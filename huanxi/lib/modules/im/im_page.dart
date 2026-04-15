@@ -38,12 +38,12 @@ class _ImPageState extends ConsumerState<ImPage> {
       // 1. 获取 UserSig
       final dio = DioClient.instance;
       final response = await dio.get(ApiEndpoints.imUserSig);
-      final usersigData = response['data'];
-      final userSig = usersigData['usersig'];
+      final usersigData = response.data['data'] as Map<String, dynamic>;
+      final userSig = usersigData['usersig'] as String;
 
       // 2. 获取当前用户ID
       final authState = ref.read(authProvider);
-      _myUserId = 'huanxi_${authState.user?.id}';
+      _myUserId = 'huanxi_${authState.userId}';
 
       // 3. 初始化并登录 IM（如果未初始化）
       if (!_imService.isInitialized) {
@@ -262,9 +262,6 @@ class _ImPageState extends ConsumerState<ImPage> {
                 ),
               ],
             ),
-          ),
-        ],
-      ),
     );
   }
 }
