@@ -1,0 +1,155 @@
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../app/routes/app_router.dart';
+import '../../app/providers/auth_provider.dart';
+import '../../app/theme/app_theme.dart';
+
+/// Splash 页面
+/// 负责：SDK 初始化、登录态检查、路由跳转
+class SplashPage extends ConsumerStatefulWidget {
+  const SplashPage({super.key});
+
+  @override
+  ConsumerState<SplashPage> createState() => _SplashPageState();
+}
+
+class _SplashPageState extends ConsumerState<SplashPage> {
+  @override
+  void initState() {
+    super.initState();
+    _init();
+  }
+
+  Future<void> _init() async {
+    try {
+      // 初始化认证状态，设置一个总的超时兜底
+      await Future.any([
+        ref.read(authProvider.notifier).init(),
+        Future.delayed(const Duration(seconds: 3)), // 最多等3秒
+      ]);
+    } catch (e) {
+      debugPrint('Splash Init Error: $e');
+    }
+
+    // 无论如何，稍微展示一下品牌 Logo
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    if (!mounted) return;
+
+    final isLoggedIn = ref.read(authProvider).isLoggedIn;
+    debugPrint('Splash Init Finished. IsLoggedIn: $isLoggedIn');
+
+    // 根据登录状态跳转
+    if (isLoggedIn) {
+      context.go(AppRoutes.index);
+    } else {
+      context.go(AppRoutes.login);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppTheme.backgroundColor,
+      body: Stack(
+        children: [
+          // 装饰性圆形背景
+          Positioned(
+            top: -80,
+            left: -80,
+            child: Container(
+              width: 240,
+              height: 240,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppTheme.primaryColor.withValues(alpha: 0.08),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 60,
+            right: -60,
+            child: Container(
+              width: 180,
+              height: 180,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppTheme.accentColor.withValues(alpha: 0.1),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 120,
+            right: 40,
+            child: Container(
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppTheme.secondaryColor.withValues(alpha: 0.1),
+              ),
+            ),
+          ),
+          // 内容
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Logo 渐变容器
+                Container(
+                  width: 100,
+                  height: 100,
+                  decoration: BoxDecoration(
+                    gradient: AppTheme.primaryGradient,
+                    borderRadius: BorderRadius.circular(28),
+                    boxShadow: AppTheme.elevatedShadow,
+                  ),
+                  child: const Icon(
+                    Icons.favorite,
+                    size: 56,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                // App名称 - 渐变文字
+                ShaderMask(
+                  shaderCallback: (bounds) =>
+                      AppTheme.primaryGradient.createShader(bounds),
+                  child: const Text(
+                    '欢喜',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 36,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 4,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  '1v1 视频交友',
+                  style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 16,
+                  ),
+                ),
+                const SizedBox(height: 48),
+                SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                      AppTheme.primaryColor.withValues(alpha: 0.7),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

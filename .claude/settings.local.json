@@ -1,0 +1,29 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:github.com)",
+      "Bash(git clone:*)",
+      "Bash(mysql:*)",
+      "Bash(where mysql:*)",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Program Files \\(x86\\)/**)",
+      "Bash(ls /d/mysql*/)",
+      "Bash(sc query:*)",
+      "Bash(/d/phpstudy_pro/Extensions/MySQL8.0.12/bin/mysql.exe:*)",
+      "Bash(pip install:*)",
+      "Bash(python -m venv venv)",
+      "Bash(./venv/Scripts/python.exe -m pip install -r requirements.txt aiomysql redis -q)",
+      "Bash(./venv/Scripts/python.exe -m pip install --only-binary :all: -r requirements.txt aiomysql redis -q)",
+      "Bash(./venv/Scripts/python.exe -m pip install --only-binary :all: -r requirements.txt redis -q)",
+      "Bash(./venv/Scripts/python.exe -m pip install --only-binary :all: redis aiomysql aiosqlite aerich \"fastapi>=0.100\" \"uvicorn[standard]\" tortoise-orm pydantic pydantic-settings python-jose passlib python-multipart -q)",
+      "Bash(./venv/Scripts/python.exe:*)",
+      "Bash(\"/d/phpstudy_pro/Extensions/MySQL8.0.12/bin/mysql.exe\" -u root -p123456 -e \"PING\")",
+      "Bash(curl -s http://localhost:9999/openapi.json)",
+      "Bash(taskkill /F /IM python.exe)",
+      "Bash(taskkill //F //IM python.exe)",
+      "Bash(curl -s http://localhost:9999/docs)",
+      "Bash(D:/phpstudy_pro/Extensions/MySQL8.0.12/bin/mysql.exe:*)",
+      "Bash(curl:*)"
+    ]
+  }
+}
