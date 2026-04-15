@@ -1,0 +1,66 @@
+from fastapi import APIRouter, Depends
+
+from app.core.app_auth import AppAuthControl
+from app.core.dependency import LimitLogin, LimitRegister
+from app.models import AppUser
+from app.schemas.app_user import AppLoginIn, AppRegisterIn, AppRegisterOut
+from app.schemas.base import Fail, Success
+from app.utils.password import get_password_hash, verify_password
+
+router = APIRouter()
+
+
+@router.post("/login", summary="App登录(手机号+密码)", dependencies=[Depends(LimitLogin)])
+async def app_login(req_in: AppLoginIn):
+    app_user = await AppUser.filter(phone=req_in.phone).first()
+    if not app_user:
+        return Fail(code=401, msg="手机号未注册")
+
+    if app_user.status == "banned":
+        return Fail(code=403, msg=f"账号已被封禁，原因：{app_user.ban_reason or '未知'}")
+
+    # 密码校验
+    if not req_in.password:
+        return Fail(code=400, msg="请输入密码")
+    if not verify_password(req_in.password, app_user.password or ""):
+        return Fail(code=401, msg="密码错误")
+
+    # 生成 Token
+    token = await AppAuthControl.create_app_token(app_user)
+
+    return Success(
+        data={
+            "token": token,
+            "user_id": app_user.id,
+            "nickname": app_user.nickname or app_user.phone,
+            "avatar": app_user.avatar or "",
+            "is_anchor": app_user.is_anchor,
+        }
+    )
+
+
+@router.post("/register", summary="App用户注册", dependencies=[Depends(LimitRegister)])
+async def app_register(req_in: AppRegisterIn):
+    # 检查手机号是否已注册
+    existing = await AppUser.filter(phone=req_in.phone).first()
+    if existing:
+        return Fail(code=400, msg="该手机号已注册")
+
+    # 创建用户
+    app_user = await AppUser.create(
+        phone=req_in.phone,
+        password=get_password_hash(req_in.password),
+        nickname=req_in.phone[-4:],  # 默认昵称为手机号后4位
+        gender=str(req_in.gender.value),  # 转换为字符串存储
+        status="normal",
+    )
+
+    # 生成 Token
+    token = await AppAuthControl.create_app_token(app_user)
+
+    return Success(
+        data=AppRegisterOut(
+            user_id=app_user.id,
+            token=token,
+        ).model_dump()
+    )
