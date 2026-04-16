@@ -247,25 +247,50 @@ class _AnchorListPageState extends ConsumerState<_AnchorListPage> {
   }
 }
 
-class _AnchorCard extends StatelessWidget {
+class _AnchorCard extends StatefulWidget {
   final AnchorInfo anchor;
 
   const _AnchorCard({required this.anchor});
 
   @override
+  State<_AnchorCard> createState() => _AnchorCardState();
+}
+
+class _AnchorCardState extends State<_AnchorCard> {
+  bool _isNavigating = false;
+
+  Future<void> _openDetail() async {
+    if (_isNavigating) return;
+    _isNavigating = true;
+    try {
+      await context.push(AppRoutes.anchorDetail, extra: widget.anchor);
+    } finally {
+      if (mounted) {
+        _isNavigating = false;
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final anchor = widget.anchor;
     final isOnline = anchor.isOnline ?? false;
 
     return GestureDetector(
-      onTap: () {
-        context.push(AppRoutes.anchorDetail, extra: anchor);
-      },
-      child: Container(
+      onTap: _openDetail,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
+          final rawCacheWidth = (constraints.maxWidth * devicePixelRatio).round();
+          final rawCacheHeight = (constraints.maxHeight * devicePixelRatio).round();
+          final cacheWidth = rawCacheWidth > 720 ? 720 : rawCacheWidth;
+          final cacheHeight = rawCacheHeight > 960 ? 960 : rawCacheHeight;
+          return Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
           color: const Color(0xFFF2F2F7),
         ),
-        clipBehavior: Clip.antiAlias,
+        clipBehavior: Clip.hardEdge,
         child: Stack(
           fit: StackFit.expand,
           children: [
@@ -273,7 +298,22 @@ class _AnchorCard extends StatelessWidget {
             Hero(
               tag: 'anchor_avatar_${anchor.userId}',
               child: anchor.avatar != null && anchor.avatar!.isNotEmpty
-                  ? Image.network(anchor.avatar!, fit: BoxFit.cover)
+                  ? Image.network(
+                      anchor.avatar!,
+                      fit: BoxFit.cover,
+                      filterQuality: FilterQuality.low,
+                      cacheWidth: cacheWidth,
+                      cacheHeight: cacheHeight,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Container(color: const Color(0xFFEFEFF4));
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        return const Center(
+                          child: Icon(Icons.person, size: 40, color: Colors.grey),
+                        );
+                      },
+                    )
                   : const Center(child: Icon(Icons.person, size: 40, color: Colors.grey)),
             ),
 
@@ -366,6 +406,8 @@ class _AnchorCard extends StatelessWidget {
             ),
           ],
         ),
+          );
+        },
       ),
     );
   }

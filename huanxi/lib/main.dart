@@ -40,6 +40,12 @@ class HuanxiApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       routerConfig: appRouter,
+      builder: (context, child) {
+        return HeroMode(
+          enabled: false,
+          child: child ?? const SizedBox.shrink(),
+        );
+      },
     );
   }
 }

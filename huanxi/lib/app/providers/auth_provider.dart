@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/constants/api_endpoints.dart';
@@ -74,22 +75,67 @@ class TokenNamesState {
   }
 }
 
+/// App 初始化配置状态
+class AppInitState {
+  final bool isLoading;
+  final bool loaded;
+  final String coinName;
+  final String diamondName;
+  final int? imSdkAppId;
+  final bool imConfigured;
+
+  const AppInitState({
+    this.isLoading = false,
+    this.loaded = false,
+    this.coinName = '金币',
+    this.diamondName = '钻石',
+    this.imSdkAppId,
+    this.imConfigured = false,
+  });
+
+  AppInitState copyWith({
+    bool? isLoading,
+    bool? loaded,
+    String? coinName,
+    String? diamondName,
+    int? imSdkAppId,
+    bool? imConfigured,
+  }) {
+    return AppInitState(
+      isLoading: isLoading ?? this.isLoading,
+      loaded: loaded ?? this.loaded,
+      coinName: coinName ?? this.coinName,
+      diamondName: diamondName ?? this.diamondName,
+      imSdkAppId: imSdkAppId ?? this.imSdkAppId,
+      imConfigured: imConfigured ?? this.imConfigured,
+    );
+  }
+}
+
 /// 认证 Provider
 class AuthNotifier extends StateNotifier<AuthState> {
   final DioClient _dio;
 
   AuthNotifier(this._dio) : super(const AuthState());
 
+  int? _parseUserId(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value.trim());
+    return null;
+  }
+
   /// 初始化：检查登录状态
   Future<void> init() async {
     final token = StorageService.getToken();
+    final localUserId = StorageService.getUserId();
     if (token != null && token.isNotEmpty) {
       // 尝试从本地缓存加载用户信息
       final cachedInfo = StorageService.getUserInfo();
       if (cachedInfo != null) {
         state = state.copyWith(
           isLoggedIn: true,
-          userId: cachedInfo['id'] as int?,
+          userId: _parseUserId(cachedInfo['id']) ?? localUserId,
           username: cachedInfo['nickname'] as String? ?? cachedInfo['username'] as String?,
           avatar: cachedInfo['avatar'] as String?,
           appRole: cachedInfo['is_anchor'] == true ? 'anchor' : 'user',
@@ -97,7 +143,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
           diamonds: cachedInfo['diamonds'] as int? ?? 0,
         );
       } else {
-        state = state.copyWith(isLoggedIn: true);
+        state = state.copyWith(isLoggedIn: true, userId: localUserId);
       }
 
       // 异步验证 token 并获取最新数据，失败则清除存储
@@ -148,7 +194,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       }
 
       await StorageService.saveToken(token);
-      final userId = respData['user_id'] as int?;
+      final userId = _parseUserId(respData['user_id']);
       if (userId != null) {
         await StorageService.saveUserId(userId);
       }
@@ -183,7 +229,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final respData = data['data'] as Map<String, dynamic>?;
       if (respData == null) return;
 
-      final userId = respData['id'] as int?;
+      final userId = _parseUserId(respData['id']);
       if (userId != null) {
         await StorageService.saveUserId(userId);
         await StorageService.saveUserInfo(respData);
@@ -203,8 +249,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       await StorageService.clearUserData();
       state = const AuthState();
       rethrow;
-    } catch (_) {
-      // 静默失败
+    } catch (e) {
+      debugPrint('auth.fetchUserInfo error: $e');
     }
   }
 
@@ -219,8 +265,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         coins: respData['coins'] as int? ?? state.coins,
         diamonds: respData['diamonds'] as int? ?? state.diamonds,
       );
-    } catch (_) {
-      // 静默失败
+    } catch (e) {
+      debugPrint('auth.refreshBalance error: $e');
     }
   }
 
@@ -236,24 +282,39 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 }
 
-/// 代币名称 Provider
-class TokenNamesNotifier extends StateNotifier<TokenNamesState> {
+/// App 初始化配置 Provider
+class AppInitNotifier extends StateNotifier<AppInitState> {
   final DioClient _dio;
 
-  TokenNamesNotifier(this._dio) : super(const TokenNamesState());
+  AppInitNotifier(this._dio) : super(const AppInitState());
 
-  Future<void> fetchTokenNames() async {
+  Future<void> init() async {
+    if (state.loaded || state.isLoading) return;
+    state = state.copyWith(isLoading: true);
     try {
-      final data = await _dio.apiGet(ApiEndpoints.systemConfig);
+      final data = await _dio.apiGet(ApiEndpoints.appBootstrap);
       final respData = data['data'] as Map<String, dynamic>?;
-      if (respData == null) return;
+      if (respData == null) {
+        state = state.copyWith(isLoading: false, loaded: true);
+        return;
+      }
+
+      final tokenNames = respData['token_names'] as Map<String, dynamic>?;
+      final im = respData['im'] as Map<String, dynamic>?;
+      final sdkAppIdRaw = im?['sdk_app_id'];
+      final sdkAppId = sdkAppIdRaw is num ? sdkAppIdRaw.toInt() : null;
 
       state = state.copyWith(
-        coinName: respData['coin_name'] as String? ?? '金币',
-        diamondName: respData['diamond_name'] as String? ?? '钻石',
+        isLoading: false,
+        loaded: true,
+        coinName: tokenNames?['coin_name'] as String? ?? '金币',
+        diamondName: tokenNames?['diamond_name'] as String? ?? '钻石',
+        imConfigured: im?['configured'] == true,
+        imSdkAppId: sdkAppId,
       );
-    } catch (_) {
-      // 静默失败，使用默认值
+    } catch (e) {
+      debugPrint('appInit.init error: $e');
+      state = state.copyWith(isLoading: false, loaded: true);
     }
   }
 }
@@ -263,10 +324,18 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
   return AuthNotifier(DioClient.instance);
 });
 
+/// App 初始化配置 Provider
+final appInitProvider = StateNotifierProvider<AppInitNotifier, AppInitState>((ref) {
+  return AppInitNotifier(DioClient.instance);
+});
+
 /// 代币名称 Provider
-final tokenNamesProvider =
-    StateNotifierProvider<TokenNamesNotifier, TokenNamesState>((ref) {
-  return TokenNamesNotifier(DioClient.instance);
+final tokenNamesProvider = Provider<TokenNamesState>((ref) {
+  final initState = ref.watch(appInitProvider);
+  return TokenNamesState(
+    coinName: initState.coinName,
+    diamondName: initState.diamondName,
+  );
 });
 
 /// 是否已登录

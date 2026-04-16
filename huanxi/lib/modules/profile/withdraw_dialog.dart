@@ -59,13 +59,17 @@ class _WithdrawDialogState extends ConsumerState<WithdrawDialog> {
     final authState = ref.watch(authProvider);
     final tokenNames = ref.watch(tokenNamesProvider);
     final available = authState.diamonds;
+    final mediaQuery = MediaQuery.of(context);
+    final safeBottom = mediaQuery.padding.bottom;
+    final keyboardBottom = mediaQuery.viewInsets.bottom;
+    final dialogBottom = (keyboardBottom > 0 ? keyboardBottom : safeBottom) + 24;
 
     return Container(
       padding: EdgeInsets.only(
         left: 24,
         right: 24,
         top: 24,
-        bottom: MediaQuery.of(context).padding.bottom + 24,
+        bottom: dialogBottom,
       ),
       decoration: const BoxDecoration(
         color: AppTheme.surfaceColor,
@@ -74,6 +78,7 @@ class _WithdrawDialogState extends ConsumerState<WithdrawDialog> {
       child: Form(
         key: _formKey,
         child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,

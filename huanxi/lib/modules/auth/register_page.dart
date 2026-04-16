@@ -36,7 +36,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     if (phone.isEmpty) { setState(() => _errorMsg = '请输入手机号'); return; }
     if (phone.length != 11) { setState(() => _errorMsg = '手机号格式不正确'); return; }
     if (password.isEmpty) { setState(() => _errorMsg = '请输入密码'); return; }
-    if (password.length < 6) { setState(() => _errorMsg = '密码长度至少6位'); return; }
+    if (password.length < 8) { setState(() => _errorMsg = '密码长度至少8位'); return; }
     if (password != confirmPassword) { setState(() => _errorMsg = '两次密码不一致'); return; }
     setState(() { _errorMsg = null; _isLoading = true; });
 
@@ -83,41 +83,45 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => context.pop()),
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const SizedBox(height: 20),
-              ShaderMask(
-                shaderCallback: (bounds) => AppTheme.primaryGradient.createShader(bounds),
-                child: const Text('注册账号', textAlign: TextAlign.center, style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
-              ),
-              const SizedBox(height: 8),
-              const Text('填写以下信息完成注册', textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: AppTheme.textSecondary)),
-              const SizedBox(height: 40),
-              TextField(controller: _phoneController, keyboardType: TextInputType.phone, maxLength: 11, decoration: const InputDecoration(labelText: '手机号', hintText: '请输入手机号', prefixIcon: Icon(Icons.phone_outlined, color: AppTheme.textHint), counterText: '')),
-              const SizedBox(height: 16),
-              TextField(controller: _passwordController, obscureText: true, decoration: const InputDecoration(labelText: '密码', hintText: '请输入密码（至少6位）', prefixIcon: Icon(Icons.lock_outlined, color: AppTheme.textHint))),
-              const SizedBox(height: 16),
-              TextField(controller: _confirmPasswordController, obscureText: true, decoration: const InputDecoration(labelText: '确认密码', hintText: '请再次输入密码', prefixIcon: Icon(Icons.lock_outlined, color: AppTheme.textHint))),
-              if (_errorMsg != null) ...[const SizedBox(height: 16), Text(_errorMsg!, style: const TextStyle(color: AppTheme.errorColor, fontSize: 14))],
-              const SizedBox(height: 32),
-              Container(
-                height: 56,
-                decoration: BoxDecoration(gradient: AppTheme.primaryGradient, borderRadius: BorderRadius.circular(28), boxShadow: AppTheme.elevatedShadow),
-                child: ElevatedButton(
-                  onPressed: _isLoading ? null : _register,
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28))),
-                  child: _isLoading
-                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)))
-                    : const Text('注册', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: Colors.white)),
+        child: GestureDetector(
+          onTap: () => FocusScope.of(context).unfocus(),
+          child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const SizedBox(height: 20),
+                ShaderMask(
+                  shaderCallback: (bounds) => AppTheme.primaryGradient.createShader(bounds),
+                  child: const Text('注册账号', textAlign: TextAlign.center, style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white)),
                 ),
-              ),
-              const SizedBox(height: 24),
-              Center(child: TextButton(onPressed: () => context.pop(), child: const Text('已有账号？去登录', style: TextStyle(fontSize: 14, color: AppTheme.secondaryColor)))),
-              const SizedBox(height: 32),
-            ],
+                const SizedBox(height: 8),
+                const Text('填写以下信息完成注册', textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: AppTheme.textSecondary)),
+                const SizedBox(height: 40),
+                TextField(controller: _phoneController, keyboardType: TextInputType.phone, maxLength: 11, decoration: const InputDecoration(labelText: '手机号', hintText: '请输入手机号', prefixIcon: Icon(Icons.phone_outlined, color: AppTheme.textHint), counterText: '')),
+                const SizedBox(height: 16),
+                TextField(controller: _passwordController, obscureText: true, decoration: const InputDecoration(labelText: '密码', hintText: '请输入密码（至少8位，含字母和数字）', prefixIcon: Icon(Icons.lock_outlined, color: AppTheme.textHint))),
+                const SizedBox(height: 16),
+                TextField(controller: _confirmPasswordController, obscureText: true, decoration: const InputDecoration(labelText: '确认密码', hintText: '请再次输入密码', prefixIcon: Icon(Icons.lock_outlined, color: AppTheme.textHint))),
+                if (_errorMsg != null) ...[const SizedBox(height: 16), Text(_errorMsg!, style: const TextStyle(color: AppTheme.errorColor, fontSize: 14))],
+                const SizedBox(height: 32),
+                Container(
+                  height: 56,
+                  decoration: BoxDecoration(gradient: AppTheme.primaryGradient, borderRadius: BorderRadius.circular(28), boxShadow: AppTheme.elevatedShadow),
+                  child: ElevatedButton(
+                    onPressed: _isLoading ? null : _register,
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.transparent, shadowColor: Colors.transparent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28))),
+                    child: _isLoading
+                      ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)))
+                      : const Text('注册', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: Colors.white)),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Center(child: TextButton(onPressed: () => context.pop(), child: const Text('已有账号？去登录', style: TextStyle(fontSize: 14, color: AppTheme.secondaryColor)))),
+                const SizedBox(height: 32),
+              ],
+            ),
           ),
         ),
       ),

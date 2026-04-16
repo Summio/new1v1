@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../../modules/auth/splash_page.dart';
 import '../../modules/auth/login_page.dart';
@@ -43,12 +44,17 @@ class AppRoutes {
   static const String im = '/im';
   static const String giftPanel = '/gift';
   static const String callRoom = '/call/room';
+
+  static AnchorInfo? tryGetAnchorInfo(Object? extra) {
+    return extra is AnchorInfo ? extra : null;
+  }
 }
 
 final appRouter = GoRouter(
   initialLocation: AppRoutes.splash,
   redirect: (context, state) {
-    final isLoggedIn = StorageService.getToken() != null;
+    final token = StorageService.getToken();
+    final isLoggedIn = token != null && token.isNotEmpty;
     final isOnSplash = state.matchedLocation == AppRoutes.splash;
     final isOnLogin = state.matchedLocation == AppRoutes.login;
     final isOnRegister = state.matchedLocation == AppRoutes.register;
@@ -70,8 +76,35 @@ final appRouter = GoRouter(
         GoRoute(path: AppRoutes.profile, pageBuilder: (context, state) => NoTransitionPage(child: ProfilePage())),
       ],
     ),
-    GoRoute(path: AppRoutes.callRoom, builder: (context, state) => CallRoomPage(roomId: state.uri.queryParameters['roomId'] ?? '', anchorId: state.uri.queryParameters['anchorId'] ?? '')),
-    GoRoute(path: AppRoutes.anchorDetail, builder: (context, state) => AnchorDetailPage(anchor: state.extra as AnchorInfo)),
+    GoRoute(
+      path: AppRoutes.callRoom,
+      builder: (context, state) {
+        final callId = int.tryParse(state.uri.queryParameters['callId'] ?? '');
+        if (callId == null || callId <= 0) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('提示')),
+            body: const Center(child: Text('通话参数无效，请返回重试')),
+          );
+        }
+        return CallRoomPage(
+          callId: callId,
+          anchorId: state.uri.queryParameters['anchorId'] ?? '',
+        );
+      },
+    ),
+    GoRoute(
+      path: AppRoutes.anchorDetail,
+      builder: (context, state) {
+        final anchor = AppRoutes.tryGetAnchorInfo(state.extra);
+        if (anchor == null) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('提示')),
+            body: const Center(child: Text('主播信息无效，请返回重试')),
+          );
+        }
+        return AnchorDetailPage(anchor: anchor);
+      },
+    ),
     GoRoute(path: AppRoutes.recharge, builder: (context, state) => const RechargePage()),
     GoRoute(path: AppRoutes.wallet, builder: (context, state) => const WalletPage()),
     GoRoute(path: AppRoutes.editProfile, builder: (context, state) => const EditProfilePage()),
@@ -80,7 +113,24 @@ final appRouter = GoRouter(
     GoRoute(path: AppRoutes.settingsPrivacy, builder: (context, state) => const PrivacyPage()),
     GoRoute(path: AppRoutes.settingsPassword, builder: (context, state) => const ChangePasswordPage()),
     GoRoute(path: AppRoutes.anchorApply, builder: (context, state) => const AnchorApplyPage()),
-    GoRoute(path: '${AppRoutes.im}/:userId', builder: (context, state) => ImPage(userId: state.pathParameters['userId']!)),
+    GoRoute(
+      path: '${AppRoutes.im}/:userId',
+      builder: (context, state) {
+        final peer = state.pathParameters['userId']!;
+        final extra = state.extra is Map<String, dynamic>
+            ? state.extra as Map<String, dynamic>
+            : null;
+        final myUserId = StorageService.getUserId();
+        if (myUserId != null && peer == myUserId.toString()) {
+          return const MessagesPage();
+        }
+        return ImPage(
+          userId: peer,
+          initialPeerNickname: extra?['peerNickname'] as String?,
+          initialPeerAvatarUrl: extra?['peerAvatarUrl'] as String?,
+        );
+      },
+    ),
     GoRoute(path: AppRoutes.giftPanel, builder: (context, state) => GiftPanel(anchorId: state.uri.queryParameters['anchorId'] ?? '', onClose: () => context.pop())),
   ],
 );

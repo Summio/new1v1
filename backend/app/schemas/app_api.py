@@ -66,6 +66,40 @@ class CallEndOut(BaseModel):
     msg: str = "通话已结束"
 
 
+class CallActionIn(BaseModel):
+    call_id: int = Field(..., description="通话记录ID")
+
+
+class CallStatusOut(BaseModel):
+    call_id: int
+    caller_id: int
+    callee_id: int
+    status: str
+    created_at: Optional[str] = None
+    end_reason: Optional[str] = None
+    duration: int = 0
+
+
+class IncomingCallOut(BaseModel):
+    call_id: int
+    caller_id: int
+    caller_nickname: str
+    caller_avatar: Optional[str] = None
+    created_at: str
+
+
+class RTCTokenIn(BaseModel):
+    call_id: int = Field(..., description="通话记录ID")
+
+
+class RTCTokenOut(BaseModel):
+    app_id: str
+    channel: str
+    token: str
+    uid: int
+    expired_time: int
+
+
 # ===== 礼物 =====
 
 class GiftOut(BaseModel):
@@ -141,3 +175,4 @@ class TransactionListOut(BaseModel):
 class IMSigOut(BaseModel):
     usersig: str
     expired_time: int
+    sdk_app_id: int

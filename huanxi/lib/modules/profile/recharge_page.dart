@@ -1,7 +1,10 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/providers/auth_provider.dart';
+import '../../core/constants/api_endpoints.dart';
+import '../../core/network/dio_client.dart';
 
 /// 充值页面
 /// 显示充值套餐 + 支付方式选择
@@ -14,10 +17,11 @@ class RechargePage extends ConsumerStatefulWidget {
 
 class _RechargePageState extends ConsumerState<RechargePage> {
   int _selectedIndex = 0;
-  final String coinName = '金币'; // default, overridden by tokenNamesProvider
+  bool _isLoadingPackages = false;
+  bool _isSubmitting = false;
+  int _tokenRate = 10;
 
-  // 充值套餐
-  final List<Map<String, dynamic>> _packages = [
+  static const List<Map<String, dynamic>> _defaultPackages = [
     {'amount': 6, 'coins': 60, 'label': '6元', 'tag': '尝鲜'},
     {'amount': 30, 'coins': 300, 'label': '30元', 'tag': '推荐'},
     {'amount': 68, 'coins': 700, 'label': '68元', 'tag': '特惠'},
@@ -26,14 +30,98 @@ class _RechargePageState extends ConsumerState<RechargePage> {
     {'amount': 648, 'coins': 7000, 'label': '648元', 'tag': '至尊'},
   ];
 
+  List<Map<String, dynamic>> _packages =
+      List<Map<String, dynamic>>.from(_defaultPackages);
+
   int _payMethod = 0; // 0=支付宝 1=微信
 
+  @override
+  void initState() {
+    super.initState();
+    _loadRechargeConfig();
+  }
+
+  Future<void> _loadRechargeConfig() async {
+    if (_isLoadingPackages) return;
+    setState(() => _isLoadingPackages = true);
+    try {
+      final data = await DioClient.instance.apiGet(ApiEndpoints.appBootstrap);
+      final payload = data['data'];
+      if (payload is! Map<String, dynamic>) {
+        return;
+      }
+      final rateRaw = payload['token_rate'];
+      final tokenRate = rateRaw is num ? rateRaw.toInt() : _tokenRate;
+      final packageList = payload['recharge_packages'];
+      if (packageList is! List) {
+        setState(() => _tokenRate = tokenRate > 0 ? tokenRate : _tokenRate);
+        return;
+      }
+
+      final parsed = <Map<String, dynamic>>[];
+      for (final item in packageList) {
+        if (item is! Map<String, dynamic>) continue;
+        final amount = _toInt(item['amount'] ?? item['money']);
+        final coins = _toInt(item['coins'] ?? item['token_amount']);
+        if (amount <= 0 || coins <= 0) continue;
+        final label = item['label']?.toString() ?? '${amount}元';
+        parsed.add({
+          'amount': amount,
+          'coins': coins,
+          'label': label,
+          'tag': item['tag']?.toString(),
+        });
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _tokenRate = tokenRate > 0 ? tokenRate : _tokenRate;
+        if (parsed.isNotEmpty) {
+          _packages = parsed;
+          if (_selectedIndex >= _packages.length) {
+            _selectedIndex = 0;
+          }
+        }
+      });
+    } catch (e) {
+      debugPrint('recharge.loadConfig error: $e');
+      // 保持默认配置，避免影响支付主流程
+    } finally {
+      if (mounted) setState(() => _isLoadingPackages = false);
+    }
+  }
+
+  int _toInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value.trim()) ?? 0;
+    return 0;
+  }
+
   Future<void> _submitRecharge() async {
+    if (_isSubmitting || _packages.isEmpty) return;
+    setState(() => _isSubmitting = true);
     final pkg = _packages[_selectedIndex];
-    // TODO: 调用充值创建 API
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('正在唤起支付：${pkg['label']}...')),
-    );
+    final payChannel = _payMethod == 0 ? 'alipay' : 'wechat';
+    try {
+      final data = await DioClient.instance.apiPost(
+        ApiEndpoints.rechargeCreate,
+        data: {
+          'amount': pkg['amount'],
+          'pay_channel': payChannel,
+        },
+      );
+      final msg = data['msg']?.toString() ?? '订单已创建，请继续完成支付';
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('充值失败，请稍后重试')),
+      );
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
+    }
   }
 
   @override
@@ -54,7 +142,6 @@ class _RechargePageState extends ConsumerState<RechargePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 充值说明 - 薄荷绿
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -67,22 +154,24 @@ class _RechargePageState extends ConsumerState<RechargePage> {
                         SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            '1元 = 10$dynamicCoinName，$dynamicCoinName用于拨打主播电话',
+                            '1元 = $_tokenRate$dynamicCoinName，$dynamicCoinName用于拨打主播电话',
                             style: TextStyle(fontSize: 13, color: AppTheme.secondaryDark),
                           ),
                         ),
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 24),
-
-                  // 充值套餐
                   const Text(
                     '选择充值金额',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
+                  if (_isLoadingPackages)
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 12),
+                      child: LinearProgressIndicator(minHeight: 2),
+                    ),
                   GridView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
@@ -105,7 +194,9 @@ class _RechargePageState extends ConsumerState<RechargePage> {
                                 : AppTheme.surfaceColor,
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(
-                              color: isSelected ? AppTheme.secondaryColor : const Color(0xFFF0F0F0),
+                              color: isSelected
+                                  ? AppTheme.secondaryColor
+                                  : const Color(0xFFF0F0F0),
                               width: isSelected ? 2 : 1,
                             ),
                             boxShadow: isSelected ? AppTheme.cardShadow : null,
@@ -117,7 +208,7 @@ class _RechargePageState extends ConsumerState<RechargePage> {
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     Text(
-                                      pkg['label'],
+                                      pkg['label']?.toString() ?? '',
                                       style: TextStyle(
                                         fontSize: 18,
                                         fontWeight: FontWeight.bold,
@@ -150,12 +241,15 @@ class _RechargePageState extends ConsumerState<RechargePage> {
                                       gradient: pkg['tag'] == '推荐'
                                           ? AppTheme.primaryGradient
                                           : const LinearGradient(
-                                              colors: [Color(0xFFFFB74D), Color(0xFFFF9800)],
+                                              colors: [
+                                                Color(0xFFFFB74D),
+                                                Color(0xFFFF9800)
+                                              ],
                                             ),
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     child: Text(
-                                      pkg['tag'],
+                                      pkg['tag']?.toString() ?? '',
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontSize: 9,
@@ -170,10 +264,7 @@ class _RechargePageState extends ConsumerState<RechargePage> {
                       );
                     },
                   ),
-
                   const SizedBox(height: 24),
-
-                  // 支付方式
                   const Text(
                     '选择支付方式',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
@@ -198,8 +289,6 @@ class _RechargePageState extends ConsumerState<RechargePage> {
               ),
             ),
           ),
-
-          // 底部确认按钮 - 渐变
           Container(
             padding: EdgeInsets.only(
               left: 16,
@@ -225,7 +314,7 @@ class _RechargePageState extends ConsumerState<RechargePage> {
                 boxShadow: AppTheme.elevatedShadow,
               ),
               child: ElevatedButton(
-                onPressed: _submitRecharge,
+                onPressed: _isSubmitting ? null : _submitRecharge,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.transparent,
                   shadowColor: Colors.transparent,
@@ -233,14 +322,23 @@ class _RechargePageState extends ConsumerState<RechargePage> {
                     borderRadius: BorderRadius.circular(28),
                   ),
                 ),
-                child: Text(
-                  '立即支付 ¥${_packages[_selectedIndex]['amount']}',
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.white,
-                  ),
-                ),
+                child: _isSubmitting
+                    ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : Text(
+                        '立即支付 ￥${_packages[_selectedIndex]['amount']}',
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
+                      ),
               ),
             ),
           ),

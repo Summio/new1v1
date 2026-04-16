@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/constants/api_endpoints.dart';
@@ -112,9 +113,10 @@ class AnchorListNotifier extends StateNotifier<AnchorListState> {
         currentPage: page + 1,
       );
     } catch (e) {
+      debugPrint('anchor.fetchAnchors error: $e');
       state = state.copyWith(
         isLoading: false,
-        error: e.toString(),
+        error: '主播列表加载失败，请稍后重试',
       );
     }
   }

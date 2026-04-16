@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/constants/api_endpoints.dart';
@@ -25,11 +26,18 @@ class TransactionRecord {
   });
 
   factory TransactionRecord.fromJson(Map<String, dynamic> json) {
+    int parseInt(dynamic value, {int fallback = 0}) {
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      if (value is String) return int.tryParse(value.trim()) ?? fallback;
+      return fallback;
+    }
+
     return TransactionRecord(
-      id: json['id'] as String? ?? '',
+      id: (json['id'] ?? '').toString(),
       type: json['type'] as String? ?? '',
       title: json['title'] as String? ?? '',
-      amount: json['amount'] as int? ?? 0,
+      amount: parseInt(json['amount']),
       isIncome: json['is_income'] as bool? ?? false,
       createdAt: json['created_at'] as String? ?? '',
     );
@@ -133,7 +141,9 @@ class WalletNotifier extends StateNotifier<WalletState> {
         diamonds: respData['diamonds'] as int? ?? 0,
         frozenDiamonds: respData['frozen_diamonds'] as int? ?? 0,
       );
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('wallet.fetchBalance error: $e');
+    }
   }
 
   /// 获取交易记录（第一页或切换 filter）
@@ -171,9 +181,11 @@ class WalletNotifier extends StateNotifier<WalletState> {
         currentPage: 1,
         hasMore: respData['has_more'] as bool? ?? false,
         isLoading: false,
+        error: null,
       );
-    } catch (_) {
-      state = state.copyWith(isLoading: false, error: '加载失败');
+    } catch (e) {
+      debugPrint('wallet.fetchTransactions error: $e');
+      state = state.copyWith(isLoading: false, error: '账单加载失败，请稍后重试');
     }
   }
 
@@ -211,7 +223,8 @@ class WalletNotifier extends StateNotifier<WalletState> {
         hasMore: respData['has_more'] as bool? ?? false,
         isLoadingMore: false,
       );
-    } catch (_) {
+    } catch (e) {
+      debugPrint('wallet.loadMore error: $e');
       state = state.copyWith(isLoadingMore: false);
     }
   }
@@ -248,7 +261,8 @@ class WalletNotifier extends StateNotifier<WalletState> {
       _ref.read(authProvider.notifier).refreshBalance();
 
       return result;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('wallet.withdraw error: $e');
       return null;
     }
   }

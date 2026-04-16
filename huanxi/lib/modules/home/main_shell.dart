@@ -1,14 +1,213 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
+import '../../app/providers/auth_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
+import '../../core/constants/api_endpoints.dart';
+import '../../core/network/dio_client.dart';
 
 /// 底部导航 Shell
 /// 包含首页、发现、消息、我的四个标签
-class MainShell extends StatelessWidget {
+class MainShell extends ConsumerStatefulWidget {
   final Widget child;
 
   const MainShell({super.key, required this.child});
+
+  @override
+  ConsumerState<MainShell> createState() => _MainShellState();
+}
+
+class _MainShellState extends ConsumerState<MainShell> with WidgetsBindingObserver {
+  Timer? _incomingTimer;
+  Timer? _incomingAlertTimer;
+  bool _incomingDialogShowing = false;
+  int? _lastHandledCallId;
+  AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
+  _IncomingCallPayload? _pendingIncomingWhenBackground;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _startIncomingPolling();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _lifecycleState = state;
+    if (state == AppLifecycleState.resumed) {
+      _tryShowPendingIncomingOnResume();
+    }
+  }
+
+  void _startIncomingPolling() {
+    _incomingTimer?.cancel();
+    _incomingTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      _checkIncomingCall();
+    });
+    _checkIncomingCall();
+  }
+
+  Future<void> _checkIncomingCall() async {
+    final auth = ref.read(authProvider);
+    if (!auth.isLoggedIn || auth.appRole != 'anchor') {
+      return;
+    }
+
+    if (_incomingDialogShowing) {
+      return;
+    }
+
+    try {
+      final res = await DioClient.instance.apiGet(ApiEndpoints.callIncoming);
+      final data = res['data'];
+      if (data is! Map<String, dynamic>) {
+        return;
+      }
+
+      final callId = (data['call_id'] as num?)?.toInt();
+      final callerId = (data['caller_id'] as num?)?.toInt();
+      final callerNickname = (data['caller_nickname'] as String?)?.trim() ?? '用户';
+      final callerAvatar = (data['caller_avatar'] as String?)?.trim() ?? '';
+      if (callId == null || callId <= 0 || callerId == null || callerId <= 0) {
+        return;
+      }
+      if (_lastHandledCallId == callId) {
+        return;
+      }
+
+      final payload = _IncomingCallPayload(
+        callId: callId,
+        callerId: callerId,
+        callerNickname: callerNickname,
+        callerAvatar: callerAvatar,
+      );
+
+      // 前台弹窗；后台仅缓存（通知占位）
+      if (_lifecycleState == AppLifecycleState.resumed) {
+        await _showIncomingDialog(payload, fromBackground: false);
+      } else {
+        _pendingIncomingWhenBackground = payload;
+        debugPrint('incoming call received in background: callId=$callId');
+      }
+    } catch (e) {
+      debugPrint('mainShell.incomingCall error: $e');
+    }
+  }
+
+  Future<void> _tryShowPendingIncomingOnResume() async {
+    if (_incomingDialogShowing) return;
+    final pending = _pendingIncomingWhenBackground;
+    if (pending == null) return;
+    _pendingIncomingWhenBackground = null;
+    await _showIncomingDialog(pending, fromBackground: true);
+  }
+
+  Future<void> _showIncomingDialog(
+    _IncomingCallPayload payload, {
+    required bool fromBackground,
+  }) async {
+    if (_incomingDialogShowing) return;
+    if (_lastHandledCallId == payload.callId) return;
+    if (!mounted) return;
+
+    _incomingDialogShowing = true;
+    _startIncomingAlert();
+    try {
+      if (fromBackground) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('检测到后台来电，请尽快处理')),
+        );
+      }
+
+      final action = await showDialog<String>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: const Text('视频来电'),
+          content: Row(
+            children: [
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: const Color(0xFFEFEFF4),
+                backgroundImage: payload.callerAvatar.isNotEmpty
+                    ? NetworkImage(payload.callerAvatar)
+                    : null,
+                child: payload.callerAvatar.isEmpty
+                    ? const Icon(Icons.person, color: AppTheme.textHint)
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text('${payload.callerNickname} 邀请你视频通话'),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'reject'),
+              child: const Text('拒绝'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'accept'),
+              child: const Text('接听'),
+            ),
+          ],
+        ),
+      );
+
+      if (!mounted) return;
+
+      if (action == 'accept') {
+        await DioClient.instance.apiPost(
+          ApiEndpoints.callAccept,
+          data: {'call_id': payload.callId},
+        );
+        if (!mounted) return;
+        await context.push(
+          '${AppRoutes.callRoom}?callId=${payload.callId}&anchorId=${payload.callerId}',
+        );
+      } else if (action == 'reject') {
+        await DioClient.instance.apiPost(
+          ApiEndpoints.callReject,
+          data: {'call_id': payload.callId},
+        );
+      }
+
+      _lastHandledCallId = payload.callId;
+    } catch (e) {
+      debugPrint('mainShell.showIncomingDialog error: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('处理来电失败，请重试')),
+        );
+      }
+    } finally {
+      _stopIncomingAlert();
+      _incomingDialogShowing = false;
+    }
+  }
+
+  void _startIncomingAlert() {
+    _stopIncomingAlert();
+    _incomingAlertTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      SystemSound.play(SystemSoundType.alert);
+      if (timer.tick.isEven) {
+        HapticFeedback.mediumImpact();
+      }
+    });
+  }
+
+  void _stopIncomingAlert() {
+    _incomingAlertTimer?.cancel();
+    _incomingAlertTimer = null;
+  }
 
   int _getCurrentIndex(BuildContext context) {
     try {
@@ -17,7 +216,9 @@ class MainShell extends StatelessWidget {
       if (location.startsWith(AppRoutes.discover)) return 1;
       if (location.startsWith(AppRoutes.messages)) return 2;
       if (location.startsWith(AppRoutes.profile)) return 3;
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('mainShell.getCurrentIndex error: $e');
+    }
     return 0;
   }
 
@@ -39,11 +240,19 @@ class MainShell extends StatelessWidget {
   }
 
   @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _incomingTimer?.cancel();
+    _stopIncomingAlert();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final currentIndex = _getCurrentIndex(context);
 
     return Scaffold(
-      body: child,
+      body: widget.child,
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -97,6 +306,20 @@ class MainShell extends StatelessWidget {
       ),
     );
   }
+}
+
+class _IncomingCallPayload {
+  final int callId;
+  final int callerId;
+  final String callerNickname;
+  final String callerAvatar;
+
+  const _IncomingCallPayload({
+    required this.callId,
+    required this.callerId,
+    required this.callerNickname,
+    required this.callerAvatar,
+  });
 }
 
 /// 导航项组件

@@ -73,71 +73,75 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          children: [
-            // 头像
-            Center(
-              child: Column(
-                children: [
-                  CircleAvatar(
-                    radius: 50,
-                    backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
-                    backgroundImage: authState.avatar != null
-                        ? NetworkImage(authState.avatar!)
-                        : null,
-                    child: authState.avatar == null
-                        ? const Icon(Icons.person, size: 50, color: AppTheme.primaryColor)
-                        : null,
-                  ),
-                  const SizedBox(height: 12),
-                  TextButton.icon(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('更换头像功能开发中')),
-                      );
-                    },
-                    icon: const Icon(Icons.camera_alt_outlined, size: 18),
-                    label: const Text('更换头像'),
-                  ),
-                ],
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              // 头像
+              Center(
+                child: Column(
+                  children: [
+                    CircleAvatar(
+                      radius: 50,
+                      backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+                      backgroundImage: authState.avatar != null
+                          ? NetworkImage(authState.avatar!)
+                          : null,
+                      child: authState.avatar == null
+                          ? const Icon(Icons.person, size: 50, color: AppTheme.primaryColor)
+                          : null,
+                    ),
+                    const SizedBox(height: 12),
+                    TextButton.icon(
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('更换头像功能开发中')),
+                        );
+                      },
+                      icon: const Icon(Icons.camera_alt_outlined, size: 18),
+                      label: const Text('更换头像'),
+                    ),
+                  ],
+                ),
               ),
-            ),
 
-            const SizedBox(height: 24),
+              const SizedBox(height: 24),
 
-            // 昵称
-            TextField(
-              controller: _nicknameController,
-              decoration: const InputDecoration(
-                labelText: '昵称',
-                hintText: '请输入昵称',
-                prefixIcon: Icon(Icons.person_outline),
+              // 昵称
+              TextField(
+                controller: _nicknameController,
+                decoration: const InputDecoration(
+                  labelText: '昵称',
+                  hintText: '请输入昵称',
+                  prefixIcon: Icon(Icons.person_outline),
+                ),
+                maxLength: 20,
               ),
-              maxLength: 20,
-            ),
 
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
 
-            // 个人简介
-            TextField(
-              controller: _bioController,
-              decoration: const InputDecoration(
-                labelText: '个人简介',
-                hintText: '介绍一下自己吧',
-                prefixIcon: Icon(Icons.edit_note),
-                alignLabelWithHint: true,
+              // 个人简介
+              TextField(
+                controller: _bioController,
+                decoration: const InputDecoration(
+                  labelText: '个人简介',
+                  hintText: '介绍一下自己吧',
+                  prefixIcon: Icon(Icons.edit_note),
+                  alignLabelWithHint: true,
+                ),
+                maxLines: 3,
+                maxLength: 100,
               ),
-              maxLines: 3,
-              maxLength: 100,
-            ),
 
-            const SizedBox(height: 24),
+              const SizedBox(height: 24),
 
-            // 其他信息（只读展示）
-            _buildInfoTile('用户ID', authState.userId?.toString() ?? '-'),
-          ],
+              // 其他信息（只读展示）
+              _buildInfoTile('用户ID', authState.userId?.toString() ?? '-'),
+            ],
+          ),
         ),
       ),
     );

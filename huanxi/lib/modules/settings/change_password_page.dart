@@ -43,26 +43,46 @@ class _ChangePasswordPageState extends ConsumerState<ChangePasswordPage> {
 
   @override
   Widget build(BuildContext context) {
+    final bottomInset = MediaQuery.of(context).viewInsets.bottom;
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(title: const Text('修改密码'), backgroundColor: AppTheme.surfaceColor, elevation: 0),
-      body: Padding(padding: const EdgeInsets.all(16), child: Column(children: [
-        Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: AppTheme.surfaceColor, borderRadius: BorderRadius.circular(16), boxShadow: AppTheme.cardShadow), child: Column(children: [
-          TextField(controller: _oldPasswordController, obscureText: true, decoration: const InputDecoration(labelText: '旧密码', prefixIcon: Icon(Icons.lock_outline))),
-          const SizedBox(height: 16),
-          TextField(controller: _newPasswordController, obscureText: true, decoration: const InputDecoration(labelText: '新密码（至少6位）', prefixIcon: Icon(Icons.lock_outline))),
-          const SizedBox(height: 16),
-          TextField(controller: _confirmPasswordController, obscureText: true, decoration: const InputDecoration(labelText: '确认新密码', prefixIcon: Icon(Icons.lock_outline))),
-          if (_error != null) ...[const SizedBox(height: 16), Text(_error!, style: const TextStyle(color: AppTheme.errorColor, fontSize: 14))],
-          if (_success != null) ...[const SizedBox(height: 16), Text(_success!, style: const TextStyle(color: AppTheme.primaryColor, fontSize: 14))],
-        ])),
-        const SizedBox(height: 24),
-        SizedBox(width: double.infinity, height: 52, child: ElevatedButton(
-          onPressed: _isLoading ? null : _submit,
-          style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26))),
-          child: _isLoading ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white))) : const Text('确认修改', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-        )),
-      ])),
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: EdgeInsets.fromLTRB(16, 16, 16, 16 + bottomInset),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(color: AppTheme.surfaceColor, borderRadius: BorderRadius.circular(16), boxShadow: AppTheme.cardShadow),
+                child: Column(
+                  children: [
+                    TextField(controller: _oldPasswordController, obscureText: true, decoration: const InputDecoration(labelText: '旧密码', prefixIcon: Icon(Icons.lock_outline))),
+                    const SizedBox(height: 16),
+                    TextField(controller: _newPasswordController, obscureText: true, decoration: const InputDecoration(labelText: '新密码（至少6位）', prefixIcon: Icon(Icons.lock_outline))),
+                    const SizedBox(height: 16),
+                    TextField(controller: _confirmPasswordController, obscureText: true, decoration: const InputDecoration(labelText: '确认新密码', prefixIcon: Icon(Icons.lock_outline))),
+                    if (_error != null) ...[const SizedBox(height: 16), Text(_error!, style: const TextStyle(color: AppTheme.errorColor, fontSize: 14))],
+                    if (_success != null) ...[const SizedBox(height: 16), Text(_success!, style: const TextStyle(color: AppTheme.primaryColor, fontSize: 14))],
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: _isLoading ? null : _submit,
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26))),
+                  child: _isLoading ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white))) : const Text('确认修改', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

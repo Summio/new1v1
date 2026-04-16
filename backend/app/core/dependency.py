@@ -4,7 +4,7 @@ import jwt
 from fastapi import Depends, Header, HTTPException, Request
 
 from app.core.ctx import CTX_USER_ID
-from app.models import Api, Role, User
+from app.models import Api, User
 from app.settings import settings
 
 
@@ -34,18 +34,13 @@ class PermissionControl:
             return
         method = request.method
         path = request.url.path
-        # 优化：一次性加载所有角色的所有 API，避免 N+1 查询
-        roles: list[Role] = await current_user.roles.all().prefetch_related("apis")
-        if not roles:
+        role_ids = await current_user.roles.all().values_list("id", flat=True)
+        if not role_ids:
             raise HTTPException(status_code=403, detail="The user is not bound to a role")
-        # 收集所有 API id
-        api_ids: set[int] = set()
-        for role in roles:
-            async for api in role.apis.all():
-                api_ids.add(api.id)
-        # 一次性查询所有需要的 API
-        apis = await Api.filter(id__in=api_ids).all()
-        permission_apis = set((api.method, api.path) for api in apis)
+
+        permission_apis = set(
+            await Api.filter(role_apis__id__in=role_ids).distinct().values_list("method", "path")
+        )
         if (method, path) not in permission_apis:
             raise HTTPException(status_code=403, detail=f"Permission denied method:{method} path:{path}")
 

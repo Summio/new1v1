@@ -16,7 +16,7 @@ class ApiException implements Exception {
   bool get isSuccess => code == 200;
 
   @override
-  String toString() => 'ApiException(code: $code, message: $message)';
+  String toString() => message;
 }
 
 /// 未登录异常

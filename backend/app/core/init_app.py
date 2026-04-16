@@ -1,5 +1,4 @@
 import os
-import shutil
 import warnings
 
 from aerich import Command
@@ -22,6 +21,7 @@ from app.core.exceptions import (
     RequestValidationHandle,
     ResponseValidationError,
     ResponseValidationHandle,
+    UnhandledExceptionHandle,
 )
 from app.log import logger
 from app.models.admin import Api, Menu, Role
@@ -29,6 +29,7 @@ from app.schemas.menus import MenuType
 from app.settings.config import settings
 
 from .middlewares import BackGroundTaskMiddleware, HttpAuditLogMiddleware
+from .middlewares import AppFriendlyStatusMiddleware
 
 
 def make_middlewares():
@@ -41,6 +42,7 @@ def make_middlewares():
             allow_headers=settings.CORS_ALLOW_HEADERS,
         ),
         Middleware(BackGroundTaskMiddleware),
+        Middleware(AppFriendlyStatusMiddleware),
         Middleware(
             HttpAuditLogMiddleware,
             methods=["GET", "POST", "PUT", "DELETE"],
@@ -60,6 +62,7 @@ def register_exceptions(app: FastAPI):
     app.add_exception_handler(IntegrityError, IntegrityHandle)
     app.add_exception_handler(RequestValidationError, RequestValidationHandle)
     app.add_exception_handler(ResponseValidationError, ResponseValidationHandle)
+    app.add_exception_handler(Exception, UnhandledExceptionHandle)
 
 
 def register_routers(app: FastAPI, prefix: str = "/api"):
@@ -180,6 +183,17 @@ async def init_menus():
                 component="/system/auditlog",
                 keepalive=False,
             ),
+            Menu(
+                menu_type=MenuType.MENU,
+                name="系统配置",
+                path="config",
+                order=7,
+                parent_id=parent_menu.id,
+                icon="material-symbols:settings-outline-rounded",
+                is_hidden=False,
+                component="/system/config",
+                keepalive=False,
+            ),
         ]
         await Menu.bulk_create(children_menu)
         await Menu.create(
@@ -214,10 +228,18 @@ async def init_db():
         await command.migrate()
     except (AttributeError, Exception) as e:
         import asyncclick.exceptions
+        # aerich 在部分 M2M 差异场景下会抛出 TypeError: 'bool' object is not subscriptable
+        # 该异常来自迁移对比逻辑，避免阻塞服务启动，后续可通过手动 aerich migrate 处理。
+        if isinstance(e, TypeError) and "bool' object is not subscriptable" in str(e):
+            logger.warning("skip auto migrate due to aerich m2m diff bug: {}", str(e))
+            return
         if isinstance(e, (asyncclick.exceptions.UsageError, AttributeError)):
-            logger.warning("unable to retrieve model history from database, model history will be created from scratch")
-            shutil.rmtree("migrations", ignore_errors=True)
-            await command.init_db(safe=True)
+            logger.error(
+                "unable to retrieve model history from database. "
+                "startup auto-recovery is disabled to avoid deleting migrations. "
+                "please run manual migration recovery."
+            )
+            raise RuntimeError("migration history retrieval failed, manual migration recovery required") from e
         else:
             raise
 

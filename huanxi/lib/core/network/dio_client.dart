@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import '../constants/app_constants.dart';
 import 'api_interceptor.dart';
 import 'api_exception.dart';
@@ -17,7 +18,9 @@ class DioClient {
   Dio get dio => _dio;
 
   /// 初始化（App 启动时调用一次）
-  void init() {
+  void init({
+    ApiRequestTransformer? requestTransformer,
+  }) {
     _dio = Dio(
       BaseOptions(
         baseUrl: AppConstants.apiBaseUrl,
@@ -28,7 +31,10 @@ class DioClient {
       ),
     );
 
-    _apiInterceptor = ApiInterceptor();
+    _apiInterceptor = ApiInterceptor(
+      requestTransformer: requestTransformer,
+      enableDebugLog: kDebugMode,
+    );
 
     _dio.interceptors.add(_apiInterceptor);
   }

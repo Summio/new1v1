@@ -48,8 +48,9 @@ dependencies:
   collection: ^1.19.1
 
   # 腾讯 IM
-  # TODO: 包名待确认（可能为 tencent_cloud_chat_sdk 或类似），确认后取消注释
-  # tencent_cloud_chat_sdk: ^6.0.0
+  tencent_cloud_chat_sdk: ^8.9.7511+3
+  flutter_secure_storage: ^10.0.0
+  agora_rtc_engine: ^6.5.2
 
 dev_dependencies:
   flutter_test:

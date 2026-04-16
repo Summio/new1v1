@@ -1,3 +1,4 @@
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/app_constants.dart';
@@ -10,6 +11,8 @@ class StorageService {
   static SharedPreferences? _prefs;
   static Box? _userBox;
   static Box? _cacheBox;
+  static const FlutterSecureStorage _secureStorage = FlutterSecureStorage();
+  static String? _tokenCache;
 
   /// 初始化（App 启动时调用一次）
   static Future<void> init() async {
@@ -18,22 +21,27 @@ class StorageService {
     _prefs = await SharedPreferences.getInstance();
     _userBox = await Hive.openBox(AppConstants.hiveBoxUser);
     _cacheBox = await Hive.openBox(AppConstants.hiveBoxCache);
+    await _migrateTokenToSecureStorage();
   }
 
   // =============== SharedPreferences（键值对） ===============
 
   /// 保存 Token
   static Future<void> saveToken(String token) async {
-    await _prefs?.setString(AppConstants.storageToken, token);
+    _tokenCache = token;
+    await _secureStorage.write(key: AppConstants.storageToken, value: token);
+    await _prefs?.remove(AppConstants.storageToken);
   }
 
   /// 获取 Token
   static String? getToken() {
-    return _prefs?.getString(AppConstants.storageToken);
+    return _tokenCache;
   }
 
   /// 删除 Token
   static Future<void> removeToken() async {
+    _tokenCache = null;
+    await _secureStorage.delete(key: AppConstants.storageToken);
     await _prefs?.remove(AppConstants.storageToken);
   }
 
@@ -75,6 +83,8 @@ class StorageService {
   /// 清空所有 shared_preferences
   static Future<void> clearAll() async {
     await _prefs?.clear();
+    _tokenCache = null;
+    await _secureStorage.delete(key: AppConstants.storageToken);
   }
 
   // =============== Hive（结构化数据） ===============
@@ -121,8 +131,27 @@ class StorageService {
 
   /// 清空所有用户数据（退出登录时调用）
   static Future<void> clearUserData() async {
-    await _prefs?.remove(AppConstants.storageToken);
+    await removeToken();
     await _prefs?.remove(AppConstants.storageUserId);
     await _userBox?.clear();
+  }
+
+  static Future<void> _migrateTokenToSecureStorage() async {
+    final secureToken = await _secureStorage.read(key: AppConstants.storageToken);
+    if (secureToken != null && secureToken.isNotEmpty) {
+      _tokenCache = secureToken;
+      await _prefs?.remove(AppConstants.storageToken);
+      return;
+    }
+
+    final legacyToken = _prefs?.getString(AppConstants.storageToken);
+    if (legacyToken != null && legacyToken.isNotEmpty) {
+      await _secureStorage.write(key: AppConstants.storageToken, value: legacyToken);
+      await _prefs?.remove(AppConstants.storageToken);
+      _tokenCache = legacyToken;
+      return;
+    }
+
+    _tokenCache = null;
   }
 }

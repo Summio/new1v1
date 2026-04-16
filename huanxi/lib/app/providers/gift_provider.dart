@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/constants/api_endpoints.dart';
@@ -74,7 +75,8 @@ class GiftListNotifier extends StateNotifier<GiftListState> {
 
       state = state.copyWith(gifts: gifts, isLoading: false);
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      debugPrint('gift.fetchGifts error: $e');
+      state = state.copyWith(isLoading: false, error: '礼物加载失败，请稍后重试');
     }
   }
 
@@ -92,7 +94,8 @@ class GiftListNotifier extends StateNotifier<GiftListState> {
         },
       );
       return data['code'] == 200;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('gift.sendGift error: $e');
       return false;
     }
   }

@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import Any, AsyncGenerator
 
 from fastapi import FastAPI
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from fastapi.routing import APIRoute
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 from starlette.requests import Request
@@ -15,6 +15,33 @@ from app.core.dependency import AuthControl
 from app.models.admin import AuditLog, User
 
 from .bgtask import BgTasks
+
+SENSITIVE_FIELDS = {
+    "password",
+    "old_password",
+    "new_password",
+    "token",
+    "authorization",
+    "access_token",
+    "refresh_token",
+    "account_no",
+    "id_card",
+    "bank_card",
+}
+
+
+def sanitize_sensitive_data(data: Any) -> Any:
+    if isinstance(data, dict):
+        sanitized: dict[str, Any] = {}
+        for key, value in data.items():
+            if key.lower() in SENSITIVE_FIELDS:
+                sanitized[key] = "***"
+            else:
+                sanitized[key] = sanitize_sensitive_data(value)
+        return sanitized
+    if isinstance(data, list):
+        return [sanitize_sensitive_data(item) for item in data]
+    return data
 
 
 class SimpleBaseMiddleware:
@@ -186,8 +213,8 @@ class HttpAuditLogMiddleware(BaseHTTPMiddleware):
             data: dict = await self.get_request_log(request=request, response=response)
             data["response_time"] = process_time
 
-            data["request_args"] = request.state.request_args
-            data["response_body"] = await self.get_response_body(request, response)
+            data["request_args"] = sanitize_sensitive_data(request.state.request_args)
+            data["response_body"] = sanitize_sensitive_data(await self.get_response_body(request, response))
             await AuditLog.create(**data)
 
         return response
@@ -200,3 +227,42 @@ class HttpAuditLogMiddleware(BaseHTTPMiddleware):
         process_time = int((end_time.timestamp() - start_time.timestamp()) * 1000)
         await self.after_request(request, response, process_time)
         return response
+
+
+class AppFriendlyStatusMiddleware(BaseHTTPMiddleware):
+    """App 接口统一使用 HTTP 200，业务错误通过 code/msg 表达。"""
+
+    @staticmethod
+    def _is_app_request(request: Request) -> bool:
+        return request.url.path.startswith("/api/v1/app/")
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        response = await call_next(request)
+        if not self._is_app_request(request) or response.status_code < 400:
+            return response
+
+        body = b""
+        if hasattr(response, "body") and response.body is not None:
+            body = response.body
+        else:
+            chunks = []
+            async for chunk in response.body_iterator:
+                if not isinstance(chunk, bytes):
+                    chunk = chunk.encode(response.charset)
+                chunks.append(chunk)
+            body = b"".join(chunks)
+
+        payload: dict[str, Any]
+        try:
+            raw = json.loads(body or b"{}")
+            if isinstance(raw, dict):
+                payload = raw
+            else:
+                payload = {}
+        except Exception:
+            payload = {}
+
+        payload.setdefault("code", response.status_code)
+        payload.setdefault("msg", "请求失败，请稍后重试")
+        payload.setdefault("data", None)
+        return JSONResponse(content=payload, status_code=200)

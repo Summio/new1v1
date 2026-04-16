@@ -1,18 +1,103 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../app/providers/anchor_provider.dart';
+import '../../app/providers/auth_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
-import '../../app/providers/anchor_provider.dart';
+import '../../core/constants/api_endpoints.dart';
+import '../../core/network/api_exception.dart';
+import '../../core/network/dio_client.dart';
 
 /// 主播详情页 (Momo 风格)
-class AnchorDetailPage extends ConsumerWidget {
+class AnchorDetailPage extends ConsumerStatefulWidget {
   final AnchorInfo anchor;
 
   const AnchorDetailPage({super.key, required this.anchor});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<AnchorDetailPage> createState() => _AnchorDetailPageState();
+}
+
+class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
+  bool _showExtendedContent = false;
+  bool _isActionNavigating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      setState(() => _showExtendedContent = true);
+    });
+  }
+
+  Future<void> _openIm({
+    required bool isSelf,
+    required AnchorInfo anchor,
+  }) async {
+    if (isSelf || _isActionNavigating) return;
+    setState(() => _isActionNavigating = true);
+    try {
+      await context.push(
+        '${AppRoutes.im}/${anchor.userId}',
+        extra: {
+          'peerNickname': anchor.username,
+          'peerAvatarUrl': anchor.avatar,
+        },
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isActionNavigating = false);
+      }
+    }
+  }
+
+  Future<void> _openCall(AnchorInfo anchor) async {
+    if (_isActionNavigating) return;
+    setState(() => _isActionNavigating = true);
+    try {
+      final dialingRes = await DioClient.instance.apiPost(
+        ApiEndpoints.dialing,
+        data: {'anchor_id': anchor.id},
+      );
+      final dialingData = dialingRes['data'] as Map<String, dynamic>?;
+      final callId = (dialingData?['call_id'] as num?)?.toInt();
+      if (callId == null || callId <= 0) {
+        throw const ApiException(code: 400, message: '呼叫创建失败，请稍后重试');
+      }
+
+      await context.push(
+        '${AppRoutes.callRoom}?callId=$callId&anchorId=${anchor.userId}',
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('通话启动失败，请稍后重试')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isActionNavigating = false);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final anchor = widget.anchor;
+    final myUserId = ref.watch(authProvider).userId;
+    final isSelf = myUserId != null && myUserId == anchor.userId;
+    final screenWidth = MediaQuery.of(context).size.width;
+    final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
+    final rawHeaderCacheWidth = (screenWidth * devicePixelRatio).round();
+    final headerCacheWidth = rawHeaderCacheWidth > 1080 ? 1080 : rawHeaderCacheWidth;
+    final hasAvatar = anchor.avatar != null && anchor.avatar!.isNotEmpty;
+
     return Scaffold(
       backgroundColor: Colors.white,
       extendBodyBehindAppBar: true,
@@ -33,24 +118,33 @@ class AnchorDetailPage extends ConsumerWidget {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            // 头部大图
             Hero(
               tag: 'anchor_avatar_${anchor.userId}',
-              child: Container(
-                height: MediaQuery.of(context).size.width * 1.2,
+              child: SizedBox(
+                height: screenWidth * 1.2,
                 width: double.infinity,
-                decoration: BoxDecoration(
-                  image: anchor.avatar != null && anchor.avatar!.isNotEmpty
-                      ? DecorationImage(
-                          image: NetworkImage(anchor.avatar!),
-                          fit: BoxFit.cover,
-                        )
-                      : null,
-                  color: AppTheme.primaryColor.withValues(alpha: 0.1),
-                ),
-                child: anchor.avatar == null || anchor.avatar!.isEmpty
-                    ? const Icon(Icons.person, size: 100, color: AppTheme.primaryColor)
-                    : Container(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Container(color: AppTheme.primaryColor.withValues(alpha: 0.08)),
+                    if (hasAvatar)
+                      Image.network(
+                        anchor.avatar!,
+                        fit: BoxFit.cover,
+                        filterQuality: FilterQuality.low,
+                        cacheWidth: headerCacheWidth,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return _buildHeaderPlaceholder();
+                        },
+                        errorBuilder: (context, error, stackTrace) {
+                          return _buildHeaderPlaceholder();
+                        },
+                      )
+                    else
+                      _buildHeaderPlaceholder(),
+                    if (hasAvatar)
+                      Container(
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
@@ -65,10 +159,10 @@ class AnchorDetailPage extends ConsumerWidget {
                           ),
                         ),
                       ),
+                  ],
+                ),
               ),
             ),
-
-            // 信息区域
             Transform.translate(
               offset: const Offset(0, -30),
               child: Container(
@@ -81,7 +175,6 @@ class AnchorDetailPage extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // 名字与状态
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -102,13 +195,13 @@ class AnchorDetailPage extends ConsumerWidget {
                                 children: [
                                   _buildTag(
                                     icon: Icons.female,
-                                    label: '23', // 模拟年龄
+                                    label: '23',
                                     color: const Color(0xFFFF69B4),
                                   ),
                                   const SizedBox(width: 8),
                                   _buildTag(
                                     icon: Icons.location_on,
-                                    label: '1.2km', // 模拟距离
+                                    label: '1.2km',
                                     color: AppTheme.textHint,
                                   ),
                                 ],
@@ -152,50 +245,46 @@ class AnchorDetailPage extends ConsumerWidget {
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 24),
                     const Divider(color: AppTheme.dividerColor),
                     const SizedBox(height: 24),
-
-                    // 关于我
-                    const Text(
-                      '关于我',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimary,
+                    if (_showExtendedContent) ...[
+                      const Text(
+                        '关于我',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      anchor.anchorIntro ?? '这个主播很懒，还没有填写自我介绍哦~',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        color: AppTheme.textSecondary,
-                        height: 1.6,
+                      const SizedBox(height: 12),
+                      Text(
+                        anchor.anchorIntro ?? '这个主播很懒，还没有填写自我介绍哦~',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          color: AppTheme.textSecondary,
+                          height: 1.6,
+                        ),
                       ),
-                    ),
-
-                    const SizedBox(height: 32),
-                    
-                    // 礼物/魅力值 (模拟)
-                    const Text(
-                      '魅力与礼物',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimary,
+                      const SizedBox(height: 32),
+                      const Text(
+                        '魅力与礼物',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.textPrimary,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: List.generate(5, (index) => _buildGiftItem(index)),
+                      const SizedBox(height: 12),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: List.generate(5, (index) => _buildGiftItem(index)),
+                        ),
                       ),
-                    ),
-                    
-                    const SizedBox(height: 100), // 留出底部操作栏的空间
+                    ] else
+                      _buildDeferredSkeleton(),
+                    const SizedBox(height: 100),
                   ],
                 ),
               ),
@@ -218,11 +307,12 @@ class AnchorDetailPage extends ConsumerWidget {
         child: SafeArea(
           child: Row(
             children: [
-              // 聊天按钮
               Expanded(
                 flex: 1,
                 child: OutlinedButton(
-                  onPressed: () => context.push('${AppRoutes.im}/${anchor.userId}'),
+                  onPressed: isSelf || _isActionNavigating
+                      ? null
+                      : () => _openIm(isSelf: isSelf, anchor: anchor),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     side: const BorderSide(color: AppTheme.dividerColor),
@@ -241,7 +331,6 @@ class AnchorDetailPage extends ConsumerWidget {
                 ),
               ),
               const SizedBox(width: 16),
-              // 视频通话按钮
               Expanded(
                 flex: 2,
                 child: Container(
@@ -251,9 +340,7 @@ class AnchorDetailPage extends ConsumerWidget {
                     boxShadow: AppTheme.elevatedShadow,
                   ),
                   child: ElevatedButton(
-                    onPressed: () {
-                      context.push('${AppRoutes.callRoom}?roomId=room_${anchor.userId}&anchorId=${anchor.userId}');
-                    },
+                    onPressed: _isActionNavigating ? null : () => _openCall(anchor),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.transparent,
                       shadowColor: Colors.transparent,
@@ -284,6 +371,15 @@ class AnchorDetailPage extends ConsumerWidget {
     );
   }
 
+  Widget _buildHeaderPlaceholder() {
+    return Container(
+      color: const Color(0xFFEFEFF4),
+      child: const Center(
+        child: Icon(Icons.person, size: 100, color: AppTheme.primaryColor),
+      ),
+    );
+  }
+
   Widget _buildTag({required IconData icon, required String label, required Color color}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -305,6 +401,64 @@ class AnchorDetailPage extends ConsumerWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDeferredSkeleton() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 80,
+          height: 18,
+          decoration: BoxDecoration(
+            color: const Color(0xFFEFEFF4),
+            borderRadius: BorderRadius.circular(6),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          height: 14,
+          decoration: BoxDecoration(
+            color: const Color(0xFFEFEFF4),
+            borderRadius: BorderRadius.circular(6),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          width: 220,
+          height: 14,
+          decoration: BoxDecoration(
+            color: const Color(0xFFEFEFF4),
+            borderRadius: BorderRadius.circular(6),
+          ),
+        ),
+        const SizedBox(height: 32),
+        Container(
+          width: 110,
+          height: 18,
+          decoration: BoxDecoration(
+            color: const Color(0xFFEFEFF4),
+            borderRadius: BorderRadius.circular(6),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: List.generate(
+            4,
+            (index) => Container(
+              margin: const EdgeInsets.only(right: 12),
+              width: 60,
+              height: 60,
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFEFF4),
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

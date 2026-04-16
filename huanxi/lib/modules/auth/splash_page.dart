@@ -23,11 +23,11 @@ class _SplashPageState extends ConsumerState<SplashPage> {
 
   Future<void> _init() async {
     try {
-      // 初始化认证状态，设置一个总的超时兜底
-      await Future.any([
+      // 初始化认证状态 + App 启动配置，设置一个总的超时兜底
+      await Future.wait([
         ref.read(authProvider.notifier).init(),
-        Future.delayed(const Duration(seconds: 3)), // 最多等3秒
-      ]);
+        ref.read(appInitProvider.notifier).init(),
+      ]).timeout(const Duration(seconds: 3));
     } catch (e) {
       debugPrint('Splash Init Error: $e');
     }

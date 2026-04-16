@@ -10,6 +10,8 @@ class ApiEndpoints {
   static const String appRegister = 'app/register';
   /// 获取当前用户信息
   static const String userInfo = 'app/user/info';
+  /// 按 user_id 获取公开用户资料
+  static const String userPublic = 'app/user/public';
 
   // ========== 主播模块 ==========
   /// 主播推荐列表（分页）
@@ -26,6 +28,18 @@ class ApiEndpoints {
   static const String heartbeat = 'app/heartbeat';
   /// 通话结束结算
   static const String callEnd = 'app/call/end';
+  /// 获取 RTC Token
+  static const String rtcToken = 'app/rtc/token';
+  /// 查询通话状态
+  static const String callStatus = 'app/call/status';
+  /// 查询来电
+  static const String callIncoming = 'app/call/incoming';
+  /// 接听来电
+  static const String callAccept = 'app/call/accept';
+  /// 拒绝来电
+  static const String callReject = 'app/call/reject';
+  /// 取消呼叫
+  static const String callCancel = 'app/call/cancel';
 
   // ========== 礼物模块 ==========
   /// 礼物列表
@@ -43,9 +57,9 @@ class ApiEndpoints {
   /// 申请提现
   static const String withdrawApply = 'app/withdraw/apply';
 
-  // ========== 系统配置模块 ==========
-  /// 获取系统配置（代币名称等）
-  static const String systemConfig = 'app/system_config';
+  // ========== 初始化模块 ==========
+  /// 获取 App 初始化配置（第三方 SDK + 通用配置）
+  static const String appBootstrap = 'app/init/bootstrap';
 
   // ========== 设置模块 ==========
   /// 用户协议

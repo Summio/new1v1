@@ -39,4 +39,9 @@ export default {
   deleteDept: (params = {}) => request.delete('/dept/delete', { params }),
   // auditlog
   getAuditLogList: (params = {}) => request.get('/auditlog/list', { params }),
+  // system config
+  getSystemConfigList: (params = {}) => request.get('/system_config/list', { params }),
+  createSystemConfig: (data = {}) => request.post('/system_config/create', data),
+  updateSystemConfig: (data = {}) => request.post('/system_config/update', data),
+  deleteSystemConfig: (params = {}) => request.delete('/system_config/delete', { params }),
 }
