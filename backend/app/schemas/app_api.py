@@ -42,6 +42,12 @@ class DialingOut(BaseModel):
     call_id: int
     coins: int
     can_call: bool
+    callee_id: int
+    callee_nickname: str
+    callee_avatar: Optional[str] = None
+    call_price: int = 0
+    ring_timeout_seconds: int = 30
+    left_seconds: int = 30
     msg: str = "余额充足"
 
 
@@ -65,6 +71,7 @@ class CallEndOut(BaseModel):
     total_fee: int
     coins: int
     duration: int
+    next_status: str = "ended"
     msg: str = "通话已结束"
 
 
@@ -82,12 +89,33 @@ class CallStatusOut(BaseModel):
     duration: int = 0
 
 
-class IncomingCallOut(BaseModel):
-    call_id: int
-    caller_id: int
-    caller_nickname: str
-    caller_avatar: Optional[str] = None
-    created_at: str
+class CallActionOut(BaseModel):
+    next_status: str
+    msg: str
+
+
+class CallSessionActionsOut(BaseModel):
+    can_accept: bool = False
+    can_reject: bool = False
+    can_cancel: bool = False
+    can_hangup: bool = False
+
+
+class CurrentCallSessionOut(BaseModel):
+    call_id: Optional[int] = None
+    status: str = "idle"
+    role: Optional[str] = None
+    end_reason: Optional[str] = None
+    peer_user_id: Optional[int] = None
+    peer_nickname: Optional[str] = None
+    peer_avatar: Optional[str] = None
+    call_price: int = 0
+    ring_timeout_seconds: int = 30
+    left_seconds: int = 0
+    created_at: Optional[str] = None
+    connected_at: Optional[str] = None
+    duration: int = 0
+    actions: CallSessionActionsOut = Field(default_factory=CallSessionActionsOut)
 
 
 class RTCTokenIn(BaseModel):

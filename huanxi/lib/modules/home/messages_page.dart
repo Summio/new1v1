@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:tencent_cloud_chat_sdk/models/v2_tim_conversation.dart';
@@ -11,8 +10,8 @@ import '../../core/constants/api_endpoints.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/network/response_parsers.dart';
 import '../../core/storage/storage.dart';
-import '../../core/utils/conversation_refresh_throttler.dart';
 import '../../services/im_service.dart';
+import 'package:huanxi/core/utils/app_toast.dart';
 
 /// 消息页
 class MessagesPage extends ConsumerStatefulWidget {
@@ -30,7 +29,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
   List<V2TimConversation> _conversations = [];
   final Map<String, V2TimUserFullInfo> _profileByUserId = {};
   final Map<String, _PeerAppProfile> _appProfileByUserId = {};
-  final ConversationRefreshThrottler _refreshThrottler = ConversationRefreshThrottler();
+  void Function(int)? _totalUnreadListener;
 
   @override
   void initState() {
@@ -41,6 +40,9 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
   @override
   void dispose() {
     _imService.removeMessageListener(_onMessageReceived);
+    if (_totalUnreadListener != null) {
+      _imService.removeTotalUnreadListener(_totalUnreadListener!);
+    }
     super.dispose();
   }
 
@@ -52,20 +54,18 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
       if (myUserId == null) {
         throw Exception('登录状态失效，请重新登录');
       }
-      await _loginWithPrefix(
-        prefix: _chatPrefix,
-        numericUserId: myUserId,
-      );
+      await _loginWithPrefix(prefix: _chatPrefix, numericUserId: myUserId);
 
       _imService.removeMessageListener(_onMessageReceived);
       _imService.addMessageListener(_onMessageReceived);
+      _totalUnreadListener ??= _onTotalUnreadChanged;
+      _imService.removeTotalUnreadListener(_totalUnreadListener!);
+      _imService.addTotalUnreadListener(_totalUnreadListener!);
       await _loadConversations();
     } catch (e) {
       debugPrint('消息页 IM 初始化失败: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('消息初始化失败: $e')),
-        );
+        AppToast.showSnackBar(context, SnackBar(content: Text('消息初始化失败: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -128,7 +128,9 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
     }
   }
 
-  Future<void> _loadPeerAppProfiles(List<V2TimConversation> conversations) async {
+  Future<void> _loadPeerAppProfiles(
+    List<V2TimConversation> conversations,
+  ) async {
     final targets = conversations
         .map((c) => c.userID?.trim() ?? '')
         .where((id) => id.isNotEmpty)
@@ -148,7 +150,9 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
             ApiEndpoints.userPublic,
             params: {'user_id': target.userId},
           );
-          final payload = (data['data'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+          final payload =
+              (data['data'] as Map<String, dynamic>?) ??
+              const <String, dynamic>{};
           final nickname = (payload['nickname'] as String?)?.trim();
           final avatarUrl = (payload['avatar'] as String?)?.trim();
           return MapEntry(
@@ -177,9 +181,14 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
 
   void _onMessageReceived(dynamic message) {
     // 有新消息时刷新会话页，确保“消息页”可见
-    if (_refreshThrottler.canRefresh()) {
-      _loadConversations();
-    }
+    debugPrint('[MSG_PAGE] 收到消息，刷新会话列表');
+    _loadConversations();
+  }
+
+  void _onTotalUnreadChanged(int totalUnreadCount) {
+    if (totalUnreadCount < 0) return;
+    debugPrint('[MSG_PAGE] 未读数变化: $totalUnreadCount，刷新会话列表');
+    _loadConversations();
   }
 
   String _displayName(V2TimConversation conv) {
@@ -192,7 +201,9 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
 
     final showName = conv.showName?.trim() ?? '';
     final isTechnicalId = _isTechnicalImId(showName);
-    if (showName.isNotEmpty && showName != _myUserId && !isTechnicalId) return showName;
+    if (showName.isNotEmpty && showName != _myUserId && !isTechnicalId) {
+      return showName;
+    }
     return '';
   }
 
@@ -220,9 +231,11 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
   }
 
   String _lastText(V2TimConversation conv) {
-    return conv.lastMessage?.textElem?.text?.trim().isNotEmpty == true
-        ? conv.lastMessage!.textElem!.text!
-        : '[暂无文本消息]';
+    final currentUserId = _extractAppUserId(_myUserId ?? '') ?? 0;
+    return _imService.buildConversationPreview(
+      message: conv.lastMessage,
+      currentUserId: currentUserId,
+    );
   }
 
   String _timeText(V2TimConversation conv) {
@@ -254,112 +267,131 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _conversations.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 120,
-                        height: 120,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              AppTheme.primaryColor.withValues(alpha: 0.1),
-                              AppTheme.accentColor.withValues(alpha: 0.1),
-                            ],
-                          ),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.chat_bubble_outline_rounded,
-                          size: 56,
-                          color: AppTheme.primaryColor.withValues(alpha: 0.6),
-                        ),
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          AppTheme.primaryColor.withValues(alpha: 0.1),
+                          AppTheme.accentColor.withValues(alpha: 0.1),
+                        ],
                       ),
-                      const SizedBox(height: 24),
-                      const Text(
-                        '暂无消息',
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        '和主播互动后将在此处收到消息',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                    ],
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.chat_bubble_outline_rounded,
+                      size: 56,
+                      color: AppTheme.primaryColor.withValues(alpha: 0.6),
+                    ),
                   ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _loadConversations,
-                  child: ListView.separated(
-                    itemCount: _conversations.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final conv = _conversations[index];
-                      final avatarUrl = _avatarUrl(conv);
-                      return ListTile(
-                        leading: CircleAvatar(
-                          backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.15),
-                          backgroundImage: avatarUrl == null ? null : NetworkImage(avatarUrl),
-                          child: avatarUrl == null
-                              ? const Icon(Icons.person, color: AppTheme.primaryColor)
-                              : null,
+                  const SizedBox(height: 24),
+                  const Text(
+                    '暂无消息',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    '和主播互动后将在此处收到消息',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: _loadConversations,
+              child: ListView.separated(
+                itemCount: _conversations.length,
+                separatorBuilder: (_, itemIndex) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final conv = _conversations[index];
+                  final avatarUrl = _avatarUrl(conv);
+                  return ListTile(
+                    leading: CircleAvatar(
+                      backgroundColor: AppTheme.primaryColor.withValues(
+                        alpha: 0.15,
+                      ),
+                      backgroundImage: avatarUrl == null
+                          ? null
+                          : NetworkImage(avatarUrl),
+                      child: avatarUrl == null
+                          ? const Icon(
+                              Icons.person,
+                              color: AppTheme.primaryColor,
+                            )
+                          : null,
+                    ),
+                    title: Text(
+                      _displayName(conv),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    subtitle: Text(
+                      _lastText(conv),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    trailing: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          _timeText(conv),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.textHint,
+                          ),
                         ),
-                        title: Text(
-                          _displayName(conv),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        subtitle: Text(
-                          _lastText(conv),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        trailing: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              _timeText(conv),
-                              style: const TextStyle(fontSize: 12, color: AppTheme.textHint),
+                        if ((conv.unreadCount ?? 0) > 0)
+                          Container(
+                            margin: const EdgeInsets.only(top: 4),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1,
                             ),
-                            if ((conv.unreadCount ?? 0) > 0)
-                              Container(
-                                margin: const EdgeInsets.only(top: 4),
-                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                                decoration: BoxDecoration(
-                                  color: Colors.redAccent,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Text(
-                                  '${conv.unreadCount}',
-                                  style: const TextStyle(color: Colors.white, fontSize: 11),
-                                ),
+                            decoration: BoxDecoration(
+                              color: Colors.redAccent,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              '${conv.unreadCount}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
                               ),
-                          ],
-                        ),
-                        onTap: () {
-                          final userId = conv.userID;
-                          if (userId == null || userId.isEmpty) return;
-                          _imService.cleanC2CUnread(peerUserId: userId);
-                          context.push(
-                            '${AppRoutes.im}/$userId',
-                            extra: {
-                              'peerNickname': _displayName(conv),
-                              'peerAvatarUrl': _avatarUrl(conv),
-                            },
-                          );
+                            ),
+                          ),
+                      ],
+                    ),
+                    onTap: () async {
+                      final userId = conv.userID;
+                      if (userId == null || userId.isEmpty) return;
+                      final router = GoRouter.of(context);
+                      await _imService.cleanC2CUnread(peerUserId: userId);
+                      await router.push(
+                        '${AppRoutes.im}/$userId',
+                        extra: {
+                          'peerNickname': _displayName(conv),
+                          'peerAvatarUrl': _avatarUrl(conv),
                         },
                       );
+                      if (!mounted) return;
+                      await _loadConversations();
                     },
-                  ),
-                ),
+                  );
+                },
+              ),
+            ),
     );
   }
 }

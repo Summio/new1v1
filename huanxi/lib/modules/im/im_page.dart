@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,8 +11,10 @@ import '../../core/network/api_exception.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/network/response_parsers.dart';
 import '../../core/storage/storage.dart';
+import '../../core/im/call_trace_message.dart';
 import '../../app/providers/auth_provider.dart';
 import 'package:tencent_cloud_chat_sdk/models/v2_tim_message.dart';
+import 'package:huanxi/core/utils/app_toast.dart';
 
 /// IM 聊天页面
 /// 发送文字消息（后续接入 WebSocket）
@@ -71,9 +72,6 @@ class _ImPageState extends ConsumerState<ImPage> {
       // 1. 拉取统一初始化配置（IM 可降级到 usersig 返回的 sdk_app_id）
       final appInitNotifier = ref.read(appInitProvider.notifier);
       await appInitNotifier.init();
-      final appInitState = ref.read(appInitProvider);
-      int? sdkAppId = appInitState.imConfigured ? appInitState.imSdkAppId : null;
-
       // 2. 获取 UserSig（用户态短期凭证仍走独立接口）
       final authState = ref.read(authProvider);
       final myUserId = authState.userId ?? StorageService.getUserId();
@@ -82,10 +80,10 @@ class _ImPageState extends ConsumerState<ImPage> {
       }
       final usersigData = await _requestUserSig();
       final userSig = usersigData.userSig;
-      sdkAppId ??= usersigData.sdkAppId;
-      if (sdkAppId == null) {
-        throw Exception('IM 初始化配置缺失，请联系管理员');
-      }
+      final appInitState = ref.read(appInitProvider);
+      final sdkAppId = appInitState.imConfigured
+          ? (appInitState.imSdkAppId ?? usersigData.sdkAppId)
+          : usersigData.sdkAppId;
 
       // 3. 获取当前用户ID
       _myUserId = '${_chatPrefix}_$myUserId';
@@ -95,9 +93,11 @@ class _ImPageState extends ConsumerState<ImPage> {
       _peerAvatarUrl = widget.initialPeerAvatarUrl;
       final myNumId = _extractAppUserId(_myUserId ?? '');
       final peerNumId = _extractAppUserId(_peerUserId ?? '');
-      if (_myUserId == _peerUserId || (myNumId != null && peerNumId != null && myNumId == peerNumId)) {
+      if (_myUserId == _peerUserId ||
+          (myNumId != null && peerNumId != null && myNumId == peerNumId)) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
+          AppToast.showSnackBar(
+            context,
             const SnackBar(content: Text('不能和自己聊天')),
           );
           Navigator.of(context).pop();
@@ -123,9 +123,7 @@ class _ImPageState extends ConsumerState<ImPage> {
       await _imService.cleanC2CUnread(peerUserId: _peerUserId!);
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('IM 初始化失败: $e')),
-        );
+        AppToast.showSnackBar(context, SnackBar(content: Text('IM 初始化失败: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -136,12 +134,15 @@ class _ImPageState extends ConsumerState<ImPage> {
   void _onMessageReceived(dynamic message) {
     try {
       final msgPeerUserId = message?.userID as String?;
-      if (_peerUserId == null || msgPeerUserId == null || msgPeerUserId != _peerUserId) {
+      if (_peerUserId == null ||
+          msgPeerUserId == null ||
+          msgPeerUserId != _peerUserId) {
         return;
       }
 
-      final text = message?.textElem?.text as String?;
-      if (text == null || text.trim().isEmpty) return;
+      final trace = _imService.parseCallTraceMessage(message);
+      final text = (message?.textElem?.text as String?)?.trim() ?? '';
+      if (trace == null && text.isEmpty) return;
 
       final sender = message?.sender as String?;
       final isMe = sender != null && sender == _myUserId;
@@ -152,14 +153,22 @@ class _ImPageState extends ConsumerState<ImPage> {
         _messageIds.add(msgId);
       }
 
+      final currentUserId = _extractAppUserId(_myUserId ?? '') ?? 0;
+      final renderedText = trace != null
+          ? trace.toDisplayText(currentUserId: currentUserId)
+          : text;
+
       setState(() {
-        _messages.add(_ChatMessage(
-          content: text,
-          isMe: isMe,
-          time: timestamp != null
-              ? DateTime.fromMillisecondsSinceEpoch(timestamp * 1000)
-              : DateTime.now(),
-        ));
+        _messages.add(
+          _ChatMessage(
+            content: renderedText,
+            isMe: isMe,
+            time: timestamp != null
+                ? DateTime.fromMillisecondsSinceEpoch(timestamp * 1000)
+                : DateTime.now(),
+            callTrace: trace,
+          ),
+        );
       });
       _scrollToBottom();
       if (_peerUserId != null) {
@@ -178,7 +187,9 @@ class _ImPageState extends ConsumerState<ImPage> {
   Future<void> _loadPeerProfile() async {
     if (_peerUserId == null) return;
     try {
-      final profiles = await _imService.getUsersProfile(userIds: [_peerUserId!]);
+      final profiles = await _imService.getUsersProfile(
+        userIds: [_peerUserId!],
+      );
       final V2TimUserFullInfo? profile = profiles[_peerUserId!];
       if (!mounted || profile == null) return;
       final nick = profile.nickName?.trim();
@@ -203,7 +214,8 @@ class _ImPageState extends ConsumerState<ImPage> {
         ApiEndpoints.userPublic,
         params: {'user_id': peerNumId},
       );
-      final payload = (data['data'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+      final payload =
+          (data['data'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
       if (!mounted) return;
       setState(() {
         final appNick = (payload['nickname'] as String?)?.trim();
@@ -239,6 +251,7 @@ class _ImPageState extends ConsumerState<ImPage> {
       }
 
       final parsed = <_ChatMessage>[];
+      final currentUserId = _extractAppUserId(_myUserId ?? '') ?? 0;
       for (final msg in messages.reversed) {
         final msgId = msg.msgID;
         if (msgId != null && msgId.isNotEmpty && _messageIds.contains(msgId)) {
@@ -247,18 +260,25 @@ class _ImPageState extends ConsumerState<ImPage> {
         if (msgId != null && msgId.isNotEmpty) {
           _messageIds.add(msgId);
         }
-        final text = msg?.textElem?.text as String?;
-        if (text == null || text.trim().isEmpty) continue;
-        final sender = msg?.sender as String?;
+        final trace = _imService.parseCallTraceMessage(msg);
+        final text = msg.textElem?.text?.trim() ?? '';
+        if (trace == null && text.isEmpty) continue;
+        final sender = msg.sender;
         final isMe = sender != null && sender == _myUserId;
-        final timestamp = msg?.timestamp as int?;
-        parsed.add(_ChatMessage(
-          content: text,
-          isMe: isMe,
-          time: timestamp != null
-              ? DateTime.fromMillisecondsSinceEpoch(timestamp * 1000)
-              : DateTime.now(),
-        ));
+        final timestamp = msg.timestamp;
+        final renderedText = trace != null
+            ? trace.toDisplayText(currentUserId: currentUserId)
+            : text;
+        parsed.add(
+          _ChatMessage(
+            content: renderedText,
+            isMe: isMe,
+            time: timestamp != null
+                ? DateTime.fromMillisecondsSinceEpoch(timestamp * 1000)
+                : DateTime.now(),
+            callTrace: trace,
+          ),
+        );
       }
       if (parsed.isEmpty) return;
 
@@ -298,24 +318,19 @@ class _ImPageState extends ConsumerState<ImPage> {
 
       // 添加到本地列表
       setState(() {
-        _messages.add(_ChatMessage(
-          content: text,
-          isMe: true,
-          time: DateTime.now(),
-        ));
+        _messages.add(
+          _ChatMessage(content: text, isMe: true, time: DateTime.now()),
+        );
       });
 
       _controller.clear();
       _scrollToBottom();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('消息发送失败: $e')),
-        );
+        AppToast.showSnackBar(context, SnackBar(content: Text('消息发送失败: $e')));
       }
     }
   }
-
 
   @override
   void dispose() {
@@ -330,7 +345,8 @@ class _ImPageState extends ConsumerState<ImPage> {
     if (!_scrollController.hasClients) return;
     final position = _scrollController.position;
     final isAtTop = position.pixels <= 60;
-    final isUserScrollingToTop = position.userScrollDirection == ScrollDirection.forward;
+    final isUserScrollingToTop =
+        position.userScrollDirection == ScrollDirection.forward;
     if (isAtTop && isUserScrollingToTop) {
       _loadMoreHistory();
     }
@@ -367,7 +383,8 @@ class _ImPageState extends ConsumerState<ImPage> {
     final peerNumId = _extractAppUserId(_peerUserId ?? widget.userId);
     if (peerNumId == null || peerNumId <= 0) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      AppToast.showSnackBar(
+        context,
         const SnackBar(content: Text('目标用户信息异常，无法发起通话')),
       );
       return;
@@ -375,7 +392,8 @@ class _ImPageState extends ConsumerState<ImPage> {
     final anchorId = _peerAnchorId;
     if (anchorId == null || anchorId <= 0) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      AppToast.showSnackBar(
+        context,
         const SnackBar(content: Text('对方不是可通话主播，暂不支持视频呼叫')),
       );
       return;
@@ -389,6 +407,10 @@ class _ImPageState extends ConsumerState<ImPage> {
       );
       final dialingData = dialingRes['data'] as Map<String, dynamic>?;
       final callId = (dialingData?['call_id'] as num?)?.toInt();
+      final peerUserId = (dialingData?['callee_id'] as num?)?.toInt();
+      final peerName = (dialingData?['callee_nickname'] as String?)?.trim();
+      final peerAvatar = (dialingData?['callee_avatar'] as String?)?.trim();
+      final callPrice = (dialingData?['call_price'] as num?)?.toInt() ?? 0;
       if (callId == null || callId <= 0) {
         throw const ApiException(code: 400, message: '呼叫创建失败，请稍后重试');
       }
@@ -396,23 +418,30 @@ class _ImPageState extends ConsumerState<ImPage> {
 
       await context.push(
         Uri(
-          path: AppRoutes.callRoom,
+          path: AppRoutes.callOutgoing,
           queryParameters: {
             'callId': callId.toString(),
-            'peerUserId': peerNumId.toString(),
+            'peerUserId': (peerUserId ?? peerNumId).toString(),
             'anchorId': anchorId.toString(),
-            'peerName': _peerDisplayName(),
+            'peerName':
+                (peerName != null && peerName.isNotEmpty)
+                    ? peerName
+                    : _peerDisplayName(),
+            'peerAvatar':
+                (peerAvatar != null && peerAvatar.isNotEmpty)
+                    ? peerAvatar
+                    : (_peerAvatarUrl ?? ''),
+            'callPrice': callPrice.toString(),
           },
         ).toString(),
       );
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      AppToast.showSnackBar(context, SnackBar(content: Text(e.message)));
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      AppToast.showSnackBar(
+        context,
         const SnackBar(content: Text('通话启动失败，请稍后重试')),
       );
     } finally {
@@ -446,26 +475,22 @@ class _ImPageState extends ConsumerState<ImPage> {
             icon: const Icon(Icons.more_horiz),
             onSelected: (value) {
               if (value == 'block') {
-                ScaffoldMessenger.of(context).showSnackBar(
+                AppToast.showSnackBar(
+                  context,
                   const SnackBar(content: Text('拉黑功能开发中')),
                 );
                 return;
               }
               if (value == 'report') {
-                ScaffoldMessenger.of(context).showSnackBar(
+                AppToast.showSnackBar(
+                  context,
                   const SnackBar(content: Text('投诉功能开发中')),
                 );
               }
             },
             itemBuilder: (context) => const [
-              PopupMenuItem<String>(
-                value: 'block',
-                child: Text('拉黑'),
-              ),
-              PopupMenuItem<String>(
-                value: 'report',
-                child: Text('投诉'),
-              ),
+              PopupMenuItem<String>(value: 'block', child: Text('拉黑')),
+              PopupMenuItem<String>(value: 'report', child: Text('投诉')),
             ],
           ),
         ],
@@ -480,7 +505,11 @@ class _ImPageState extends ConsumerState<ImPage> {
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.chat_bubble_outline, size: 48, color: AppTheme.textHint),
+                              Icon(
+                                Icons.chat_bubble_outline,
+                                size: 48,
+                                color: AppTheme.textHint,
+                              ),
                               SizedBox(height: 12),
                               Text(
                                 '暂无消息，开始聊天吧',
@@ -492,15 +521,23 @@ class _ImPageState extends ConsumerState<ImPage> {
                       : RepaintBoundary(
                           child: ListView.builder(
                             controller: _scrollController,
-                            padding: EdgeInsets.fromLTRB(12, 12, 12, listBottomPadding),
-                            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                            padding: EdgeInsets.fromLTRB(
+                              12,
+                              12,
+                              12,
+                              listBottomPadding,
+                            ),
+                            keyboardDismissBehavior:
+                                ScrollViewKeyboardDismissBehavior.onDrag,
                             itemCount: _messages.length,
                             itemBuilder: (context, index) {
                               final msg = _messages[index];
                               return _MessageBubble(
                                 message: msg,
                                 maxBubbleWidth: maxBubbleWidth,
-                                avatarUrl: msg.isMe ? _myAvatarUrl : _peerAvatarUrl,
+                                avatarUrl: msg.isMe
+                                    ? _myAvatarUrl
+                                    : _peerAvatarUrl,
                               );
                             },
                           ),
@@ -511,14 +548,22 @@ class _ImPageState extends ConsumerState<ImPage> {
                   right: 0,
                   bottom: 0,
                   child: Container(
-                    padding: EdgeInsets.only(left: 12, right: 12, top: 8, bottom: composerBottom),
+                    padding: EdgeInsets.only(
+                      left: 12,
+                      right: 12,
+                      top: 8,
+                      bottom: composerBottom,
+                    ),
                     decoration: const BoxDecoration(
                       color: AppTheme.surfaceColor,
                     ),
                     child: Row(
                       children: [
                         IconButton(
-                          icon: const Icon(Icons.videocam_outlined, color: AppTheme.textSecondary),
+                          icon: const Icon(
+                            Icons.videocam_outlined,
+                            color: AppTheme.textSecondary,
+                          ),
                           onPressed: _isStartingCall ? null : _startVideoCall,
                         ),
                         Expanded(
@@ -570,8 +615,16 @@ class _ChatMessage {
   final String content;
   final bool isMe;
   final DateTime time;
+  final CallTraceMessage? callTrace;
 
-  _ChatMessage({required this.content, required this.isMe, required this.time});
+  _ChatMessage({
+    required this.content,
+    required this.isMe,
+    required this.time,
+    this.callTrace,
+  });
+
+  bool get isCallTrace => callTrace != null;
 }
 
 class _MessageBubble extends StatelessWidget {
@@ -587,10 +640,16 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (message.isCallTrace) {
+      return _CallTraceCard(message: message, maxBubbleWidth: maxBubbleWidth);
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
-        mainAxisAlignment: message.isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
+        mainAxisAlignment: message.isMe
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!message.isMe) ...[
@@ -598,12 +657,12 @@ class _MessageBubble extends StatelessWidget {
             const SizedBox(width: 8),
           ],
           Container(
-            constraints: BoxConstraints(
-              maxWidth: maxBubbleWidth,
-            ),
+            constraints: BoxConstraints(maxWidth: maxBubbleWidth),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: message.isMe ? AppTheme.primaryColor : AppTheme.primaryColor.withValues(alpha: 0.08),
+              color: message.isMe
+                  ? AppTheme.primaryColor
+                  : AppTheme.primaryColor.withValues(alpha: 0.08),
               borderRadius: BorderRadius.only(
                 topLeft: const Radius.circular(16),
                 topRight: const Radius.circular(16),
@@ -643,6 +702,61 @@ class _MessageBubble extends StatelessWidget {
   }
 }
 
+class _CallTraceCard extends StatelessWidget {
+  final _ChatMessage message;
+  final double maxBubbleWidth;
+
+  const _CallTraceCard({required this.message, required this.maxBubbleWidth});
+
+  @override
+  Widget build(BuildContext context) {
+    final detail = message.callTrace?.detailText() ?? '';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Center(
+        child: Container(
+          constraints: BoxConstraints(maxWidth: maxBubbleWidth + 80),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: AppTheme.primaryColor.withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                message.content,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              if (detail.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(
+                  detail,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 2),
+              Text(
+                '${message.time.hour.toString().padLeft(2, '0')}:${message.time.minute.toString().padLeft(2, '0')}',
+                style: const TextStyle(fontSize: 10, color: AppTheme.textHint),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _BubbleAvatar extends StatelessWidget {
   final String? avatarUrl;
 
@@ -655,7 +769,9 @@ class _BubbleAvatar extends StatelessWidget {
       radius: 16,
       backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.15),
       backgroundImage: hasAvatar ? NetworkImage(avatarUrl!.trim()) : null,
-      child: hasAvatar ? null : const Icon(Icons.person, size: 16, color: AppTheme.primaryColor),
+      child: hasAvatar
+          ? null
+          : const Icon(Icons.person, size: 16, color: AppTheme.primaryColor),
     );
   }
 }

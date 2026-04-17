@@ -8,6 +8,7 @@ import '../../app/theme/app_theme.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/network/dio_client.dart';
+import 'package:huanxi/core/utils/app_toast.dart';
 
 /// 主播详情页 (Momo 风格)
 class AnchorDetailPage extends ConsumerStatefulWidget {
@@ -63,6 +64,10 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
       );
       final dialingData = dialingRes['data'] as Map<String, dynamic>?;
       final callId = (dialingData?['call_id'] as num?)?.toInt();
+      final peerUserId = (dialingData?['callee_id'] as num?)?.toInt();
+      final peerName = (dialingData?['callee_nickname'] as String?)?.trim();
+      final peerAvatar = (dialingData?['callee_avatar'] as String?)?.trim();
+      final callPrice = (dialingData?['call_price'] as num?)?.toInt() ?? 0;
       if (callId == null || callId <= 0) {
         throw const ApiException(code: 400, message: '呼叫创建失败，请稍后重试');
       }
@@ -70,23 +75,29 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
 
       await context.push(
         Uri(
-          path: AppRoutes.callRoom,
+          path: AppRoutes.callOutgoing,
           queryParameters: {
             'callId': callId.toString(),
-            'peerUserId': anchor.userId.toString(),
+            'peerUserId': (peerUserId ?? anchor.userId).toString(),
             'anchorId': anchor.id.toString(),
-            'peerName': anchor.username,
+            'peerName':
+                (peerName != null && peerName.isNotEmpty)
+                    ? peerName
+                    : (anchor.username ?? '主播'),
+            'peerAvatar': (peerAvatar != null && peerAvatar.isNotEmpty)
+                ? peerAvatar
+                : (anchor.avatar ?? ''),
+            'callPrice': callPrice.toString(),
           },
         ).toString(),
       );
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
+      AppToast.showSnackBar(context, SnackBar(content: Text(e.message)));
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      AppToast.showSnackBar(
+        context,
         const SnackBar(content: Text('通话启动失败，请稍后重试')),
       );
     } finally {
@@ -104,7 +115,9 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
     final screenWidth = MediaQuery.of(context).size.width;
     final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
     final rawHeaderCacheWidth = (screenWidth * devicePixelRatio).round();
-    final headerCacheWidth = rawHeaderCacheWidth > 1080 ? 1080 : rawHeaderCacheWidth;
+    final headerCacheWidth = rawHeaderCacheWidth > 1080
+        ? 1080
+        : rawHeaderCacheWidth;
     final hasAvatar = anchor.avatar != null && anchor.avatar!.isNotEmpty;
 
     return Scaffold(
@@ -135,7 +148,9 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    Container(color: AppTheme.primaryColor.withValues(alpha: 0.08)),
+                    Container(
+                      color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                    ),
                     if (hasAvatar)
                       Image.network(
                         anchor.avatar!,
@@ -219,7 +234,10 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 6,
+                          ),
                           decoration: BoxDecoration(
                             color: (anchor.isOnline ?? false)
                                 ? AppTheme.onlineGreen.withValues(alpha: 0.1)
@@ -288,7 +306,10 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
-                          children: List.generate(5, (index) => _buildGiftItem(index)),
+                          children: List.generate(
+                            5,
+                            (index) => _buildGiftItem(index),
+                          ),
                         ),
                       ),
                     ] else
@@ -332,9 +353,19 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                   child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.chat_bubble_outline, size: 20, color: AppTheme.textPrimary),
+                      Icon(
+                        Icons.chat_bubble_outline,
+                        size: 20,
+                        color: AppTheme.textPrimary,
+                      ),
                       SizedBox(width: 8),
-                      Text('聊一聊', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold)),
+                      Text(
+                        '聊一聊',
+                        style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -349,7 +380,9 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                     boxShadow: AppTheme.elevatedShadow,
                   ),
                   child: ElevatedButton(
-                    onPressed: _isActionNavigating ? null : () => _openCall(anchor),
+                    onPressed: _isActionNavigating
+                        ? null
+                        : () => _openCall(anchor),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.transparent,
                       shadowColor: Colors.transparent,
@@ -358,7 +391,11 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.videocam, size: 22, color: Colors.white),
+                        const Icon(
+                          Icons.videocam,
+                          size: 22,
+                          color: Colors.white,
+                        ),
                         const SizedBox(width: 8),
                         Text(
                           '立即通话 (${anchor.callPrice?.toStringAsFixed(0) ?? '0'}/分)',
@@ -389,7 +426,11 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
     );
   }
 
-  Widget _buildTag({required IconData icon, required String label, required Color color}) {
+  Widget _buildTag({
+    required IconData icon,
+    required String label,
+    required Color color,
+  }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
@@ -480,7 +521,10 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
         color: AppTheme.backgroundColor,
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Icon(Icons.card_giftcard, color: AppTheme.primaryColor.withValues(alpha: 0.5)),
+      child: Icon(
+        Icons.card_giftcard,
+        color: AppTheme.primaryColor.withValues(alpha: 0.5),
+      ),
     );
   }
 }

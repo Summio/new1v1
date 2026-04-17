@@ -32,8 +32,8 @@ class ApiEndpoints {
   static const String rtcToken = 'app/rtc/token';
   /// 查询通话状态
   static const String callStatus = 'app/call/status';
-  /// 查询来电
-  static const String callIncoming = 'app/call/incoming';
+  /// 查询当前通话会话（聚合）
+  static const String callSessionCurrent = 'app/call/session/current';
   /// 接听来电
   static const String callAccept = 'app/call/accept';
   /// 拒绝来电

@@ -14,13 +14,16 @@ import '../../core/constants/api_endpoints.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/network/dio_client.dart';
 import '../gift/gift_panel.dart';
+import 'package:huanxi/core/utils/app_toast.dart';
 
 /// 通话房间页面
 /// 基于声网 RTC 实现实时视频通话
 class CallRoomPage extends ConsumerStatefulWidget {
   final int callId;
+
   /// 通话对端 AppUser ID（用于资料展示）
   final String peerUserId;
+
   /// 礼物目标 Anchor ID（可选，缺省时尝试按 peerUserId 反查）
   final String? anchorId;
   final String peerName;
@@ -53,14 +56,12 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
   bool _endingInProgress = false;
   bool _rtcJoining = false;
   bool _joinRequested = false;
-  bool _isCaller = false;
   bool _renewInFlight = false;
   bool _endingForBalance = false;
   bool _endingForNetwork = false;
   int _renewSyncedMinutes = 0;
 
-  String _callStatus = 'pending';
-  int _pendingLeftSeconds = 30;
+  String _callStatus = 'ongoing';
 
   int? _localUid;
   int? _remoteUid;
@@ -104,13 +105,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       final data = res['data'] as Map<String, dynamic>?;
       final status = (data?['status'] as String?)?.trim() ?? 'ended';
       final endReason = (data?['end_reason'] as String?)?.trim();
-      final callerId = (data?['caller_id'] as num?)?.toInt();
-      final createdAtRaw = (data?['created_at'] as String?)?.trim();
-      final myUserId = ref.read(authProvider).userId;
-      final isCallerNow = myUserId != null && callerId != null && myUserId == callerId;
-      if (_isCaller != isCallerNow && mounted) {
-        setState(() => _isCaller = isCallerNow);
-      }
 
       if (!mounted) return;
       if (_callStatus != status) {
@@ -126,16 +120,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
         return;
       }
 
-      if (status == 'pending' && _isLoading) {
-        setState(() => _isLoading = false);
-      }
-      if (status == 'pending' && isCallerNow) {
-        final left = _calcPendingLeftSeconds(createdAtRaw);
-        if (mounted && left != _pendingLeftSeconds) {
-          setState(() => _pendingLeftSeconds = left);
-        }
-      }
-
       if (status == 'ended') {
         _log('status ended, endReason=$endReason');
         await _handleEndedByRemote(endReason);
@@ -144,15 +128,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       // 状态轮询失败不立刻中断，保持页面等待下次轮询
       _log('status polling failed');
     }
-  }
-
-  int _calcPendingLeftSeconds(String? createdAtRaw) {
-    if (createdAtRaw == null || createdAtRaw.isEmpty) return _pendingLeftSeconds;
-    final createdAt = DateTime.tryParse(createdAtRaw)?.toLocal();
-    if (createdAt == null) return _pendingLeftSeconds;
-    final elapsed = DateTime.now().difference(createdAt).inSeconds;
-    final left = 30 - elapsed;
-    return left > 0 ? left : 0;
   }
 
   Future<void> _initRtc() async {
@@ -191,7 +166,8 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       final channel = (rtcData?['channel'] as String?)?.trim() ?? '';
       final token = (rtcData?['token'] as String?)?.trim() ?? '';
       final uid = (rtcData?['uid'] as num?)?.toInt() ?? 0;
-      final freeSecondsRaw = (rtcData?['free_seconds_before_billing'] as num?)?.toInt();
+      final freeSecondsRaw = (rtcData?['free_seconds_before_billing'] as num?)
+          ?.toInt();
       if (freeSecondsRaw != null && freeSecondsRaw >= 0) {
         _freeSecondsBeforeBilling = freeSecondsRaw;
       }
@@ -200,7 +176,9 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
         _log('rtc init failed: invalid rtc params');
         throw Exception('RTC 参数不完整');
       }
-      _log('rtc token ready, channel=$channel uid=$uid freeSeconds=$_freeSecondsBeforeBilling');
+      _log(
+        'rtc token ready, channel=$channel uid=$uid freeSeconds=$_freeSecondsBeforeBilling',
+      );
 
       final engine = createAgoraRtcEngine();
       _engine = engine;
@@ -217,7 +195,9 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       _rtcEventHandler = RtcEngineEventHandler(
         onJoinChannelSuccess: (RtcConnection connection, int elapsed) {
           if (!mounted) return;
-          _log('join success, localUid=${connection.localUid}, elapsed=$elapsed');
+          _log(
+            'join success, localUid=${connection.localUid}, elapsed=$elapsed',
+          );
           if (!joinCompleter.isCompleted) {
             joinCompleter.complete();
           }
@@ -227,56 +207,92 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
           });
           _startDurationTimer();
         },
-        onConnectionStateChanged: (RtcConnection connection, ConnectionStateType state, ConnectionChangedReasonType reason) {
-          _log('connection state changed: state=$state, reason=$reason');
-          if (!mounted) return;
-          if (state == ConnectionStateType.connectionStateConnected && !_joined) {
-            _log('fallback mark joined by connection state');
-            setState(() {
-              _joined = true;
-              _localUid = uid;
-            });
-            _startDurationTimer();
-          }
-        },
+        onConnectionStateChanged:
+            (
+              RtcConnection connection,
+              ConnectionStateType state,
+              ConnectionChangedReasonType reason,
+            ) {
+              _log('connection state changed: state=$state, reason=$reason');
+              if (!mounted) return;
+              if (state == ConnectionStateType.connectionStateConnected &&
+                  !_joined) {
+                _log('fallback mark joined by connection state');
+                setState(() {
+                  _joined = true;
+                  _localUid = uid;
+                });
+                _startDurationTimer();
+              }
+            },
         onUserJoined: (RtcConnection connection, int remoteUid, int elapsed) {
           if (!mounted) return;
           _log('remote joined, uid=$remoteUid');
           setState(() => _remoteUid = remoteUid);
         },
-        onFirstRemoteVideoFrame: (RtcConnection connection, int remoteUid, int width, int height, int elapsed) {
-          _log('first remote video frame, uid=$remoteUid, ${width}x$height, elapsed=$elapsed');
-        },
-        onRemoteVideoStateChanged: (RtcConnection connection, int remoteUid, RemoteVideoState state, RemoteVideoStateReason reason, int elapsed) {
-          _log('remote video state, uid=$remoteUid, state=$state, reason=$reason, elapsed=$elapsed');
-        },
-        onLocalVideoStateChanged: (VideoSourceType source, LocalVideoStreamState state, LocalVideoStreamReason reason) {
-          _log('local video state, source=$source, state=$state, reason=$reason');
-          if (!mounted) return;
-          if (reason == LocalVideoStreamReason.localVideoStreamReasonDeviceNoPermission) {
-            setState(() => _errorMessage = '相机权限不足，请在系统设置中开启后重试');
-            return;
-          }
-          if (reason == LocalVideoStreamReason.localVideoStreamReasonDeviceBusy) {
-            setState(() => _errorMessage = '相机被其他应用占用，请关闭占用后重试');
-            return;
-          }
-          if (reason == LocalVideoStreamReason.localVideoStreamReasonCaptureFailure) {
-            setState(() => _errorMessage = '相机采集失败，请重试或切换网络后再试');
-            return;
-          }
-        },
-        onUserOffline: (
-          RtcConnection connection,
-          int remoteUid,
-          UserOfflineReasonType reason,
-        ) {
-          if (!mounted) return;
-          if (_remoteUid == remoteUid) {
-            _log('remote offline, uid=$remoteUid, reason=$reason');
-            setState(() => _remoteUid = null);
-          }
-        },
+        onFirstRemoteVideoFrame:
+            (
+              RtcConnection connection,
+              int remoteUid,
+              int width,
+              int height,
+              int elapsed,
+            ) {
+              _log(
+                'first remote video frame, uid=$remoteUid, ${width}x$height, elapsed=$elapsed',
+              );
+            },
+        onRemoteVideoStateChanged:
+            (
+              RtcConnection connection,
+              int remoteUid,
+              RemoteVideoState state,
+              RemoteVideoStateReason reason,
+              int elapsed,
+            ) {
+              _log(
+                'remote video state, uid=$remoteUid, state=$state, reason=$reason, elapsed=$elapsed',
+              );
+            },
+        onLocalVideoStateChanged:
+            (
+              VideoSourceType source,
+              LocalVideoStreamState state,
+              LocalVideoStreamReason reason,
+            ) {
+              _log(
+                'local video state, source=$source, state=$state, reason=$reason',
+              );
+              if (!mounted) return;
+              if (reason ==
+                  LocalVideoStreamReason
+                      .localVideoStreamReasonDeviceNoPermission) {
+                setState(() => _errorMessage = '相机权限不足，请在系统设置中开启后重试');
+                return;
+              }
+              if (reason ==
+                  LocalVideoStreamReason.localVideoStreamReasonDeviceBusy) {
+                setState(() => _errorMessage = '相机被其他应用占用，请关闭占用后重试');
+                return;
+              }
+              if (reason ==
+                  LocalVideoStreamReason.localVideoStreamReasonCaptureFailure) {
+                setState(() => _errorMessage = '相机采集失败，请重试或切换网络后再试');
+                return;
+              }
+            },
+        onUserOffline:
+            (
+              RtcConnection connection,
+              int remoteUid,
+              UserOfflineReasonType reason,
+            ) {
+              if (!mounted) return;
+              if (_remoteUid == remoteUid) {
+                _log('remote offline, uid=$remoteUid, reason=$reason');
+                setState(() => _remoteUid = null);
+              }
+            },
         onError: (ErrorCodeType err, String msg) {
           if (!mounted) return;
           _log('rtc error: code=$err msg=$msg');
@@ -294,12 +310,14 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
         },
         onLocalAudioStateChanged: (connection, state, reason) {
           if (!mounted) return;
-          if (reason == LocalAudioStreamReason.localAudioStreamReasonDeviceNoPermission) {
+          if (reason ==
+              LocalAudioStreamReason.localAudioStreamReasonDeviceNoPermission) {
             _log('local audio state: no permission');
             setState(() => _errorMessage = '麦克风权限不足，请在系统设置中开启后重试');
             return;
           }
-          if (reason == LocalAudioStreamReason.localAudioStreamReasonDeviceBusy) {
+          if (reason ==
+              LocalAudioStreamReason.localAudioStreamReasonDeviceBusy) {
             _log('local audio state: device busy');
             setState(() => _errorMessage = '麦克风被其他应用占用，请关闭占用后重试');
             return;
@@ -359,7 +377,9 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
         try {
           await joinCompleter.future.timeout(const Duration(seconds: 5));
         } catch (_) {
-          _log('join success callback timeout, keep waiting for connection state');
+          _log(
+            'join success callback timeout, keep waiting for connection state',
+          );
           if (mounted) {
             setState(() {
               _isLoading = false;
@@ -389,10 +409,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
   }
 
   Future<bool> _ensureMediaPermissions() async {
-    final statuses = await [
-      Permission.camera,
-      Permission.microphone,
-    ].request();
+    final statuses = await [Permission.camera, Permission.microphone].request();
 
     final cameraGranted = statuses[Permission.camera]?.isGranted ?? false;
     final micGranted = statuses[Permission.microphone]?.isGranted ?? false;
@@ -458,10 +475,9 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
 
         if (coins != null) {
           final diamondsNow = ref.read(authProvider).diamonds;
-          ref.read(authProvider.notifier).syncBalance(
-            coins: coins,
-            diamonds: diamondsNow,
-          );
+          ref
+              .read(authProvider.notifier)
+              .syncBalance(coins: coins, diamonds: diamondsNow);
         }
         if (deductedMinutes != null && deductedMinutes > _renewSyncedMinutes) {
           _renewSyncedMinutes = deductedMinutes;
@@ -496,7 +512,8 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     if (_endingForBalance || _hasEnded || !mounted) return;
     _endingForBalance = true;
     _log('renew got insufficient balance, auto end in 3s');
-    ScaffoldMessenger.of(context).showSnackBar(
+    AppToast.showSnackBar(
+      context,
       const SnackBar(content: Text('余额不足，通话即将结束')),
     );
     await Future.delayed(const Duration(seconds: 3));
@@ -509,7 +526,8 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     if (_endingForNetwork || _hasEnded || !mounted) return;
     _endingForNetwork = true;
     _log('renew failed 3 times, auto end in 3s');
-    ScaffoldMessenger.of(context).showSnackBar(
+    AppToast.showSnackBar(
+      context,
       const SnackBar(content: Text('网络不稳定，通话即将结束')),
     );
     await Future.delayed(const Duration(seconds: 3));
@@ -546,9 +564,8 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
         return;
       }
 
-      final isPending = _callStatus == 'pending';
-      _log('end call confirmed, isPending=$isPending');
-      await _leaveAndExit(cancelPending: isPending);
+      _log('end call confirmed');
+      await _leaveAndExit();
     } catch (_) {
       _endingInProgress = false;
       rethrow;
@@ -568,32 +585,27 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     }
 
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(tip)));
+      AppToast.showSnackBar(context, SnackBar(content: Text(tip)));
     }
 
     await _leaveAndExit(notifyEndApi: false);
   }
 
   Future<void> _leaveAndExit({
-    bool cancelPending = false,
     bool notifyEndApi = true,
   }) async {
     if (_hasEnded) return;
     _hasEnded = true;
     _joinRequested = false;
-    _log('leave and exit start, cancelPending=$cancelPending, notifyEndApi=$notifyEndApi');
+    _log(
+      'leave and exit start, notifyEndApi=$notifyEndApi',
+    );
 
     _statusTimer?.cancel();
     _durationTimer?.cancel();
 
     try {
-      if (cancelPending) {
-        _log('call cancel api request');
-        await DioClient.instance.apiPost(
-          ApiEndpoints.callCancel,
-          data: {'call_id': widget.callId},
-        );
-      } else if (notifyEndApi) {
+      if (notifyEndApi) {
         _log('call end api request');
         await DioClient.instance.apiPost(
           ApiEndpoints.callEnd,
@@ -680,7 +692,8 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
   void _showGiftPanel(AnchorInfo? anchor) {
     final targetAnchorId = _resolveGiftTargetAnchorId(anchor);
     if (targetAnchorId == null || targetAnchorId <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      AppToast.showSnackBar(
+        context,
         const SnackBar(content: Text('当前通话对象非主播，暂不支持送礼')),
       );
       return;
@@ -721,20 +734,11 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     _hasEnded = true;
     _log('best effort terminate start, status=$_callStatus');
     try {
-      final isPending = _callStatus == 'pending';
-      if (isPending) {
-        _log('best effort call cancel api request');
-        await DioClient.instance.apiPost(
-          ApiEndpoints.callCancel,
-          data: {'call_id': widget.callId},
-        );
-      } else {
-        _log('best effort call end api request');
-        await DioClient.instance.apiPost(
-          ApiEndpoints.callEnd,
-          data: {'call_id': widget.callId},
-        );
-      }
+      _log('best effort call end api request');
+      await DioClient.instance.apiPost(
+        ApiEndpoints.callEnd,
+        data: {'call_id': widget.callId},
+      );
     } catch (_) {}
     _log('best effort terminate end');
   }
@@ -763,180 +767,186 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       },
       child: Scaffold(
         body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFF2D1F2F),
-              Color(0xFF1A1A1A),
-            ],
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [Color(0xFF2D1F2F), Color(0xFF1A1A1A)],
+            ),
           ),
-        ),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            _buildRemoteView(),
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 16,
-              right: 16,
-              child: GestureDetector(
-                onTap: _flipCamera,
-                child: AnimatedContainer(
-                  duration: Duration.zero,
-                  width: 90,
-                  height: 120,
-                  decoration: BoxDecoration(
-                    color: _isCameraOn ? const Color(0xFF2A2A2A) : Colors.black,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white24),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              _buildRemoteView(),
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 16,
+                right: 16,
+                child: GestureDetector(
+                  onTap: _flipCamera,
+                  child: AnimatedContainer(
+                    duration: Duration.zero,
+                    width: 90,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      color: _isCameraOn
+                          ? const Color(0xFF2A2A2A)
+                          : Colors.black,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    clipBehavior: Clip.hardEdge,
+                    child: _buildLocalPreview(),
                   ),
-                  clipBehavior: Clip.hardEdge,
-                  child: _buildLocalPreview(),
                 ),
               ),
-            ),
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                padding: EdgeInsets.only(
-                  top: MediaQuery.of(context).padding.top + 12,
-                  left: 16,
-                  right: 16,
-                  bottom: 12,
-                ),
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black54,
-                      Colors.transparent,
-                    ],
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  padding: EdgeInsets.only(
+                    top: MediaQuery.of(context).padding.top + 12,
+                    left: 16,
+                    right: 16,
+                    bottom: 12,
                   ),
-                ),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back, color: Colors.white),
-                      onPressed: _endCall,
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.black54, Colors.transparent],
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            peerName,
+                  ),
+                  child: Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.arrow_back, color: Colors.white),
+                        onPressed: _endCall,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              peerName,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            Text(
+                              _formatDuration(_callDuration),
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (anchor?.callPrice != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white24,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            '￥${anchor!.callPrice!.toStringAsFixed(0)}/min',
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
                             ),
                           ),
-                          Text(
-                            _formatDuration(_callDuration),
-                            style: const TextStyle(color: Colors.white70, fontSize: 13),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (anchor?.callPrice != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white24,
-                          borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Text(
-                          '￥${anchor!.callPrice!.toStringAsFixed(0)}/min',
-                          style: const TextStyle(color: Colors.white, fontSize: 12),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                padding: EdgeInsets.only(
-                  left: 24,
-                  right: 24,
-                  bottom: MediaQuery.of(context).padding.bottom + 24,
-                  top: 20,
-                ),
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [
-                      Colors.black54,
-                      Colors.transparent,
                     ],
                   ),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _ControlButton(
-                      icon: _isMicOn ? Icons.mic : Icons.mic_off,
-                      label: _isMicOn ? '麦克风' : '静音',
-                      isActive: !_isMicOn,
-                      onTap: () => _toggleMic(),
+              ),
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  padding: EdgeInsets.only(
+                    left: 24,
+                    right: 24,
+                    bottom: MediaQuery.of(context).padding.bottom + 24,
+                    top: 20,
+                  ),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.bottomCenter,
+                      end: Alignment.topCenter,
+                      colors: [Colors.black54, Colors.transparent],
                     ),
-                    _ControlButton(
-                      icon: _isSpeakerOn ? Icons.volume_up : Icons.volume_off,
-                      label: '扬声器',
-                      isActive: !_isSpeakerOn,
-                      onTap: () => _toggleSpeaker(),
-                    ),
-                    _ControlButton(
-                      icon: _isCameraOn ? Icons.videocam : Icons.videocam_off,
-                      label: '摄像头',
-                      isActive: !_isCameraOn,
-                      onTap: () => _toggleCamera(),
-                    ),
-                    _ControlButton(
-                      icon: Icons.card_giftcard,
-                      label: '礼物',
-                      onTap: () => _showGiftPanel(anchor),
-                    ),
-                    _ControlButton(
-                      icon: Icons.flip_camera_ios,
-                      label: '翻转',
-                      isSpinning: _isFlipping,
-                      onTap: () => _flipCamera(),
-                    ),
-                    GestureDetector(
-                      onTap: _endCall,
-                      child: Container(
-                        width: 60,
-                        height: 60,
-                        decoration: const BoxDecoration(
-                          color: AppTheme.errorColor,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(Icons.call_end, color: Colors.white, size: 30),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _ControlButton(
+                        icon: _isMicOn ? Icons.mic : Icons.mic_off,
+                        label: _isMicOn ? '麦克风' : '静音',
+                        isActive: !_isMicOn,
+                        onTap: () => _toggleMic(),
                       ),
-                    ),
-                  ],
+                      _ControlButton(
+                        icon: _isSpeakerOn ? Icons.volume_up : Icons.volume_off,
+                        label: '扬声器',
+                        isActive: !_isSpeakerOn,
+                        onTap: () => _toggleSpeaker(),
+                      ),
+                      _ControlButton(
+                        icon: _isCameraOn ? Icons.videocam : Icons.videocam_off,
+                        label: '摄像头',
+                        isActive: !_isCameraOn,
+                        onTap: () => _toggleCamera(),
+                      ),
+                      _ControlButton(
+                        icon: Icons.card_giftcard,
+                        label: '礼物',
+                        onTap: () => _showGiftPanel(anchor),
+                      ),
+                      _ControlButton(
+                        icon: Icons.flip_camera_ios,
+                        label: '翻转',
+                        isSpinning: _isFlipping,
+                        onTap: () => _flipCamera(),
+                      ),
+                      GestureDetector(
+                        onTap: _endCall,
+                        child: Container(
+                          width: 60,
+                          height: 60,
+                          decoration: const BoxDecoration(
+                            color: AppTheme.errorColor,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.call_end,
+                            color: Colors.white,
+                            size: 30,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            if (_isLoading)
-              Container(
-                color: Colors.black45,
-                child: const Center(
-                  child: CircularProgressIndicator(color: Colors.white),
+              if (_isLoading)
+                Container(
+                  color: Colors.black45,
+                  child: const Center(
+                    child: CircularProgressIndicator(color: Colors.white),
+                  ),
                 ),
-              ),
-          ],
-        ),
+            ],
+          ),
         ),
       ),
     );
@@ -987,13 +997,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
 
   Widget _buildPlaceholder() {
     String statusText;
-    String? subText;
-    if (_callStatus == 'pending') {
-      statusText = '等待对方接听...';
-      if (_isCaller) {
-        subText = '${_pendingLeftSeconds}s 后自动超时';
-      }
-    } else if (_joined) {
+    if (_joined) {
       statusText = '等待对方加入...';
     } else {
       statusText = '正在连接视频通话...';
@@ -1022,14 +1026,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
             statusText,
             style: const TextStyle(color: Colors.white54, fontSize: 16),
           ),
-          if (subText != null)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Text(
-                subText,
-                style: const TextStyle(color: Colors.white38, fontSize: 13),
-              ),
-            ),
           if (_localUid != null && _channelName != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),

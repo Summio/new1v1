@@ -1,10 +1,10 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/dio_client.dart';
+import 'package:huanxi/core/utils/app_toast.dart';
 
 /// 充值页面
 /// 显示充值套餐 + 支付方式选择
@@ -30,8 +30,9 @@ class _RechargePageState extends ConsumerState<RechargePage> {
     {'amount': 648, 'coins': 7000, 'label': '648元', 'tag': '至尊'},
   ];
 
-  List<Map<String, dynamic>> _packages =
-      List<Map<String, dynamic>>.from(_defaultPackages);
+  List<Map<String, dynamic>> _packages = List<Map<String, dynamic>>.from(
+    _defaultPackages,
+  );
 
   int _payMethod = 0; // 0=支付宝 1=微信
 
@@ -64,7 +65,7 @@ class _RechargePageState extends ConsumerState<RechargePage> {
         final amount = _toInt(item['amount'] ?? item['money']);
         final coins = _toInt(item['coins'] ?? item['token_amount']);
         if (amount <= 0 || coins <= 0) continue;
-        final label = item['label']?.toString() ?? '${amount}元';
+        final label = item['label']?.toString() ?? '$amount元';
         parsed.add({
           'amount': amount,
           'coins': coins,
@@ -106,17 +107,15 @@ class _RechargePageState extends ConsumerState<RechargePage> {
     try {
       final data = await DioClient.instance.apiPost(
         ApiEndpoints.rechargeCreate,
-        data: {
-          'amount': pkg['amount'],
-          'pay_channel': payChannel,
-        },
+        data: {'amount': pkg['amount'], 'pay_channel': payChannel},
       );
       final msg = data['msg']?.toString() ?? '订单已创建，请继续完成支付';
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      AppToast.showSnackBar(context, SnackBar(content: Text(msg)));
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
+      AppToast.showSnackBar(
+        context,
         const SnackBar(content: Text('充值失败，请稍后重试')),
       );
     } finally {
@@ -150,12 +149,19 @@ class _RechargePageState extends ConsumerState<RechargePage> {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.info_outline, color: AppTheme.secondaryDark, size: 20),
+                        Icon(
+                          Icons.info_outline,
+                          color: AppTheme.secondaryDark,
+                          size: 20,
+                        ),
                         SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             '1元 = $_tokenRate$dynamicCoinName，$dynamicCoinName用于拨打主播电话',
-                            style: TextStyle(fontSize: 13, color: AppTheme.secondaryDark),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppTheme.secondaryDark,
+                            ),
                           ),
                         ),
                       ],
@@ -175,12 +181,13 @@ class _RechargePageState extends ConsumerState<RechargePage> {
                   GridView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 3,
-                      childAspectRatio: 1.1,
-                      crossAxisSpacing: 10,
-                      mainAxisSpacing: 10,
-                    ),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
+                          childAspectRatio: 1.1,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                        ),
                     itemCount: _packages.length,
                     itemBuilder: (context, index) {
                       final pkg = _packages[index];
@@ -190,7 +197,9 @@ class _RechargePageState extends ConsumerState<RechargePage> {
                         child: Container(
                           decoration: BoxDecoration(
                             color: isSelected
-                                ? AppTheme.secondaryColor.withValues(alpha: 0.08)
+                                ? AppTheme.secondaryColor.withValues(
+                                    alpha: 0.08,
+                                  )
                                 : AppTheme.surfaceColor,
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(
@@ -243,7 +252,7 @@ class _RechargePageState extends ConsumerState<RechargePage> {
                                           : const LinearGradient(
                                               colors: [
                                                 Color(0xFFFFB74D),
-                                                Color(0xFFFF9800)
+                                                Color(0xFFFF9800),
                                               ],
                                             ),
                                       borderRadius: BorderRadius.circular(4),
@@ -328,7 +337,9 @@ class _RechargePageState extends ConsumerState<RechargePage> {
                         height: 24,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
                         ),
                       )
                     : Text(
@@ -380,7 +391,12 @@ class _PayMethodTile extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(icon, color: isSelected ? AppTheme.secondaryDark : AppTheme.textSecondary),
+            Icon(
+              icon,
+              color: isSelected
+                  ? AppTheme.secondaryDark
+                  : AppTheme.textSecondary,
+            ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -388,7 +404,9 @@ class _PayMethodTile extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  color: isSelected ? AppTheme.secondaryDark : AppTheme.textPrimary,
+                  color: isSelected
+                      ? AppTheme.secondaryDark
+                      : AppTheme.textPrimary,
                 ),
               ),
             ),

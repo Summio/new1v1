@@ -10,6 +10,8 @@ import '../../modules/home/profile_page.dart';
 import '../../modules/home/main_shell.dart';
 import '../../modules/home/anchor_apply_page.dart';
 import '../../modules/call/call_room_page.dart';
+import '../../modules/call/call_outgoing_page.dart';
+import '../../modules/call/incoming_call_page.dart';
 import '../../modules/profile/recharge_page.dart';
 import '../../modules/profile/edit_profile_page.dart';
 import '../../modules/settings/settings_page.dart';
@@ -44,6 +46,8 @@ class AppRoutes {
   static const String im = '/im';
   static const String giftPanel = '/gift';
   static const String callRoom = '/call/room';
+  static const String callOutgoing = '/call/outgoing';
+  static const String callIncoming = '/call/incoming';
 
   static AnchorInfo? tryGetAnchorInfo(Object? extra) {
     return extra is AnchorInfo ? extra : null;
@@ -75,6 +79,46 @@ final appRouter = GoRouter(
         GoRoute(path: AppRoutes.messages, pageBuilder: (context, state) => NoTransitionPage(child: MessagesPage())),
         GoRoute(path: AppRoutes.profile, pageBuilder: (context, state) => NoTransitionPage(child: ProfilePage())),
       ],
+    ),
+    GoRoute(
+      path: AppRoutes.callOutgoing,
+      builder: (context, state) {
+        final callId = int.tryParse(state.uri.queryParameters['callId'] ?? '');
+        if (callId == null || callId <= 0) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('提示')),
+            body: const Center(child: Text('呼叫参数无效，请返回重试')),
+          );
+        }
+        final callPrice =
+            int.tryParse(state.uri.queryParameters['callPrice'] ?? '') ?? 0;
+        return CallOutgoingPage(
+          callId: callId,
+          peerUserId: state.uri.queryParameters['peerUserId'] ?? '',
+          peerName: state.uri.queryParameters['peerName'] ?? '',
+          peerAvatar: state.uri.queryParameters['peerAvatar'],
+          anchorId: state.uri.queryParameters['anchorId'],
+          callPrice: callPrice,
+        );
+      },
+    ),
+    GoRoute(
+      path: AppRoutes.callIncoming,
+      builder: (context, state) {
+        final callId = int.tryParse(state.uri.queryParameters['callId'] ?? '');
+        if (callId == null || callId <= 0) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('提示')),
+            body: const Center(child: Text('来电参数无效，请返回重试')),
+          );
+        }
+        return IncomingCallPage(
+          callId: callId,
+          peerUserId: state.uri.queryParameters['peerUserId'] ?? '',
+          peerName: state.uri.queryParameters['peerName'] ?? '',
+          peerAvatar: state.uri.queryParameters['peerAvatar'],
+        );
+      },
     ),
     GoRoute(
       path: AppRoutes.callRoom,
