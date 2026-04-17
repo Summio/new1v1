@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -31,17 +30,26 @@ class _MainShellState extends ConsumerState<MainShell> with WidgetsBindingObserv
   AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
   _IncomingCallPayload? _pendingIncomingWhenBackground;
 
+  void _log(String message) {
+    debugPrint('[INCOMING_FLOW] $message');
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _startIncomingPolling();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(authProvider.notifier).refreshBalance();
+    });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _lifecycleState = state;
     if (state == AppLifecycleState.resumed) {
+      ref.read(authProvider.notifier).refreshBalance();
       _tryShowPendingIncomingOnResume();
     }
   }
@@ -68,6 +76,7 @@ class _MainShellState extends ConsumerState<MainShell> with WidgetsBindingObserv
       final res = await DioClient.instance.apiGet(ApiEndpoints.callIncoming);
       final data = res['data'];
       if (data is! Map<String, dynamic>) {
+        _log('polling no incoming data');
         return;
       }
 
@@ -76,11 +85,14 @@ class _MainShellState extends ConsumerState<MainShell> with WidgetsBindingObserv
       final callerNickname = (data['caller_nickname'] as String?)?.trim() ?? '用户';
       final callerAvatar = (data['caller_avatar'] as String?)?.trim() ?? '';
       if (callId == null || callId <= 0 || callerId == null || callerId <= 0) {
+        _log('polling invalid payload: $data');
         return;
       }
       if (_lastHandledCallId == callId) {
+        _log('polling ignored duplicated callId=$callId');
         return;
       }
+      _log('polling incoming callId=$callId callerId=$callerId lifecycle=$_lifecycleState');
 
       final payload = _IncomingCallPayload(
         callId: callId,
@@ -94,10 +106,10 @@ class _MainShellState extends ConsumerState<MainShell> with WidgetsBindingObserv
         await _showIncomingDialog(payload, fromBackground: false);
       } else {
         _pendingIncomingWhenBackground = payload;
-        debugPrint('incoming call received in background: callId=$callId');
+        _log('incoming received in background callId=$callId');
       }
     } catch (e) {
-      debugPrint('mainShell.incomingCall error: $e');
+      _log('polling error: $e');
     }
   }
 
@@ -165,15 +177,25 @@ class _MainShellState extends ConsumerState<MainShell> with WidgetsBindingObserv
       if (!mounted) return;
 
       if (action == 'accept') {
+        _log('dialog action accept callId=${payload.callId}');
         await DioClient.instance.apiPost(
           ApiEndpoints.callAccept,
           data: {'call_id': payload.callId},
         );
         if (!mounted) return;
+        final callUri = Uri(
+          path: AppRoutes.callRoom,
+          queryParameters: {
+            'callId': payload.callId.toString(),
+            'peerUserId': payload.callerId.toString(),
+            'peerName': payload.callerNickname,
+          },
+        );
         await context.push(
-          '${AppRoutes.callRoom}?callId=${payload.callId}&anchorId=${payload.callerId}',
+          callUri.toString(),
         );
       } else if (action == 'reject') {
+        _log('dialog action reject callId=${payload.callId}');
         await DioClient.instance.apiPost(
           ApiEndpoints.callReject,
           data: {'call_id': payload.callId},
@@ -182,7 +204,7 @@ class _MainShellState extends ConsumerState<MainShell> with WidgetsBindingObserv
 
       _lastHandledCallId = payload.callId;
     } catch (e) {
-      debugPrint('mainShell.showIncomingDialog error: $e');
+      _log('dialog handling error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('处理来电失败，请重试')),
@@ -234,6 +256,7 @@ class _MainShellState extends ConsumerState<MainShell> with WidgetsBindingObserv
         context.go(AppRoutes.messages);
         break;
       case 3:
+        ref.read(authProvider.notifier).refreshBalance();
         context.go(AppRoutes.profile);
         break;
     }

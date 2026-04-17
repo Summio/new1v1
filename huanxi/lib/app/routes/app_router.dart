@@ -88,7 +88,9 @@ final appRouter = GoRouter(
         }
         return CallRoomPage(
           callId: callId,
-          anchorId: state.uri.queryParameters['anchorId'] ?? '',
+          peerUserId: state.uri.queryParameters['peerUserId'] ?? '',
+          anchorId: state.uri.queryParameters['anchorId'],
+          peerName: state.uri.queryParameters['peerName'] ?? '',
         );
       },
     ),

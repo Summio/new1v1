@@ -141,6 +141,11 @@ class WalletNotifier extends StateNotifier<WalletState> {
         diamonds: respData['diamonds'] as int? ?? 0,
         frozenDiamonds: respData['frozen_diamonds'] as int? ?? 0,
       );
+
+      _ref.read(authProvider.notifier).syncBalance(
+            coins: state.coins,
+            diamonds: state.diamonds,
+          );
     } catch (e) {
       debugPrint('wallet.fetchBalance error: $e');
     }

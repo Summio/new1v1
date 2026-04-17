@@ -13,8 +13,8 @@ class AppConstants {
     // 编译时传入: flutter build --dart-define=API_BASE_URL=https://api.example.com
     final env = String.fromEnvironment('API_BASE_URL', defaultValue: '');
     if (env.isNotEmpty) return env;
-    // 默认回环地址，避免提交个人内网 IP 导致环境污染
-    return 'http://127.0.0.1:9999/api/v1/';
+    // 默认开发地址
+    return 'http://192.168.31.93:9999/api/v1/';
   }
 
   /// 本地存储 Keys

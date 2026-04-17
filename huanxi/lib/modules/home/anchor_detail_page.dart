@@ -66,9 +66,18 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
       if (callId == null || callId <= 0) {
         throw const ApiException(code: 400, message: '呼叫创建失败，请稍后重试');
       }
+      if (!mounted) return;
 
       await context.push(
-        '${AppRoutes.callRoom}?callId=$callId&anchorId=${anchor.userId}',
+        Uri(
+          path: AppRoutes.callRoom,
+          queryParameters: {
+            'callId': callId.toString(),
+            'peerUserId': anchor.userId.toString(),
+            'anchorId': anchor.id.toString(),
+            'peerName': anchor.username,
+          },
+        ).toString(),
       );
     } on ApiException catch (e) {
       if (!mounted) return;

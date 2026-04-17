@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../app/theme/app_theme.dart';
@@ -23,6 +24,9 @@ class _SplashPageState extends ConsumerState<SplashPage> {
 
   Future<void> _init() async {
     try {
+      // 启动即请求通话核心权限（相机/麦克风）
+      await _requestMediaPermissions();
+
       // 初始化认证状态 + App 启动配置，设置一个总的超时兜底
       await Future.wait([
         ref.read(authProvider.notifier).init(),
@@ -45,6 +49,17 @@ class _SplashPageState extends ConsumerState<SplashPage> {
       context.go(AppRoutes.index);
     } else {
       context.go(AppRoutes.login);
+    }
+  }
+
+  Future<void> _requestMediaPermissions() async {
+    try {
+      await [
+        Permission.camera,
+        Permission.microphone,
+      ].request();
+    } catch (e) {
+      debugPrint('Splash permission request error: $e');
     }
   }
 

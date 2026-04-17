@@ -2,6 +2,7 @@ from fastapi import APIRouter, Query
 
 from app.core.app_auth import DependAppAuth
 from app.core.ctx import CTX_APP_USER_OBJ
+from app.models.anchor import Anchor
 from app.models.app_user import AppUser
 from app.schemas.base import Fail, Success
 
@@ -42,6 +43,10 @@ async def get_user_public_profile(
     app_user = await AppUser.filter(id=user_id).first()
     if not app_user:
         return Fail(code=404, msg="用户不存在")
+    anchor_id = None
+    if app_user.is_anchor:
+        anchor = await Anchor.filter(app_user_id=app_user.id, apply_status="approved").first()
+        anchor_id = anchor.id if anchor else None
 
     return Success(
         data={
@@ -49,6 +54,7 @@ async def get_user_public_profile(
             "nickname": app_user.nickname or f"用户{app_user.id}",
             "avatar": app_user.avatar or "",
             "is_anchor": app_user.is_anchor,
+            "anchor_id": anchor_id,
             "status": app_user.status or "normal",
         }
     )

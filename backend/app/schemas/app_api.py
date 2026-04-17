@@ -40,28 +40,30 @@ class DialingIn(BaseModel):
 
 class DialingOut(BaseModel):
     call_id: int
-    diamonds: int
+    coins: int
     can_call: bool
     msg: str = "余额充足"
-
-
-class HeartbeatIn(BaseModel):
-    call_id: int = Field(..., description="通话记录ID")
-
-
-class HeartbeatOut(BaseModel):
-    diamonds: int
-    duration: int
-    msg: str = "OK"
 
 
 class CallEndIn(BaseModel):
     call_id: int = Field(..., description="通话记录ID")
 
 
+class RenewLeaseIn(BaseModel):
+    call_id: int = Field(..., description="通话记录ID")
+
+
+class RenewLeaseOut(BaseModel):
+    coins: int
+    duration: int
+    deducted_minutes: int
+    deducted_amount: int
+    msg: str = "OK"
+
+
 class CallEndOut(BaseModel):
     total_fee: int
-    diamonds: int
+    coins: int
     duration: int
     msg: str = "通话已结束"
 
@@ -98,6 +100,7 @@ class RTCTokenOut(BaseModel):
     token: str
     uid: int
     expired_time: int
+    free_seconds_before_billing: int = 10
 
 
 # ===== 礼物 =====

@@ -9,6 +9,11 @@ import 'app/routes/app_router.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // 全局锁定竖屏，禁用旋转相关提示/行为
+  await SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+  ]);
+
   // 设置状态栏样式
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(

@@ -126,11 +126,16 @@ class CallRecord(BaseModel, TimestampMixin):
     """通话记录"""
     caller_id = fields.BigIntField(description="主叫用户ID", index=True)
     callee_id = fields.BigIntField(description="被叫用户ID(主播)", index=True)
-    call_price = fields.IntField(default=0, description="通话单价(分/12秒)，以发起时价格固定计费")
+    call_price = fields.IntField(default=0, description="通话单价(分/分钟)，以发起时价格固定计费")
     status = fields.CharField(max_length=20, default="pending", description="pending/ongoing/ended/failed/timeout", index=True)
     duration = fields.IntField(default=0, description="通话时长(秒)")
     total_fee = fields.IntField(default=0, description="总费用(分)")
     end_reason = fields.CharField(max_length=50, null=True, description="结束原因")
+    connected_at = fields.DatetimeField(null=True, description="实际接通时间")
+    ended_at = fields.DatetimeField(null=True, description="结束时间")
+    deducted_amount = fields.IntField(default=0, description="已扣费总额(分)")
+    deducted_minutes = fields.IntField(default=0, description="已扣费分钟数")
+    last_renew_at = fields.DatetimeField(null=True, description="最后一次续租时间")
 
     class Meta:
         table = "call_record"

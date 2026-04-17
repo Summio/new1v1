@@ -24,8 +24,8 @@ class ApiEndpoints {
   // ========== 通话模块 ==========
   /// 发起呼叫（余额预检）
   static const String dialing = 'app/dialing';
-  /// 心跳上报（每5秒）
-  static const String heartbeat = 'app/heartbeat';
+  /// 通话续租扣费
+  static const String callRenew = 'app/call/renew';
   /// 通话结束结算
   static const String callEnd = 'app/call/end';
   /// 获取 RTC Token

@@ -144,10 +144,10 @@ async def seed():
         nickname="测试用户",
         avatar=TEST_USER_AVATAR,
         gender="male",
-        balance=10000,  # 100元
+        coins=10000,  # 100元
         status="normal",
     )
-    print(f"创建用户: id={test_user.id}, phone={test_user.phone}, balance={test_user.balance}分")
+    print(f"创建用户: id={test_user.id}, phone={test_user.phone}, coins={test_user.coins}分")
 
     # ===== 2. 创建 20 个主播 =====
     anchor_count = 20
@@ -174,7 +174,6 @@ async def seed():
             nickname=f"主播{i:02d}",
             avatar=avatar_url,
             gender=gender,
-            balance=0,
             status="normal",
             is_anchor=True,
         )

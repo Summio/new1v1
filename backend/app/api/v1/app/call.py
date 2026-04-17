@@ -1,12 +1,10 @@
 from datetime import datetime, timedelta, timezone
 import math
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter
 
 from app.core.app_auth import DependAppAuth
 from app.core.ctx import CTX_APP_USER_ID, CTX_APP_USER_OBJ
-from app.core.dependency import LimitHeartbeat
-from app.core.redis import RedisCache, get_redis, heartbeat_key
 from app.models import Anchor, AppUser, CallRecord
 from app.schemas.app_api import (
     CallActionIn,
@@ -15,21 +13,22 @@ from app.schemas.app_api import (
     CallStatusOut,
     DialingIn,
     DialingOut,
-    HeartbeatIn,
-    HeartbeatOut,
     IncomingCallOut,
+    RenewLeaseIn,
+    RenewLeaseOut,
 )
 from app.schemas.base import Fail, Success
-from app.settings import settings
 from tortoise.expressions import Q
+from tortoise.transactions import in_transaction
 
 router = APIRouter()
 
-HEARTBEAT_INTERVAL = settings.HEARTBEAT_INTERVAL  # 从配置读取，默认 5 秒
 CALL_RING_TIMEOUT_SECONDS = 30
+DEFAULT_FREE_SECONDS_BEFORE_BILLING = 10
 DEFAULT_REJECT_INBOUND_PROTECT_SECONDS = 5
 DEFAULT_REJECT_PAIR_PROTECT_SECONDS = 5
 MAX_REJECT_PROTECT_SECONDS = 600
+MAX_FREE_SECONDS_BEFORE_BILLING = 600
 
 
 def _to_aware(dt: datetime | None) -> datetime:
@@ -49,6 +48,7 @@ async def _mark_timeout_if_needed(call_record: CallRecord) -> bool:
     if call_record.status == "pending" and _is_ring_timeout(call_record):
         call_record.status = "ended"
         call_record.end_reason = "timeout"
+        call_record.ended_at = datetime.now(timezone.utc)
         await call_record.save()
         return True
     return False
@@ -99,6 +99,57 @@ def _left_seconds(event_time: datetime | None, protect_seconds: int) -> int:
     elapsed = (datetime.now(timezone.utc) - _to_aware(event_time)).total_seconds()
     left = protect_seconds - elapsed
     return max(0, math.ceil(left))
+
+
+def _calc_duration_seconds(call_record: CallRecord) -> int:
+    if call_record.status != "ongoing" or not call_record.connected_at:
+        return max(0, int(call_record.duration or 0))
+    elapsed = (datetime.now(timezone.utc) - _to_aware(call_record.connected_at)).total_seconds()
+    return max(0, int(elapsed))
+
+
+async def _get_free_seconds_before_billing() -> int:
+    from app.models.system_config import SystemConfig
+
+    raw = await SystemConfig.get_value(
+        "call_billing_free_seconds",
+        str(DEFAULT_FREE_SECONDS_BEFORE_BILLING),
+    )
+    seconds = _safe_parse_int(raw, DEFAULT_FREE_SECONDS_BEFORE_BILLING)
+    if seconds < 0:
+        return 0
+    if seconds > MAX_FREE_SECONDS_BEFORE_BILLING:
+        return MAX_FREE_SECONDS_BEFORE_BILLING
+    return seconds
+
+
+def _calc_due_minutes_with_free(duration_seconds: int, free_seconds_before_billing: int) -> int:
+    if duration_seconds < free_seconds_before_billing:
+        return 0
+    return ((duration_seconds - free_seconds_before_billing) // 60) + 1
+
+
+async def _resolve_payer_id(call_record: CallRecord) -> int:
+    caller_id = int(call_record.caller_id)
+    callee_id = int(call_record.callee_id)
+
+    caller_is_anchor = await Anchor.filter(
+        app_user_id=caller_id,
+        apply_status="approved",
+    ).exists()
+    callee_is_anchor = await Anchor.filter(
+        app_user_id=callee_id,
+        apply_status="approved",
+    ).exists()
+
+    # 单主播场景：非主播承担通话费用
+    if caller_is_anchor and not callee_is_anchor:
+        return callee_id
+    if callee_is_anchor and not caller_is_anchor:
+        return caller_id
+
+    # 兜底：双方角色无法区分时按主叫方计费
+    return caller_id
 
 
 @router.post("/dialing", summary="发起呼叫(余额预检)", dependencies=[DependAppAuth])
@@ -168,8 +219,8 @@ async def dialing(req_in: DialingIn):
 
     call_price = anchor.call_price
 
-    # 只做余额门槛检查，不预扣
-    if app_user.diamonds < call_price:
+    # 只做余额门槛检查，不预扣（视频通话消耗金币）
+    if app_user.coins < call_price:
         return Fail(code=501, msg="余额不足，请先充值")
 
     # 创建通话记录（先 pending，待主播接听）
@@ -183,7 +234,7 @@ async def dialing(req_in: DialingIn):
     return Success(
         data=DialingOut(
             call_id=call_record.id,
-            diamonds=app_user.diamonds,
+            coins=app_user.coins,
             can_call=True,
             msg="呼叫已发出，等待接听",
         ).model_dump()
@@ -231,6 +282,7 @@ async def call_status(call_id: int):
 
     await _mark_timeout_if_needed(call_record)
     await call_record.refresh_from_db()
+    duration = _calc_duration_seconds(call_record)
 
     return Success(
         data=CallStatusOut(
@@ -240,7 +292,7 @@ async def call_status(call_id: int):
             status=call_record.status,
             created_at=_to_aware(call_record.created_at).isoformat() if call_record.created_at else None,
             end_reason=call_record.end_reason,
-            duration=call_record.duration,
+            duration=duration,
         ).model_dump()
     )
 
@@ -272,11 +324,13 @@ async def accept_call(req_in: CallActionIn):
 
     call_record.status = "ongoing"
     call_record.end_reason = None
+    call_record.connected_at = datetime.now(timezone.utc)
+    call_record.duration = 0
+    call_record.deducted_amount = 0
+    call_record.deducted_minutes = 0
+    call_record.last_renew_at = None
+    call_record.ended_at = None
     await call_record.save()
-
-    redis = await get_redis()
-    cache = RedisCache(redis)
-    await cache.set(heartbeat_key(call_record.id), 1, expire=HEARTBEAT_INTERVAL * 3)
 
     return Success(msg="已接听")
 
@@ -297,6 +351,7 @@ async def reject_call(req_in: CallActionIn):
 
     call_record.status = "ended"
     call_record.end_reason = "rejected"
+    call_record.ended_at = datetime.now(timezone.utc)
     await call_record.save()
 
     return Success(msg="已拒绝")
@@ -318,63 +373,71 @@ async def cancel_call(req_in: CallActionIn):
 
     call_record.status = "ended"
     call_record.end_reason = "cancelled"
+    call_record.ended_at = datetime.now(timezone.utc)
     await call_record.save()
 
     return Success(msg="已取消呼叫")
 
 
-@router.post("/heartbeat", summary="通话心跳(每5秒)", dependencies=[DependAppAuth, Depends(LimitHeartbeat)])
-async def heartbeat(req_in: HeartbeatIn):
+@router.post("/call/renew", summary="通话续租扣费", dependencies=[DependAppAuth])
+async def renew_call(req_in: RenewLeaseIn):
     caller_id = CTX_APP_USER_ID.get()
-    app_user: AppUser = CTX_APP_USER_OBJ.get()
 
-    call_record = await CallRecord.filter(id=req_in.call_id, status="ongoing").first()
-    if not call_record:
-        return Fail(code=404, msg="通话不存在或已结束")
+    async with in_transaction() as conn:
+        call_record = (
+            await CallRecord.filter(id=req_in.call_id, status="ongoing")
+            .using_db(conn)
+            .select_for_update()
+            .first()
+        )
+        if not call_record:
+            return Fail(code=404, msg="通话不存在或已结束")
 
-    redis = await get_redis()
-    cache = RedisCache(redis)
+        if caller_id not in {int(call_record.caller_id), int(call_record.callee_id)}:
+            return Fail(code=403, msg="无权续租该通话")
 
-    # 检查心跳是否还在（掉线检测）
-    if not await cache.get(heartbeat_key(call_record.id)):
-        call_record.status = "ended"
-        call_record.end_reason = "timeout"
-        await call_record.save()
-        return Fail(code=400, msg="心跳超时，通话已结束")
+        duration_seconds = _calc_duration_seconds(call_record)
+        free_seconds_before_billing = await _get_free_seconds_before_billing()
+        due_minutes = _calc_due_minutes_with_free(
+            duration_seconds,
+            free_seconds_before_billing,
+        )
+        deducted_minutes = int(call_record.deducted_minutes or 0)
+        to_charge_minutes = max(0, due_minutes - deducted_minutes)
+        payer_id = await _resolve_payer_id(call_record)
 
-    # 刷新心跳 TTL
-    await cache.set(heartbeat_key(call_record.id), 1, expire=HEARTBEAT_INTERVAL * 3)
+        if to_charge_minutes > 0:
+            charge_amount = to_charge_minutes * int(call_record.call_price or 0)
+            updated = (
+                await AppUser.filter(id=payer_id, coins__gte=charge_amount)
+                .using_db(conn)
+                .update(coins=AppUser.coins - charge_amount)
+            )
+            if updated == 0:
+                call_record.status = "ended"
+                call_record.end_reason = "balance_empty"
+                call_record.duration = duration_seconds
+                call_record.ended_at = datetime.now(timezone.utc)
+                call_record.total_fee = int(call_record.deducted_amount or 0)
+                await call_record.save(using_db=conn)
+                return Fail(code=501, msg="余额不足，通话结束")
 
-    # 使用通话记录中的固定单价（创建时锁定，防止主播中途调价导致计费不一致）
-    call_price = call_record.call_price
-    fee_per_tick = call_price // 12
+            call_record.deducted_minutes = deducted_minutes + to_charge_minutes
+            call_record.deducted_amount = int(call_record.deducted_amount or 0) + charge_amount
 
-    # 原子扣费（扣钻石）
-    updated = await AppUser.filter(id=caller_id, diamonds__gte=fee_per_tick).update(
-        diamonds=AppUser.diamonds - fee_per_tick
-    )
+        call_record.duration = duration_seconds
+        call_record.last_renew_at = datetime.now(timezone.utc)
+        await call_record.save(using_db=conn)
 
-    if updated == 0:
-        call_record.status = "ended"
-        call_record.end_reason = "balance_empty"
-        await call_record.save()
-        return Fail(code=501, msg="余额不足，通话结束")
-
-    # 原子更新通话时长（防止并发心跳导致时长计算错误）
-    await CallRecord.filter(id=call_record.id, status="ongoing").update(
-        duration=CallRecord.duration + HEARTBEAT_INTERVAL
-    )
-    # 同步内存中的时长值（DB 已原子更新，内存值+1 即可）
-    call_record.duration += HEARTBEAT_INTERVAL
-
-    # 获取扣费后最新钻石余额
-    updated_user = await AppUser.filter(id=caller_id).first()
-    new_diamonds = updated_user.diamonds if updated_user else 0
+        user = await AppUser.filter(id=caller_id).using_db(conn).first()
+        current_coins = user.coins if user else 0
 
     return Success(
-        data=HeartbeatOut(
-            diamonds=new_diamonds,
-            duration=call_record.duration,
+        data=RenewLeaseOut(
+            coins=current_coins,
+            duration=duration_seconds,
+            deducted_minutes=int(call_record.deducted_minutes or 0),
+            deducted_amount=int(call_record.deducted_amount or 0),
             msg="OK",
         ).model_dump()
     )
@@ -382,55 +445,63 @@ async def heartbeat(req_in: HeartbeatIn):
 
 @router.post("/call/end", summary="通话结束结算", dependencies=[DependAppAuth])
 async def call_end(req_in: CallEndIn):
-    caller_id = CTX_APP_USER_ID.get()
+    user_id = CTX_APP_USER_ID.get()
 
-    call_record = await CallRecord.filter(id=req_in.call_id).first()
-    if not call_record:
-        return Success(data=CallEndOut(total_fee=0, diamonds=0, duration=0, msg="通话已结束").model_dump())
-
-    if caller_id not in {int(call_record.caller_id), int(call_record.callee_id)}:
-        return Fail(code=403, msg="无权结束该通话")
-
-    if call_record.status == "ended":
-        app_user = await AppUser.filter(id=caller_id).first()
-        final_diamonds = app_user.diamonds if app_user else 0
-        return Success(
-            data=CallEndOut(
-                total_fee=call_record.total_fee,
-                diamonds=final_diamonds,
-                duration=call_record.duration,
-                msg="通话已结束",
-            ).model_dump()
+    async with in_transaction() as conn:
+        call_record = (
+            await CallRecord.filter(id=req_in.call_id)
+            .using_db(conn)
+            .select_for_update()
+            .first()
         )
+        if not call_record:
+            user = await AppUser.filter(id=user_id).using_db(conn).first()
+            return Success(
+                data=CallEndOut(
+                    total_fee=0,
+                    coins=user.coins if user else 0,
+                    duration=0,
+                    msg="通话已结束",
+                ).model_dump()
+            )
 
-    redis = await get_redis()
-    cache = RedisCache(redis)
+        if user_id not in {int(call_record.caller_id), int(call_record.callee_id)}:
+            return Fail(code=403, msg="无权结束该通话")
 
-    # 获取最终钻石余额（心跳已直接更新 DB，从 DB 读取）
-    app_user = await AppUser.filter(id=caller_id).first()
-    final_diamonds = app_user.diamonds if app_user else 0
+        if call_record.status != "ended":
+            duration_seconds = _calc_duration_seconds(call_record)
+            call_record.duration = duration_seconds
+            free_seconds_before_billing = await _get_free_seconds_before_billing()
+            due_minutes = (
+                _calc_due_minutes_with_free(duration_seconds, free_seconds_before_billing)
+                if call_record.status == "ongoing"
+                else 0
+            )
+            actual_fee = due_minutes * int(call_record.call_price or 0)
+            deducted_amount = int(call_record.deducted_amount or 0)
+            refund_amount = max(0, deducted_amount - actual_fee)
+            charged_amount = deducted_amount - refund_amount
+            payer_id = await _resolve_payer_id(call_record)
 
-    # 仅 ongoing 时进行计费结算，pending 直接为 0
-    if call_record.status == "ongoing" and call_record.duration > 0:
-        call_price = call_record.call_price
-        fee_per_tick = call_price // 12
-        ticks = (call_record.duration + HEARTBEAT_INTERVAL - 1) // HEARTBEAT_INTERVAL
-        total_fee = ticks * fee_per_tick
-    else:
-        total_fee = 0
+            if refund_amount > 0:
+                await AppUser.filter(id=payer_id).using_db(conn).update(
+                    coins=AppUser.coins + refund_amount
+                )
 
-    call_record.status = "ended"
-    call_record.end_reason = call_record.end_reason or "normal"
-    call_record.total_fee = total_fee
-    await call_record.save()
+            call_record.total_fee = charged_amount
+            call_record.status = "ended"
+            call_record.end_reason = call_record.end_reason or "normal"
+            call_record.ended_at = datetime.now(timezone.utc)
+            await call_record.save(using_db=conn)
 
-    await cache.delete(heartbeat_key(call_record.id))
+        user = await AppUser.filter(id=user_id).using_db(conn).first()
+        final_coins = user.coins if user else 0
 
     return Success(
         data=CallEndOut(
-            total_fee=total_fee,
-            diamonds=final_diamonds,
-            duration=call_record.duration,
+            total_fee=int(call_record.total_fee or 0),
+            coins=final_coins,
+            duration=int(call_record.duration or 0),
             msg="通话已结束",
         ).model_dump()
     )

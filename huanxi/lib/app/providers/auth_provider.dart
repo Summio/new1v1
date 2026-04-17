@@ -261,13 +261,28 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final respData = data['data'] as Map<String, dynamic>?;
       if (respData == null) return;
 
-      state = state.copyWith(
-        coins: respData['coins'] as int? ?? state.coins,
-        diamonds: respData['diamonds'] as int? ?? state.diamonds,
-      );
+      final coins = respData['coins'] as int? ?? state.coins;
+      final diamonds = respData['diamonds'] as int? ?? state.diamonds;
+      syncBalance(coins: coins, diamonds: diamonds);
     } catch (e) {
       debugPrint('auth.refreshBalance error: $e');
     }
+  }
+
+  /// 同步余额到全局状态（避免必须重新登录才更新）
+  void syncBalance({
+    required int coins,
+    required int diamonds,
+  }) {
+    final next = state.copyWith(coins: coins, diamonds: diamonds);
+    state = next;
+
+    // 仅更新本地缓存中的余额字段，避免覆盖其他用户信息
+    final cached = StorageService.getUserInfo();
+    if (cached == null) return;
+    cached['coins'] = coins;
+    cached['diamonds'] = diamonds;
+    StorageService.saveUserInfo(cached);
   }
 
   /// 注册成功后设置登录状态（token已保存）

@@ -1,8 +1,10 @@
 from contextlib import asynccontextmanager
+import asyncio
 
 from fastapi import FastAPI
 from tortoise import Tortoise
 
+from app.core.call_watchdog import run_call_watchdog
 from app.core.exceptions import SettingNotFound
 from app.core.init_app import (
     init_data,
@@ -24,11 +26,17 @@ async def lifespan(app: FastAPI):
     await get_redis()
     # 初始化数据库
     await init_data()
-    yield
-    # 关闭 Redis
-    await close_redis()
-    # 关闭数据库
-    await Tortoise.close_connections()
+    stop_event = asyncio.Event()
+    watchdog_task = asyncio.create_task(run_call_watchdog(stop_event))
+    try:
+        yield
+    finally:
+        stop_event.set()
+        await watchdog_task
+        # 关闭 Redis
+        await close_redis()
+        # 关闭数据库
+        await Tortoise.close_connections()
 
 
 def create_app() -> FastAPI:

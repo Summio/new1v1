@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:tencent_cloud_chat_sdk/models/v2_tim_user_full_info.dart';
 import '../../app/theme/app_theme.dart';
+import '../../app/routes/app_router.dart';
 import '../../services/im_service.dart';
 import '../../core/constants/api_endpoints.dart';
+import '../../core/network/api_exception.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/network/response_parsers.dart';
 import '../../core/storage/storage.dart';
@@ -43,9 +46,11 @@ class _ImPageState extends ConsumerState<ImPage> {
   String? _peerUserId;
   String? _peerNickname;
   String? _peerAvatarUrl;
+  int? _peerAnchorId;
   String? _myAvatarUrl;
   final Set<String> _messageIds = <String>{};
   V2TimMessage? _lastHistoryMsg;
+  bool _isStartingCall = false;
 
   String _normalizeIMUserId(String userId) {
     if (userId.startsWith('chat_')) return userId;
@@ -203,12 +208,14 @@ class _ImPageState extends ConsumerState<ImPage> {
       setState(() {
         final appNick = (payload['nickname'] as String?)?.trim();
         final appAvatar = (payload['avatar'] as String?)?.trim();
+        final appAnchorId = (payload['anchor_id'] as num?)?.toInt();
         if (appNick != null && appNick.isNotEmpty) {
           _peerNickname = appNick;
         }
         if (appAvatar != null && appAvatar.isNotEmpty) {
           _peerAvatarUrl = appAvatar;
         }
+        _peerAnchorId = appAnchorId;
       });
     } catch (_) {
       // App 资料兜底失败不影响聊天主链路
@@ -355,6 +362,66 @@ class _ImPageState extends ConsumerState<ImPage> {
     return ResponseParsers.parseUserSigPayload(response.data);
   }
 
+  Future<void> _startVideoCall() async {
+    if (_isStartingCall) return;
+    final peerNumId = _extractAppUserId(_peerUserId ?? widget.userId);
+    if (peerNumId == null || peerNumId <= 0) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('目标用户信息异常，无法发起通话')),
+      );
+      return;
+    }
+    final anchorId = _peerAnchorId;
+    if (anchorId == null || anchorId <= 0) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('对方不是可通话主播，暂不支持视频呼叫')),
+      );
+      return;
+    }
+
+    setState(() => _isStartingCall = true);
+    try {
+      final dialingRes = await DioClient.instance.apiPost(
+        ApiEndpoints.dialing,
+        data: {'anchor_id': anchorId},
+      );
+      final dialingData = dialingRes['data'] as Map<String, dynamic>?;
+      final callId = (dialingData?['call_id'] as num?)?.toInt();
+      if (callId == null || callId <= 0) {
+        throw const ApiException(code: 400, message: '呼叫创建失败，请稍后重试');
+      }
+      if (!mounted) return;
+
+      await context.push(
+        Uri(
+          path: AppRoutes.callRoom,
+          queryParameters: {
+            'callId': callId.toString(),
+            'peerUserId': peerNumId.toString(),
+            'anchorId': anchorId.toString(),
+            'peerName': _peerDisplayName(),
+          },
+        ).toString(),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('通话启动失败，请稍后重试')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isStartingCall = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final media = MediaQuery.of(context);
@@ -452,11 +519,7 @@ class _ImPageState extends ConsumerState<ImPage> {
                       children: [
                         IconButton(
                           icon: const Icon(Icons.videocam_outlined, color: AppTheme.textSecondary),
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('视频通话功能开发中')),
-                            );
-                          },
+                          onPressed: _isStartingCall ? null : _startVideoCall,
                         ),
                         Expanded(
                           child: TextField(
