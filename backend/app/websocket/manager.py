@@ -3,14 +3,15 @@
 Redis Pub/Sub 版：支持多 worker 部署，每个 worker 维护自己的连接，
 通过 Redis Pub/Sub 广播消息，目标 worker 收到后转发到本地 WebSocket。
 
-Redis Key 设计：
-  ws:online              - SET，所有在线用户 ID
-  ws:user:{user_id}:pid  - STRING，用户所在进程 PID（连接时设，断开时删）
-  ws:pid:{pid}:users    - SET，该进程所有连接用户（连接时增，断开时删）
-  ws:broadcast           - Pub/Sub 频道，跨实例消息广播
+Redis 键：
+  ws:online                  - SET，所有在线用户 ID（WS 连接时 sadd，断开时 srem）
+  ws:user:{user_id}:pid     - STRING，用户所在进程 PID（连接时设，断开时删）
+  ws:pid:{pid}:users        - SET，该进程所有连接用户（连接时增，断开时删）
+  ws:broadcast               - Pub/Sub 频道，跨实例消息广播
+  ws:manual_offline:{user_id} - STRING，手动离线标记（presence.py 管理）
 
 Watchdog Leader Election：
-  watchdog:leader        - STRING，当前 leader 的 PID（SET NX EX 60s）
+  watchdog:leader            - STRING，当前 leader 的 PID（SET NX EX 60s）
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ import os
 from typing import Any
 
 from loguru import logger
+from redis.exceptions import ResponseError
 
 from app.core.redis import get_redis
 
@@ -30,6 +32,13 @@ _WS_ONLINE_KEY = "ws:online"
 _WS_BROADCAST_CHANNEL = "ws:broadcast"
 _WATCHDOG_LEADER_KEY = "watchdog:leader"
 _WATCHDOG_LEADER_TTL = 60  # 秒，leader 续期间隔
+_WATCHDOG_REFRESH_LEADER_SCRIPT = """
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+    return redis.call('EXPIRE', KEYS[1], ARGV[2])
+end
+return 0
+"""
+_watchdog_refresh_script_sha: str | None = None
 
 
 def _user_pid_key(user_id: int) -> str:
@@ -53,6 +62,8 @@ _redis_client_for_pubsub: Any = None  # 独立 Redis 连接用于 pub/sub
 class ConnectionManager:
     """本 worker 的 WebSocket 连接管理器 + Redis Pub/Sub 广播。"""
 
+    _PUSH_FAIL_THRESHOLD = 3
+
     def __init__(self) -> None:
         self._pid = os.getpid()
         self._ws_conns: dict[int, Any] = {}
@@ -60,6 +71,8 @@ class ConnectionManager:
         self._pubsub: Any = None
         self._pubsub_task: asyncio.Task | None = None
         self._pubsub_running = False
+        # M3 修复：推送失败计数器，追踪每个用户的连续失败次数
+        self._push_failures: dict[int, int] = {}
 
     # ===== 本实例连接管理 =====
 
@@ -77,6 +90,13 @@ class ConnectionManager:
             logger.info(f"[WS] user {user_id} connected on pid {self._pid}, total={len(self._ws_conns)}")
         except Exception as e:
             logger.warning(f"[WS] Redis update failed on connect: {e}")
+
+        # 广播上线事件（异步，不阻塞连接建立）
+        try:
+            from app.websocket.presence import broadcast_presence
+            broadcast_presence(manager=self, user_id=user_id, online=True)
+        except Exception as e:
+            logger.warning(f"[WS] presence broadcast on connect failed: {e}")
 
     async def disconnect(self, user_id: int) -> None:
         """将用户 WebSocket 连接从本实例移除。"""
@@ -98,6 +118,13 @@ class ConnectionManager:
             await redis.srem(_pid_users_key(self._pid), user_id)
         except Exception as e:
             logger.warning(f"[WS] Redis update failed on disconnect: {e}")
+
+        # 广播下线事件（异步，不阻塞清理）
+        try:
+            from app.websocket.presence import broadcast_presence
+            broadcast_presence(manager=self, user_id=user_id, online=False)
+        except Exception as e:
+            logger.warning(f"[WS] presence broadcast on disconnect failed: {e}")
 
     async def _send_ws(self, user_id: int, payload: dict) -> bool:
         """向本实例的 WebSocket 发送消息，不存在则静默忽略。"""
@@ -155,9 +182,19 @@ class ConnectionManager:
                 separators=(",", ":"),
             )
             await redis.publish(_WS_BROADCAST_CHANNEL, msg)
+            # M3 修复：推送成功后重置该用户的失败计数器
+            self._push_failures.pop(user_id, None)
             return True
         except Exception as e:
-            # W-4 修复：关键事件失败时记录 WARNING 日志用于监控
+            # M3 修复：追踪每个用户的连续推送失败，超过阈值时降级告警
+            fail_count = self._push_failures.get(user_id, 0) + 1
+            self._push_failures[user_id] = fail_count
+            if fail_count >= self._PUSH_FAIL_THRESHOLD:
+                logger.warning(
+                    "[WS] push failure threshold exceeded: user_id={} event={} consecutive_failures={}",
+                    user_id, event, fail_count,
+                )
+            # 常规失败日志
             if critical or event in self._CRITICAL_EVENTS:
                 logger.warning(f"[WS] critical push_to_user({user_id}, {event}) failed: {e}")
             else:
@@ -174,6 +211,7 @@ class ConnectionManager:
             if _pubsub_started:
                 return
             _pubsub_started = True
+            self._pubsub_running = True
 
         logger.info(f"[WS] starting pubsub listener on pid {self._pid}")
         _pubsub_task = asyncio.create_task(self._pubsub_loop())
@@ -228,6 +266,8 @@ class ConnectionManager:
 
     async def stop_pubsub(self) -> None:
         """停止 Pub/Sub 监听（进程退出时调用）。"""
+        global _pubsub_started, _pubsub_task
+
         self._pubsub_running = False
         if self._pubsub_task:
             self._pubsub_task.cancel()
@@ -235,6 +275,10 @@ class ConnectionManager:
                 await self._pubsub_task
             except asyncio.CancelledError:
                 pass
+            self._pubsub_task = None
+        global _pubsub_task
+        _pubsub_task = None
+        _pubsub_started = False
 
 
 # ===== 全局单例 =====
@@ -266,15 +310,40 @@ async def try_acquire_watchdog_leader() -> bool:
         return False
 
 
+async def _get_watchdog_refresh_script_sha(redis_client: Any) -> str:
+    global _watchdog_refresh_script_sha
+
+    if _watchdog_refresh_script_sha is None:
+        _watchdog_refresh_script_sha = await redis_client.script_load(
+            _WATCHDOG_REFRESH_LEADER_SCRIPT
+        )
+    return _watchdog_refresh_script_sha
+
+
 async def refresh_watchdog_leader() -> bool:
     """续期 watchdog leader（仅 leader 调用）。"""
     try:
-        redis = await get_redis()
-        pid = await redis.get(_WATCHDOG_LEADER_KEY)
-        if pid and int(pid) == os.getpid():
-            await redis.expire(_WATCHDOG_LEADER_KEY, _WATCHDOG_LEADER_TTL)
-            return True
-        return False
+        redis_client = await get_redis()
+        pid = str(os.getpid())
+        ttl_seconds = str(_WATCHDOG_LEADER_TTL)
+
+        try:
+            script_sha = await _get_watchdog_refresh_script_sha(redis_client)
+            result = await redis_client.evalsha(
+                script_sha, 1, _WATCHDOG_LEADER_KEY, pid, ttl_seconds
+            )
+        except ResponseError as e:
+            if "NOSCRIPT" not in str(e).upper():
+                raise
+            global _watchdog_refresh_script_sha
+            _watchdog_refresh_script_sha = await redis_client.script_load(
+                _WATCHDOG_REFRESH_LEADER_SCRIPT
+            )
+            result = await redis_client.evalsha(
+                _watchdog_refresh_script_sha, 1, _WATCHDOG_LEADER_KEY, pid, ttl_seconds
+            )
+
+        return int(result or 0) == 1
     except Exception as e:
         logger.warning(f"[WS] watchdog leader refresh failed: {e}")
         return False
