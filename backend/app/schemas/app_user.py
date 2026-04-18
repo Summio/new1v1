@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from re import compile as re_compile
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -90,7 +90,7 @@ class AppUserInfoOut(BaseModel):
 
 class AnchorApplyIn(BaseModel):
     intro: str = Field(..., max_length=500, description="申请简介")
-    tags: Optional[list] = Field(default_factory=list, description="擅长领域标签")
+    tags: Optional[List[str]] = Field(default_factory=list, description="擅长领域标签")
     call_price: int = Field(default=60, ge=10, le=1000, description="期望通话价格(分/分钟)")
 
 

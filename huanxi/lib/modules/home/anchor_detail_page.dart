@@ -5,9 +5,6 @@ import '../../app/providers/anchor_provider.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
-import '../../core/constants/api_endpoints.dart';
-import '../../core/network/api_exception.dart';
-import '../../core/network/dio_client.dart';
 import 'package:huanxi/core/utils/app_toast.dart';
 
 /// 主播详情页 (Momo 风格)
@@ -58,42 +55,18 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
     if (_isActionNavigating) return;
     setState(() => _isActionNavigating = true);
     try {
-      final dialingRes = await DioClient.instance.apiPost(
-        ApiEndpoints.dialing,
-        data: {'anchor_id': anchor.id},
-      );
-      final dialingData = dialingRes['data'] as Map<String, dynamic>?;
-      final callId = (dialingData?['call_id'] as num?)?.toInt();
-      final peerUserId = (dialingData?['callee_id'] as num?)?.toInt();
-      final peerName = (dialingData?['callee_nickname'] as String?)?.trim();
-      final peerAvatar = (dialingData?['callee_avatar'] as String?)?.trim();
-      final callPrice = (dialingData?['call_price'] as num?)?.toInt() ?? 0;
-      if (callId == null || callId <= 0) {
-        throw const ApiException(code: 400, message: '呼叫创建失败，请稍后重试');
-      }
-      if (!mounted) return;
-
       await context.push(
         Uri(
           path: AppRoutes.callOutgoing,
           queryParameters: {
-            'callId': callId.toString(),
-            'peerUserId': (peerUserId ?? anchor.userId).toString(),
+            'peerUserId': anchor.userId.toString(),
             'anchorId': anchor.id.toString(),
-            'peerName':
-                (peerName != null && peerName.isNotEmpty)
-                    ? peerName
-                    : (anchor.username ?? '主播'),
-            'peerAvatar': (peerAvatar != null && peerAvatar.isNotEmpty)
-                ? peerAvatar
-                : (anchor.avatar ?? ''),
-            'callPrice': callPrice.toString(),
+            'peerName': anchor.username ?? '主播',
+            'peerAvatar': anchor.avatar ?? '',
+            'callPrice': '0',
           },
         ).toString(),
       );
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      AppToast.showSnackBar(context, SnackBar(content: Text(e.message)));
     } catch (_) {
       if (!mounted) return;
       AppToast.showSnackBar(

@@ -12,11 +12,19 @@ import '../../core/network/dio_client.dart';
 import '../../core/network/response_parsers.dart';
 import '../../core/storage/storage.dart';
 import '../../services/im_service.dart';
+import '../../services/websocket_service.dart';
 import '../call/call_session_payload.dart';
 
 /// 底部导航 Shell
 /// 包含首页、发现、消息、我的四个标签
 class MainShell extends ConsumerStatefulWidget {
+  static final _presenceStreamController =
+      StreamController<PresenceEvent>.broadcast();
+
+  /// 在线状态变化事件流（其他页面可监听此 stream 刷新 UI）
+  static Stream<PresenceEvent> get presenceStream =>
+      _presenceStreamController.stream;
+
   final Widget child;
 
   const MainShell({super.key, required this.child});
@@ -25,12 +33,18 @@ class MainShell extends ConsumerStatefulWidget {
   ConsumerState<MainShell> createState() => _MainShellState();
 }
 
+/// WebSocket 在线状态变化事件
+class PresenceEvent {
+  final int userId;
+  final bool online;
+  const PresenceEvent({required this.userId, required this.online});
+}
+
 class _MainShellState extends ConsumerState<MainShell>
     with WidgetsBindingObserver {
-  Timer? _incomingTimer;
   final IMService _imService = IMService();
   bool _incomingPageShowing = false;
-  int? _lastHandledCallId;
+  String? _lastHandledIncomingKey;
   int _imUnreadCount = 0;
   void Function(int)? _imUnreadListener;
   Function(dynamic)? _imMessageListener;
@@ -38,6 +52,8 @@ class _MainShellState extends ConsumerState<MainShell>
   int? _imReadyUserId;
   AppLifecycleState _lifecycleState = AppLifecycleState.resumed;
   CallSessionPayload? _pendingIncomingWhenBackground;
+  String? _lastMatchedLocation;
+  StreamSubscription<WsEvent>? _wsSubscription;
 
   void _log(String message) {
     debugPrint('[INCOMING_FLOW] $message');
@@ -47,8 +63,8 @@ class _MainShellState extends ConsumerState<MainShell>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _startIncomingPolling();
     _initGlobalIMUnread();
+    _initWebSocket();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref.read(authProvider.notifier).refreshBalance();
@@ -61,6 +77,7 @@ class _MainShellState extends ConsumerState<MainShell>
     if (state == AppLifecycleState.resumed) {
       ref.read(authProvider.notifier).refreshBalance();
       _openPendingIncomingOnResume();
+      WsService.instance.connect();
       if (_imService.isInitialized) {
         _refreshUnreadCount();
       } else {
@@ -120,10 +137,36 @@ class _MainShellState extends ConsumerState<MainShell>
       return;
     }
     try {
-      final total = await _imService.getTotalUnreadCount();
-      _onImTotalUnreadChanged(total);
+      await _imService.syncTotalUnreadCount();
     } catch (e) {
       debugPrint('mainShell.refreshUnreadCount error: $e');
+    }
+  }
+
+  String? _currentMatchedLocation(BuildContext context) {
+    try {
+      return GoRouterState.of(context).matchedLocation;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  bool _isImRoute(String? location) {
+    if (location == null || location.isEmpty) {
+      return false;
+    }
+    return location.startsWith(AppRoutes.im);
+  }
+
+  void _handleRouteBasedUnreadRefresh(String currentLocation) {
+    final previous = _lastMatchedLocation;
+    _lastMatchedLocation = currentLocation;
+    if (_isImRoute(previous) &&
+        currentLocation.startsWith(AppRoutes.messages)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _refreshUnreadCount();
+      });
     }
   }
 
@@ -149,54 +192,15 @@ class _MainShellState extends ConsumerState<MainShell>
     });
   }
 
-  void _startIncomingPolling() {
-    _incomingTimer?.cancel();
-    _incomingTimer = Timer.periodic(const Duration(seconds: 3), (_) {
-      _checkIncomingCall();
-    });
-    _checkIncomingCall();
-  }
-
-  Future<void> _checkIncomingCall() async {
-    final auth = ref.read(authProvider);
-    if (!auth.isLoggedIn || auth.appRole != 'anchor' || _incomingPageShowing) {
-      return;
+  String? _incomingDedupKey(CallSessionPayload payload) {
+    final callId = payload.callId;
+    if (callId == null || callId <= 0) return null;
+    final createdAt = payload.createdAt?.trim();
+    if (createdAt != null && createdAt.isNotEmpty) {
+      return '$callId|$createdAt';
     }
-
-    try {
-      final res = await DioClient.instance.apiGet(ApiEndpoints.callSessionCurrent);
-      final payload = CallSessionPayload.fromJson(
-        res['data'] is Map<String, dynamic>
-            ? res['data'] as Map<String, dynamic>
-            : null,
-      );
-
-      if (!payload.isPending || payload.role != 'callee') {
-        return;
-      }
-
-      final callId = payload.callId;
-      final peerUserId = payload.peerUserId;
-      if (callId == null || callId <= 0 || peerUserId == null || peerUserId <= 0) {
-        return;
-      }
-      if (_lastHandledCallId == callId) {
-        _log('polling ignored duplicated callId=$callId');
-        return;
-      }
-      _log(
-        'polling incoming callId=$callId peerUserId=$peerUserId lifecycle=$_lifecycleState',
-      );
-
-      if (_lifecycleState == AppLifecycleState.resumed) {
-        await _openIncomingCallPage(payload);
-      } else {
-        _pendingIncomingWhenBackground = payload;
-        _log('incoming received in background callId=$callId');
-      }
-    } catch (e) {
-      _log('polling error: $e');
-    }
+    // 兜底：服务端缺失 created_at 时，使用稳定字段去重，避免 key 抖动
+    return '$callId|${payload.peerUserId ?? 0}|${payload.role ?? ''}';
   }
 
   Future<void> _openPendingIncomingOnResume() async {
@@ -209,10 +213,14 @@ class _MainShellState extends ConsumerState<MainShell>
 
   Future<void> _openIncomingCallPage(CallSessionPayload payload) async {
     if (_incomingPageShowing) return;
-    if (_lastHandledCallId == payload.callId) return;
-    if (!mounted || payload.callId == null || payload.peerUserId == null) return;
+    final dedupKey = _incomingDedupKey(payload);
+    if (dedupKey != null && _lastHandledIncomingKey == dedupKey) return;
+    if (!mounted || payload.callId == null || payload.peerUserId == null) {
+      return;
+    }
 
     _incomingPageShowing = true;
+    _lastHandledIncomingKey = dedupKey;
     try {
       final callUri = Uri(
         path: AppRoutes.callIncoming,
@@ -221,15 +229,103 @@ class _MainShellState extends ConsumerState<MainShell>
           'peerUserId': payload.peerUserId.toString(),
           'peerName': payload.peerNickname,
           'peerAvatar': payload.peerAvatar ?? '',
+          'leftSeconds': payload.leftSeconds.toString(),
         },
       );
       await context.push(callUri.toString());
-      _lastHandledCallId = payload.callId;
     } catch (e) {
       _log('open incoming page error: $e');
     } finally {
       _incomingPageShowing = false;
     }
+  }
+
+  // ===== WebSocket 事件监听 =====
+
+  void _initWebSocket() {
+    _wsSubscription?.cancel();
+    _wsSubscription = WsService.instance.events.listen(_onWsEvent);
+    // 已登录则立即连接
+    if (ref.read(authProvider).isLoggedIn) {
+      WsService.instance.connect();
+    }
+  }
+
+  void _onWsEvent(WsEvent event) {
+    switch (event.event) {
+      case 'balance_updated':
+        _handleBalanceUpdated(event.data);
+        break;
+      case 'call_incoming':
+        _handleWsIncomingCall(event.data);
+        break;
+      case 'presence':
+        _handlePresenceEvent(event.data);
+        break;
+    }
+  }
+
+  void _handleBalanceUpdated(Map<String, dynamic> data) {
+    final coins = data['coins'] as int?;
+    final diamonds = data['diamonds'] as int?;
+    if (coins != null || diamonds != null) {
+      ref
+          .read(authProvider.notifier)
+          .syncBalance(
+            coins: coins ?? ref.read(authProvider).coins,
+            diamonds: diamonds ?? ref.read(authProvider).diamonds,
+          );
+    }
+  }
+
+  void _handleWsIncomingCall(Map<String, dynamic> data) {
+    final auth = ref.read(authProvider);
+    if (!auth.isLoggedIn || auth.appRole != 'anchor' || _incomingPageShowing) {
+      return;
+    }
+    try {
+      // WebSocket call_incoming 事件字段映射：
+      // 后端发送: caller_id, caller_name, caller_avatar, call_price, left_seconds
+      // CallSessionPayload 期望: peer_user_id, peer_nickname, peer_avatar, ...
+      // 加上 status=pending 和 role=callee（来电场景固定为被叫）
+      final wsData = Map<String, dynamic>.from(data);
+      wsData['peer_user_id'] = wsData['caller_id'];
+      wsData['peer_nickname'] = wsData['caller_name'] ?? '用户';
+      wsData['peer_avatar'] = wsData['caller_avatar'];
+      wsData['status'] = 'pending';
+      wsData['role'] = 'callee';
+
+      final payload = CallSessionPayload.fromJson(wsData);
+      if (!payload.isPending) return;
+
+      final callId = payload.callId;
+      final peerUserId = payload.peerUserId;
+      if (callId == null ||
+          callId <= 0 ||
+          peerUserId == null ||
+          peerUserId <= 0) {
+        return;
+      }
+
+      _log('[WS] 收到来电事件 callId=$callId peerUserId=$peerUserId');
+
+      if (_lifecycleState == AppLifecycleState.resumed) {
+        _openIncomingCallPage(payload);
+      } else {
+        _pendingIncomingWhenBackground = payload;
+      }
+    } catch (e) {
+      _log('[WS] 来电事件解析失败: $e');
+    }
+  }
+
+  void _handlePresenceEvent(Map<String, dynamic> data) {
+    final userId = data['user_id'] as int?;
+    final online = data['online'] as bool?;
+    if (userId == null || online == null) return;
+    MainShell._presenceStreamController.add(
+      PresenceEvent(userId: userId, online: online),
+    );
   }
 
   int _getCurrentIndex(BuildContext context) {
@@ -272,8 +368,8 @@ class _MainShellState extends ConsumerState<MainShell>
     if (_imMessageListener != null) {
       _imService.removeMessageListener(_imMessageListener!);
     }
+    _wsSubscription?.cancel();
     WidgetsBinding.instance.removeObserver(this);
-    _incomingTimer?.cancel();
     super.dispose();
   }
 
@@ -292,6 +388,10 @@ class _MainShellState extends ConsumerState<MainShell>
       });
     }
 
+    final currentLocation = _currentMatchedLocation(context) ?? '';
+    if (currentLocation.isNotEmpty) {
+      _handleRouteBasedUnreadRefresh(currentLocation);
+    }
     final currentIndex = _getCurrentIndex(context);
 
     return Scaffold(

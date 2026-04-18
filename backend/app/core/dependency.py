@@ -23,8 +23,9 @@ class AuthControl:
             raise HTTPException(status_code=401, detail="无效的Token")
         except jwt.ExpiredSignatureError:
             raise HTTPException(status_code=401, detail="登录已过期")
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"{repr(e)}")
+        except Exception:
+            # 隐藏内部错误细节，防止信息泄漏
+            raise HTTPException(status_code=500, detail="认证服务异常")
 
 
 class PermissionControl:
@@ -38,10 +39,13 @@ class PermissionControl:
         if not role_ids:
             raise HTTPException(status_code=403, detail="The user is not bound to a role")
 
-        permission_apis = set(
-            await Api.filter(role_apis__id__in=role_ids).distinct().values_list("method", "path")
-        )
-        if (method, path) not in permission_apis:
+        # DB 层精确过滤：只查匹配当前请求 method+path 的权限记录，避免全量加载
+        has_perm = await Api.filter(
+            role_apis__id__in=role_ids,
+            method=method,
+            path=path,
+        ).exists()
+        if not has_perm:
             raise HTTPException(status_code=403, detail=f"Permission denied method:{method} path:{path}")
 
 
@@ -51,18 +55,24 @@ DependPermission = Depends(PermissionControl.has_permission)
 
 
 # ===== 限流依赖 =====
-from starlette.requests import Request
-from starlette.responses import JSONResponse
-
 from app.core.redis import get_redis, rate_limit
 
 
 def get_client_ip(request: Request) -> str:
-    """从请求中获取客户端 IP，优先取 X-Forwarded-For 头。"""
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    return request.client.host if request.client else "unknown"
+    """获取真实客户端 IP。
+
+    仅当请求来自可信代理列表时才读取 X-Forwarded-For 头，
+    防止攻击者伪造 IP 绕过限流。
+    """
+    from app.settings.config import settings
+
+    # 只有来自可信代理的请求才信任 X-Forwarded-For
+    client_host = request.client.host if request.client else None
+    if client_host and settings.TRUSTED_PROXY_IPS and client_host in settings.TRUSTED_PROXY_IPS:
+        forwarded = request.headers.get("x-forwarded-for")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+    return client_host or "unknown"
 
 
 class RateLimit:

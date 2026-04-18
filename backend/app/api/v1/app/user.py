@@ -1,15 +1,32 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends
+from fastapi import Header, HTTPException, Query
 
-from app.core.app_auth import DependAppAuth
+from app.core.app_auth import DependAppAuth, logout_app_user
 from app.core.ctx import CTX_APP_USER_OBJ
-from app.models.anchor import Anchor
-from app.models.app_user import AppUser
+from app.models import Anchor, AppUser
 from app.schemas.base import Fail, Success
 
 router = APIRouter()
 
 
-@router.get("/user/info", summary="获取当前用户信息", dependencies=[DependAppAuth])
+def _mask_phone(phone: str | None) -> str:
+    """手机号脱敏：138****1234"""
+    if not phone or len(phone) < 7:
+        return phone or ""
+    return f"{phone[:3]}****{phone[-4:]}"
+
+
+@router.post("/user/logout", summary="登出")
+async def logout(authorization: str = Header(None, alias="Authorization")):
+    """退出登录，撤销当前 JWT token。"""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="无效的认证信息")
+    token = authorization[7:]
+    ok = await logout_app_user(token)
+    return Success(msg="登出成功")
+
+
+@router.get("/user/info", summary="获取当前用户信息", dependencies=[Depends(DependAppAuth)])
 async def get_user_info():
     app_user = CTX_APP_USER_OBJ.get()
     if not app_user:
@@ -21,7 +38,7 @@ async def get_user_info():
     return Success(
         data={
             "id": app_user.id,
-            "phone": app_user.phone,
+            "phone": _mask_phone(app_user.phone),
             "nickname": app_user.nickname or app_user.phone,
             "avatar": app_user.avatar or "",
             "gender": app_user.gender or "secret",
@@ -36,7 +53,7 @@ async def get_user_info():
     )
 
 
-@router.get("/user/public", summary="按 user_id 获取公开用户资料", dependencies=[DependAppAuth])
+@router.get("/user/public", summary="按 user_id 获取公开用户资料", dependencies=[Depends(DependAppAuth)])
 async def get_user_public_profile(
     user_id: int = Query(..., description="目标用户ID"),
 ):

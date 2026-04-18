@@ -3,11 +3,25 @@ from datetime import datetime
 
 from tortoise import fields, models
 
+from app.core.time_utils import to_local_naive_for_db
 from app.settings import settings
 
 
 class BaseModel(models.Model):
     id = fields.BigIntField(pk=True, index=True)
+
+    def _normalize_datetime_fields_for_db(self) -> None:
+        for field in self._meta.db_fields:
+            value = getattr(self, field, None)
+            if not isinstance(value, datetime):
+                continue
+            normalized = to_local_naive_for_db(value)
+            if normalized != value:
+                setattr(self, field, normalized)
+
+    async def save(self, *args, **kwargs):  # type: ignore[override]
+        self._normalize_datetime_fields_for_db()
+        return await super().save(*args, **kwargs)
 
     async def to_dict(self, m2m: bool = False, exclude_fields: list[str] | None = None):
         if exclude_fields is None:

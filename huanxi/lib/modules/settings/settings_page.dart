@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../app/theme/app_theme.dart';
+import 'package:huanxi/core/utils/app_toast.dart';
 
 /// 设置页面
 class SettingsPage extends ConsumerWidget {
@@ -47,7 +48,8 @@ class SettingsPage extends ConsumerWidget {
             icon: Icons.block,
             title: '黑名单管理',
             onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
+              AppToast.showSnackBar(
+                context,
                 const SnackBar(content: Text('黑名单管理功能开发中')),
               );
             },
@@ -67,7 +69,8 @@ class SettingsPage extends ConsumerWidget {
             title: '青少年模式',
             subtitle: '未开启',
             onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
+              AppToast.showSnackBar(
+                context,
                 const SnackBar(content: Text('青少年模式功能开发中')),
               );
             },
@@ -78,7 +81,10 @@ class SettingsPage extends ConsumerWidget {
           _SettingsTile(
             icon: Icons.language,
             title: '语言',
-            trailing: const Text('简体中文', style: TextStyle(color: AppTheme.textHint, fontSize: 14)),
+            trailing: const Text(
+              '简体中文',
+              style: TextStyle(color: AppTheme.textHint, fontSize: 14),
+            ),
             onTap: () {},
           ),
           _SettingsTile(
@@ -237,13 +243,11 @@ class _SettingsTile extends StatelessWidget {
         subtitle: subtitle != null
             ? Text(
                 subtitle!,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppTheme.textHint,
-                ),
+                style: const TextStyle(fontSize: 12, color: AppTheme.textHint),
               )
             : null,
-        trailing: trailing ??
+        trailing:
+            trailing ??
             const Icon(Icons.chevron_right, color: AppTheme.textHint),
         onTap: onTap,
       ),

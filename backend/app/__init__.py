@@ -4,6 +4,7 @@ import asyncio
 from fastapi import FastAPI
 from tortoise import Tortoise
 
+from app.core.bgtask import run_auditlog_cleanup
 from app.core.call_watchdog import run_call_watchdog
 from app.core.exceptions import SettingNotFound
 from app.core.init_app import (
@@ -13,6 +14,7 @@ from app.core.init_app import (
     register_routers,
 )
 from app.core.redis import close_redis, get_redis
+from app.websocket.manager import get_manager
 
 try:
     from app.settings.config import settings
@@ -28,11 +30,18 @@ async def lifespan(app: FastAPI):
     await init_data()
     stop_event = asyncio.Event()
     watchdog_task = asyncio.create_task(run_call_watchdog(stop_event))
+    auditlog_task = asyncio.create_task(run_auditlog_cleanup(stop_event))
     try:
         yield
     finally:
         stop_event.set()
         await watchdog_task
+        await auditlog_task
+        # 关闭 WebSocket Pub/Sub 监听
+        try:
+            await get_manager().stop_pubsub()
+        except Exception:
+            pass
         # 关闭 Redis
         await close_redis()
         # 关闭数据库

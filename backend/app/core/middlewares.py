@@ -27,6 +27,8 @@ SENSITIVE_FIELDS = {
     "account_no",
     "id_card",
     "bank_card",
+    "real_name",
+    "bank_name",
 }
 
 
@@ -110,21 +112,28 @@ class HttpAuditLogMiddleware(BaseHTTPMiddleware):
         return args
 
     async def get_response_body(self, request: Request, response: Response) -> Any:
+        # P3-1: 优先从 ResponseBodyCacheMiddleware 缓存的响应中读取
+        cached_response = getattr(request.state, "_cached_response", None)
+        if cached_response is not None and hasattr(cached_response, "body"):
+            response_to_read = cached_response
+        else:
+            response_to_read = response
+
         # 检查Content-Length
-        content_length = response.headers.get("content-length")
+        content_length = response_to_read.headers.get("content-length")
         if content_length and int(content_length) > self.max_body_size:
             return {"code": 0, "msg": "Response too large to log", "data": None}
 
-        if hasattr(response, "body"):
-            body = response.body
+        if hasattr(response_to_read, "body") and response_to_read.body is not None:
+            body = response_to_read.body
         else:
             body_chunks = []
-            async for chunk in response.body_iterator:
+            async for chunk in response_to_read.body_iterator:
                 if not isinstance(chunk, bytes):
-                    chunk = chunk.encode(response.charset)
+                    chunk = chunk.encode(response_to_read.charset)
                 body_chunks.append(chunk)
 
-            response.body_iterator = self._async_iter(body_chunks)
+            response_to_read.body_iterator = self._async_iter(body_chunks)
             body = b"".join(body_chunks)
 
         if any(request.url.path.startswith(path) for path in self.audit_log_paths):
@@ -157,7 +166,8 @@ class HttpAuditLogMiddleware(BaseHTTPMiddleware):
     async def get_request_log(self, request: Request, response: Response) -> dict:
         """
         根据request和response对象获取对应的日志记录数据。
-        同时支持 Admin Token 和 App Token。
+        优先复用 CTX 中的已认证用户信息（避免重复 JWT 解码），
+        若无 context 则尝试从 header 解码。
         """
         data: dict = {"path": request.url.path, "status": response.status_code, "method": request.method}
         # 路由信息
@@ -170,35 +180,21 @@ class HttpAuditLogMiddleware(BaseHTTPMiddleware):
             ):
                 data["module"] = ",".join(route.tags)
                 data["summary"] = route.summary
-        # 获取用户信息 — 优先尝试 App Token，再尝试 Admin Token
-        token = request.headers.get("token")
-        user_obj = None
-        user_type = "unknown"
-        if token:
-            # 1. 优先尝试 App Token
-            try:
-                user_obj = await AppAuthControl.is_app_authed(token)
-                user_type = "app"
-            except Exception:
-                pass
-            # 2. 降级尝试 Admin Token
-            if user_obj is None:
-                try:
-                    user_obj = await AuthControl.is_authed(token)
-                    user_type = "admin"
-                except Exception:
-                    user_obj = None
-        if user_obj is None:
+
+        # M2 修复：直接复用 CTX 中已解码的用户信息，避免重复 JWT 解码
+        from app.core.ctx import CTX_APP_USER_ID, CTX_APP_USER_OBJ
+
+        ctx_user_id = CTX_APP_USER_ID.get()
+        ctx_user = CTX_APP_USER_OBJ.get()
+        if ctx_user:
+            # App 用户（主播/普通用户）
+            data["user_id"] = ctx_user_id or 0
+            data["username"] = ctx_user.nickname if hasattr(ctx_user, "nickname") and ctx_user.nickname else (
+                ctx_user.phone if hasattr(ctx_user, "phone") and ctx_user.phone else str(ctx_user.id)
+            )
+        else:
             data["user_id"] = 0
             data["username"] = ""
-            return data
-        data["user_id"] = user_obj.id
-        data["username"] = (
-            user_obj.nickname if user_type == "app" and hasattr(user_obj, "nickname")
-            else (user_obj.phone if user_type == "app" and hasattr(user_obj, "phone")
-            else (user_obj.username if user_type == "admin" and hasattr(user_obj, "username")
-            else ""))
-        )
         return data
 
     async def before_request(self, request: Request):
@@ -229,6 +225,39 @@ class HttpAuditLogMiddleware(BaseHTTPMiddleware):
         return response
 
 
+class ResponseBodyCacheMiddleware(BaseHTTPMiddleware):
+    """P3-2: 将响应体预读到内存，避免后续中间件重复消费 body_iterator。"""
+
+    async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
+        response = await call_next(request)
+
+        if not hasattr(response, "body") or response.body is None:
+            body_chunks = []
+            async for chunk in response.body_iterator:
+                if not isinstance(chunk, bytes):
+                    chunk = chunk.encode(response.charset or "utf-8")
+                body_chunks.append(chunk)
+            body_bytes = b"".join(body_chunks)
+
+            headers = {}
+            if hasattr(response, "init_headers"):
+                headers = dict(response.init_headers())
+            if hasattr(response, "raw_headers"):
+                headers = dict(response.raw_headers)
+
+            media_type = getattr(response, "media_type", "application/json")
+
+            response = Response(
+                content=body_bytes,
+                status_code=response.status_code,
+                headers=headers,
+                media_type=media_type,
+            )
+
+        request.state._cached_response = response
+        return response
+
+
 class AppFriendlyStatusMiddleware(BaseHTTPMiddleware):
     """App 接口统一使用 HTTP 200，业务错误通过 code/msg 表达。"""
 
@@ -241,8 +270,11 @@ class AppFriendlyStatusMiddleware(BaseHTTPMiddleware):
         if not self._is_app_request(request) or response.status_code < 400:
             return response
 
-        body = b""
-        if hasattr(response, "body") and response.body is not None:
+        # P3-2: 优先从 ResponseBodyCacheMiddleware 缓存的响应中读取
+        cached_response = getattr(request.state, "_cached_response", None)
+        if cached_response is not None and hasattr(cached_response, "body") and cached_response.body is not None:
+            body = cached_response.body
+        elif hasattr(response, "body") and response.body is not None:
             body = response.body
         else:
             chunks = []

@@ -387,6 +387,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
                       );
                       if (!mounted) return;
                       await _loadConversations();
+                      await _imService.syncTotalUnreadCount();
                     },
                   );
                 },

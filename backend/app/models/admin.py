@@ -77,7 +77,6 @@ class DeptClosure(BaseModel, TimestampMixin):
 
 
 class AuditLog(BaseModel, TimestampMixin):
-    # TODO: 审计日志无限增长，生产环境应实现定期清理机制（如定时任务删除 N 天前的日志）
     user_id = fields.IntField(description="用户ID", index=True)
     username = fields.CharField(max_length=64, default="", description="用户名称", index=True)
     module = fields.CharField(max_length=64, default="", description="功能模块")
@@ -96,7 +95,7 @@ class Anchor(BaseModel, TimestampMixin):
     """主播资料（关联AppUser）"""
     app_user = fields.OneToOneField("models.AppUser", related_name="anchor_profile", on_delete=fields.OnDelete.CASCADE)
     is_online = fields.BooleanField(default=False, description="是否在线", index=True)
-    call_price = fields.IntField(default=100, description="每分钟通话价格(分)")
+    call_price = fields.BigIntField(default=100, description="每分钟通话价格(分)")
     intro = fields.CharField(max_length=500, null=True, description="主播简介")
     tags = fields.JSONField(null=True, description="标签列表")
     avatar = fields.CharField(max_length=500, null=True, description="头像URL")
@@ -114,7 +113,7 @@ class Gift(BaseModel):
     """礼物配置"""
     name = fields.CharField(max_length=50, description="礼物名称", index=True)
     icon = fields.CharField(max_length=500, description="礼物图标URL")
-    price = fields.IntField(description="价格(分)", index=True)
+    price = fields.BigIntField(description="价格(分)", index=True)
     svga_url = fields.CharField(max_length=500, null=True, description="SVGA动画URL")
     is_active = fields.BooleanField(default=True, description="是否上架")
 
@@ -126,16 +125,18 @@ class CallRecord(BaseModel, TimestampMixin):
     """通话记录"""
     caller_id = fields.BigIntField(description="主叫用户ID", index=True)
     callee_id = fields.BigIntField(description="被叫用户ID(主播)", index=True)
-    call_price = fields.IntField(default=0, description="通话单价(分/分钟)，以发起时价格固定计费")
+    call_price = fields.BigIntField(default=0, description="通话单价(分/分钟)，以发起时价格固定计费")
     status = fields.CharField(max_length=20, default="pending", description="pending/ongoing/ended/failed/timeout", index=True)
     duration = fields.IntField(default=0, description="通话时长(秒)")
-    total_fee = fields.IntField(default=0, description="总费用(分)")
+    total_fee = fields.BigIntField(default=0, description="总费用(分)")
     end_reason = fields.CharField(max_length=50, null=True, description="结束原因")
     connected_at = fields.DatetimeField(null=True, description="实际接通时间")
     ended_at = fields.DatetimeField(null=True, description="结束时间")
-    deducted_amount = fields.IntField(default=0, description="已扣费总额(分)")
-    deducted_minutes = fields.IntField(default=0, description="已扣费分钟数")
+    deducted_amount = fields.BigIntField(default=0, description="已扣费总额(分)")
+    deducted_minutes = fields.BigIntField(default=0, description="已扣费分钟数")
     last_renew_at = fields.DatetimeField(null=True, description="最后一次续租时间")
+    billing_free_seconds = fields.BigIntField(default=10, description="本次通话免费秒数快照")
+    payer_user_id = fields.BigIntField(null=True, description="本次通话付费用户ID快照")
 
     class Meta:
         table = "call_record"
@@ -147,7 +148,7 @@ class GiftRecord(BaseModel, TimestampMixin):
     receiver_id = fields.BigIntField(description="接收者ID", index=True)
     gift_id = fields.BigIntField(description="礼物ID")
     gift_name = fields.CharField(max_length=50, description="礼物名称")
-    price = fields.IntField(description="价格(分)")
+    price = fields.BigIntField(description="价格(分)")
 
     class Meta:
         table = "gift_record"
@@ -157,7 +158,7 @@ class RechargeOrder(BaseModel, TimestampMixin):
     """充值订单"""
     user_id = fields.BigIntField(description="用户ID", index=True)
     order_no = fields.CharField(max_length=64, unique=True, description="订单号", index=True)
-    amount = fields.IntField(description="充值金额(分)")
+    amount = fields.BigIntField(description="充值金额(分)")
     status = fields.CharField(max_length=20, default="pending", description="pending/paid/cancelled/refunded", index=True)
     pay_channel = fields.CharField(max_length=20, null=True, description="支付渠道: wx/alipay")
     paid_at = fields.DatetimeField(null=True, description="支付时间")
@@ -169,7 +170,7 @@ class RechargeOrder(BaseModel, TimestampMixin):
 class WithdrawApply(BaseModel, TimestampMixin):
     """提现申请"""
     user_id = fields.BigIntField(description="用户ID", index=True)
-    amount = fields.IntField(description="提现金额(分)")
+    amount = fields.BigIntField(description="提现金额(分)")
     bank_name = fields.CharField(max_length=50, null=True, description="银行名称")
     account_no = fields.CharField(max_length=50, null=True, description="银行账号")
     real_name = fields.CharField(max_length=30, null=True, description="真实姓名")

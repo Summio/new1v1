@@ -11,7 +11,6 @@ import '../../app/providers/auth_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/constants/api_endpoints.dart';
-import '../../core/network/api_exception.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/utils/app_toast.dart';
 import '../../services/websocket_service.dart';
@@ -42,11 +41,20 @@ class CallRoomPage extends ConsumerStatefulWidget {
 }
 
 class _CallRoomPageState extends ConsumerState<CallRoomPage> {
+  static const Duration _wsGracePeriod = Duration(seconds: 10);
   RtcEngine? _engine;
   RtcEngineEventHandler? _rtcEventHandler;
   Timer? _durationTimer;
-  Timer? _statusTimer;
+  Timer? _wsDisconnectTimer;
   StreamSubscription<WsEvent>? _wsSubscription;
+  StreamSubscription<WsConnectionEvent>? _wsConnectionSubscription;
+
+  // 礼物动画状态
+  bool _giftShowing = false;
+  String _giftName = '';
+  String _giftIcon = '';
+  int _giftPrice = 0;
+  String _giftSenderNickname = '';
 
   bool _isMicOn = true;
   bool _isSpeakerOn = true;
@@ -57,13 +65,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
   bool _hasEnded = false;
   bool _endingInProgress = false;
   bool _rtcJoining = false;
-  bool _joinRequested = false;
-  bool _renewInFlight = false;
   bool _endingForBalance = false;
-  bool _endingForNetwork = false;
-  int _renewSyncedMinutes = 0;
-
-  String _callStatus = 'ongoing';
 
   int? _localUid;
   int? _remoteUid;
@@ -72,7 +74,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
 
   Duration _callDuration = Duration.zero;
   DateTime? _callStartTime;
-  int _freeSecondsBeforeBilling = 10;
 
   void _log(String message) {
     debugPrint('[CALL_FLOW][callId=${widget.callId}] $message');
@@ -86,20 +87,49 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       'anchorId=${widget.anchorId}, peerName=${widget.peerName}',
     );
     _initWebSocket();
-    _startStatusPolling();
+    unawaited(_initRtc());
   }
 
   void _initWebSocket() {
     WsService.instance.connect();
     _wsSubscription?.cancel();
     _wsSubscription = WsService.instance.events.listen(_onWsEvent);
+    _wsConnectionSubscription?.cancel();
+    _wsConnectionSubscription = WsService.instance.connectionEvents.listen(
+      _onWsConnectionEvent,
+    );
+  }
+
+  void _onWsConnectionEvent(WsConnectionEvent event) {
+    if (!mounted || _hasEnded) return;
+
+    if (event.state == WsConnectionState.connected) {
+      _wsDisconnectTimer?.cancel();
+      _wsDisconnectTimer = null;
+      return;
+    }
+
+    if (event.state == WsConnectionState.reconnecting ||
+        event.state == WsConnectionState.disconnected ||
+        event.state == WsConnectionState.authFailed) {
+      _wsDisconnectTimer ??= Timer(_wsGracePeriod, () {
+        if (!mounted || _hasEnded || WsService.instance.isConnected) return;
+        _handleEndedByRemote('network_lost');
+      });
+    }
   }
 
   void _onWsEvent(WsEvent event) {
-    // 通话结束类事件：call_ended, balance_empty, call_cancelled, call_timeout, call_rejected
+    if (event.event == 'call_balance_empty') {
+      final callId = event.data['call_id'] as int?;
+      if (callId != widget.callId || _hasEnded) return;
+      unawaited(_handleBalanceEmptyEnded());
+      return;
+    }
+
+    // 通话结束类事件：call_ended, call_cancelled, call_timeout, call_rejected
     final callEndedEvents = {
       'call_ended',
-      'call_balance_empty',
       'call_cancelled',
       'call_timeout',
       'call_rejected',
@@ -113,52 +143,17 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       final coins = event.data['coins'] as int?;
       final diamonds = event.data['diamonds'] as int?;
       if (coins != null || diamonds != null) {
-        ref.read(authProvider.notifier).syncBalance(coins: coins, diamonds: diamonds);
+        ref
+            .read(authProvider.notifier)
+            .syncBalance(coins: coins, diamonds: diamonds);
       }
-    }
-  }
-
-  void _startStatusPolling() {
-    _statusTimer?.cancel();
-    _statusTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      _checkCallStatus();
-    });
-    _checkCallStatus();
-  }
-
-  Future<void> _checkCallStatus() async {
-    if (_hasEnded) return;
-
-    try {
-      final res = await DioClient.instance.apiGet(
-        ApiEndpoints.callStatus,
-        params: {'call_id': widget.callId},
+    } else if (event.event == 'gift_received') {
+      _showGiftAnimation(
+        giftName: event.data['gift_name'] as String? ?? '',
+        giftIcon: event.data['gift_icon'] as String? ?? '',
+        giftPrice: event.data['gift_price'] as int? ?? 0,
+        senderNickname: event.data['sender_nickname'] as String? ?? '用户',
       );
-      final data = res['data'] as Map<String, dynamic>?;
-      final status = (data?['status'] as String?)?.trim() ?? 'ended';
-      final endReason = (data?['end_reason'] as String?)?.trim();
-
-      if (!mounted) return;
-      if (_callStatus != status) {
-        _log('status changed: $_callStatus -> $status');
-        setState(() => _callStatus = status);
-      }
-
-      if (status == 'ongoing') {
-        if (!_rtcJoining && !_joined && !_joinRequested) {
-          _log('status ongoing, start rtc init');
-          await _initRtc();
-        }
-        return;
-      }
-
-      if (status == 'ended') {
-        _log('status ended, endReason=$endReason');
-        await _handleEndedByRemote(endReason);
-      }
-    } catch (_) {
-      // 状态轮询失败不立刻中断，保持页面等待下次轮询
-      _log('status polling failed');
     }
   }
 
@@ -198,19 +193,12 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       final channel = (rtcData?['channel'] as String?)?.trim() ?? '';
       final token = (rtcData?['token'] as String?)?.trim() ?? '';
       final uid = (rtcData?['uid'] as num?)?.toInt() ?? 0;
-      final freeSecondsRaw = (rtcData?['free_seconds_before_billing'] as num?)
-          ?.toInt();
-      if (freeSecondsRaw != null && freeSecondsRaw >= 0) {
-        _freeSecondsBeforeBilling = freeSecondsRaw;
-      }
 
       if (appId.isEmpty || channel.isEmpty || token.isEmpty || uid <= 0) {
         _log('rtc init failed: invalid rtc params');
         throw Exception('RTC 参数不完整');
       }
-      _log(
-        'rtc token ready, channel=$channel uid=$uid freeSeconds=$_freeSecondsBeforeBilling',
-      );
+      _log('rtc token ready, channel=$channel uid=$uid');
 
       final engine = createAgoraRtcEngine();
       _engine = engine;
@@ -363,7 +351,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       await engine.startPreview();
 
       Future<void> doJoin() async {
-        _joinRequested = true;
         _log('join start, channel=$channel uid=$uid');
         await engine.joinChannel(
           token: token,
@@ -427,7 +414,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
         _isLoading = false;
       });
     } catch (e) {
-      _joinRequested = false;
       _log('rtc init failed: $e');
       if (!mounted) return;
       setState(() {
@@ -454,121 +440,24 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     _durationTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_callStartTime != null && mounted) {
         final duration = DateTime.now().difference(_callStartTime!);
-        final seconds = duration.inSeconds;
         setState(() {
           _callDuration = duration;
         });
-        final dueMinutes = _calcDueMinutes(seconds);
-        if (dueMinutes > _renewSyncedMinutes) {
-          unawaited(_renewLeaseIfNeeded());
-        }
       }
     });
   }
 
-  int _calcDueMinutes(int durationSeconds) {
-    if (durationSeconds < _freeSecondsBeforeBilling) {
-      return 0;
-    }
-    return ((durationSeconds - _freeSecondsBeforeBilling) ~/ 60) + 1;
-  }
-
-  Future<void> _renewLeaseIfNeeded() async {
-    if (_renewInFlight || _hasEnded || !_joined) return;
-
-    final localDueMinutes = _calcDueMinutes(_callDuration.inSeconds);
-    if (localDueMinutes <= _renewSyncedMinutes) return;
-
-    _renewInFlight = true;
-    try {
-      final ok = await _renewLeaseWithRetry();
-      if (!ok) {
-        await _handleRenewNetworkFailure();
-      }
-    } on InsufficientBalanceException {
-      await _handleInsufficientBalance();
-    } finally {
-      _renewInFlight = false;
-    }
-  }
-
-  Future<bool> _renewLeaseWithRetry() async {
-    const retryDelays = [2, 4, 8];
-    for (var attempt = 0; attempt <= retryDelays.length; attempt++) {
-      try {
-        final res = await DioClient.instance.apiPost(
-          ApiEndpoints.callRenew,
-          data: {'call_id': widget.callId},
-        );
-        final data = res['data'] as Map<String, dynamic>? ?? const {};
-        final coins = (data['coins'] as num?)?.toInt();
-        final duration = (data['duration'] as num?)?.toInt();
-        final deductedMinutes = (data['deducted_minutes'] as num?)?.toInt();
-
-        if (coins != null) {
-          final diamondsNow = ref.read(authProvider).diamonds;
-          ref
-              .read(authProvider.notifier)
-              .syncBalance(coins: coins, diamonds: diamondsNow);
-        }
-        if (deductedMinutes != null && deductedMinutes > _renewSyncedMinutes) {
-          _renewSyncedMinutes = deductedMinutes;
-        }
-        // W-6 修复：用服务端时长同步本地计时器，避免计时漂移累积
-        if (duration != null && duration > _callDuration.inSeconds && mounted) {
-          setState(() {
-            _callDuration = Duration(seconds: duration);
-            // 用服务端时长反推通话开始时间，后续 Timer 增量从正确锚点计算
-            _callStartTime = DateTime.now().subtract(Duration(seconds: duration));
-          });
-        } else if (duration != null && mounted) {
-          setState(() => _callDuration = Duration(seconds: duration));
-        }
-        _log('renew success, deductedMinutes=$_renewSyncedMinutes');
-        return true;
-      } on InsufficientBalanceException {
-        rethrow;
-      } catch (e) {
-        if (attempt == retryDelays.length) {
-          _log('renew failed after retries: $e');
-          return false;
-        }
-        final waitSeconds = retryDelays[attempt];
-        _log('renew failed, retry in ${waitSeconds}s');
-        await Future.delayed(Duration(seconds: waitSeconds));
-        if (_hasEnded) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
-  Future<void> _handleInsufficientBalance() async {
+  Future<void> _handleBalanceEmptyEnded() async {
     if (_endingForBalance || _hasEnded || !mounted) return;
     _endingForBalance = true;
-    _log('renew got insufficient balance, auto end in 3s');
+    _log('received call_balance_empty, auto exit in 3s');
     AppToast.showSnackBar(
       context,
       const SnackBar(content: Text('余额不足，通话即将结束')),
     );
     await Future.delayed(const Duration(seconds: 3));
     if (mounted && !_hasEnded) {
-      await _leaveAndExit(notifyEndApi: true);
-    }
-  }
-
-  Future<void> _handleRenewNetworkFailure() async {
-    if (_endingForNetwork || _hasEnded || !mounted) return;
-    _endingForNetwork = true;
-    _log('renew failed 3 times, auto end in 3s');
-    AppToast.showSnackBar(
-      context,
-      const SnackBar(content: Text('网络不稳定，通话即将结束')),
-    );
-    await Future.delayed(const Duration(seconds: 3));
-    if (mounted && !_hasEnded) {
-      await _leaveAndExit(notifyEndApi: true);
+      await _leaveAndExit(notifyEndApi: false);
     }
   }
 
@@ -630,10 +519,8 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
   Future<void> _leaveAndExit({bool notifyEndApi = true}) async {
     if (_hasEnded) return;
     _hasEnded = true;
-    _joinRequested = false;
     _log('leave and exit start, notifyEndApi=$notifyEndApi');
-
-    _statusTimer?.cancel();
+    _wsDisconnectTimer?.cancel();
     _durationTimer?.cancel();
 
     try {
@@ -659,7 +546,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
   }
 
   Future<void> _releaseRtcEngine() async {
-    _joinRequested = false;
     final engine = _engine;
     _engine = null;
     if (engine == null) return;
@@ -741,6 +627,28 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     );
   }
 
+  void _showGiftAnimation({
+    required String giftName,
+    required String giftIcon,
+    required int giftPrice,
+    required String senderNickname,
+  }) {
+    if (!mounted) return;
+    setState(() {
+      _giftShowing = true;
+      _giftName = giftName;
+      _giftIcon = giftIcon;
+      _giftPrice = giftPrice;
+      _giftSenderNickname = senderNickname;
+    });
+    // 3秒后自动隐藏
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted) {
+        setState(() => _giftShowing = false);
+      }
+    });
+  }
+
   String _formatDuration(Duration d) {
     final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
     final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
@@ -748,7 +656,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
   }
 
   bool _shouldBestEffortTerminateOnDispose() {
-    return !_hasEnded && _joined && _callStatus == 'ongoing';
+    return !_hasEnded && _joined;
   }
 
   @override
@@ -760,12 +668,13 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     } else {
       _log(
         'dispose skip best effort terminate, '
-        'hasEnded=$_hasEnded joined=$_joined status=$_callStatus',
+        'hasEnded=$_hasEnded joined=$_joined',
       );
     }
-    _statusTimer?.cancel();
+    _wsDisconnectTimer?.cancel();
     _durationTimer?.cancel();
     _wsSubscription?.cancel();
+    _wsConnectionSubscription?.cancel();
     unawaited(_releaseRtcEngine());
     super.dispose();
   }
@@ -773,7 +682,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
   Future<void> _bestEffortTerminateCall() async {
     if (_hasEnded) return;
     _hasEnded = true;
-    _log('best effort terminate start, status=$_callStatus');
+    _log('best effort terminate start');
     try {
       _log('best effort call end api request');
       await DioClient.instance.apiPost(
@@ -819,6 +728,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
             fit: StackFit.expand,
             children: [
               _buildRemoteView(),
+              if (_giftShowing) _buildGiftAnimationOverlay(),
               Positioned(
                 top: MediaQuery.of(context).padding.top + 16,
                 right: 16,
@@ -1076,6 +986,91 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildGiftAnimationOverlay() {
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Center(
+          child: TweenAnimationBuilder<double>(
+            tween: Tween(begin: 0.0, end: 1.0),
+            duration: const Duration(milliseconds: 300),
+            builder: (context, value, child) {
+              return Opacity(
+                opacity: value,
+                child: Transform.scale(
+                  scale: 0.8 + (0.2 * value),
+                  child: child,
+                ),
+              );
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.7),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: AppTheme.secondaryColor.withValues(alpha: 0.5),
+                  width: 2,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _giftIcon.isNotEmpty
+                      ? Image.network(
+                          _giftIcon,
+                          width: 48,
+                          height: 48,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Icon(
+                                Icons.card_giftcard,
+                                color: AppTheme.secondaryColor,
+                                size: 48,
+                              ),
+                        )
+                      : const Icon(
+                          Icons.card_giftcard,
+                          color: AppTheme.secondaryColor,
+                          size: 48,
+                        ),
+                  const SizedBox(width: 16),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _giftSenderNickname,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 14,
+                        ),
+                      ),
+                      Text(
+                        '送出了 $_giftName',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (_giftPrice > 0)
+                        Text(
+                          '价值 ¥${_giftPrice.toStringAsFixed(0)}',
+                          style: const TextStyle(
+                            color: AppTheme.secondaryColor,
+                            fontSize: 13,
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

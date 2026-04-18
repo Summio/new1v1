@@ -6,6 +6,7 @@ import '../../app/routes/app_router.dart';
 import '../../app/providers/wallet_provider.dart';
 import '../../app/providers/auth_provider.dart';
 import '../profile/withdraw_dialog.dart';
+import 'package:huanxi/core/utils/app_toast.dart';
 
 /// 钱包页面
 /// 显示余额 + 账单明细
@@ -33,8 +34,8 @@ class _WalletPageState extends ConsumerState<WalletPage> {
     final type = index == 1
         ? TransactionType.income
         : index == 2
-            ? TransactionType.expense
-            : TransactionType.all;
+        ? TransactionType.expense
+        : TransactionType.all;
     ref.read(walletProvider.notifier).fetchTransactions(type: type);
   }
 
@@ -87,14 +88,13 @@ class _WalletPageState extends ConsumerState<WalletPage> {
                     const SizedBox(width: 4),
                     Text(
                       tokenNames.coinName,
-                      style: const TextStyle(fontSize: 16, color: Colors.white70),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        color: Colors.white70,
+                      ),
                     ),
                     const SizedBox(width: 24),
-                    Container(
-                      width: 1,
-                      height: 28,
-                      color: Colors.white30,
-                    ),
+                    Container(width: 1, height: 28, color: Colors.white30),
                     const SizedBox(width: 24),
                     Text(
                       '${walletState.diamonds}',
@@ -107,7 +107,10 @@ class _WalletPageState extends ConsumerState<WalletPage> {
                     const SizedBox(width: 4),
                     Text(
                       tokenNames.diamondName,
-                      style: const TextStyle(fontSize: 16, color: Colors.white70),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        color: Colors.white70,
+                      ),
                     ),
                   ],
                 ),
@@ -134,16 +137,20 @@ class _WalletPageState extends ConsumerState<WalletPage> {
                         icon: Icons.account_balance_wallet_outlined,
                         label: '提现',
                         onTap: () async {
-                          final messenger = ScaffoldMessenger.of(context);
                           final result = await showDialog<WithdrawResult>(
                             context: context,
                             builder: (context) => Dialog(
-                              insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                              insetPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 24,
+                              ),
                               child: const WithdrawDialog(),
                             ),
                           );
-                          if (result != null && mounted) {
-                            messenger.showSnackBar(
+                          if (!context.mounted) return;
+                          if (result != null) {
+                            AppToast.showSnackBar(
+                              context,
                               SnackBar(content: Text(result.msg)),
                             );
                           }
@@ -168,7 +175,10 @@ class _WalletPageState extends ConsumerState<WalletPage> {
                 const Spacer(),
                 Text(
                   '共 ${walletState.total} 条',
-                  style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppTheme.textSecondary,
+                  ),
                 ),
               ],
             ),
@@ -244,7 +254,11 @@ class _ActionButton extends StatelessWidget {
             const SizedBox(width: 6),
             Text(
               label,
-              style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ],
         ),
@@ -274,7 +288,9 @@ class _FilterChip extends StatelessWidget {
           color: isSelected ? AppTheme.secondaryColor : AppTheme.surfaceColor,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isSelected ? AppTheme.secondaryColor : const Color(0xFFF0F0F0),
+            color: isSelected
+                ? AppTheme.secondaryColor
+                : const Color(0xFFF0F0F0),
           ),
         ),
         child: Text(
@@ -294,10 +310,7 @@ class _TransactionList extends StatelessWidget {
   final WalletState walletState;
   final VoidCallback onLoadMore;
 
-  const _TransactionList({
-    required this.walletState,
-    required this.onLoadMore,
-  });
+  const _TransactionList({required this.walletState, required this.onLoadMore});
 
   IconData _iconForType(String type) {
     switch (type) {
@@ -342,7 +355,10 @@ class _TransactionList extends StatelessWidget {
           children: [
             Icon(Icons.receipt_long, size: 48, color: AppTheme.textHint),
             const SizedBox(height: 12),
-            const Text('暂无账单记录', style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+            const Text(
+              '暂无账单记录',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+            ),
           ],
         ),
       );
@@ -360,8 +376,11 @@ class _TransactionList extends StatelessWidget {
       },
       child: ListView.separated(
         padding: const EdgeInsets.symmetric(horizontal: 16),
-        itemCount: walletState.transactions.length + (walletState.isLoadingMore ? 1 : 0),
-        separatorBuilder: (context, index) => const Divider(height: 1, color: Color(0xFFF0F0F0)),
+        itemCount:
+            walletState.transactions.length +
+            (walletState.isLoadingMore ? 1 : 0),
+        separatorBuilder: (context, index) =>
+            const Divider(height: 1, color: Color(0xFFF0F0F0)),
         itemBuilder: (context, index) {
           if (index >= walletState.transactions.length) {
             return const Padding(
@@ -408,7 +427,10 @@ class _TransactionList extends StatelessWidget {
                       const SizedBox(height: 2),
                       Text(
                         record.createdAt,
-                        style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppTheme.textSecondary,
+                        ),
                       ),
                     ],
                   ),

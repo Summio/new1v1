@@ -54,19 +54,6 @@ class DialingOut(BaseModel):
 class CallEndIn(BaseModel):
     call_id: int = Field(..., description="通话记录ID")
 
-
-class RenewLeaseIn(BaseModel):
-    call_id: int = Field(..., description="通话记录ID")
-
-
-class RenewLeaseOut(BaseModel):
-    coins: int
-    duration: int
-    deducted_minutes: int
-    deducted_amount: int
-    msg: str = "OK"
-
-
 class CallEndOut(BaseModel):
     total_fee: int
     coins: int
@@ -79,43 +66,9 @@ class CallActionIn(BaseModel):
     call_id: int = Field(..., description="通话记录ID")
 
 
-class CallStatusOut(BaseModel):
-    call_id: int
-    caller_id: int
-    callee_id: int
-    status: str
-    created_at: Optional[str] = None
-    end_reason: Optional[str] = None
-    duration: int = 0
-
-
 class CallActionOut(BaseModel):
     next_status: str
     msg: str
-
-
-class CallSessionActionsOut(BaseModel):
-    can_accept: bool = False
-    can_reject: bool = False
-    can_cancel: bool = False
-    can_hangup: bool = False
-
-
-class CurrentCallSessionOut(BaseModel):
-    call_id: Optional[int] = None
-    status: str = "idle"
-    role: Optional[str] = None
-    end_reason: Optional[str] = None
-    peer_user_id: Optional[int] = None
-    peer_nickname: Optional[str] = None
-    peer_avatar: Optional[str] = None
-    call_price: int = 0
-    ring_timeout_seconds: int = 30
-    left_seconds: int = 0
-    created_at: Optional[str] = None
-    connected_at: Optional[str] = None
-    duration: int = 0
-    actions: CallSessionActionsOut = Field(default_factory=CallSessionActionsOut)
 
 
 class RTCTokenIn(BaseModel):
@@ -171,7 +124,7 @@ class RechargeCreateOut(BaseModel):
 
 
 class WithdrawApplyIn(BaseModel):
-    amount: int = Field(..., ge=100, description="提现金额(分)，最低1元")
+    amount: int = Field(..., ge=100, le=50000, description="提现金额(分)，最低1元，最高500元")
     bank_name: str = Field(..., description="银行名称")
     account_no: str = Field(..., min_length=10, max_length=23, description="银行账号(10-23位)")
     real_name: str = Field(..., description="真实姓名")
@@ -181,6 +134,25 @@ class WithdrawApplyOut(BaseModel):
     diamonds: int
     frozen_diamonds: int = 0
     msg: str = "申请已提交"
+
+
+class WithdrawReviewIn(BaseModel):
+    withdraw_id: int = Field(..., description="提现申请ID")
+    action: str = Field(..., description="操作：approve（通过）或 reject（拒绝）")
+    review_reason: Optional[str] = Field(None, description="拒绝原因")
+
+
+class WithdrawListItem(BaseModel):
+    id: int
+    user_id: int
+    amount: int
+    bank_name: str
+    account_no_masked: str
+    real_name: str
+    status: str
+    created_at: Optional[datetime] = None
+    processed_at: Optional[datetime] = None
+    username: Optional[str] = None
 
 
 # ===== Wallet Transactions =====

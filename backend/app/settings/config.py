@@ -59,7 +59,7 @@ class Settings(BaseSettings):
         warnings.warn("使用了默认数据库密码 123456，生产环境请通过环境变量 DB_PASSWORD 配置", UserWarning, stacklevel=2)
     DB_PASSWORD: str = _db_password
     DB_DATABASE: str = os.getenv("DB_DATABASE", "huanxi")
-    DB_POOL_MIN: int = int(os.getenv("DB_POOL_MIN", "1"))
+    DB_POOL_MIN: int = int(os.getenv("DB_POOL_MIN", "5"))
     DB_POOL_MAX: int = int(os.getenv("DB_POOL_MAX", "10"))
 
     # Redis 配置
@@ -67,6 +67,16 @@ class Settings(BaseSettings):
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
     REDIS_PASSWORD: typing.Optional[str] = os.getenv("REDIS_PASSWORD") or None
+
+    # 可信代理 IP 列表（逗号分隔），仅当请求来自这些 IP 时才读取 X-Forwarded-For 头
+    # 生产环境建议在内网入口处（Nginx/网关）配置，不填写则完全信任 X-Forwarded-For（有安全风险）
+    # 示例：TRUSTED_PROXY_IPS=10.0.0.1,10.0.0.2
+    _trusted_proxy_ips = os.getenv("TRUSTED_PROXY_IPS", "")
+    TRUSTED_PROXY_IPS: typing.List[str] = (
+        [ip.strip() for ip in _trusted_proxy_ips.split(",") if ip.strip()]
+        if _trusted_proxy_ips
+        else []
+    )
 
     # 通话心跳配置
     HEARTBEAT_INTERVAL: int = int(os.getenv("HEARTBEAT_INTERVAL", "5"))  # 秒
@@ -98,7 +108,10 @@ class Settings(BaseSettings):
     DATETIME_FORMAT: str = "%Y-%m-%d %H:%M:%S"
 
 
-# 腾讯 IM 配置
+    # 腾讯 IM 配置
+    # 充值回调 Mock 开关：仅在本地开发/测试环境启用（DEBUG=true 且 ENABLE_MOCK_CALLBACK=true）
+    # 生产环境必须接入微信支付/支付宝真实回调，禁用此 Mock
+    ENABLE_MOCK_CALLBACK: bool = os.getenv("ENABLE_MOCK_CALLBACK", "false").lower() == "true"
 try:
     from app.settings.im import im_settings as im_settings
 except ImportError:

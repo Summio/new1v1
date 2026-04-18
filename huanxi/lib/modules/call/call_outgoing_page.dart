@@ -6,13 +6,14 @@ import 'package:go_router/go_router.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/constants/api_endpoints.dart';
+import '../../core/network/api_exception.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/utils/app_toast.dart';
+import '../../services/websocket_service.dart';
 import 'call_end_reason.dart';
-import 'call_session_payload.dart';
 
 class CallOutgoingPage extends StatefulWidget {
-  final int callId;
+  final int? callId;
   final String peerUserId;
   final String peerName;
   final String? peerAvatar;
@@ -21,7 +22,7 @@ class CallOutgoingPage extends StatefulWidget {
 
   const CallOutgoingPage({
     super.key,
-    required this.callId,
+    this.callId,
     required this.peerUserId,
     required this.peerName,
     this.peerAvatar,
@@ -34,93 +35,280 @@ class CallOutgoingPage extends StatefulWidget {
 }
 
 class _CallOutgoingPageState extends State<CallOutgoingPage> {
-  Timer? _pollTimer;
+  static const Duration _wsGracePeriod = Duration(seconds: 10);
+  Timer? _countdownTimer;
+  Timer? _wsDisconnectTimer;
+  StreamSubscription<WsEvent>? _wsSubscription;
+  StreamSubscription<WsConnectionEvent>? _wsConnectionSubscription;
   bool _pageClosing = false;
-  bool _requestInFlight = false;
   bool _actionInFlight = false;
+  bool _dialingInFlight = false;
   int _leftSeconds = 30;
+  int? _callId;
+  String _peerUserId = '';
+  String _peerName = '';
+  String? _peerAvatar;
+  int _callPrice = 0;
 
   @override
   void initState() {
     super.initState();
+    _callId = widget.callId != null && widget.callId! > 0
+        ? widget.callId
+        : null;
+    _peerUserId = widget.peerUserId;
+    _peerName = widget.peerName;
+    _peerAvatar = widget.peerAvatar;
+    _callPrice = widget.callPrice;
     _leftSeconds = 30;
-    _startPolling();
+
+    _initWebSocket();
+
+    if (_callId != null) {
+      _startCountdown();
+    } else {
+      _startDialing();
+    }
   }
 
-  void _startPolling() {
-    _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      _refreshSession();
+  void _initWebSocket() {
+    WsService.instance.connect();
+    _wsSubscription?.cancel();
+    _wsSubscription = WsService.instance.events.listen(_onWsEvent);
+    _wsConnectionSubscription?.cancel();
+    _wsConnectionSubscription = WsService.instance.connectionEvents.listen(
+      _onWsConnectionEvent,
+    );
+  }
+
+  void _onWsConnectionEvent(WsConnectionEvent event) {
+    if (!mounted || _pageClosing) return;
+
+    if (event.state == WsConnectionState.connected) {
+      _wsDisconnectTimer?.cancel();
+      _wsDisconnectTimer = null;
+      return;
+    }
+
+    if (event.state == WsConnectionState.reconnecting ||
+        event.state == WsConnectionState.disconnected ||
+        event.state == WsConnectionState.authFailed) {
+      _wsDisconnectTimer ??= Timer(_wsGracePeriod, () {
+        if (!mounted || _pageClosing || WsService.instance.isConnected) return;
+        _handleNetworkLost();
+      });
+    }
+  }
+
+  void _onWsEvent(WsEvent event) {
+    if (!mounted || _pageClosing) return;
+
+    final callId = _callId;
+    if (callId == null || callId <= 0) return;
+
+    final eventCallId = (event.data['call_id'] as num?)?.toInt();
+    if (eventCallId == null || eventCallId != callId) return;
+
+    if (event.event == 'call_accepted') {
+      _goToCallRoom(callId);
+      return;
+    }
+
+    const endedEvents = {
+      'call_rejected',
+      'call_timeout',
+      'call_cancelled',
+      'call_ended',
+      'call_balance_empty',
+    };
+    if (endedEvents.contains(event.event)) {
+      _closeWithReason(_reasonFromWsEvent(event));
+    }
+  }
+
+  String _reasonFromWsEvent(WsEvent event) {
+    final reasonFromData = (event.data['end_reason'] as String?)?.trim();
+    if (reasonFromData != null && reasonFromData.isNotEmpty) {
+      return reasonFromData;
+    }
+    final reasonFromEvent = (event.data['reason'] as String?)?.trim();
+    if (reasonFromEvent != null && reasonFromEvent.isNotEmpty) {
+      return reasonFromEvent;
+    }
+
+    switch (event.event) {
+      case 'call_rejected':
+        return 'rejected';
+      case 'call_timeout':
+        return 'timeout';
+      case 'call_cancelled':
+        return 'cancelled';
+      case 'call_balance_empty':
+        return 'balance_empty';
+      default:
+        return 'normal';
+    }
+  }
+
+  void _startCountdown() {
+    _countdownTimer?.cancel();
+    if (_leftSeconds <= 0) return;
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted || _pageClosing) {
+        timer.cancel();
+        return;
+      }
+      if (_leftSeconds <= 0) {
+        timer.cancel();
+        _closeWithReason('timeout');
+        return;
+      }
+      setState(() => _leftSeconds -= 1);
     });
-    _refreshSession();
   }
 
-  Future<void> _refreshSession() async {
-    if (_pageClosing || _requestInFlight) return;
-    _requestInFlight = true;
-    try {
-      final res = await DioClient.instance.apiGet(ApiEndpoints.callSessionCurrent);
-      final payload = CallSessionPayload.fromJson(
-        res['data'] is Map<String, dynamic> ? res['data'] as Map<String, dynamic> : null,
+  Future<void> _startDialing() async {
+    if (_dialingInFlight || _pageClosing) return;
+    final anchorId = int.tryParse((widget.anchorId ?? '').trim());
+    if (anchorId == null || anchorId <= 0) {
+      if (!mounted) return;
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('主播参数异常，无法发起通话')),
       );
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go(AppRoutes.index);
+      }
+      return;
+    }
+
+    _dialingInFlight = true;
+    try {
+      final dialingRes = await DioClient.instance.apiPost(
+        ApiEndpoints.dialing,
+        data: {'anchor_id': anchorId},
+      );
+      final dialingData = dialingRes['data'] as Map<String, dynamic>?;
+      final callId = (dialingData?['call_id'] as num?)?.toInt();
+      if (callId == null || callId <= 0) {
+        throw const ApiException(code: 400, message: '呼叫创建失败，请稍后重试');
+      }
+
       if (!mounted || _pageClosing) return;
 
-      if (payload.callId != null && payload.callId != widget.callId) {
-        return;
-      }
-
-      if (_leftSeconds != payload.leftSeconds && payload.leftSeconds >= 0) {
-        setState(() => _leftSeconds = payload.leftSeconds);
-      }
-
-      if (payload.isOngoing) {
-        _pageClosing = true;
-        _pollTimer?.cancel();
-        context.pushReplacement(
-          Uri(
-            path: AppRoutes.callRoom,
-            queryParameters: {
-              'callId': widget.callId.toString(),
-              'peerUserId': widget.peerUserId,
-              'anchorId': widget.anchorId,
-              'peerName': widget.peerName,
-            },
-          ).toString(),
-        );
-        return;
-      }
-
-      if (payload.isEnded || payload.isIdle) {
-        _pageClosing = true;
-        _pollTimer?.cancel();
-        AppToast.showSnackBar(
-          context,
-          SnackBar(content: Text(callEndReasonText(payload.endReason))),
-        );
-        if (context.canPop()) {
-          context.pop();
-        } else {
-          context.go(AppRoutes.index);
+      setState(() {
+        _callId = callId;
+        final peerUserId = (dialingData?['callee_id'] as num?)?.toInt();
+        final peerName = (dialingData?['callee_nickname'] as String?)?.trim();
+        final peerAvatar = (dialingData?['callee_avatar'] as String?)?.trim();
+        final callPrice = (dialingData?['call_price'] as num?)?.toInt();
+        if (peerUserId != null && peerUserId > 0) {
+          _peerUserId = peerUserId.toString();
         }
+        if (peerName != null && peerName.isNotEmpty) {
+          _peerName = peerName;
+        }
+        if (peerAvatar != null && peerAvatar.isNotEmpty) {
+          _peerAvatar = peerAvatar;
+        }
+        if (callPrice != null && callPrice >= 0) {
+          _callPrice = callPrice;
+        }
+        final leftSeconds = (dialingData?['left_seconds'] as num?)?.toInt();
+        if (leftSeconds != null && leftSeconds >= 0) {
+          _leftSeconds = leftSeconds;
+        }
+      });
+      _startCountdown();
+    } on ApiException catch (e) {
+      if (!mounted || _pageClosing) return;
+      AppToast.showSnackBar(context, SnackBar(content: Text(e.message)));
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go(AppRoutes.index);
       }
     } catch (_) {
-      // keep polling
+      if (!mounted || _pageClosing) return;
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('通话启动失败，请稍后重试')),
+      );
+      if (context.canPop()) {
+        context.pop();
+      } else {
+        context.go(AppRoutes.index);
+      }
     } finally {
-      _requestInFlight = false;
+      _dialingInFlight = false;
     }
+  }
+
+  void _goToCallRoom(int callId) {
+    if (!mounted || _pageClosing) return;
+    _pageClosing = true;
+    _countdownTimer?.cancel();
+    _wsDisconnectTimer?.cancel();
+    context.pushReplacement(
+      Uri(
+        path: AppRoutes.callRoom,
+        queryParameters: {
+          'callId': callId.toString(),
+          'peerUserId': _peerUserId,
+          'anchorId': widget.anchorId,
+          'peerName': _peerName,
+        },
+      ).toString(),
+    );
+  }
+
+  Future<void> _closeWithReason(String reason) async {
+    if (!mounted || _pageClosing) return;
+    _pageClosing = true;
+    _countdownTimer?.cancel();
+    _wsDisconnectTimer?.cancel();
+    AppToast.showSnackBar(
+      context,
+      SnackBar(content: Text(callEndReasonText(reason))),
+    );
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(AppRoutes.index);
+    }
+  }
+
+  Future<void> _handleNetworkLost() async {
+    if (!mounted || _pageClosing) return;
+    final callId = _callId;
+    if (callId != null && callId > 0) {
+      try {
+        await DioClient.instance.apiPost(
+          ApiEndpoints.callCancel,
+          data: {'call_id': callId},
+        );
+      } catch (_) {}
+    }
+    await _closeWithReason('network_lost');
   }
 
   Future<void> _cancelCall() async {
     if (_actionInFlight || _pageClosing) return;
     _actionInFlight = true;
     try {
-      await DioClient.instance.apiPost(
-        ApiEndpoints.callCancel,
-        data: {'call_id': widget.callId},
-      );
+      final callId = _callId;
+      if (callId != null && callId > 0) {
+        await DioClient.instance.apiPost(
+          ApiEndpoints.callCancel,
+          data: {'call_id': callId},
+        );
+      }
       if (!mounted) return;
       _pageClosing = true;
-      _pollTimer?.cancel();
+      _countdownTimer?.cancel();
+      _wsDisconnectTimer?.cancel();
       if (context.canPop()) {
         context.pop();
       } else {
@@ -140,13 +328,21 @@ class _CallOutgoingPageState extends State<CallOutgoingPage> {
   @override
   void dispose() {
     _pageClosing = true;
-    _pollTimer?.cancel();
+    _countdownTimer?.cancel();
+    _wsDisconnectTimer?.cancel();
+    _wsSubscription?.cancel();
+    _wsConnectionSubscription?.cancel();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final priceText = widget.callPrice > 0 ? '${widget.callPrice}/分' : '--';
+    final hasCallId = _callId != null && _callId! > 0;
+    final countdownText = !hasCallId
+        ? '正在发起呼叫...'
+        : _callPrice > 0
+        ? '$_leftSeconds 秒后自动结束 · $_callPrice/分'
+        : '$_leftSeconds 秒后自动结束';
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
@@ -155,70 +351,101 @@ class _CallOutgoingPageState extends State<CallOutgoingPage> {
         }
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFF111827),
+        backgroundColor: const Color(0xFF0F172A),
         body: SafeArea(
           child: Column(
             children: [
               const SizedBox(height: 48),
-              CircleAvatar(
-                radius: 52,
-                backgroundColor: Colors.white12,
-                backgroundImage:
-                    (widget.peerAvatar != null && widget.peerAvatar!.isNotEmpty)
-                    ? NetworkImage(widget.peerAvatar!)
-                    : null,
-                child:
-                    (widget.peerAvatar == null || widget.peerAvatar!.isEmpty)
-                    ? const Icon(Icons.person, color: Colors.white70, size: 48)
-                    : null,
+              Text(
+                hasCallId ? '视频呼叫中' : '正在连接',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.9),
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const SizedBox(height: 20),
-              Text(
-                widget.peerName,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 26,
-                  fontWeight: FontWeight.w700,
+              CircleAvatar(
+                radius: 56,
+                backgroundColor: Colors.white12,
+                backgroundImage:
+                    (_peerAvatar != null && _peerAvatar!.isNotEmpty)
+                    ? NetworkImage(_peerAvatar!)
+                    : null,
+                child: (_peerAvatar == null || _peerAvatar!.isEmpty)
+                    ? const Icon(Icons.person, color: Colors.white70, size: 50)
+                    : null,
+              ),
+              const SizedBox(height: 18),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Text(
+                  _peerName,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                '视频呼叫中...',
+                countdownText,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.8),
-                  fontSize: 16,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '$_leftSeconds 秒后自动结束  ·  $priceText',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.6),
-                  fontSize: 13,
+                  color: Colors.white.withValues(alpha: 0.7),
+                  fontSize: 14,
                 ),
               ),
               const Spacer(),
-              GestureDetector(
+              _ActionButton(
+                color: AppTheme.errorColor,
+                icon: Icons.call_end,
+                label: '取消',
                 onTap: _cancelCall,
-                child: Container(
-                  width: 74,
-                  height: 74,
-                  decoration: const BoxDecoration(
-                    color: AppTheme.errorColor,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.call_end, color: Colors.white, size: 34),
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                '取消',
-                style: TextStyle(color: Colors.white70, fontSize: 14),
               ),
               const SizedBox(height: 56),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ActionButton extends StatelessWidget {
+  final Color color;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _ActionButton({
+    required this.color,
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+            child: Icon(icon, color: Colors.white, size: 34),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            label,
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+        ],
       ),
     );
   }

@@ -10,9 +10,21 @@
 """
 from __future__ import annotations
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+
+
+@pytest.fixture(autouse=True)
+def reset_pubsub_state():
+    from app.websocket import manager as manager_module
+
+    manager_module._pubsub_started = False
+    manager_module._pubsub_task = None
+    yield
+    manager_module._pubsub_started = False
+    manager_module._pubsub_task = None
 
 
 class TestPushToUser:
@@ -121,8 +133,6 @@ class TestPubsubLoopRouting:
         async with manager._lock:
             manager._ws_conns[100] = mock_ws_100
 
-        # 模拟 pubsub 收到消息
-        raw_msg = '{"user_id": 100, "event": "call_ended", "data": {}}'
         await manager._send_ws(100, {"type": "event", "event": "call_ended", "data": {}})
 
         mock_ws_100.send_json.assert_called_once_with(
@@ -163,3 +173,40 @@ class TestCriticalEventMarkers:
         from app.websocket.manager import ConnectionManager
         manager = ConnectionManager()
         assert "balance_updated" in manager._CRITICAL_EVENTS
+
+
+class TestPubsubLifecycle:
+    """测试 PubSub 启停状态维护。"""
+
+    @pytest.mark.asyncio
+    async def test_start_pubsub_sets_running_true(self):
+        from app.websocket.manager import ConnectionManager
+
+        manager = ConnectionManager()
+        fake_task = MagicMock()
+
+        def _fake_create_task(coro):
+            coro.close()
+            return fake_task
+
+        with patch("app.websocket.manager.asyncio.create_task", side_effect=_fake_create_task):
+            await manager.start_pubsub()
+
+        assert manager._pubsub_running is True
+        assert manager._pubsub_task is fake_task
+
+    @pytest.mark.asyncio
+    async def test_stop_pubsub_resets_started_flag(self):
+        from app.websocket import manager as manager_module
+        from app.websocket.manager import ConnectionManager
+
+        manager = ConnectionManager()
+        manager_module._pubsub_started = True
+        manager._pubsub_running = True
+        task = asyncio.create_task(asyncio.sleep(0))
+        manager._pubsub_task = task
+
+        await manager.stop_pubsub()
+
+        assert manager._pubsub_running is False
+        assert manager_module._pubsub_started is False

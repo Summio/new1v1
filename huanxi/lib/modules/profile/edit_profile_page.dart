@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../app/theme/app_theme.dart';
+import 'package:huanxi/core/utils/app_toast.dart';
 
 /// 编辑资料页
 class EditProfilePage extends ConsumerStatefulWidget {
@@ -34,9 +35,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
 
   Future<void> _save() async {
     if (_nicknameController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('昵称不能为空')),
-      );
+      AppToast.showSnackBar(context, const SnackBar(content: Text('昵称不能为空')));
       return;
     }
 
@@ -47,9 +46,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
 
     if (!mounted) return;
     setState(() => _isSaving = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('资料已保存')),
-    );
+    AppToast.showSnackBar(context, const SnackBar(content: Text('资料已保存')));
     context.pop();
   }
 
@@ -86,18 +83,25 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                   children: [
                     CircleAvatar(
                       radius: 50,
-                      backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+                      backgroundColor: AppTheme.primaryColor.withValues(
+                        alpha: 0.1,
+                      ),
                       backgroundImage: authState.avatar != null
                           ? NetworkImage(authState.avatar!)
                           : null,
                       child: authState.avatar == null
-                          ? const Icon(Icons.person, size: 50, color: AppTheme.primaryColor)
+                          ? const Icon(
+                              Icons.person,
+                              size: 50,
+                              color: AppTheme.primaryColor,
+                            )
                           : null,
                     ),
                     const SizedBox(height: 12),
                     TextButton.icon(
                       onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
+                        AppToast.showSnackBar(
+                          context,
                           const SnackBar(content: Text('更换头像功能开发中')),
                         );
                       },
@@ -155,9 +159,15 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
       ),
       child: Row(
         children: [
-          Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+          Text(
+            label,
+            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 14),
+          ),
           const Spacer(),
-          Text(value, style: const TextStyle(color: AppTheme.textHint, fontSize: 14)),
+          Text(
+            value,
+            style: const TextStyle(color: AppTheme.textHint, fontSize: 14),
+          ),
         ],
       ),
     );

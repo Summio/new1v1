@@ -1,6 +1,6 @@
 import time
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.core.app_auth import DependAppAuth
 from app.core.ctx import CTX_APP_USER_ID
@@ -12,7 +12,7 @@ router = APIRouter()
 USER_SIG_EXPIRE_SECONDS = 3600 * 2
 
 
-@router.get("/im/usersig", summary="获取IM UserSig", dependencies=[DependAppAuth])
+@router.get("/im/usersig", summary="获取IM UserSig", dependencies=[Depends(DependAppAuth)])
 async def get_usersig():
     """
     获取腾讯云 IM 的 UserSig。

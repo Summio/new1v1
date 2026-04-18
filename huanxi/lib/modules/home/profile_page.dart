@@ -1,18 +1,68 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../app/theme/app_theme.dart';
+import '../../services/websocket_service.dart';
+import 'main_shell.dart';
 
-class ProfilePage extends ConsumerWidget {
+class ProfilePage extends ConsumerStatefulWidget {
   const ProfilePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProfilePage> createState() => _ProfilePageState();
+}
+
+class _ProfilePageState extends ConsumerState<ProfilePage> {
+  /// 本地"在线接单"状态（true=在线，false=手动离线）
+  /// 由 Switch 控制，收到 presence 广播时同步
+  bool _anchorOnline = true;
+  StreamSubscription<PresenceEvent>? _presenceSub;
+  int? _currentUserId;
+
+  @override
+  void initState() {
+    super.initState();
+    _initPresenceListener();
+  }
+
+  void _initPresenceListener() {
+    _presenceSub = MainShell.presenceStream.listen((event) {
+      if (!mounted) return;
+      if (event.userId == _currentUserId) {
+        setState(() {
+          _anchorOnline = event.online;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _presenceSub?.cancel();
+    super.dispose();
+  }
+
+  void _onOnlineStatusChanged(bool value) {
+    // value: true=在线，false=手动离线
+    WsService.instance.sendSetOnlineStatus(value);
+    setState(() {
+      _anchorOnline = value;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
     final tokenNames = ref.watch(tokenNamesProvider);
     final isAnchor = authState.appRole == 'anchor';
+
+    // 同步当前用户 ID
+    if (_currentUserId != authState.userId) {
+      _currentUserId = authState.userId;
+    }
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
@@ -105,7 +155,18 @@ class ProfilePage extends ConsumerWidget {
                   if (!isAnchor)
                     _buildMenuTile(icon: Icons.live_tv_rounded, title: '申请成为主播', iconColor: AppTheme.secondaryColor, onTap: () => context.push(AppRoutes.anchorApply)),
                   if (isAnchor)
-                    _buildMenuTile(icon: Icons.online_prediction_rounded, title: '在线接单', iconColor: const Color(0xFF34C759), onTap: () {}, trailing: Switch(value: true, onChanged: (v) {}, activeThumbColor: AppTheme.primaryColor, activeTrackColor: AppTheme.primaryColor.withValues(alpha: 0.4))),
+                    _buildMenuTile(
+                      icon: Icons.online_prediction_rounded,
+                      title: '在线接单',
+                      iconColor: const Color(0xFF34C759),
+                      onTap: () {},
+                      trailing: Switch(
+                        value: _anchorOnline,
+                        onChanged: _onOnlineStatusChanged,
+                        activeThumbColor: AppTheme.primaryColor,
+                        activeTrackColor: AppTheme.primaryColor.withValues(alpha: 0.4),
+                      ),
+                    ),
                   _buildMenuTile(icon: Icons.account_balance_wallet_rounded, title: '我的钱包', iconColor: const Color(0xFFFF9500), onTap: () => context.push(AppRoutes.wallet)),
                   _buildMenuTile(icon: Icons.shield_rounded, title: '安全中心', iconColor: const Color(0xFF34C759), onTap: () => context.push(AppRoutes.settingsPassword), isLast: true),
                 ],

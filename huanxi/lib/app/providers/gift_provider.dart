@@ -52,6 +52,14 @@ class GiftListState {
   }
 }
 
+/// 礼物发送结果
+class GiftSendResult {
+  final bool success;
+  final int? coins;
+
+  const GiftSendResult({required this.success, this.coins});
+}
+
 /// 礼物列表 Provider
 class GiftListNotifier extends StateNotifier<GiftListState> {
   final DioClient _dio;
@@ -80,8 +88,8 @@ class GiftListNotifier extends StateNotifier<GiftListState> {
     }
   }
 
-  /// 发送礼物
-  Future<bool> sendGift({
+  /// 发送礼物（内部调用）
+  Future<GiftSendResult> _sendGiftInternal({
     required int giftId,
     required int anchorId,
   }) async {
@@ -93,11 +101,21 @@ class GiftListNotifier extends StateNotifier<GiftListState> {
           'anchor_id': anchorId,
         },
       );
-      return data['code'] == 200;
+      final success = data['code'] == 200;
+      final coins = (data['data'] as Map<String, dynamic>?)?['coins'] as int?;
+      return GiftSendResult(success: success, coins: coins);
     } catch (e) {
-      debugPrint('gift.sendGift error: $e');
-      return false;
+      debugPrint('gift._sendGiftInternal error: $e');
+      return const GiftSendResult(success: false);
     }
+  }
+
+  /// 发送礼物（公开方法，供外部调用）
+  Future<GiftSendResult> sendGift({
+    required int giftId,
+    required int anchorId,
+  }) {
+    return _sendGiftInternal(giftId: giftId, anchorId: anchorId);
   }
 }
 

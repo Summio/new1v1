@@ -35,8 +35,8 @@ class RedisCache:
         self.client = client
 
     async def set(self, key: str, value: Any, expire: int = 0) -> bool:
-        """设置值，expire=0 表示永不过期"""
-        v = json.dumps(value, ensure_ascii=False) if not isinstance(value, str) else value
+        """设置值，统一使用 JSON 序列化，expire=0 表示永不过期"""
+        v = json.dumps(value, ensure_ascii=False)
         if expire > 0:
             return await self.client.setex(key, expire, v)
         return await self.client.set(key, v)
@@ -85,12 +85,34 @@ def online_anchors_key() -> str:
 
 
 # ===== 限流工具 =====
+# Lua 脚本保证 INCR + EXPIRE 原子性，防止并发请求绕过限流
+_RATELIMIT_LUA_SCRIPT = """
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return count
+"""
+_ratelimit_sha: str | None = None
+
+
+async def _get_ratelimit_sha(client: redis.Redis) -> str:
+    """缓存 Lua 脚本的 SHA，避免每次执行都发送脚本源码。"""
+    global _ratelimit_sha
+    if _ratelimit_sha is None:
+        _ratelimit_sha = await client.script_load(_RATELIMIT_LUA_SCRIPT)
+    return _ratelimit_sha
+
+
 async def rate_limit(client: redis.Redis, key: str, limit: int, window_seconds: int) -> bool:
-    """Redis 滑动窗口限流。返回 True = 通过，False = 被限流。"""
-    import time
-    now = time.time()
-    window_key = f"{key}:{int(now // window_seconds)}"
-    count = await client.incr(window_key)
-    if count == 1:
-        await client.expire(window_key, window_seconds + 1)
-    return count <= limit
+    """Redis 原子滑动窗口限流。返回 True = 通过，False = 被限流。"""
+    window_key = f"{key}:{int(__import__('time').time() // window_seconds)}"
+    try:
+        sha = await _get_ratelimit_sha(client)
+        count = await client.evalsha(sha, 1, window_key, window_seconds)
+    except redis.ResponseError:
+        # Lua 脚本未加载（Redis 重启后），回退到普通方式
+        count = await client.incr(window_key)
+        if count == 1:
+            await client.expire(window_key, window_seconds + 1)
+    return int(count) <= limit

@@ -4,6 +4,7 @@ import '../../core/network/dio_client.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/storage/storage.dart';
 import '../../core/network/api_exception.dart';
+import '../../services/websocket_service.dart';
 
 /// 认证状态
 class AuthState {
@@ -59,15 +60,9 @@ class TokenNamesState {
   final String coinName;
   final String diamondName;
 
-  const TokenNamesState({
-    this.coinName = '金币',
-    this.diamondName = '钻石',
-  });
+  const TokenNamesState({this.coinName = '金币', this.diamondName = '钻石'});
 
-  TokenNamesState copyWith({
-    String? coinName,
-    String? diamondName,
-  }) {
+  TokenNamesState copyWith({String? coinName, String? diamondName}) {
     return TokenNamesState(
       coinName: coinName ?? this.coinName,
       diamondName: diamondName ?? this.diamondName,
@@ -136,7 +131,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
         state = state.copyWith(
           isLoggedIn: true,
           userId: _parseUserId(cachedInfo['id']) ?? localUserId,
-          username: cachedInfo['nickname'] as String? ?? cachedInfo['username'] as String?,
+          username:
+              cachedInfo['nickname'] as String? ??
+              cachedInfo['username'] as String?,
           avatar: cachedInfo['avatar'] as String?,
           appRole: cachedInfo['is_anchor'] == true ? 'anchor' : 'user',
           coins: cachedInfo['coins'] as int? ?? 0,
@@ -159,19 +156,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   /// 登录
-  Future<bool> login({
-    required String phone,
-    String? password,
-  }) async {
+  Future<bool> login({required String phone, String? password}) async {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
       final data = await _dio.apiPost(
         ApiEndpoints.appLogin,
-        data: {
-          'phone': phone,
-          'password': password ?? '',
-        },
+        data: {'phone': phone, 'password': password ?? ''},
       );
 
       final code_ = data['code'] as int?;
@@ -202,7 +193,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(
         isLoggedIn: true,
         userId: userId,
-        username: respData['nickname'] as String? ?? respData['username'] as String?,
+        username:
+            respData['nickname'] as String? ?? respData['username'] as String?,
         avatar: respData['avatar'] as String?,
         appRole: respData['is_anchor'] == true ? 'anchor' : 'user',
         coins: respData['coins'] as int? ?? 0,
@@ -238,7 +230,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(
         isLoggedIn: true,
         userId: userId,
-        username: respData['nickname'] as String? ?? respData['username'] as String?,
+        username:
+            respData['nickname'] as String? ?? respData['username'] as String?,
         avatar: respData['avatar'] as String?,
         appRole: respData['is_anchor'] == true ? 'anchor' : 'user',
         coins: respData['coins'] as int? ?? 0,
@@ -270,18 +263,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   /// 同步余额到全局状态（避免必须重新登录才更新）
-  void syncBalance({
-    required int coins,
-    required int diamonds,
-  }) {
-    final next = state.copyWith(coins: coins, diamonds: diamonds);
-    state = next;
+  /// - `coins`/`diamonds` 为空时保持当前值
+  /// - 同步更新本地缓存余额字段
+  void syncBalance({int? coins, int? diamonds}) {
+    final nextCoins = coins ?? state.coins;
+    final nextDiamonds = diamonds ?? state.diamonds;
+    state = state.copyWith(coins: nextCoins, diamonds: nextDiamonds);
 
-    // 仅更新本地缓存中的余额字段，避免覆盖其他用户信息
     final cached = StorageService.getUserInfo();
     if (cached == null) return;
-    cached['coins'] = coins;
-    cached['diamonds'] = diamonds;
+    cached['coins'] = nextCoins;
+    cached['diamonds'] = nextDiamonds;
     StorageService.saveUserInfo(cached);
   }
 
@@ -293,6 +285,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// 退出登录
   Future<void> logout() async {
     await StorageService.clearUserData();
+    WsService.instance.disconnect();
     state = const AuthState();
   }
 }
@@ -340,7 +333,9 @@ final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
 });
 
 /// App 初始化配置 Provider
-final appInitProvider = StateNotifierProvider<AppInitNotifier, AppInitState>((ref) {
+final appInitProvider = StateNotifierProvider<AppInitNotifier, AppInitState>((
+  ref,
+) {
   return AppInitNotifier(DioClient.instance);
 });
 

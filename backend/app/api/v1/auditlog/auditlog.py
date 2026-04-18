@@ -42,6 +42,7 @@ async def get_audit_log_list(
     elif end_time:
         q &= Q(created_at__lte=end_time)
 
+    page_size = min(max(page_size, 1), 100)
     audit_log_objs = await AuditLog.filter(q).offset((page - 1) * page_size).limit(page_size).order_by("-created_at")
     total = await AuditLog.filter(q).count()
     data = [await audit_log.to_dict() for audit_log in audit_log_objs]

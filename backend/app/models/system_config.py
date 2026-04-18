@@ -1,6 +1,10 @@
+from app.core.redis import get_redis
 from tortoise import fields
 
 from .base import BaseModel, TimestampMixin
+
+SYSTEM_CONFIG_CACHE_KEY = "system_config:all"
+SYSTEM_CONFIG_CACHE_TTL = 60  # 秒
 
 
 class SystemConfig(BaseModel, TimestampMixin):
@@ -20,6 +24,21 @@ class SystemConfig(BaseModel, TimestampMixin):
 
     @classmethod
     async def get_all_as_dict(cls) -> dict:
-        """获取所有配置为字典"""
+        """P-5 修复：获取所有配置为字典（Redis 缓存，60s TTL）"""
+        import json
+
+        try:
+            redis = await get_redis()
+            cached = await redis.get(SYSTEM_CONFIG_CACHE_KEY)
+            if cached:
+                return json.loads(cached)
+        except Exception:  # noqa: BLE001
+            pass
         configs = await cls.all()
-        return {c.cfg_key: c.cfg_value for c in configs}
+        result = {c.cfg_key: c.cfg_value for c in configs}
+        try:
+            redis = await get_redis()
+            await redis.setex(SYSTEM_CONFIG_CACHE_KEY, SYSTEM_CONFIG_CACHE_TTL, json.dumps(result))
+        except Exception:  # noqa: BLE001
+            pass
+        return result

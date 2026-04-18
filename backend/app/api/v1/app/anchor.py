@@ -1,12 +1,17 @@
-from typing import Optional
+import json
+from typing import Any, Optional
 
 from fastapi import APIRouter, Query
 
+from app.core.redis import get_redis
 from app.models import Anchor
 from app.schemas.app_api import AnchorListOut, AnchorOut
 from app.schemas.base import SuccessExtra
 
 router = APIRouter()
+
+ANCHOR_LIST_CACHE_KEY = "anchor:list"
+ANCHOR_LIST_CACHE_TTL = 60  # 秒
 
 
 @router.get("/anchor/list", summary="主播推荐列表(分页)")
@@ -15,17 +20,30 @@ async def anchor_list(
     page_size: int = Query(20, ge=1, le=50, description="每页数量"),
     gender: Optional[str] = Query(None, description="性别过滤: male/female"),
 ):
-    q = Anchor.filter(is_online=True, apply_status="approved")
+    # 查询已认证主播（不过滤 DB is_online，改用 Redis 在线状态）
+    from app.websocket.presence import get_online_user_ids
+
+    # 从 Redis 获取在线用户 ID 集合
+    online_ids: set[int] = await get_online_user_ids()
+
+    # 从 DB 查询已认证主播
+    q = Anchor.filter(apply_status="approved")
     if gender:
         q = q.filter(app_user__gender=gender)
 
-    total = await q.count()
-    anchors = await q.offset((page - 1) * page_size).limit(page_size).prefetch_related("app_user")
+    all_anchors = await q.prefetch_related("app_user")
+    # 过滤出在线主播
+    online_anchors = [a for a in all_anchors if a.app_user_id in online_ids]
+    total = len(online_anchors)
 
-    rows = []
-    for anchor in anchors:
-        app_user = anchor.app_user
-        rows.append({
+    # 分页
+    start = (page - 1) * page_size
+    page_anchors = online_anchors[start:start + page_size]
+
+    all_rows = []
+    for anchor in page_anchors:
+        app_user = await anchor.app_user
+        all_rows.append({
             "id": anchor.id,
             "user_id": app_user.id,
             "nickname": app_user.nickname or app_user.phone,
@@ -34,9 +52,8 @@ async def anchor_list(
             "intro": anchor.intro or "",
             "tags": anchor.tags or [],
             "call_price": anchor.call_price,
-            "is_online": anchor.is_online,
-            "diamonds": app_user.diamonds,
+            "is_online": True,  # 由 Redis 保障
         })
 
-    has_more = (page * page_size) < total
-    return SuccessExtra(rows=rows, current=page, total=total, has_more=has_more)
+    has_more = total > page * page_size
+    return SuccessExtra(rows=all_rows, current=page, total=total, has_more=has_more)

@@ -62,34 +62,58 @@ final appRouter = GoRouter(
     final isOnSplash = state.matchedLocation == AppRoutes.splash;
     final isOnLogin = state.matchedLocation == AppRoutes.login;
     final isOnRegister = state.matchedLocation == AppRoutes.register;
-    if (isOnSplash) { return null; }
-    if (!isLoggedIn && !isOnLogin && !isOnRegister) { return AppRoutes.login; }
-    if (isLoggedIn && (isOnLogin || isOnRegister)) { return AppRoutes.index; }
+    if (isOnSplash) {
+      return null;
+    }
+    if (!isLoggedIn && !isOnLogin && !isOnRegister) {
+      return AppRoutes.login;
+    }
+    if (isLoggedIn && (isOnLogin || isOnRegister)) {
+      return AppRoutes.index;
+    }
     return null;
   },
   routes: [
-    GoRoute(path: AppRoutes.splash, builder: (context, state) => const SplashPage()),
-    GoRoute(path: AppRoutes.login, builder: (context, state) => const LoginPage()),
-    GoRoute(path: AppRoutes.register, builder: (context, state) => const RegisterPage()),
+    GoRoute(
+      path: AppRoutes.splash,
+      builder: (context, state) => const SplashPage(),
+    ),
+    GoRoute(
+      path: AppRoutes.login,
+      builder: (context, state) => const LoginPage(),
+    ),
+    GoRoute(
+      path: AppRoutes.register,
+      builder: (context, state) => const RegisterPage(),
+    ),
     ShellRoute(
       builder: (context, state, child) => MainShell(child: child),
       routes: [
-        GoRoute(path: AppRoutes.index, pageBuilder: (context, state) => NoTransitionPage(child: HomePage())),
-        GoRoute(path: AppRoutes.discover, pageBuilder: (context, state) => NoTransitionPage(child: DiscoverPage())),
-        GoRoute(path: AppRoutes.messages, pageBuilder: (context, state) => NoTransitionPage(child: MessagesPage())),
-        GoRoute(path: AppRoutes.profile, pageBuilder: (context, state) => NoTransitionPage(child: ProfilePage())),
+        GoRoute(
+          path: AppRoutes.index,
+          pageBuilder: (context, state) => NoTransitionPage(child: HomePage()),
+        ),
+        GoRoute(
+          path: AppRoutes.discover,
+          pageBuilder: (context, state) =>
+              NoTransitionPage(child: DiscoverPage()),
+        ),
+        GoRoute(
+          path: AppRoutes.messages,
+          pageBuilder: (context, state) =>
+              NoTransitionPage(child: MessagesPage()),
+        ),
+        GoRoute(
+          path: AppRoutes.profile,
+          pageBuilder: (context, state) =>
+              NoTransitionPage(child: ProfilePage()),
+        ),
       ],
     ),
     GoRoute(
       path: AppRoutes.callOutgoing,
       builder: (context, state) {
         final callId = int.tryParse(state.uri.queryParameters['callId'] ?? '');
-        if (callId == null || callId <= 0) {
-          return Scaffold(
-            appBar: AppBar(title: const Text('提示')),
-            body: const Center(child: Text('呼叫参数无效，请返回重试')),
-          );
-        }
         final callPrice =
             int.tryParse(state.uri.queryParameters['callPrice'] ?? '') ?? 0;
         return CallOutgoingPage(
@@ -106,6 +130,8 @@ final appRouter = GoRouter(
       path: AppRoutes.callIncoming,
       builder: (context, state) {
         final callId = int.tryParse(state.uri.queryParameters['callId'] ?? '');
+        final leftSeconds =
+            int.tryParse(state.uri.queryParameters['leftSeconds'] ?? '') ?? 30;
         if (callId == null || callId <= 0) {
           return Scaffold(
             appBar: AppBar(title: const Text('提示')),
@@ -117,6 +143,7 @@ final appRouter = GoRouter(
           peerUserId: state.uri.queryParameters['peerUserId'] ?? '',
           peerName: state.uri.queryParameters['peerName'] ?? '',
           peerAvatar: state.uri.queryParameters['peerAvatar'],
+          leftSeconds: leftSeconds,
         );
       },
     ),
@@ -151,14 +178,38 @@ final appRouter = GoRouter(
         return AnchorDetailPage(anchor: anchor);
       },
     ),
-    GoRoute(path: AppRoutes.recharge, builder: (context, state) => const RechargePage()),
-    GoRoute(path: AppRoutes.wallet, builder: (context, state) => const WalletPage()),
-    GoRoute(path: AppRoutes.editProfile, builder: (context, state) => const EditProfilePage()),
-    GoRoute(path: AppRoutes.settings, builder: (context, state) => const SettingsPage()),
-    GoRoute(path: AppRoutes.settingsAgreement, builder: (context, state) => const AgreementPage()),
-    GoRoute(path: AppRoutes.settingsPrivacy, builder: (context, state) => const PrivacyPage()),
-    GoRoute(path: AppRoutes.settingsPassword, builder: (context, state) => const ChangePasswordPage()),
-    GoRoute(path: AppRoutes.anchorApply, builder: (context, state) => const AnchorApplyPage()),
+    GoRoute(
+      path: AppRoutes.recharge,
+      builder: (context, state) => const RechargePage(),
+    ),
+    GoRoute(
+      path: AppRoutes.wallet,
+      builder: (context, state) => const WalletPage(),
+    ),
+    GoRoute(
+      path: AppRoutes.editProfile,
+      builder: (context, state) => const EditProfilePage(),
+    ),
+    GoRoute(
+      path: AppRoutes.settings,
+      builder: (context, state) => const SettingsPage(),
+    ),
+    GoRoute(
+      path: AppRoutes.settingsAgreement,
+      builder: (context, state) => const AgreementPage(),
+    ),
+    GoRoute(
+      path: AppRoutes.settingsPrivacy,
+      builder: (context, state) => const PrivacyPage(),
+    ),
+    GoRoute(
+      path: AppRoutes.settingsPassword,
+      builder: (context, state) => const ChangePasswordPage(),
+    ),
+    GoRoute(
+      path: AppRoutes.anchorApply,
+      builder: (context, state) => const AnchorApplyPage(),
+    ),
     GoRoute(
       path: '${AppRoutes.im}/:userId',
       builder: (context, state) {
@@ -177,6 +228,12 @@ final appRouter = GoRouter(
         );
       },
     ),
-    GoRoute(path: AppRoutes.giftPanel, builder: (context, state) => GiftPanel(anchorId: state.uri.queryParameters['anchorId'] ?? '', onClose: () => context.pop())),
+    GoRoute(
+      path: AppRoutes.giftPanel,
+      builder: (context, state) => GiftPanel(
+        anchorId: state.uri.queryParameters['anchorId'] ?? '',
+        onClose: () => context.pop(),
+      ),
+    ),
   ],
 );

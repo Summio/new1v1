@@ -20,6 +20,15 @@ class WsEvent {
   }
 }
 
+enum WsConnectionState { connected, reconnecting, disconnected, authFailed }
+
+class WsConnectionEvent {
+  final WsConnectionState state;
+  final String? message;
+
+  const WsConnectionEvent({required this.state, this.message});
+}
+
 /// WebSocket 服务
 /// 处理与后端的 WebSocket 长连接，用于接收实时推送事件
 class WsService {
@@ -29,6 +38,7 @@ class WsService {
 
   WebSocketChannel? _channel;
   StreamController<WsEvent>? _eventController;
+  StreamController<WsConnectionEvent>? _connectionController;
   Timer? _reconnectTimer;
   Timer? _pingTimer;
   bool _isConnecting = false;
@@ -40,11 +50,27 @@ class WsService {
     return _eventController!.stream;
   }
 
+  Stream<WsConnectionEvent> get connectionEvents {
+    _ensureConnectionController();
+    return _connectionController!.stream;
+  }
+
   /// 是否已连接且认证
   bool get isConnected => _channel != null && _authenticated;
 
   void _ensureController() {
     _eventController ??= StreamController<WsEvent>.broadcast();
+  }
+
+  void _ensureConnectionController() {
+    _connectionController ??= StreamController<WsConnectionEvent>.broadcast();
+  }
+
+  void _emitConnectionState(WsConnectionState state, {String? message}) {
+    _ensureConnectionController();
+    _connectionController!.add(
+      WsConnectionEvent(state: state, message: message),
+    );
   }
 
   /// 构造 WebSocket URL
@@ -114,6 +140,18 @@ class WsService {
     }
   }
 
+  /// 手动设置在线状态（不影响 WebSocket 连接）
+  Future<void> sendSetOnlineStatus(bool online) async {
+    if (_channel == null || !_authenticated) return;
+    try {
+      _channel!.sink.add(
+        jsonEncode({'type': 'set_online_status', 'online': online}),
+      );
+    } catch (e) {
+      debugPrint('[Ws] set_online_status 发送失败: $e');
+    }
+  }
+
   void _onMessage(dynamic data) {
     try {
       final decoded = jsonDecode(data as String) as Map<String, dynamic>;
@@ -122,9 +160,10 @@ class WsService {
       if (type == 'auth_success') {
         _authenticated = true;
         debugPrint('[Ws] 认证成功, user_id=${decoded['user_id']}');
+        _emitConnectionState(WsConnectionState.connected);
         // 认证成功后再启动 ping 定时器
         _pingTimer?.cancel();
-        _pingTimer = Timer.periodic(const Duration(seconds: 25), (_) {
+        _pingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
           _sendPing();
         });
         return;
@@ -133,6 +172,10 @@ class WsService {
       if (type == 'error') {
         debugPrint('[Ws] 认证失败: ${decoded['code']} ${decoded['msg']}');
         _authenticated = false;
+        _emitConnectionState(
+          WsConnectionState.authFailed,
+          message: decoded['msg'] as String?,
+        );
         _channel?.sink.close();
         return;
       }
@@ -148,7 +191,9 @@ class WsService {
         if (eventName != null && eventName.isNotEmpty) {
           debugPrint('[Ws] 收到事件: $eventName');
           _ensureController();
-          _eventController!.add(WsEvent(event: eventName, data: eventData ?? {}));
+          _eventController!.add(
+            WsEvent(event: eventName, data: eventData ?? {}),
+          );
         }
         return;
       }
@@ -164,6 +209,7 @@ class WsService {
     _isConnecting = false;
     _authenticated = false;
     _channel = null;
+    _emitConnectionState(WsConnectionState.reconnecting);
     _scheduleReconnect();
   }
 
@@ -174,7 +220,10 @@ class WsService {
     _pingTimer?.cancel();
     _pingTimer = null;
     if (_shouldReconnect) {
+      _emitConnectionState(WsConnectionState.reconnecting);
       _scheduleReconnect();
+    } else {
+      _emitConnectionState(WsConnectionState.disconnected);
     }
   }
 
@@ -205,9 +254,12 @@ class WsService {
       }
       _channel = null;
     }
+    _emitConnectionState(WsConnectionState.disconnected);
 
     _eventController?.close();
     _eventController = null;
+    _connectionController?.close();
+    _connectionController = null;
   }
 
   /// 释放资源

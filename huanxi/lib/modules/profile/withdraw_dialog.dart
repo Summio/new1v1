@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/providers/wallet_provider.dart';
 import '../../app/providers/auth_provider.dart';
+import 'package:huanxi/core/utils/app_toast.dart';
 
 /// 提现弹窗
 class WithdrawDialog extends ConsumerStatefulWidget {
@@ -34,7 +35,9 @@ class _WithdrawDialogState extends ConsumerState<WithdrawDialog> {
     setState(() => _isLoading = true);
 
     final amount = int.tryParse(_amountController.text.trim()) ?? 0;
-    final result = await ref.read(walletProvider.notifier).withdraw(
+    final result = await ref
+        .read(walletProvider.notifier)
+        .withdraw(
           amount: amount,
           bankName: '支付宝',
           accountNo: _accountNoController.text.trim(),
@@ -48,7 +51,8 @@ class _WithdrawDialogState extends ConsumerState<WithdrawDialog> {
     if (result != null) {
       Navigator.of(context).pop(result);
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
+      AppToast.showSnackBar(
+        context,
         const SnackBar(content: Text('提现申请失败，请稍后重试')),
       );
     }
@@ -62,7 +66,8 @@ class _WithdrawDialogState extends ConsumerState<WithdrawDialog> {
     final mediaQuery = MediaQuery.of(context);
     final safeBottom = mediaQuery.padding.bottom;
     final keyboardBottom = mediaQuery.viewInsets.bottom;
-    final dialogBottom = (keyboardBottom > 0 ? keyboardBottom : safeBottom) + 24;
+    final dialogBottom =
+        (keyboardBottom > 0 ? keyboardBottom : safeBottom) + 24;
 
     return Container(
       padding: EdgeInsets.only(
@@ -110,12 +115,19 @@ class _WithdrawDialogState extends ConsumerState<WithdrawDialog> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.account_balance_wallet, color: AppTheme.secondaryDark, size: 20),
+                    Icon(
+                      Icons.account_balance_wallet,
+                      color: AppTheme.secondaryDark,
+                      size: 20,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         '可提现 $available${tokenNames.diamondName}，1${tokenNames.diamondName}=1元',
-                        style: TextStyle(fontSize: 13, color: AppTheme.secondaryDark),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppTheme.secondaryDark,
+                        ),
                       ),
                     ),
                   ],
@@ -124,7 +136,10 @@ class _WithdrawDialogState extends ConsumerState<WithdrawDialog> {
               const SizedBox(height: 20),
 
               // 提现数量
-              const Text('提现数量', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              const Text(
+                '提现数量',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 8),
               TextFormField(
                 controller: _amountController,
@@ -139,7 +154,10 @@ class _WithdrawDialogState extends ConsumerState<WithdrawDialog> {
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                 ),
                 validator: (v) {
                   if (v == null || v.isEmpty) return '请输入提现数量';
@@ -153,7 +171,10 @@ class _WithdrawDialogState extends ConsumerState<WithdrawDialog> {
               const SizedBox(height: 16),
 
               // 支付宝账号
-              const Text('支付宝账号', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              const Text(
+                '支付宝账号',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 8),
               TextFormField(
                 controller: _accountNoController,
@@ -166,14 +187,20 @@ class _WithdrawDialogState extends ConsumerState<WithdrawDialog> {
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                 ),
                 validator: (v) => (v == null || v.isEmpty) ? '请输入支付宝账号' : null,
               ),
               const SizedBox(height: 16),
 
               // 真实姓名
-              const Text('真实姓名', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              const Text(
+                '真实姓名',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 8),
               TextFormField(
                 controller: _realNameController,
@@ -185,7 +212,10 @@ class _WithdrawDialogState extends ConsumerState<WithdrawDialog> {
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                 ),
                 validator: (v) => (v == null || v.isEmpty) ? '请输入真实姓名' : null,
               ),
@@ -221,7 +251,11 @@ class _WithdrawDialogState extends ConsumerState<WithdrawDialog> {
                           )
                         : const Text(
                             '提交申请',
-                            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: Colors.white),
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
                           ),
                   ),
                 ),
@@ -241,9 +275,7 @@ Future<void> showWithdrawDialog(BuildContext context) async {
     isScrollControlled: true,
     backgroundColor: Colors.transparent,
     builder: (context) => Padding(
-      padding: EdgeInsets.only(
-        top: MediaQuery.of(context).padding.top + 200,
-      ),
+      padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top + 200),
       child: const WithdrawDialog(),
     ),
   );

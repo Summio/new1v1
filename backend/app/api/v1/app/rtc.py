@@ -1,6 +1,6 @@
 import time
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.core.app_auth import DependAppAuth
 from app.core.ctx import CTX_APP_USER_ID
@@ -24,7 +24,7 @@ def _safe_parse_int(raw: str | None, default: int) -> int:
         return default
 
 
-@router.post("/rtc/token", summary="获取 RTC Token", dependencies=[DependAppAuth])
+@router.post("/rtc/token", summary="获取 RTC Token", dependencies=[Depends(DependAppAuth)])
 async def get_rtc_token(req_in: RTCTokenIn):
     from app.models.system_config import SystemConfig
 

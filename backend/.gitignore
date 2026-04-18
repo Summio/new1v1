@@ -5,7 +5,9 @@ venv/
 .vscode
 .ruff_cache/
 .pytest_cache/
-migrations/
+migrations/*
+!migrations/models/
+!migrations/models/*.py
 
 # 环境变量文件（包含敏感信息，禁止提交）
 .env

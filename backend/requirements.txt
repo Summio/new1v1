@@ -60,6 +60,7 @@ uvicorn==0.34.0
 uvloop==0.21.0; sys_platform != 'win32'
 watchfiles==1.0.4
 websockets==14.1
+tenacity==9.0.0
 tencentcloud-sdk-python-im==0.9.4
 tls-sig-api-v2==1.1
 agora-token-builder==1.0.0

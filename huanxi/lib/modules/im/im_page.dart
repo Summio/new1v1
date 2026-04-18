@@ -7,7 +7,6 @@ import '../../app/theme/app_theme.dart';
 import '../../app/routes/app_router.dart';
 import '../../services/im_service.dart';
 import '../../core/constants/api_endpoints.dart';
-import '../../core/network/api_exception.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/network/response_parsers.dart';
 import '../../core/storage/storage.dart';
@@ -401,43 +400,18 @@ class _ImPageState extends ConsumerState<ImPage> {
 
     setState(() => _isStartingCall = true);
     try {
-      final dialingRes = await DioClient.instance.apiPost(
-        ApiEndpoints.dialing,
-        data: {'anchor_id': anchorId},
-      );
-      final dialingData = dialingRes['data'] as Map<String, dynamic>?;
-      final callId = (dialingData?['call_id'] as num?)?.toInt();
-      final peerUserId = (dialingData?['callee_id'] as num?)?.toInt();
-      final peerName = (dialingData?['callee_nickname'] as String?)?.trim();
-      final peerAvatar = (dialingData?['callee_avatar'] as String?)?.trim();
-      final callPrice = (dialingData?['call_price'] as num?)?.toInt() ?? 0;
-      if (callId == null || callId <= 0) {
-        throw const ApiException(code: 400, message: '呼叫创建失败，请稍后重试');
-      }
-      if (!mounted) return;
-
       await context.push(
         Uri(
           path: AppRoutes.callOutgoing,
           queryParameters: {
-            'callId': callId.toString(),
-            'peerUserId': (peerUserId ?? peerNumId).toString(),
+            'peerUserId': peerNumId.toString(),
             'anchorId': anchorId.toString(),
-            'peerName':
-                (peerName != null && peerName.isNotEmpty)
-                    ? peerName
-                    : _peerDisplayName(),
-            'peerAvatar':
-                (peerAvatar != null && peerAvatar.isNotEmpty)
-                    ? peerAvatar
-                    : (_peerAvatarUrl ?? ''),
-            'callPrice': callPrice.toString(),
+            'peerName': _peerDisplayName(),
+            'peerAvatar': _peerAvatarUrl ?? '',
+            'callPrice': '0',
           },
         ).toString(),
       );
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      AppToast.showSnackBar(context, SnackBar(content: Text(e.message)));
     } catch (_) {
       if (!mounted) return;
       AppToast.showSnackBar(

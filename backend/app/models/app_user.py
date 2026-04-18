@@ -12,9 +12,9 @@ class AppUser(BaseModel, TimestampMixin):
     gender = fields.CharField(max_length=10, null=True, default="secret", description="male/female/secret")
     status = fields.CharField(max_length=20, null=True, default="normal", description="normal/banned", index=True)
     is_anchor = fields.BooleanField(default=False, description="是否为签约主播", index=True)
-    coins = fields.IntField(default=0, description="金币余额(分)")
-    diamonds = fields.IntField(default=0, description="钻石余额(分)")
-    frozen_diamonds = fields.IntField(default=0, description="冻结钻石(分)")
+    coins = fields.BigIntField(default=0, description="金币余额(分)")
+    diamonds = fields.BigIntField(default=0, description="钻石余额(分)")
+    frozen_diamonds = fields.BigIntField(default=0, description="冻结钻石(分)")
     ban_reason = fields.CharField(max_length=500, null=True, description="封禁原因")
     last_login = fields.DatetimeField(null=True, description="最后登录时间")
 

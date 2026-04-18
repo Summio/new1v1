@@ -5,6 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../app/theme/app_theme.dart';
+import '../../services/im_service.dart';
 
 /// Splash 页面
 /// 负责：SDK 初始化、登录态检查、路由跳转
@@ -36,6 +37,9 @@ class _SplashPageState extends ConsumerState<SplashPage> {
       debugPrint('Splash Init Error: $e');
     }
 
+    // 全局初始化 IM SDK（不依赖登录状态，提前注册消息监听器）
+    await _initGlobalIM();
+
     // 无论如何，稍微展示一下品牌 Logo
     await Future.delayed(const Duration(milliseconds: 500));
 
@@ -49,6 +53,33 @@ class _SplashPageState extends ConsumerState<SplashPage> {
       context.go(AppRoutes.index);
     } else {
       context.go(AppRoutes.login);
+    }
+  }
+
+  /// 全局初始化 IM SDK，确保在任何页面使用前就绪
+  Future<void> _initGlobalIM() async {
+    final appInit = ref.read(appInitProvider);
+    final auth = ref.read(authProvider);
+
+    if (!appInit.imConfigured || appInit.imSdkAppId == null) {
+      debugPrint('[Splash] IM 未配置，跳过全局初始化');
+      return;
+    }
+
+    final imService = IMService();
+    try {
+      // 1. 全局初始化 SDK（仅注册监听器，不登录）
+      await imService.initGlobal(sdkAppId: appInit.imSdkAppId!);
+
+      // 2. 如果已登录，立即完成 IM 登录
+      if (auth.isLoggedIn && auth.userId != null) {
+        debugPrint('[Splash] 已登录用户，进行 IM 登录...');
+        // IM 登录需要 usersig，需要从后端获取
+        // 这部分逻辑由 MainShell 中的 _initGlobalIMUnread 统一处理
+        // 这里只确保 SDK 已初始化
+      }
+    } catch (e) {
+      debugPrint('[Splash] IM 全局初始化失败: $e');
     }
   }
 

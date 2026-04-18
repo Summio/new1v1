@@ -8,14 +8,15 @@ import '../../app/theme/app_theme.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/utils/app_toast.dart';
+import '../../services/websocket_service.dart';
 import 'call_end_reason.dart';
-import 'call_session_payload.dart';
 
 class IncomingCallPage extends StatefulWidget {
   final int callId;
   final String peerUserId;
   final String peerName;
   final String? peerAvatar;
+  final int leftSeconds;
 
   const IncomingCallPage({
     super.key,
@@ -23,6 +24,7 @@ class IncomingCallPage extends StatefulWidget {
     required this.peerUserId,
     required this.peerName,
     this.peerAvatar,
+    this.leftSeconds = 30,
   });
 
   @override
@@ -30,8 +32,11 @@ class IncomingCallPage extends StatefulWidget {
 }
 
 class _IncomingCallPageState extends State<IncomingCallPage> {
-  Timer? _pollTimer;
-  bool _requestInFlight = false;
+  static const Duration _wsGracePeriod = Duration(seconds: 10);
+  Timer? _countdownTimer;
+  Timer? _wsDisconnectTimer;
+  StreamSubscription<WsEvent>? _wsSubscription;
+  StreamSubscription<WsConnectionEvent>? _wsConnectionSubscription;
   bool _actionInFlight = false;
   bool _pageClosing = false;
   int _leftSeconds = 30;
@@ -39,65 +44,109 @@ class _IncomingCallPageState extends State<IncomingCallPage> {
   @override
   void initState() {
     super.initState();
-    _startPolling();
+    _leftSeconds = widget.leftSeconds > 0 ? widget.leftSeconds : 30;
+    _initWebSocket();
+    _startCountdown();
   }
 
-  void _startPolling() {
-    _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-      _refreshSession();
-    });
-    _refreshSession();
+  void _initWebSocket() {
+    WsService.instance.connect();
+    _wsSubscription?.cancel();
+    _wsSubscription = WsService.instance.events.listen(_onWsEvent);
+    _wsConnectionSubscription?.cancel();
+    _wsConnectionSubscription = WsService.instance.connectionEvents.listen(
+      _onWsConnectionEvent,
+    );
   }
 
-  Future<void> _refreshSession() async {
-    if (_pageClosing || _requestInFlight) return;
-    _requestInFlight = true;
-    try {
-      final res = await DioClient.instance.apiGet(ApiEndpoints.callSessionCurrent);
-      final payload = CallSessionPayload.fromJson(
-        res['data'] is Map<String, dynamic> ? res['data'] as Map<String, dynamic> : null,
-      );
-      if (!mounted || _pageClosing) return;
-      if (payload.callId != null && payload.callId != widget.callId) return;
+  void _onWsConnectionEvent(WsConnectionEvent event) {
+    if (!mounted || _pageClosing) return;
 
-      if (payload.leftSeconds >= 0 && payload.leftSeconds != _leftSeconds) {
-        setState(() => _leftSeconds = payload.leftSeconds);
-      }
+    if (event.state == WsConnectionState.connected) {
+      _wsDisconnectTimer?.cancel();
+      _wsDisconnectTimer = null;
+      return;
+    }
 
-      if (payload.isOngoing) {
-        _pageClosing = true;
-        _pollTimer?.cancel();
-        context.pushReplacement(
-          Uri(
-            path: AppRoutes.callRoom,
-            queryParameters: {
-              'callId': widget.callId.toString(),
-              'peerUserId': widget.peerUserId,
-              'peerName': widget.peerName,
-            },
-          ).toString(),
-        );
+    if (event.state == WsConnectionState.reconnecting ||
+        event.state == WsConnectionState.disconnected ||
+        event.state == WsConnectionState.authFailed) {
+      _wsDisconnectTimer ??= Timer(_wsGracePeriod, () {
+        if (!mounted || _pageClosing || WsService.instance.isConnected) return;
+        _closeWithReason('network_lost');
+      });
+    }
+  }
+
+  void _onWsEvent(WsEvent event) {
+    if (!mounted || _pageClosing) return;
+    final eventCallId = (event.data['call_id'] as num?)?.toInt();
+    if (eventCallId == null || eventCallId != widget.callId) return;
+
+    switch (event.event) {
+      case 'call_cancelled':
+      case 'call_timeout':
+      case 'call_ended':
+      case 'call_balance_empty':
+        _closeWithReason(_reasonFromWsEvent(event));
+        break;
+      default:
+        break;
+    }
+  }
+
+  String _reasonFromWsEvent(WsEvent event) {
+    final reasonFromData = (event.data['end_reason'] as String?)?.trim();
+    if (reasonFromData != null && reasonFromData.isNotEmpty) {
+      return reasonFromData;
+    }
+    final reasonFromEvent = (event.data['reason'] as String?)?.trim();
+    if (reasonFromEvent != null && reasonFromEvent.isNotEmpty) {
+      return reasonFromEvent;
+    }
+
+    switch (event.event) {
+      case 'call_timeout':
+        return 'timeout';
+      case 'call_cancelled':
+        return 'cancelled';
+      case 'call_balance_empty':
+        return 'balance_empty';
+      default:
+        return 'normal';
+    }
+  }
+
+  void _startCountdown() {
+    _countdownTimer?.cancel();
+    if (_leftSeconds <= 0) return;
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted || _pageClosing) {
+        timer.cancel();
         return;
       }
-
-      if (payload.isEnded || payload.isIdle) {
-        _pageClosing = true;
-        _pollTimer?.cancel();
-        AppToast.showSnackBar(
-          context,
-          SnackBar(content: Text(callEndReasonText(payload.endReason))),
-        );
-        if (context.canPop()) {
-          context.pop();
-        } else {
-          context.go(AppRoutes.index);
-        }
+      if (_leftSeconds <= 0) {
+        timer.cancel();
+        _closeWithReason('timeout');
+        return;
       }
-    } catch (_) {
-      // keep polling
-    } finally {
-      _requestInFlight = false;
+      setState(() => _leftSeconds -= 1);
+    });
+  }
+
+  Future<void> _closeWithReason(String reason) async {
+    if (!mounted || _pageClosing) return;
+    _pageClosing = true;
+    _countdownTimer?.cancel();
+    _wsDisconnectTimer?.cancel();
+    AppToast.showSnackBar(
+      context,
+      SnackBar(content: Text(callEndReasonText(reason))),
+    );
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(AppRoutes.index);
     }
   }
 
@@ -111,7 +160,8 @@ class _IncomingCallPageState extends State<IncomingCallPage> {
       );
       if (!mounted) return;
       _pageClosing = true;
-      _pollTimer?.cancel();
+      _countdownTimer?.cancel();
+      _wsDisconnectTimer?.cancel();
       context.pushReplacement(
         Uri(
           path: AppRoutes.callRoom,
@@ -143,7 +193,8 @@ class _IncomingCallPageState extends State<IncomingCallPage> {
       );
       if (!mounted) return;
       _pageClosing = true;
-      _pollTimer?.cancel();
+      _countdownTimer?.cancel();
+      _wsDisconnectTimer?.cancel();
       if (context.canPop()) {
         context.pop();
       } else {
@@ -163,7 +214,10 @@ class _IncomingCallPageState extends State<IncomingCallPage> {
   @override
   void dispose() {
     _pageClosing = true;
-    _pollTimer?.cancel();
+    _countdownTimer?.cancel();
+    _wsDisconnectTimer?.cancel();
+    _wsSubscription?.cancel();
+    _wsConnectionSubscription?.cancel();
     super.dispose();
   }
 
