@@ -252,6 +252,10 @@ async def dialing(req_in: DialingIn):
     if not anchor:
         return Fail(code=404, msg="主播不存在或未认证")
 
+    # W-3 修复：主播必须在线才能被呼叫
+    if not anchor.is_online:
+        return Fail(code=400, msg="主播当前不在线，请稍后再试")
+
     # 禁止自呼叫
     if caller_id == anchor.app_user_id:
         return Fail(code=400, msg="不能呼叫自己")
