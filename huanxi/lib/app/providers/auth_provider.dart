@@ -50,7 +50,7 @@ class AuthState {
       coins: coins ?? this.coins,
       diamonds: diamonds ?? this.diamonds,
       isLoading: isLoading ?? this.isLoading,
-      error: error,
+      error: error ?? this.error,
     );
   }
 }

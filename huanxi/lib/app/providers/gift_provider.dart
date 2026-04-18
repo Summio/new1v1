@@ -47,7 +47,7 @@ class GiftListState {
     return GiftListState(
       gifts: gifts ?? this.gifts,
       isLoading: isLoading ?? this.isLoading,
-      error: error,
+      error: error ?? this.error,
     );
   }
 }

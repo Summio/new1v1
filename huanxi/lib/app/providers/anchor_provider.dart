@@ -73,7 +73,7 @@ class AnchorListState {
       isLoading: isLoading ?? this.isLoading,
       hasMore: hasMore ?? this.hasMore,
       currentPage: currentPage ?? this.currentPage,
-      error: error,
+      error: error ?? this.error,
     );
   }
 }

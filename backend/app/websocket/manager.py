@@ -276,8 +276,6 @@ class ConnectionManager:
             except asyncio.CancelledError:
                 pass
             self._pubsub_task = None
-        global _pubsub_task
-        _pubsub_task = None
         _pubsub_started = False
 
 

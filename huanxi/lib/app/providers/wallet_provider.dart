@@ -96,7 +96,7 @@ class WalletState {
       filterType: filterType ?? this.filterType,
       isLoading: isLoading ?? this.isLoading,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
-      error: error,
+      error: error ?? this.error,
     );
   }
 }
