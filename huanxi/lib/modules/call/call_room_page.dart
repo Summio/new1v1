@@ -13,8 +13,9 @@ import '../../app/theme/app_theme.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/network/dio_client.dart';
+import '../../core/utils/app_toast.dart';
+import '../../services/websocket_service.dart';
 import '../gift/gift_panel.dart';
-import 'package:huanxi/core/utils/app_toast.dart';
 
 /// 通话房间页面
 /// 基于声网 RTC 实现实时视频通话
@@ -45,6 +46,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
   RtcEngineEventHandler? _rtcEventHandler;
   Timer? _durationTimer;
   Timer? _statusTimer;
+  StreamSubscription<WsEvent>? _wsSubscription;
 
   bool _isMicOn = true;
   bool _isSpeakerOn = true;
@@ -83,7 +85,37 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       'page init, peerUserId=${widget.peerUserId}, '
       'anchorId=${widget.anchorId}, peerName=${widget.peerName}',
     );
+    _initWebSocket();
     _startStatusPolling();
+  }
+
+  void _initWebSocket() {
+    WsService.instance.connect();
+    _wsSubscription?.cancel();
+    _wsSubscription = WsService.instance.events.listen(_onWsEvent);
+  }
+
+  void _onWsEvent(WsEvent event) {
+    // 通话结束类事件：call_ended, balance_empty, call_cancelled, call_timeout, call_rejected
+    final callEndedEvents = {
+      'call_ended',
+      'call_balance_empty',
+      'call_cancelled',
+      'call_timeout',
+      'call_rejected',
+    };
+    if (callEndedEvents.contains(event.event)) {
+      final callId = event.data['call_id'] as int?;
+      if (callId != widget.callId) return;
+      if (_hasEnded) return;
+      _handleEndedByRemote(event.data['end_reason'] as String?);
+    } else if (event.event == 'balance_updated') {
+      final coins = event.data['coins'] as int?;
+      final diamonds = event.data['diamonds'] as int?;
+      if (coins != null || diamonds != null) {
+        ref.read(authProvider.notifier).syncBalance(coins: coins, diamonds: diamonds);
+      }
+    }
   }
 
   void _startStatusPolling() {
@@ -394,9 +426,9 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       setState(() {
         _isLoading = false;
       });
-    } catch (_) {
+    } catch (e) {
       _joinRequested = false;
-      _log('rtc init failed');
+      _log('rtc init failed: $e');
       if (!mounted) return;
       setState(() {
         _isLoading = false;
@@ -482,11 +514,15 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
         if (deductedMinutes != null && deductedMinutes > _renewSyncedMinutes) {
           _renewSyncedMinutes = deductedMinutes;
         }
-        if (duration != null && mounted) {
-          final next = Duration(seconds: duration);
-          if (next > _callDuration) {
-            setState(() => _callDuration = next);
-          }
+        // W-6 修复：用服务端时长同步本地计时器，避免计时漂移累积
+        if (duration != null && duration > _callDuration.inSeconds && mounted) {
+          setState(() {
+            _callDuration = Duration(seconds: duration);
+            // 用服务端时长反推通话开始时间，后续 Timer 增量从正确锚点计算
+            _callStartTime = DateTime.now().subtract(Duration(seconds: duration));
+          });
+        } else if (duration != null && mounted) {
+          setState(() => _callDuration = Duration(seconds: duration));
         }
         _log('renew success, deductedMinutes=$_renewSyncedMinutes');
         return true;
@@ -591,15 +627,11 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     await _leaveAndExit(notifyEndApi: false);
   }
 
-  Future<void> _leaveAndExit({
-    bool notifyEndApi = true,
-  }) async {
+  Future<void> _leaveAndExit({bool notifyEndApi = true}) async {
     if (_hasEnded) return;
     _hasEnded = true;
     _joinRequested = false;
-    _log(
-      'leave and exit start, notifyEndApi=$notifyEndApi',
-    );
+    _log('leave and exit start, notifyEndApi=$notifyEndApi');
 
     _statusTimer?.cancel();
     _durationTimer?.cancel();
@@ -715,17 +747,26 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     return '${d.inHours > 0 ? '${d.inHours}:' : ''}$m:$s';
   }
 
+  bool _shouldBestEffortTerminateOnDispose() {
+    return !_hasEnded && _joined && _callStatus == 'ongoing';
+  }
+
   @override
   void dispose() {
-    if (!_hasEnded) {
-      _log('dispose without ended, best effort terminate');
+    final shouldTerminate = _shouldBestEffortTerminateOnDispose();
+    if (shouldTerminate) {
+      _log('dispose with active joined call, best effort terminate');
       unawaited(_bestEffortTerminateCall());
+    } else {
+      _log(
+        'dispose skip best effort terminate, '
+        'hasEnded=$_hasEnded joined=$_joined status=$_callStatus',
+      );
     }
     _statusTimer?.cancel();
     _durationTimer?.cancel();
-    if (!_hasEnded) {
-      unawaited(_releaseRtcEngine());
-    }
+    _wsSubscription?.cancel();
+    unawaited(_releaseRtcEngine());
     super.dispose();
   }
 

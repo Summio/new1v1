@@ -1,6 +1,7 @@
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
+import asyncio
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 
 from app.core.app_auth import DependAppAuth
 from app.core.ctx import CTX_APP_USER_ID, CTX_APP_USER_OBJ
@@ -39,7 +40,7 @@ _call_trace_service = CallTraceService()
 
 def _is_ring_timeout(call_record: CallRecord) -> bool:
     created_at = to_utc_aware(call_record.created_at)
-    return datetime.now(timezone.utc) - created_at > timedelta(seconds=CALL_RING_TIMEOUT_SECONDS)
+    return to_utc_aware(now_local_naive()) - created_at > timedelta(seconds=CALL_RING_TIMEOUT_SECONDS)
 
 
 async def _mark_timeout_if_needed(call_record: CallRecord) -> bool:
@@ -116,7 +117,7 @@ async def _get_reject_pair_protect_seconds() -> int:
 def _calc_duration_seconds(call_record: CallRecord) -> int:
     if call_record.status != "ongoing" or not call_record.connected_at:
         return max(0, int(call_record.duration or 0))
-    elapsed = (datetime.now(timezone.utc) - to_utc_aware(call_record.connected_at)).total_seconds()
+    elapsed = (to_utc_aware(now_local_naive()) - to_utc_aware(call_record.connected_at)).total_seconds()
     return max(0, int(elapsed))
 
 
@@ -153,7 +154,7 @@ async def _build_call_session_out(
     left_seconds = 0
     if call_record.status == "pending":
         created_at = to_utc_aware(call_record.created_at)
-        elapsed = int((datetime.now(timezone.utc) - created_at).total_seconds())
+        elapsed = int((to_utc_aware(now_local_naive()) - created_at).total_seconds())
         left_seconds = max(0, CALL_RING_TIMEOUT_SECONDS - elapsed)
 
     actions = CallSessionActionsOut(
@@ -203,106 +204,57 @@ def _calc_due_minutes_with_free(duration_seconds: int, free_seconds_before_billi
 
 
 async def _resolve_payer_id(call_record: CallRecord) -> int:
+    """
+    视频通话扣费方规则：非主播方永远付费。
+    - 主播（无论主叫还是被叫）不扣费
+    - 非主播用户（无论主叫还是被叫）付费
+    - 双方都不是主播：主叫方付费（caller_id）
+    B-2 修复：使用 select_for_update 加行锁，防止在检查期间 anchor 被审批/取消时出现 TOCTOU
+    """
     caller_id = int(call_record.caller_id)
     callee_id = int(call_record.callee_id)
 
-    caller_is_anchor = await Anchor.filter(
-        app_user_id=caller_id,
-        apply_status="approved",
-    ).exists()
-    callee_is_anchor = await Anchor.filter(
-        app_user_id=callee_id,
-        apply_status="approved",
-    ).exists()
+    # P-3 优化 + B-2 TOCTOU 修复：合并为单次 IN 查询
+    # MySQL SELECT ... WHERE id IN (...) FOR UPDATE 会对所有匹配行加锁
+    anchors = {
+        int(a.app_user_id): a
+        for a in await Anchor.filter(
+            app_user_id__in=[caller_id, callee_id],
+            apply_status="approved",
+        ).select_for_update().all()
+    }
+    caller_is_anchor = caller_id in anchors
+    callee_is_anchor = callee_id in anchors
 
-    # 单主播场景：非主播承担通话费用
+    # 主播不承担通话费用
     if caller_is_anchor and not callee_is_anchor:
+        # 主播是主叫，非主播是被叫 → 被叫付费
         return callee_id
     if callee_is_anchor and not caller_is_anchor:
+        # 主播是被叫，非主播是主叫 → 主叫付费
         return caller_id
 
-    # 兜底：双方角色无法区分时按主叫方计费
-    return caller_id
+    # 双方都是主播 → 不计费，返回 0（与 watchdog 规则一致）
+    return 0
 
 
-@router.post("/dialing", summary="发起呼叫(余额预检)", dependencies=[DependAppAuth])
+@router.post("/dialing", summary="发起呼叫(余额预检)", dependencies=[Depends(DependAppAuth)])
 async def dialing(req_in: DialingIn):
     caller_id = CTX_APP_USER_ID.get()
     app_user: AppUser = CTX_APP_USER_OBJ.get()
     reject_inbound_protect_seconds = await _get_reject_inbound_protect_seconds()
     reject_pair_protect_seconds = await _get_reject_pair_protect_seconds()
 
-    # 主叫忙线检测：若自己已有 pending/ongoing 通话，不允许再次发起
-    caller_busy = await CallRecord.filter(
-        (Q(caller_id=caller_id) | Q(callee_id=caller_id)),
-        status__in=["pending", "ongoing"],
-    ).exists()
-    if caller_busy:
-        return Fail(code=409, msg="你正在通话中，请先结束当前通话")
-
-    # 检查主播是否存在且在线（需审批通过）
+    # 查询主播信息（先查出来用于后续判断）
     anchor = await Anchor.filter(
-        id=req_in.anchor_id, is_online=True, apply_status="approved"
+        id=req_in.anchor_id, apply_status="approved"
     ).first()
     if not anchor:
-        return Fail(code=404, msg="主播不在线或不存在")
+        return Fail(code=404, msg="主播不存在或未认证")
 
-    # 被叫忙线检测：目标主播已有 pending/ongoing 通话，返回忙线
-    callee_busy = await CallRecord.filter(
-        callee_id=anchor.app_user_id,
-        status__in=["pending", "ongoing"],
-    ).exists()
-    if callee_busy:
-        return Fail(code=409, msg="对方忙线中，请稍后再试")
-
-    if reject_inbound_protect_seconds > 0:
-        protect_since_inbound = now_local_naive() - timedelta(seconds=reject_inbound_protect_seconds)
-        # 规则1：被叫在保护期内拒绝过任意来电，则禁止新的呼入
-        latest_rejected_for_callee = (
-            await CallRecord.filter(
-                callee_id=anchor.app_user_id,
-                status="ended",
-                end_reason="rejected",
-                updated_at__gte=protect_since_inbound,
-            )
-            .order_by("-updated_at")
-            .first()
-        )
-        if latest_rejected_for_callee:
-            left = calc_left_seconds(
-                latest_rejected_for_callee.updated_at,
-                reject_inbound_protect_seconds,
-            )
-            if should_block_rejected_call(
-                latest_rejected_for_callee.updated_at,
-                reject_inbound_protect_seconds,
-            ):
-                return Fail(code=429, msg=f"对方暂不接听，请{left}秒后再试")
-
-    if reject_pair_protect_seconds > 0:
-        protect_since_pair = now_local_naive() - timedelta(seconds=reject_pair_protect_seconds)
-        # 规则2：同一主叫-被叫对在保护期内被拒绝，禁止再次呼叫同一用户
-        latest_rejected_for_pair = (
-            await CallRecord.filter(
-                caller_id=caller_id,
-                callee_id=anchor.app_user_id,
-                status="ended",
-                end_reason="rejected",
-                updated_at__gte=protect_since_pair,
-            )
-            .order_by("-updated_at")
-            .first()
-        )
-        if latest_rejected_for_pair:
-            left = calc_left_seconds(
-                latest_rejected_for_pair.updated_at,
-                reject_pair_protect_seconds,
-            )
-            if should_block_rejected_call(
-                latest_rejected_for_pair.updated_at,
-                reject_pair_protect_seconds,
-            ):
-                return Fail(code=429, msg=f"你刚被对方拒绝，请{left}秒后再呼叫")
+    # 禁止自呼叫
+    if caller_id == anchor.app_user_id:
+        return Fail(code=400, msg="不能呼叫自己")
 
     call_price = anchor.call_price
 
@@ -310,13 +262,84 @@ async def dialing(req_in: DialingIn):
     if app_user.coins < call_price:
         return Fail(code=501, msg="余额不足，请先充值")
 
-    # 创建通话记录（先 pending，待主播接听）
-    call_record = await CallRecord.create(
-        caller_id=caller_id,
-        callee_id=anchor.app_user_id,
-        call_price=call_price,
-        status="pending",
-    )
+    # 事务包裹忙线检查 + 记录创建：防止 TOCTOU 竞态
+    async with in_transaction() as conn:
+        # 加行锁：锁住主叫和被叫用户行，防止并发创建冲突的通话记录
+        await AppUser.filter(id=caller_id).using_db(conn).select_for_update().first()
+        await AppUser.filter(id=anchor.app_user_id).using_db(conn).select_for_update().first()
+
+        # 主叫忙线检测
+        caller_busy = (
+            await CallRecord.filter(
+                (Q(caller_id=caller_id) | Q(callee_id=caller_id)),
+                status__in=["pending", "ongoing"],
+            )
+            .using_db(conn)
+            .exists()
+        )
+        if caller_busy:
+            return Fail(code=409, msg="你正在通话中，请先结束当前通话")
+
+        # 被叫忙线检测
+        callee_busy = (
+            await CallRecord.filter(
+                callee_id=anchor.app_user_id,
+                status__in=["pending", "ongoing"],
+            )
+            .using_db(conn)
+            .exists()
+        )
+        if callee_busy:
+            return Fail(code=409, msg="对方忙线中，请稍后再试")
+
+        # L-4 修复：检查 protect 窗口内的所有记录，而非仅最近一条
+        if reject_inbound_protect_seconds > 0:
+            protect_since_inbound = now_local_naive() - timedelta(seconds=reject_inbound_protect_seconds)
+            all_rejected_for_callee = (
+                await CallRecord.filter(
+                    callee_id=anchor.app_user_id,
+                    status="ended",
+                    end_reason="rejected",
+                    updated_at__gte=protect_since_inbound,
+                )
+                .using_db(conn)
+                .order_by("-updated_at")
+                .all()
+            )
+            for r in all_rejected_for_callee:
+                if should_block_rejected_call(r.updated_at, reject_inbound_protect_seconds):
+                    left = calc_left_seconds(r.updated_at, reject_inbound_protect_seconds)
+                    return Fail(code=429, msg=f"对方暂不接听，请{left}秒后再试")
+
+        if reject_pair_protect_seconds > 0:
+            protect_since_pair = now_local_naive() - timedelta(seconds=reject_pair_protect_seconds)
+            all_rejected_for_pair = (
+                await CallRecord.filter(
+                    caller_id=caller_id,
+                    callee_id=anchor.app_user_id,
+                    status="ended",
+                    end_reason="rejected",
+                    updated_at__gte=protect_since_pair,
+                )
+                .using_db(conn)
+                .order_by("-updated_at")
+                .all()
+            )
+            for r in all_rejected_for_pair:
+                if should_block_rejected_call(r.updated_at, reject_pair_protect_seconds):
+                    left = calc_left_seconds(r.updated_at, reject_pair_protect_seconds)
+                    return Fail(code=429, msg=f"你刚被对方拒绝，请{left}秒后再呼叫")
+
+        # 创建通话记录（同一事务内，锁已持有，无竞争）
+        call_record = await CallRecord.create(
+            caller_id=caller_id,
+            callee_id=anchor.app_user_id,
+            call_price=call_price,
+            status="pending",
+            using_db=conn,
+        )
+
+    # 事务结束后查询被叫信息（不在锁内执行，减少锁持有时间）
     callee_user = await AppUser.filter(id=anchor.app_user_id).first()
     callee_nickname = (
         (callee_user.nickname or callee_user.username or f"用户{anchor.app_user_id}")
@@ -329,6 +352,16 @@ async def dialing(req_in: DialingIn):
         phase="dialing",
         actor_user_id=int(caller_id),
     )
+    # 推送 WebSocket 来电通知给被叫方（fire-and-forget）
+    asyncio.create_task(_ws_push_call_incoming(
+        callee_id=int(anchor.app_user_id),
+        call_id=int(call_record.id),
+        caller_id=int(caller_id),
+        caller_name=app_user.nickname or f"用户{caller_id}",
+        caller_avatar=app_user.avatar,
+        call_price=int(call_price or 0),
+        left_seconds=CALL_RING_TIMEOUT_SECONDS,
+    ))
 
     return Success(
         data=DialingOut(
@@ -346,7 +379,7 @@ async def dialing(req_in: DialingIn):
     )
 
 
-@router.get("/call/session/current", summary="查询当前通话会话", dependencies=[DependAppAuth])
+@router.get("/call/session/current", summary="查询当前通话会话", dependencies=[Depends(DependAppAuth)])
 async def current_call_session():
     user_id = CTX_APP_USER_ID.get()
     active_record = (
@@ -374,7 +407,7 @@ async def current_call_session():
     return Success(data=session.model_dump())
 
 
-@router.get("/call/status", summary="查询通话状态", dependencies=[DependAppAuth])
+@router.get("/call/status", summary="查询通话状态", dependencies=[Depends(DependAppAuth)])
 async def call_status(call_id: int):
     user_id = CTX_APP_USER_ID.get()
 
@@ -402,45 +435,69 @@ async def call_status(call_id: int):
     )
 
 
-@router.post("/call/accept", summary="接听通话", dependencies=[DependAppAuth])
+@router.post("/call/accept", summary="接听通话", dependencies=[Depends(DependAppAuth)])
 async def accept_call(req_in: CallActionIn):
     user_id = CTX_APP_USER_ID.get()
 
-    call_record = await CallRecord.filter(id=req_in.call_id).first()
-    if not call_record:
-        return Fail(code=404, msg="通话不存在")
+    # 事务包裹 + SELECT FOR UPDATE：防止并发接听导致多重计费
+    async with in_transaction() as conn:
+        call_record = (
+            await CallRecord.filter(id=req_in.call_id)
+            .using_db(conn)
+            .select_for_update()
+            .first()
+        )
+        if not call_record:
+            return Fail(code=404, msg="通话不存在")
 
-    if int(call_record.callee_id) != int(user_id):
-        return Fail(code=403, msg="仅被叫方可接听")
+        if int(call_record.callee_id) != int(user_id):
+            return Fail(code=403, msg="仅被叫方可接听")
 
-    if await _mark_timeout_if_needed(call_record):
-        return Fail(code=400, msg="来电已超时")
+        if await _mark_timeout_if_needed(call_record):
+            return Fail(code=400, msg="来电已超时")
 
-    if call_record.status != "pending":
-        return Fail(code=400, msg="通话状态不可接听")
+        if call_record.status != "pending":
+            return Fail(code=400, msg="通话状态不可接听")
 
-    # 被叫忙线保护：除当前来电外，如果还存在 ongoing，则拒绝接听
-    has_other_ongoing = await CallRecord.filter(
-        callee_id=user_id,
-        status="ongoing",
-    ).exclude(id=call_record.id).exists()
-    if has_other_ongoing:
-        return Fail(code=409, msg="你正在其他通话中")
+        # 被叫忙线保护：除当前来电外，如果还存在 ongoing，则拒绝接听
+        has_other_ongoing = (
+            await CallRecord.filter(callee_id=user_id, status="ongoing")
+            .using_db(conn)
+            .exclude(id=call_record.id)
+            .exists()
+        )
+        if has_other_ongoing:
+            return Fail(code=409, msg="你正在其他通话中")
 
-    call_record.status = "ongoing"
-    call_record.end_reason = None
-    call_record.connected_at = now_local_naive()
-    call_record.duration = 0
-    call_record.deducted_amount = 0
-    call_record.deducted_minutes = 0
-    call_record.last_renew_at = None
-    call_record.ended_at = None
-    await call_record.save()
-    await _append_call_trace(
-        call_record,
-        phase="accepted",
-        actor_user_id=int(user_id),
-    )
+        # 主叫忙线检查：防止主叫同时呼出多条
+        caller_has_ongoing = (
+            await CallRecord.filter(caller_id=int(call_record.caller_id), status="ongoing")
+            .using_db(conn)
+            .exclude(id=call_record.id)
+            .exists()
+        )
+        if caller_has_ongoing:
+            return Fail(code=409, msg="对方正在其他通话中")
+
+        call_record.status = "ongoing"
+        call_record.end_reason = None
+        call_record.connected_at = now_local_naive()
+        call_record.duration = 0
+        call_record.deducted_amount = 0
+        call_record.deducted_minutes = 0
+        call_record.last_renew_at = None
+        call_record.ended_at = None
+        await call_record.save(using_db=conn)
+        await _append_call_trace(
+            call_record,
+            phase="accepted",
+            actor_user_id=int(user_id),
+        )
+        # 推送 WebSocket 事件给主叫方（fire-and-forget）
+        asyncio.create_task(_ws_push_call_accepted(
+            caller_id=int(call_record.caller_id),
+            call_id=int(call_record.id),
+        ))
 
     return Success(
         data=CallActionOut(next_status="ongoing", msg="已接听").model_dump(),
@@ -448,30 +505,42 @@ async def accept_call(req_in: CallActionIn):
     )
 
 
-@router.post("/call/reject", summary="拒绝通话", dependencies=[DependAppAuth])
+@router.post("/call/reject", summary="拒绝通话", dependencies=[Depends(DependAppAuth)])
 async def reject_call(req_in: CallActionIn):
     user_id = CTX_APP_USER_ID.get()
 
-    call_record = await CallRecord.filter(id=req_in.call_id).first()
-    if not call_record:
-        return Fail(code=404, msg="通话不存在")
+    async with in_transaction() as conn:
+        call_record = (
+            await CallRecord.filter(id=req_in.call_id)
+            .using_db(conn)
+            .select_for_update()
+            .first()
+        )
+        if not call_record:
+            return Fail(code=404, msg="通话不存在")
 
-    if int(call_record.callee_id) != int(user_id):
-        return Fail(code=403, msg="仅被叫方可拒绝")
+        if int(call_record.callee_id) != int(user_id):
+            return Fail(code=403, msg="仅被叫方可拒绝")
 
-    if call_record.status != "pending":
-        return Fail(code=400, msg="通话状态不可拒绝")
+        if call_record.status != "pending":
+            return Fail(code=400, msg="通话状态不可拒绝")
 
-    call_record.status = "ended"
-    call_record.end_reason = "rejected"
-    call_record.ended_at = now_local_naive()
-    await call_record.save()
-    await _append_call_trace(
-        call_record,
-        phase="rejected",
-        actor_user_id=int(user_id),
-        reason="rejected",
-    )
+        call_record.status = "ended"
+        call_record.end_reason = "rejected"
+        call_record.ended_at = now_local_naive()
+        await call_record.save(using_db=conn)
+        await _append_call_trace(
+            call_record,
+            phase="rejected",
+            actor_user_id=int(user_id),
+            reason="rejected",
+        )
+        # 推送 WebSocket 事件给主叫方（fire-and-forget）
+        asyncio.create_task(_ws_push_call_rejected(
+            caller_id=int(call_record.caller_id),
+            call_id=int(call_record.id),
+            reason="rejected",
+        ))
 
     return Success(
         data=CallActionOut(next_status="ended", msg="已拒绝").model_dump(),
@@ -479,30 +548,42 @@ async def reject_call(req_in: CallActionIn):
     )
 
 
-@router.post("/call/cancel", summary="取消呼叫", dependencies=[DependAppAuth])
+@router.post("/call/cancel", summary="取消呼叫", dependencies=[Depends(DependAppAuth)])
 async def cancel_call(req_in: CallActionIn):
     user_id = CTX_APP_USER_ID.get()
 
-    call_record = await CallRecord.filter(id=req_in.call_id).first()
-    if not call_record:
-        return Fail(code=404, msg="通话不存在")
+    async with in_transaction() as conn:
+        call_record = (
+            await CallRecord.filter(id=req_in.call_id)
+            .using_db(conn)
+            .select_for_update()
+            .first()
+        )
+        if not call_record:
+            return Fail(code=404, msg="通话不存在")
 
-    if int(call_record.caller_id) != int(user_id):
-        return Fail(code=403, msg="仅主叫方可取消")
+        if int(call_record.caller_id) != int(user_id):
+            return Fail(code=403, msg="仅主叫方可取消")
 
-    if call_record.status != "pending":
-        return Fail(code=400, msg="通话状态不可取消")
+        if call_record.status != "pending":
+            return Fail(code=400, msg="通话状态不可取消")
 
-    call_record.status = "ended"
-    call_record.end_reason = "cancelled"
-    call_record.ended_at = now_local_naive()
-    await call_record.save()
-    await _append_call_trace(
-        call_record,
-        phase="cancelled",
-        actor_user_id=int(user_id),
-        reason="cancelled",
-    )
+        call_record.status = "ended"
+        call_record.end_reason = "cancelled"
+        call_record.ended_at = now_local_naive()
+        await call_record.save(using_db=conn)
+        await _append_call_trace(
+            call_record,
+            phase="cancelled",
+            actor_user_id=int(user_id),
+            reason="cancelled",
+        )
+        # 推送 WebSocket 事件给被叫方（fire-and-forget）
+        asyncio.create_task(_ws_push_call_cancelled(
+            callee_id=int(call_record.callee_id),
+            call_id=int(call_record.id),
+            reason="cancelled",
+        ))
 
     return Success(
         data=CallActionOut(next_status="ended", msg="已取消呼叫").model_dump(),
@@ -510,9 +591,18 @@ async def cancel_call(req_in: CallActionIn):
     )
 
 
-@router.post("/call/renew", summary="通话续租扣费", dependencies=[DependAppAuth])
+@router.post("/call/renew", summary="通话续租扣费", dependencies=[Depends(DependAppAuth)])
 async def renew_call(req_in: RenewLeaseIn):
     caller_id = CTX_APP_USER_ID.get()
+
+    # 结果收集：避免在事务块内 return
+    result_coins: int | None = None
+    result_duration: int = 0
+    result_deducted_minutes: int = 0
+    result_deducted_amount: int = 0
+    result_msg: str = "OK"
+    result_code: int = 200
+    result_is_fail: bool = False
 
     async with in_transaction() as conn:
         call_record = (
@@ -521,66 +611,129 @@ async def renew_call(req_in: RenewLeaseIn):
             .select_for_update()
             .first()
         )
-        if not call_record:
-            return Fail(code=404, msg="通话不存在或已结束")
+        # L-6 修复：SELECT FOR UPDATE 后重新检查状态，防止 call_end 已关闭通话后覆盖
+        if not call_record or call_record.status != "ongoing":
+            result_code = 404
+            result_is_fail = True
+            result_msg = "通话不存在或已结束"
 
-        if caller_id not in {int(call_record.caller_id), int(call_record.callee_id)}:
-            return Fail(code=403, msg="无权续租该通话")
+        elif caller_id not in {int(call_record.caller_id), int(call_record.callee_id)}:
+            result_code = 403
+            result_is_fail = True
+            result_msg = "无权续租该通话"
 
-        duration_seconds = _calc_duration_seconds(call_record)
-        free_seconds_before_billing = await _get_free_seconds_before_billing()
-        due_minutes = _calc_due_minutes_with_free(
-            duration_seconds,
-            free_seconds_before_billing,
-        )
-        deducted_minutes = int(call_record.deducted_minutes or 0)
-        to_charge_minutes = max(0, due_minutes - deducted_minutes)
-        payer_id = await _resolve_payer_id(call_record)
-
-        if to_charge_minutes > 0:
-            charge_amount = to_charge_minutes * int(call_record.call_price or 0)
-            updated = (
-                await AppUser.filter(id=payer_id, coins__gte=charge_amount)
-                .using_db(conn)
-                .update(coins=AppUser.coins - charge_amount)
+        else:
+            duration_seconds = _calc_duration_seconds(call_record)
+            free_seconds_before_billing = await _get_free_seconds_before_billing()
+            due_minutes = _calc_due_minutes_with_free(
+                duration_seconds,
+                free_seconds_before_billing,
             )
-            if updated == 0:
-                call_record.status = "ended"
-                call_record.end_reason = "balance_empty"
+            deducted_minutes = int(call_record.deducted_minutes or 0)
+            to_charge_minutes = max(0, due_minutes - deducted_minutes)
+            payer_id = await _resolve_payer_id(call_record)
+
+            if payer_id == 0:
+                # 双主播不计费
                 call_record.duration = duration_seconds
-                call_record.ended_at = now_local_naive()
-                call_record.total_fee = int(call_record.deducted_amount or 0)
+                call_record.last_renew_at = now_local_naive()
                 await call_record.save(using_db=conn)
-                await _append_call_trace(
-                    call_record,
-                    phase="balance_empty",
-                    actor_user_id=int(payer_id),
-                    reason="balance_empty",
-                )
-                return Fail(code=501, msg="余额不足，通话结束")
+                payer = await AppUser.filter(id=caller_id).using_db(conn).first()
+                result_coins = payer.coins if payer else 0
+                result_duration = duration_seconds
+                result_deducted_minutes = int(call_record.deducted_minutes or 0)
+                result_deducted_amount = int(call_record.deducted_amount or 0)
+                result_msg = "主播通话，不计费"
 
-            call_record.deducted_minutes = deducted_minutes + to_charge_minutes
-            call_record.deducted_amount = int(call_record.deducted_amount or 0) + charge_amount
+            elif to_charge_minutes > 0:
+                charge_amount = to_charge_minutes * int(call_record.call_price or 0)
+                payer = await AppUser.filter(id=payer_id).using_db(conn).select_for_update().first()
+                if not payer or payer.coins < charge_amount:
+                    call_record.status = "ended"
+                    call_record.end_reason = "balance_empty"
+                    call_record.duration = duration_seconds
+                    call_record.total_fee = int(call_record.deducted_amount or 0)
+                    call_record.ended_at = now_local_naive()
+                    await call_record.save(using_db=conn)
+                    await _append_call_trace(
+                        call_record,
+                        phase="balance_empty",
+                        actor_user_id=int(payer_id),
+                        reason="balance_empty",
+                    )
+                    result_coins = payer.coins if payer else 0
+                    result_duration = duration_seconds
+                    result_deducted_minutes = int(call_record.deducted_minutes or 0)
+                    result_deducted_amount = int(call_record.deducted_amount or 0)
+                    result_code = 501
+                    result_is_fail = True
+                    result_msg = "余额不足，通话结束"
 
-        call_record.duration = duration_seconds
-        call_record.last_renew_at = now_local_naive()
-        await call_record.save(using_db=conn)
+                else:
+                    updated = await AppUser.filter(
+                        id=payer_id, coins__gte=charge_amount
+                    ).using_db(conn).update(coins=AppUser.coins - charge_amount)
+                    if updated == 0:
+                        call_record.status = "ended"
+                        call_record.end_reason = "balance_empty"
+                        call_record.duration = duration_seconds
+                        call_record.total_fee = int(call_record.deducted_amount or 0)
+                        call_record.ended_at = now_local_naive()
+                        await call_record.save(using_db=conn)
+                        await _append_call_trace(
+                            call_record,
+                            phase="balance_empty",
+                            actor_user_id=int(payer_id),
+                            reason="balance_empty",
+                        )
+                        result_coins = payer.coins if payer else 0
+                        result_duration = duration_seconds
+                        result_deducted_minutes = int(call_record.deducted_minutes or 0)
+                        result_deducted_amount = int(call_record.deducted_amount or 0)
+                        result_code = 501
+                        result_is_fail = True
+                        result_msg = "余额不足，通话结束"
 
-        user = await AppUser.filter(id=caller_id).using_db(conn).first()
-        current_coins = user.coins if user else 0
+                    else:
+                        call_record.deducted_minutes = deducted_minutes + to_charge_minutes
+                        call_record.deducted_amount = (
+                            int(call_record.deducted_amount or 0) + charge_amount
+                        )
+                        call_record.duration = duration_seconds
+                        call_record.last_renew_at = now_local_naive()
+                        await call_record.save(using_db=conn)
+                        payer = await AppUser.filter(id=payer_id).using_db(conn).first()
+                        result_coins = payer.coins if payer else 0
+                        result_duration = duration_seconds
+                        result_deducted_minutes = int(call_record.deducted_minutes or 0)
+                        result_deducted_amount = int(call_record.deducted_amount or 0)
 
+            else:
+                # 无需扣费，只更新时间戳
+                call_record.duration = duration_seconds
+                call_record.last_renew_at = now_local_naive()
+                await call_record.save(using_db=conn)
+                payer = await AppUser.filter(id=payer_id).using_db(conn).first()
+                result_coins = payer.coins if payer else 0
+                result_duration = duration_seconds
+                result_deducted_minutes = int(call_record.deducted_minutes or 0)
+                result_deducted_amount = int(call_record.deducted_amount or 0)
+
+    # 事务块结束后返回
+    if result_is_fail:
+        return Fail(code=result_code, msg=result_msg)
     return Success(
         data=RenewLeaseOut(
-            coins=current_coins,
-            duration=duration_seconds,
-            deducted_minutes=int(call_record.deducted_minutes or 0),
-            deducted_amount=int(call_record.deducted_amount or 0),
-            msg="OK",
+            coins=result_coins or 0,
+            duration=result_duration,
+            deducted_minutes=result_deducted_minutes,
+            deducted_amount=result_deducted_amount,
+            msg=result_msg,
         ).model_dump()
     )
 
 
-@router.post("/call/end", summary="通话结束结算", dependencies=[DependAppAuth])
+@router.post("/call/end", summary="通话结束结算", dependencies=[Depends(DependAppAuth)])
 async def call_end(req_in: CallEndIn):
     user_id = CTX_APP_USER_ID.get()
 
@@ -592,21 +745,17 @@ async def call_end(req_in: CallEndIn):
             .first()
         )
         if not call_record:
-            user = await AppUser.filter(id=user_id).using_db(conn).first()
-            return Success(
-                data=CallEndOut(
-                    total_fee=0,
-                    coins=user.coins if user else 0,
-                    duration=0,
-                    next_status="ended",
-                    msg="通话已结束",
-                ).model_dump()
-            )
+            return Fail(code=404, msg="通话不存在或已结束")
 
         if user_id not in {int(call_record.caller_id), int(call_record.callee_id)}:
             return Fail(code=403, msg="无权结束该通话")
 
-        if call_record.status != "ended":
+        # B-3 修复：SELECT FOR UPDATE 后必须重新检查状态，
+        # 防止 watchdog 已在并发事务中关闭同一通话导致双重退款
+        if call_record.status == "ended":
+            # 已由 watchdog 或另一方结束，无需重复处理
+            pass
+        else:
             duration_seconds = _calc_duration_seconds(call_record)
             call_record.duration = duration_seconds
             free_seconds_before_billing = await _get_free_seconds_before_billing()
@@ -622,10 +771,13 @@ async def call_end(req_in: CallEndIn):
             payer_id = await _resolve_payer_id(call_record)
 
             if refund_amount > 0:
+                # 加行锁：防止并发退款导致重复到账
+                payer = await AppUser.filter(id=payer_id).using_db(conn).select_for_update().first()
                 await AppUser.filter(id=payer_id).using_db(conn).update(
                     coins=AppUser.coins + refund_amount
                 )
 
+            call_record.deducted_minutes = due_minutes
             call_record.total_fee = charged_amount
             call_record.status = "ended"
             call_record.end_reason = call_record.end_reason or "normal"
@@ -637,6 +789,19 @@ async def call_end(req_in: CallEndIn):
                 actor_user_id=int(user_id),
                 reason=call_record.end_reason,
             )
+            # W-2 修复：仅在本地处理结束流程时通知对方，避免 watchdog 已推送后重复推送
+            peer_id = (
+                int(call_record.callee_id)
+                if int(user_id) == int(call_record.caller_id)
+                else int(call_record.caller_id)
+            )
+            asyncio.create_task(_ws_push_call_ended_to_peer(
+                peer_id=peer_id,
+                caller_id=int(call_record.caller_id),
+                callee_id=int(call_record.callee_id),
+                call_id=int(call_record.id),
+                end_reason=call_record.end_reason,
+            ))
 
         user = await AppUser.filter(id=user_id).using_db(conn).first()
         final_coins = user.coins if user else 0
@@ -650,3 +815,97 @@ async def call_end(req_in: CallEndIn):
             msg="通话已结束",
         ).model_dump()
     )
+
+
+# ===== WebSocket 推送辅助函数（fire-and-forget） =====
+
+async def _ws_push_call_incoming(
+    callee_id: int,
+    call_id: int,
+    caller_id: int,
+    caller_name: str,
+    caller_avatar: str | None,
+    call_price: int,
+    left_seconds: int,
+) -> None:
+    try:
+        from app.websocket import events as ws_events
+        await ws_events.push_call_incoming(
+            callee_id=callee_id,
+            call_id=call_id,
+            caller_id=caller_id,
+            caller_name=caller_name,
+            caller_avatar=caller_avatar,
+            call_price=call_price,
+            left_seconds=left_seconds,
+        )
+    except Exception:  # noqa: BLE001
+        pass  # 静默忽略，不影响主流程
+
+
+async def _ws_push_call_accepted(caller_id: int, call_id: int) -> None:
+    try:
+        from app.websocket import events as ws_events
+        await ws_events.push_call_accepted(caller_id=caller_id, call_id=call_id)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+async def _ws_push_call_rejected(caller_id: int, call_id: int, reason: str | None = None) -> None:
+    try:
+        from app.websocket import events as ws_events
+        await ws_events.push_call_rejected(caller_id=caller_id, call_id=call_id, reason=reason)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+async def _ws_push_call_cancelled(callee_id: int, call_id: int, reason: str | None = None) -> None:
+    try:
+        from app.websocket import events as ws_events
+        await ws_events.push_call_cancelled(callee_id=callee_id, call_id=call_id, reason=reason)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+async def _ws_push_call_ended(
+    caller_id: int,
+    callee_id: int,
+    call_id: int,
+    end_reason: str | None = None,
+) -> None:
+    try:
+        from app.websocket import events as ws_events
+        await ws_events.push_call_ended(
+            caller_id=caller_id,
+            callee_id=callee_id,
+            call_id=call_id,
+            end_reason=end_reason,
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+
+async def _ws_push_call_ended_to_peer(
+    peer_id: int,
+    caller_id: int,
+    callee_id: int,
+    call_id: int,
+    end_reason: str | None = None,
+) -> None:
+    try:
+        from app.websocket.manager import get_manager
+
+        await get_manager().push_to_user(
+            user_id=peer_id,
+            event="call_ended",
+            data={
+                "call_id": call_id,
+                "caller_id": caller_id,
+                "callee_id": callee_id,
+                "end_reason": end_reason,
+                "ts": int(datetime.now().timestamp()),
+            },
+            critical=True,
+        )
+    except Exception:  # noqa: BLE001
+        pass
