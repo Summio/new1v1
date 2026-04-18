@@ -83,6 +83,36 @@ def _next_due_second(deducted_minutes: int, free_seconds_before_billing: int) ->
     return free_seconds_before_billing + max(0, deducted_minutes) * 60
 
 
+def _resolve_billing_free_seconds(raw_snapshot: int | None, default_seconds: int) -> int:
+    if raw_snapshot is None:
+        return max(0, int(default_seconds))
+    return max(0, int(raw_snapshot))
+
+
+def _resolve_payer_user_id(raw_snapshot: int | None) -> int | None:
+    if raw_snapshot is None:
+        return None
+    return int(raw_snapshot)
+
+
+async def _try_become_watchdog_leader() -> bool:
+    try:
+        from app.websocket.manager import try_acquire_watchdog_leader
+
+        return await try_acquire_watchdog_leader()
+    except Exception:
+        return False
+
+
+async def _refresh_watchdog_leader() -> bool:
+    try:
+        from app.websocket.manager import refresh_watchdog_leader
+
+        return await refresh_watchdog_leader()
+    except Exception:
+        return False
+
+
 async def _close_timeout_pending(config: WatchdogConfig) -> None:
     timeout_before = now_local_naive() - timedelta(
         seconds=config.ring_timeout_seconds
@@ -95,6 +125,7 @@ async def _close_timeout_pending(config: WatchdogConfig) -> None:
         return
 
     trace_service = CallTraceService()
+    updated_call_ids: list[int] = []
     # P-1: 单事务批量更新，避免逐条开事务的开销
     async with in_transaction() as conn:
         for call_id in call_ids:
@@ -108,16 +139,13 @@ async def _close_timeout_pending(config: WatchdogConfig) -> None:
             )
             if updated == 0:
                 continue
-
-            call_record = await CallRecord.filter(id=call_id).using_db(conn).first()
-            if not call_record:
-                continue
-
-            # P-1: 追踪写入移出事务，避免长事务持有行锁
+            updated_call_ids.append(int(call_id))
         # 事务已提交，追踪写入和 WebSocket 推送可安全异步执行
-    for call_id in call_ids:
+    for call_id in updated_call_ids:
         call_record = await CallRecord.filter(id=call_id).first()
         if call_record:
+            if call_record.status != "ended" or call_record.end_reason != "timeout":
+                continue
             await trace_service.append(
                 call_record=call_record,
                 phase="timeout",
@@ -150,7 +178,8 @@ async def _close_stale_ongoing(config: WatchdogConfig) -> None:
         await CallRecord.filter(id__in=list(ids), status="ongoing")
         .order_by("id")
         .values("id", "caller_id", "callee_id", "connected_at",
-                 "deducted_minutes", "deducted_amount", "call_price")
+                 "deducted_minutes", "deducted_amount", "call_price",
+                 "billing_free_seconds", "payer_user_id")
     )
     all_user_ids = set()
     for r in raw_records:
@@ -165,10 +194,12 @@ async def _close_stale_ongoing(config: WatchdogConfig) -> None:
 
     # P-6 修复：分批处理，每批 20 条记录，避免单事务持有过多行锁
     BATCH_SIZE = 20
+    charged_records: list[tuple[CallRecord, int]] = []  # (call_record, payer_id)
     for batch_start in range(0, len(raw_records), BATCH_SIZE):
         batch = raw_records[batch_start : batch_start + BATCH_SIZE]
-        batch_ended = await _process_stale_batch(config, batch, anchor_user_ids)
+        batch_ended, batch_charged = await _process_stale_batch(config, batch, anchor_user_ids)
         ended_records.extend(batch_ended)
+        charged_records.extend(batch_charged)
 
     # 追踪写入移出事务
     for call_record in ended_records:
@@ -181,14 +212,19 @@ async def _close_stale_ongoing(config: WatchdogConfig) -> None:
         # 推送 WebSocket 事件
         asyncio.create_task(_ws_push_call_balance_empty(call_record))
 
+    # 推送成功扣费的余额更新（fire-and-forget）
+    for call_record, payer_id in charged_records:
+        asyncio.create_task(_ws_push_balance_updated_for_charge(payer_id))
+
 
 async def _process_stale_batch(
     config: WatchdogConfig,
     batch: list[dict],
     anchor_user_ids: set[int],
-) -> list[CallRecord]:
-    """处理一批通话记录，单独事务，返回结束的记录列表"""
+) -> tuple[list[CallRecord], list[tuple[CallRecord, int]]]:
+    """处理一批通话记录，单独事务，返回(结束的记录列表, 成功扣费的记录列表)"""
     ended_records: list[CallRecord] = []
+    charged_records: list[tuple[CallRecord, int]] = []
     async with in_transaction() as conn:
         for r in batch:
             call_record = (
@@ -212,9 +248,13 @@ async def _process_stale_batch(
                     ).total_seconds(),
                 )
             )
+            free_seconds_before_billing = _resolve_billing_free_seconds(
+                getattr(call_record, "billing_free_seconds", None),
+                config.free_seconds_before_billing,
+            )
             deducted_minutes = int(call_record.deducted_minutes or 0)
-            due_minutes = _calc_due_minutes(duration, config.free_seconds_before_billing)
-            next_due = _next_due_second(deducted_minutes, config.free_seconds_before_billing)
+            due_minutes = _calc_due_minutes(duration, free_seconds_before_billing)
+            next_due = _next_due_second(deducted_minutes, free_seconds_before_billing)
             overdue_seconds = duration - next_due
 
             if due_minutes <= deducted_minutes:
@@ -222,21 +262,23 @@ async def _process_stale_batch(
             if overdue_seconds < config.renew_grace_seconds:
                 continue
 
-            caller_id = int(r["caller_id"])
-            callee_id = int(r["callee_id"])
-            caller_is_anchor = caller_id in anchor_user_ids
-            callee_is_anchor = callee_id in anchor_user_ids
+            payer_id = _resolve_payer_user_id(getattr(call_record, "payer_user_id", None))
+            if payer_id is None:
+                caller_id = int(r["caller_id"])
+                callee_id = int(r["callee_id"])
+                caller_is_anchor = caller_id in anchor_user_ids
+                callee_is_anchor = callee_id in anchor_user_ids
 
-            if caller_is_anchor and not callee_is_anchor:
-                payer_id = callee_id
-            elif callee_is_anchor and not caller_is_anchor:
-                payer_id = caller_id
-            elif not caller_is_anchor and not callee_is_anchor:
-                payer_id = caller_id
-            else:
-                call_record.last_renew_at = now_local_naive()
-                await call_record.save(using_db=conn)
-                continue
+                if caller_is_anchor and not callee_is_anchor:
+                    payer_id = callee_id
+                elif callee_is_anchor and not caller_is_anchor:
+                    payer_id = caller_id
+                elif not caller_is_anchor and not callee_is_anchor:
+                    payer_id = caller_id
+                else:
+                    call_record.last_renew_at = now_local_naive()
+                    await call_record.save(using_db=conn)
+                    continue
 
             to_charge_minutes = due_minutes - deducted_minutes
             charge_amount = to_charge_minutes * int(call_record.call_price or 0)
@@ -256,8 +298,10 @@ async def _process_stale_batch(
                 call_record.ended_at = now_local_naive()
                 await call_record.save(using_db=conn)
                 logger.warning(
-                    "watchdog closed call_id={} (balance insufficient) duration={}s",
+                    "watchdog closed call_id={} caller_id={} callee_id={} (balance insufficient) duration={}s",
                     r["id"],
+                    r["caller_id"],
+                    r["callee_id"],
                     duration,
                 )
                 ended_records.append(call_record)
@@ -275,8 +319,10 @@ async def _process_stale_batch(
                 call_record.ended_at = now_local_naive()
                 await call_record.save(using_db=conn)
                 logger.warning(
-                    "watchdog closed call_id={} (conditional update failed) duration={}s",
+                    "watchdog closed call_id={} caller_id={} callee_id={} (conditional update failed) duration={}s",
                     r["id"],
+                    r["caller_id"],
+                    r["callee_id"],
                     duration,
                 )
                 ended_records.append(call_record)
@@ -293,8 +339,10 @@ async def _process_stale_batch(
                 to_charge_minutes,
                 charge_amount,
             )
+            # 记录成功扣费的记录，用于推送余额更新
+            charged_records.append((call_record, payer_id))
 
-    return ended_records
+    return ended_records, charged_records
 
 
 async def _ws_push_call_timeout(call_record: CallRecord) -> None:
@@ -323,19 +371,34 @@ async def _ws_push_call_balance_empty(call_record: CallRecord) -> None:
         logger.warning("ws push call_balance_empty failed: {}", str(e))
 
 
+async def _ws_push_balance_updated_for_charge(payer_id: int) -> None:
+    """Watchdog 扣费成功后推送余额更新给付费方（fire-and-forget）。"""
+    try:
+        from app.websocket import events as ws_events
+        from app.models import AppUser
+
+        payer = await AppUser.filter(id=payer_id).first()
+        if payer:
+            await ws_events.push_balance_update(
+                user_id=payer_id,
+                coins=payer.coins,
+                diamonds=payer.diamonds,
+            )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("ws push balance_updated for charge failed: {}", str(e))
+
+
 async def run_call_watchdog(stop_event: asyncio.Event) -> None:
     logger.info("call watchdog started")
+
+    # H2 修复：连续续期失败计数，用于 leader 丢失告警
+    _leader_refresh_fail_count = 0
+    _MAX_REFRESH_FAIL_BEFORE_ALERT = 3
+
     try:
         # 多 worker 部署下，只有 leader worker 执行 watchdog 逻辑
         # leader 通过 Redis SET NX EX 保证唯一性，TTL 60s 作为兜底
-        async def try_become_leader():
-            try:
-                from app.websocket.manager import try_acquire_watchdog_leader, refresh_watchdog_leader
-                return await try_acquire_watchdog_leader()
-            except Exception:
-                return False
-
-        is_leader = await try_become_leader()
+        is_leader = await _try_become_watchdog_leader()
         if is_leader:
             logger.info("call watchdog: acquired leader")
         else:
@@ -355,17 +418,28 @@ async def run_call_watchdog(stop_event: asyncio.Event) -> None:
                     await _close_timeout_pending(config)
                     await _close_stale_ongoing(config)
                     # 续期 leader 身份
-                    if not await refresh_watchdog_leader():
+                    if not await _refresh_watchdog_leader():
                         # leader 身份丢失，重新竞争
-                        is_leader = await try_become_leader()
+                        is_leader = await _try_become_watchdog_leader()
+                        _leader_refresh_fail_count += 1
                         if is_leader:
+                            _leader_refresh_fail_count = 0
                             logger.info("call watchdog: re-acquired leader")
                         else:
+                            # H2 修复：连续 N 次续期失败后记录 WARNING 供监控告警
+                            if _leader_refresh_fail_count >= _MAX_REFRESH_FAIL_BEFORE_ALERT:
+                                logger.warning(
+                                    "call watchdog: leader renewal failed {} times consecutively",
+                                    _leader_refresh_fail_count,
+                                )
                             logger.info("call watchdog: lost leader, switching to follower")
+                    else:
+                        _leader_refresh_fail_count = 0
                 else:
                     # Follower 尝试竞争 leader
-                    if await try_become_leader():
+                    if await _try_become_watchdog_leader():
                         is_leader = True
+                        _leader_refresh_fail_count = 0
                         logger.info("call watchdog: acquired leader")
                     else:
                         # W-5 修复：随机退避避免惊群效应
