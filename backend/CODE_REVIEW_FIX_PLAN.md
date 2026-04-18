@@ -30,13 +30,11 @@
 
 ## P1
 
-### W-3：`dialing` API 移除主播在线检查 — 需确认业务意图
-- **文件**：`backend/app/api/v1/app/call.py:248-252`
-- **问题**：committed 版本移除了 `is_online=True` 条件，离线主播可被呼叫。
-- **决策**：
-  - **若允许呼叫离线主播**：当前行为可接受，WebSocket 推送失败主叫感知超时不接通
-  - **若要求主播必须在线**：恢复 `is_online=True` 条件
-- **状态**：TODO（需业务确认）
+### W-3：`dialing` API 移除主播在线检查 — 已修复
+- **文件**：`backend/app/api/v1/app/call.py:248-256`
+- **决策**：不允许呼叫离线主播
+- **修复**：在主播查询后添加 `if not anchor.is_online: return Fail(code=400, msg="主播当前不在线，请稍后再试")`
+- **状态**：✅ DONE（commit `45c84ea`）
 
 ---
 
@@ -101,7 +99,7 @@
 |---|------|------|--------|------|------|
 | 1 | W-1 | WebSocket 重连竞态 `_isConnecting` | P0 | DONE | |
 | 2 | W-2 | `call_end` 双重推送 `call_ended` | P0 | DONE | |
-| 3 | W-3 | `dialing` API 移除主播在线检查 | P1 | 需业务确认 | |
+| 3 | W-3 | `dialing` API 移除主播在线检查 | P1 | ✅ DONE | `45c84ea` |
 | 4 | W-4 | Redis Pub/Sub 关键事件无监控 | P1 | DONE | |
 | 5 | W-5 | watchdog follower 无退避 | P1 | DONE | |
 | 6 | W-6 | 通话时长本地计时漂移 | P1 | DONE | |
