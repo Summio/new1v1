@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 
 from app.core.app_auth import DependAppAuth
 from app.core.ctx import CTX_APP_USER_ID, CTX_APP_USER_OBJ
+from app.log import logger
 from app.core.call_reject_protect import calc_left_seconds, should_block_rejected_call
 from app.core.time_utils import now_local_naive, to_utc_aware
 from app.models import Anchor, AppUser, CallRecord
@@ -547,7 +548,7 @@ async def call_end(req_in: CallEndIn):
 
             if refund_amount > 0:
                 # 加行锁：防止并发退款导致重复到账
-                payer = await AppUser.filter(id=payer_id).using_db(conn).select_for_update().first()
+                await AppUser.filter(id=payer_id).using_db(conn).select_for_update().first()
                 await AppUser.filter(id=payer_id).using_db(conn).update(
                     coins=AppUser.coins + refund_amount
                 )

@@ -289,7 +289,6 @@ async def test_stop_pubsub_resets_pubsub_running_flag():
 @pytest.mark.asyncio
 async def test_start_pubsub_idempotent_when_already_started():
     """重复调用 start_pubsub 不应启动多个监听"""
-    from app.websocket import manager as manager_module
     from app.websocket.manager import ConnectionManager
 
     manager = ConnectionManager()
