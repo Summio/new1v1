@@ -14,13 +14,8 @@ from app.schemas.app_api import (
     CallActionIn,
     CallEndIn,
     CallEndOut,
-    CallSessionActionsOut,
-    CallStatusOut,
-    CurrentCallSessionOut,
     DialingIn,
     DialingOut,
-    RenewLeaseIn,
-    RenewLeaseOut,
 )
 from app.schemas.base import Fail, Success
 from tortoise.expressions import Q
@@ -121,67 +116,6 @@ def _calc_duration_seconds(call_record: CallRecord) -> int:
     return max(0, int(elapsed))
 
 
-def _to_iso(dt: datetime | None) -> str | None:
-    if dt is None:
-        return None
-    return to_utc_aware(dt).isoformat()
-
-
-async def _build_call_session_out(
-    *,
-    user_id: int,
-    call_record: CallRecord | None,
-) -> CurrentCallSessionOut:
-    if call_record is None:
-        return CurrentCallSessionOut()
-
-    await _mark_timeout_if_needed(call_record)
-    await call_record.refresh_from_db()
-
-    caller_id = int(call_record.caller_id)
-    callee_id = int(call_record.callee_id)
-    is_caller = user_id == caller_id
-    role = "caller" if is_caller else "callee"
-    peer_user_id = callee_id if is_caller else caller_id
-    peer = await AppUser.filter(id=peer_user_id).first()
-    peer_nickname = (
-        (peer.nickname or peer.username or f"用户{peer_user_id}")
-        if peer
-        else f"用户{peer_user_id}"
-    )
-    peer_avatar = peer.avatar if peer else None
-
-    left_seconds = 0
-    if call_record.status == "pending":
-        created_at = to_utc_aware(call_record.created_at)
-        elapsed = int((to_utc_aware(now_local_naive()) - created_at).total_seconds())
-        left_seconds = max(0, CALL_RING_TIMEOUT_SECONDS - elapsed)
-
-    actions = CallSessionActionsOut(
-        can_accept=(call_record.status == "pending" and role == "callee"),
-        can_reject=(call_record.status == "pending" and role == "callee"),
-        can_cancel=(call_record.status == "pending" and role == "caller"),
-        can_hangup=(call_record.status == "ongoing"),
-    )
-
-    return CurrentCallSessionOut(
-        call_id=call_record.id,
-        status=call_record.status,
-        role=role,
-        end_reason=call_record.end_reason,
-        peer_user_id=peer_user_id,
-        peer_nickname=peer_nickname,
-        peer_avatar=peer_avatar,
-        call_price=int(call_record.call_price or 0),
-        ring_timeout_seconds=CALL_RING_TIMEOUT_SECONDS,
-        left_seconds=left_seconds,
-        created_at=_to_iso(call_record.created_at),
-        connected_at=_to_iso(call_record.connected_at),
-        duration=_calc_duration_seconds(call_record),
-        actions=actions,
-    )
-
-
 async def _get_free_seconds_before_billing() -> int:
     from app.models.system_config import SystemConfig
 
@@ -238,6 +172,20 @@ async def _resolve_payer_id(call_record: CallRecord) -> int:
     return 0
 
 
+def _resolve_billing_free_seconds(call_record: CallRecord, default_seconds: int) -> int:
+    snapshot_seconds = getattr(call_record, "billing_free_seconds", None)
+    if snapshot_seconds is None:
+        return max(0, int(default_seconds))
+    return max(0, int(snapshot_seconds))
+
+
+async def _resolve_payer_id_with_snapshot(call_record: CallRecord) -> int:
+    snapshot_payer_id = getattr(call_record, "payer_user_id", None)
+    if snapshot_payer_id is not None:
+        return int(snapshot_payer_id)
+    return await _resolve_payer_id(call_record)
+
+
 @router.post("/dialing", summary="发起呼叫(余额预检)", dependencies=[Depends(DependAppAuth)])
 async def dialing(req_in: DialingIn):
     caller_id = CTX_APP_USER_ID.get()
@@ -252,8 +200,9 @@ async def dialing(req_in: DialingIn):
     if not anchor:
         return Fail(code=404, msg="主播不存在或未认证")
 
-    # W-3 修复：主播必须在线才能被呼叫
-    if not anchor.is_online:
+    # 使用 Redis 在线状态检查（WebSocket 方式）
+    from app.websocket.presence import is_online as check_anchor_online
+    if not await check_anchor_online(anchor.app_user_id):
         return Fail(code=400, msg="主播当前不在线，请稍后再试")
 
     # 禁止自呼叫
@@ -383,62 +332,6 @@ async def dialing(req_in: DialingIn):
     )
 
 
-@router.get("/call/session/current", summary="查询当前通话会话", dependencies=[Depends(DependAppAuth)])
-async def current_call_session():
-    user_id = CTX_APP_USER_ID.get()
-    active_record = (
-        await CallRecord.filter(
-            (Q(caller_id=user_id) | Q(callee_id=user_id)),
-            status__in=["pending", "ongoing"],
-        )
-        .order_by("-id")
-        .first()
-    )
-
-    if active_record:
-        session = await _build_call_session_out(user_id=user_id, call_record=active_record)
-        return Success(data=session.model_dump())
-
-    ended_record = (
-        await CallRecord.filter(
-            (Q(caller_id=user_id) | Q(callee_id=user_id)),
-            status="ended",
-        )
-        .order_by("-id")
-        .first()
-    )
-    session = await _build_call_session_out(user_id=user_id, call_record=ended_record)
-    return Success(data=session.model_dump())
-
-
-@router.get("/call/status", summary="查询通话状态", dependencies=[Depends(DependAppAuth)])
-async def call_status(call_id: int):
-    user_id = CTX_APP_USER_ID.get()
-
-    call_record = await CallRecord.filter(id=call_id).first()
-    if not call_record:
-        return Fail(code=404, msg="通话不存在")
-
-    if user_id not in {int(call_record.caller_id), int(call_record.callee_id)}:
-        return Fail(code=403, msg="无权查看该通话")
-
-    await _mark_timeout_if_needed(call_record)
-    await call_record.refresh_from_db()
-    duration = _calc_duration_seconds(call_record)
-
-    return Success(
-        data=CallStatusOut(
-            call_id=call_record.id,
-            caller_id=int(call_record.caller_id),
-            callee_id=int(call_record.callee_id),
-            status=call_record.status,
-            created_at=to_utc_aware(call_record.created_at).isoformat() if call_record.created_at else None,
-            end_reason=call_record.end_reason,
-            duration=duration,
-        ).model_dump()
-    )
-
-
 @router.post("/call/accept", summary="接听通话", dependencies=[Depends(DependAppAuth)])
 async def accept_call(req_in: CallActionIn):
     user_id = CTX_APP_USER_ID.get()
@@ -490,6 +383,8 @@ async def accept_call(req_in: CallActionIn):
         call_record.deducted_amount = 0
         call_record.deducted_minutes = 0
         call_record.last_renew_at = None
+        call_record.billing_free_seconds = await _get_free_seconds_before_billing()
+        call_record.payer_user_id = await _resolve_payer_id(call_record)
         call_record.ended_at = None
         await call_record.save(using_db=conn)
         await _append_call_trace(
@@ -595,151 +490,13 @@ async def cancel_call(req_in: CallActionIn):
     )
 
 
-@router.post("/call/renew", summary="通话续租扣费", dependencies=[Depends(DependAppAuth)])
-async def renew_call(req_in: RenewLeaseIn):
-    caller_id = CTX_APP_USER_ID.get()
-
-    # 结果收集：避免在事务块内 return
-    result_coins: int | None = None
-    result_duration: int = 0
-    result_deducted_minutes: int = 0
-    result_deducted_amount: int = 0
-    result_msg: str = "OK"
-    result_code: int = 200
-    result_is_fail: bool = False
-
-    async with in_transaction() as conn:
-        call_record = (
-            await CallRecord.filter(id=req_in.call_id, status="ongoing")
-            .using_db(conn)
-            .select_for_update()
-            .first()
-        )
-        # L-6 修复：SELECT FOR UPDATE 后重新检查状态，防止 call_end 已关闭通话后覆盖
-        if not call_record or call_record.status != "ongoing":
-            result_code = 404
-            result_is_fail = True
-            result_msg = "通话不存在或已结束"
-
-        elif caller_id not in {int(call_record.caller_id), int(call_record.callee_id)}:
-            result_code = 403
-            result_is_fail = True
-            result_msg = "无权续租该通话"
-
-        else:
-            duration_seconds = _calc_duration_seconds(call_record)
-            free_seconds_before_billing = await _get_free_seconds_before_billing()
-            due_minutes = _calc_due_minutes_with_free(
-                duration_seconds,
-                free_seconds_before_billing,
-            )
-            deducted_minutes = int(call_record.deducted_minutes or 0)
-            to_charge_minutes = max(0, due_minutes - deducted_minutes)
-            payer_id = await _resolve_payer_id(call_record)
-
-            if payer_id == 0:
-                # 双主播不计费
-                call_record.duration = duration_seconds
-                call_record.last_renew_at = now_local_naive()
-                await call_record.save(using_db=conn)
-                payer = await AppUser.filter(id=caller_id).using_db(conn).first()
-                result_coins = payer.coins if payer else 0
-                result_duration = duration_seconds
-                result_deducted_minutes = int(call_record.deducted_minutes or 0)
-                result_deducted_amount = int(call_record.deducted_amount or 0)
-                result_msg = "主播通话，不计费"
-
-            elif to_charge_minutes > 0:
-                charge_amount = to_charge_minutes * int(call_record.call_price or 0)
-                payer = await AppUser.filter(id=payer_id).using_db(conn).select_for_update().first()
-                if not payer or payer.coins < charge_amount:
-                    call_record.status = "ended"
-                    call_record.end_reason = "balance_empty"
-                    call_record.duration = duration_seconds
-                    call_record.total_fee = int(call_record.deducted_amount or 0)
-                    call_record.ended_at = now_local_naive()
-                    await call_record.save(using_db=conn)
-                    await _append_call_trace(
-                        call_record,
-                        phase="balance_empty",
-                        actor_user_id=int(payer_id),
-                        reason="balance_empty",
-                    )
-                    result_coins = payer.coins if payer else 0
-                    result_duration = duration_seconds
-                    result_deducted_minutes = int(call_record.deducted_minutes or 0)
-                    result_deducted_amount = int(call_record.deducted_amount or 0)
-                    result_code = 501
-                    result_is_fail = True
-                    result_msg = "余额不足，通话结束"
-
-                else:
-                    updated = await AppUser.filter(
-                        id=payer_id, coins__gte=charge_amount
-                    ).using_db(conn).update(coins=AppUser.coins - charge_amount)
-                    if updated == 0:
-                        call_record.status = "ended"
-                        call_record.end_reason = "balance_empty"
-                        call_record.duration = duration_seconds
-                        call_record.total_fee = int(call_record.deducted_amount or 0)
-                        call_record.ended_at = now_local_naive()
-                        await call_record.save(using_db=conn)
-                        await _append_call_trace(
-                            call_record,
-                            phase="balance_empty",
-                            actor_user_id=int(payer_id),
-                            reason="balance_empty",
-                        )
-                        result_coins = payer.coins if payer else 0
-                        result_duration = duration_seconds
-                        result_deducted_minutes = int(call_record.deducted_minutes or 0)
-                        result_deducted_amount = int(call_record.deducted_amount or 0)
-                        result_code = 501
-                        result_is_fail = True
-                        result_msg = "余额不足，通话结束"
-
-                    else:
-                        call_record.deducted_minutes = deducted_minutes + to_charge_minutes
-                        call_record.deducted_amount = (
-                            int(call_record.deducted_amount or 0) + charge_amount
-                        )
-                        call_record.duration = duration_seconds
-                        call_record.last_renew_at = now_local_naive()
-                        await call_record.save(using_db=conn)
-                        payer = await AppUser.filter(id=payer_id).using_db(conn).first()
-                        result_coins = payer.coins if payer else 0
-                        result_duration = duration_seconds
-                        result_deducted_minutes = int(call_record.deducted_minutes or 0)
-                        result_deducted_amount = int(call_record.deducted_amount or 0)
-
-            else:
-                # 无需扣费，只更新时间戳
-                call_record.duration = duration_seconds
-                call_record.last_renew_at = now_local_naive()
-                await call_record.save(using_db=conn)
-                payer = await AppUser.filter(id=payer_id).using_db(conn).first()
-                result_coins = payer.coins if payer else 0
-                result_duration = duration_seconds
-                result_deducted_minutes = int(call_record.deducted_minutes or 0)
-                result_deducted_amount = int(call_record.deducted_amount or 0)
-
-    # 事务块结束后返回
-    if result_is_fail:
-        return Fail(code=result_code, msg=result_msg)
-    return Success(
-        data=RenewLeaseOut(
-            coins=result_coins or 0,
-            duration=result_duration,
-            deducted_minutes=result_deducted_minutes,
-            deducted_amount=result_deducted_amount,
-            msg=result_msg,
-        ).model_dump()
-    )
-
-
 @router.post("/call/end", summary="通话结束结算", dependencies=[Depends(DependAppAuth)])
 async def call_end(req_in: CallEndIn):
     user_id = CTX_APP_USER_ID.get()
+
+    # 用于事务结束后推送余额更新
+    _payer_id_for_balance_push: int | None = None
+    _refund_for_balance_push: int = 0
 
     async with in_transaction() as conn:
         call_record = (
@@ -762,7 +519,10 @@ async def call_end(req_in: CallEndIn):
         else:
             duration_seconds = _calc_duration_seconds(call_record)
             call_record.duration = duration_seconds
-            free_seconds_before_billing = await _get_free_seconds_before_billing()
+            free_seconds_before_billing = _resolve_billing_free_seconds(
+                call_record,
+                await _get_free_seconds_before_billing(),
+            )
             due_minutes = (
                 _calc_due_minutes_with_free(duration_seconds, free_seconds_before_billing)
                 if call_record.status == "ongoing"
@@ -772,7 +532,18 @@ async def call_end(req_in: CallEndIn):
             deducted_amount = int(call_record.deducted_amount or 0)
             refund_amount = max(0, deducted_amount - actual_fee)
             charged_amount = deducted_amount - refund_amount
-            payer_id = await _resolve_payer_id(call_record)
+
+            # P0-3 修复：金额守恒下限校验，防止 deducted_amount 异常时 total_fee 为负
+            if charged_amount < 0:
+                logger.error(
+                    "call_end charged_amount negative: call_id={} deducted_amount={} actual_fee={}",
+                    call_record.id,
+                    deducted_amount,
+                    actual_fee,
+                )
+                charged_amount = 0
+
+            payer_id = await _resolve_payer_id_with_snapshot(call_record)
 
             if refund_amount > 0:
                 # 加行锁：防止并发退款导致重复到账
@@ -780,6 +551,9 @@ async def call_end(req_in: CallEndIn):
                 await AppUser.filter(id=payer_id).using_db(conn).update(
                     coins=AppUser.coins + refund_amount
                 )
+                # 记录下来，事务结束后推送余额更新
+                _payer_id_for_balance_push = payer_id
+                _refund_for_balance_push = refund_amount
 
             call_record.deducted_minutes = due_minutes
             call_record.total_fee = charged_amount
@@ -809,6 +583,12 @@ async def call_end(req_in: CallEndIn):
 
         user = await AppUser.filter(id=user_id).using_db(conn).first()
         final_coins = user.coins if user else 0
+
+    # 事务结束后，如有退款则推送余额更新给付费方
+    if _payer_id_for_balance_push is not None and _refund_for_balance_push > 0:
+        asyncio.create_task(_ws_push_balance_updated_for_refund(
+            payer_id=_payer_id_for_balance_push,
+        ))
 
     return Success(
         data=CallEndOut(
@@ -911,5 +691,21 @@ async def _ws_push_call_ended_to_peer(
             },
             critical=True,
         )
+    except Exception:  # noqa: BLE001
+        pass
+
+async def _ws_push_balance_updated_for_refund(payer_id: int) -> None:
+    """通话结束后推送退款后的余额给付费方（fire-and-forget）。"""
+    try:
+        from app.websocket import events as ws_events
+        from app.models import AppUser
+
+        payer = await AppUser.filter(id=payer_id).first()
+        if payer:
+            await ws_events.push_balance_update(
+                user_id=payer_id,
+                coins=payer.coins,
+                diamonds=payer.diamonds,
+            )
     except Exception:  # noqa: BLE001
         pass
