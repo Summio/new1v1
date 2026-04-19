@@ -8,12 +8,14 @@ from app.models import AppUser, CallRecord
 from app.models.system_config import SystemConfig
 from app.core.time_utils import now_local_naive, to_utc_aware
 from app.services.call_trace_service import CallTraceService
+from tortoise.expressions import F
 from tortoise.transactions import in_transaction
 
 FREE_SECONDS_BEFORE_BILLING = 10
 DEFAULT_POLL_SECONDS = 5
 DEFAULT_RING_TIMEOUT_SECONDS = 30
-DEFAULT_RENEW_GRACE_SECONDS = 25
+DEFAULT_RENEW_GRACE_SECONDS = 5
+MAX_RENEW_GRACE_SECONDS = 5
 MAX_WATCHDOG_SECONDS = 600
 MIN_WATCHDOG_SECONDS = 1
 MAX_WATCHDOG_BATCH_SIZE = 100
@@ -44,6 +46,14 @@ def _clamp_seconds(value: int) -> int:
     return value
 
 
+def _clamp_renew_grace_seconds(value: int) -> int:
+    if value < 0:
+        return 0
+    if value > MAX_RENEW_GRACE_SECONDS:
+        return MAX_RENEW_GRACE_SECONDS
+    return value
+
+
 async def _load_watchdog_config() -> WatchdogConfig:
     poll_raw = await SystemConfig.get_value(
         "call_watchdog_poll_seconds",
@@ -66,7 +76,7 @@ async def _load_watchdog_config() -> WatchdogConfig:
         ring_timeout_seconds=_clamp_seconds(
             _safe_parse_int(ring_raw, DEFAULT_RING_TIMEOUT_SECONDS)
         ),
-        renew_grace_seconds=_clamp_seconds(
+        renew_grace_seconds=_clamp_renew_grace_seconds(
             _safe_parse_int(grace_raw, DEFAULT_RENEW_GRACE_SECONDS)
         ),
         free_seconds_before_billing=max(0, _safe_parse_int(free_raw, FREE_SECONDS_BEFORE_BILLING)),
@@ -76,11 +86,14 @@ async def _load_watchdog_config() -> WatchdogConfig:
 def _calc_due_minutes(duration_seconds: int, free_seconds_before_billing: int) -> int:
     if duration_seconds < free_seconds_before_billing:
         return 0
-    return ((duration_seconds - free_seconds_before_billing) // 60) + 1
+    return (duration_seconds + 59) // 60
 
 
 def _next_due_second(deducted_minutes: int, free_seconds_before_billing: int) -> int:
-    return free_seconds_before_billing + max(0, deducted_minutes) * 60
+    normalized_deducted = max(0, deducted_minutes)
+    if normalized_deducted == 0:
+        return free_seconds_before_billing
+    return normalized_deducted * 60
 
 
 def _resolve_billing_free_seconds(raw_snapshot: int | None, default_seconds: int) -> int:
@@ -93,6 +106,10 @@ def _resolve_payer_user_id(raw_snapshot: int | None) -> int | None:
     if raw_snapshot is None:
         return None
     return int(raw_snapshot)
+
+
+def _build_coins_decrement_expr(amount: int):
+    return F("coins") - int(amount)
 
 
 async def _try_become_watchdog_leader() -> bool:
@@ -309,7 +326,7 @@ async def _process_stale_batch(
 
             updated = await AppUser.filter(
                 id=payer_id, coins__gte=charge_amount,
-            ).using_db(conn).update(coins=AppUser.coins - charge_amount)
+            ).using_db(conn).update(coins=_build_coins_decrement_expr(charge_amount))
             if updated == 0:
                 call_record.status = "ended"
                 call_record.end_reason = "balance_empty"

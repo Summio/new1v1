@@ -15,6 +15,15 @@ def test_resolve_billing_free_seconds_fallback_to_default() -> None:
     assert call_api._resolve_billing_free_seconds(record, 10) == 10
 
 
+def test_calc_due_minutes_with_free_zero_when_under_free_seconds() -> None:
+    assert call_api._calc_due_minutes_with_free(duration_seconds=9, free_seconds_before_billing=10) == 0
+
+
+def test_calc_due_minutes_with_free_rounds_up_by_total_duration_after_gate() -> None:
+    assert call_api._calc_due_minutes_with_free(duration_seconds=12, free_seconds_before_billing=10) == 1
+    assert call_api._calc_due_minutes_with_free(duration_seconds=61, free_seconds_before_billing=10) == 2
+
+
 @pytest.mark.asyncio
 async def test_resolve_payer_id_with_snapshot_prefers_snapshot() -> None:
     record = SimpleNamespace(payer_user_id=2001)

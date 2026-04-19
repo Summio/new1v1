@@ -16,6 +16,7 @@ from app.schemas.app_api import (
 )
 from app.schemas.base import Fail, Success
 from app.core.redis import get_redis
+from tortoise.expressions import F
 from tortoise.transactions import in_transaction
 
 router = APIRouter()
@@ -117,7 +118,7 @@ async def recharge_callback(order_no: str):
 
         # 加钻石：同一事务内更新用户余额
         await AppUser.filter(id=order.user_id).using_db(conn).update(
-            diamonds=AppUser.diamonds + order.amount
+            diamonds=F("diamonds") + order.amount
         )
         order.status = "paid"
         await order.save(using_db=conn, update_fields=["status"])
@@ -178,8 +179,8 @@ async def withdraw_apply(req_in: WithdrawApplyIn):
 
             # 冻结钻石：减少可用 + 增加冻结
             await AppUser.filter(id=user_id).using_db(conn).update(
-                diamonds=AppUser.diamonds - req_in.amount,
-                frozen_diamonds=AppUser.frozen_diamonds + req_in.amount,
+                diamonds=F("diamonds") - req_in.amount,
+                frozen_diamonds=F("frozen_diamonds") + req_in.amount,
             )
 
             # 创建提现申请
@@ -227,12 +228,6 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
     # P-2 修复：UNION ALL 合并所有表，单次 DB 查询 + ORDER BY 做分页，消除多次查询和内存排序
     from tortoise import Tortoise
 
-    type_map = {
-        "recharge": "'recharge'",
-        "call": "'call'",
-        "gift": "'gift'",
-        "withdraw": "'withdraw'",
-    }
     union_parts = []
     params: list = [user_id, user_id, user_id, user_id, user_id, user_id, user_id, user_id]
 

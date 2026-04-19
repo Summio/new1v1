@@ -22,7 +22,7 @@ app_router = APIRouter()
 app_router.include_router(register_router, prefix="")
 # user_router: /login 无需认证，/user/info 需要 DependAppAuth
 app_router.include_router(user_router, prefix="")
-app_router.include_router(bootstrap_router, prefix="", dependencies=[Depends(DependAppAuth)])
+app_router.include_router(bootstrap_router, prefix="")
 app_router.include_router(anchor_router, prefix="", dependencies=[Depends(DependAppAuth)])
 app_router.include_router(anchor_apply_router, prefix="", dependencies=[Depends(DependAppAuth)])
 app_router.include_router(call_router, prefix="", dependencies=[Depends(DependAppAuth)])

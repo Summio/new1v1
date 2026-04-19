@@ -43,7 +43,7 @@ class PresenceEvent {
 class _MainShellState extends ConsumerState<MainShell>
     with WidgetsBindingObserver {
   final IMService _imService = IMService();
-  bool _incomingPageShowing = false;
+  bool _incomingRouteOpening = false;
   String? _lastHandledIncomingKey;
   int _imUnreadCount = 0;
   void Function(int)? _imUnreadListener;
@@ -54,6 +54,11 @@ class _MainShellState extends ConsumerState<MainShell>
   CallSessionPayload? _pendingIncomingWhenBackground;
   String? _lastMatchedLocation;
   StreamSubscription<WsEvent>? _wsSubscription;
+
+  bool _shouldGuardIncomingRouteByRole() {
+    // 关键：来电互斥保护仅用于非主播场景，主播来电不应被该标记阻断。
+    return ref.read(authProvider).appRole != 'anchor';
+  }
 
   void _log(String message) {
     debugPrint('[INCOMING_FLOW] $message');
@@ -204,7 +209,7 @@ class _MainShellState extends ConsumerState<MainShell>
   }
 
   Future<void> _openPendingIncomingOnResume() async {
-    if (_incomingPageShowing) return;
+    if (_shouldGuardIncomingRouteByRole() && _incomingRouteOpening) return;
     final pending = _pendingIncomingWhenBackground;
     if (pending == null) return;
     _pendingIncomingWhenBackground = null;
@@ -212,14 +217,14 @@ class _MainShellState extends ConsumerState<MainShell>
   }
 
   Future<void> _openIncomingCallPage(CallSessionPayload payload) async {
-    if (_incomingPageShowing) return;
+    if (_shouldGuardIncomingRouteByRole() && _incomingRouteOpening) return;
     final dedupKey = _incomingDedupKey(payload);
     if (dedupKey != null && _lastHandledIncomingKey == dedupKey) return;
     if (!mounted || payload.callId == null || payload.peerUserId == null) {
       return;
     }
 
-    _incomingPageShowing = true;
+    _incomingRouteOpening = true;
     _lastHandledIncomingKey = dedupKey;
     try {
       final callUri = Uri(
@@ -232,11 +237,12 @@ class _MainShellState extends ConsumerState<MainShell>
           'leftSeconds': payload.leftSeconds.toString(),
         },
       );
-      await context.push(callUri.toString());
+      // 关键：不等待 push Future，全流程去重依赖 call_id；避免路由替换场景下 Future 不回调导致后续来电被永久拦截。
+      unawaited(context.push(callUri.toString()));
     } catch (e) {
       _log('open incoming page error: $e');
     } finally {
-      _incomingPageShowing = false;
+      _incomingRouteOpening = false;
     }
   }
 
@@ -280,7 +286,7 @@ class _MainShellState extends ConsumerState<MainShell>
 
   void _handleWsIncomingCall(Map<String, dynamic> data) {
     final auth = ref.read(authProvider);
-    if (!auth.isLoggedIn || auth.appRole != 'anchor' || _incomingPageShowing) {
+    if (!auth.isLoggedIn || auth.appRole != 'anchor') {
       return;
     }
     try {

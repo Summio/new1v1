@@ -23,8 +23,9 @@ router = APIRouter()
 # ===== 常量 =====
 
 _AUTH_TIMEOUT = 30  # 秒，等待认证的超时时间
-_HEARTBEAT_TIMEOUT = 30  # 秒，无消息则认为断开
-_PING_INTERVAL = 30  # 客户端心跳间隔（秒）
+# 心跳超时必须显著大于客户端 ping 间隔，避免网络抖动下误判离线导致关键事件丢失
+_HEARTBEAT_TIMEOUT = 75  # 秒，无消息则认为断开
+_PING_INTERVAL = 20  # 客户端心跳间隔（秒）
 
 
 # ===== WebSocket 端点 =====
@@ -124,12 +125,11 @@ async def ws_app(websocket: WebSocket) -> None:
                         clear_manual_offline,
                         broadcast_presence,
                     )
-                    from app.websocket.manager import get_manager
                     if online:
                         await clear_manual_offline(user_id)
                     else:
                         await set_manual_offline(user_id)
-                    await broadcast_presence(manager=get_manager(), user_id=user_id, online=online)
+                    await broadcast_presence(manager=manager, user_id=user_id, online=online)
                     await websocket.send_json({"type": "online_status_ack", "online": online})
                 except Exception as e:
                     logger.warning(f"[WS] set_online_status failed for {user_id}: {e}")
@@ -148,7 +148,8 @@ async def ws_app(websocket: WebSocket) -> None:
     finally:
         # 清理连接
         if user_id is not None:
-            await manager.disconnect(user_id)
+            # 必须携带当前 websocket，避免旧连接迟到断开时把新连接一并清掉
+            await manager.disconnect(user_id, websocket=websocket)
 
         # 确保 WebSocket 正确关闭
         try:

@@ -5,7 +5,7 @@ from app.log import logger
 from app.models import AppUser, WithdrawApply
 from app.schemas.app_api import WithdrawListItem, WithdrawReviewIn
 from app.schemas.base import Fail, Success, SuccessExtra
-from tortoise.expressions import Q
+from tortoise.expressions import F, Q
 from tortoise.transactions import in_transaction
 
 router = APIRouter()
@@ -80,8 +80,8 @@ async def withdraw_review(req_in: WithdrawReviewIn):
             # 拒绝：解冻钻石，退款到可用余额
             # B-5 修复：使用 GREATEST 避免 frozen_diamonds - amount 后变为负数
             await AppUser.filter(id=withdraw.user_id).using_db(conn).update(
-                diamonds=AppUser.diamonds + withdraw.amount,
-                frozen_diamonds=AppUser.frozen_diamonds - withdraw.amount,
+                diamonds=F("diamonds") + withdraw.amount,
+                frozen_diamonds=F("frozen_diamonds") - withdraw.amount,
             )
             # 安全检查：若减后 frozen_diamonds 为负，说明数据异常（记录日志）
             updated_user = await AppUser.filter(id=withdraw.user_id).using_db(conn).first()
@@ -102,8 +102,8 @@ async def withdraw_review(req_in: WithdrawReviewIn):
 
         # L-1 修复：通过时将冻结钻石转为可用（打款时再扣减，或打款失败可原路退回）
         await AppUser.filter(id=withdraw.user_id).using_db(conn).update(
-            diamonds=AppUser.diamonds + withdraw.amount,
-            frozen_diamonds=AppUser.frozen_diamonds - withdraw.amount,
+            diamonds=F("diamonds") + withdraw.amount,
+            frozen_diamonds=F("frozen_diamonds") - withdraw.amount,
         )
         # 通过：状态更新
         withdraw.status = "approved"

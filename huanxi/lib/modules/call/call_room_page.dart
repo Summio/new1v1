@@ -42,10 +42,12 @@ class CallRoomPage extends ConsumerStatefulWidget {
 
 class _CallRoomPageState extends ConsumerState<CallRoomPage> {
   static const Duration _wsGracePeriod = Duration(seconds: 10);
+  static const Duration _rtcRemoteOfflineGracePeriod = Duration(seconds: 8);
   RtcEngine? _engine;
   RtcEngineEventHandler? _rtcEventHandler;
   Timer? _durationTimer;
   Timer? _wsDisconnectTimer;
+  Timer? _remoteOfflineEndTimer;
   StreamSubscription<WsEvent>? _wsSubscription;
   StreamSubscription<WsConnectionEvent>? _wsConnectionSubscription;
 
@@ -248,6 +250,8 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
         onUserJoined: (RtcConnection connection, int remoteUid, int elapsed) {
           if (!mounted) return;
           _log('remote joined, uid=$remoteUid');
+          _remoteOfflineEndTimer?.cancel();
+          _remoteOfflineEndTimer = null;
           setState(() => _remoteUid = remoteUid);
         },
         onFirstRemoteVideoFrame:
@@ -311,6 +315,19 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
               if (_remoteUid == remoteUid) {
                 _log('remote offline, uid=$remoteUid, reason=$reason');
                 setState(() => _remoteUid = null);
+                _remoteOfflineEndTimer?.cancel();
+                // WS 结束事件偶发丢失时，RTC 对端离线作为兜底结束信号，避免通话卡死在进行中。
+                _remoteOfflineEndTimer = Timer(
+                  _rtcRemoteOfflineGracePeriod,
+                  () {
+                    if (!mounted || _hasEnded) return;
+                    // 对端若在 grace 期内重新入会，onUserJoined 会清理该定时器。
+                    if (_remoteUid == null) {
+                      _log('remote offline grace timeout, fallback end call');
+                      unawaited(_handleEndedByRemote('peer_left'));
+                    }
+                  },
+                );
               }
             },
         onError: (ErrorCodeType err, String msg) {
@@ -507,6 +524,8 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       tip = '无人接听，通话超时';
     } else if (endReason == 'cancelled') {
       tip = '对方已取消呼叫';
+    } else if (endReason == 'peer_left') {
+      tip = '对方已离开通话';
     }
 
     if (mounted) {
@@ -521,6 +540,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     _hasEnded = true;
     _log('leave and exit start, notifyEndApi=$notifyEndApi');
     _wsDisconnectTimer?.cancel();
+    _remoteOfflineEndTimer?.cancel();
     _durationTimer?.cancel();
 
     try {
@@ -672,6 +692,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       );
     }
     _wsDisconnectTimer?.cancel();
+    _remoteOfflineEndTimer?.cancel();
     _durationTimer?.cancel();
     _wsSubscription?.cancel();
     _wsConnectionSubscription?.cancel();

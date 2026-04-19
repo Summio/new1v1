@@ -1,14 +1,11 @@
 from datetime import datetime, timedelta, timezone
 import asyncio
-import json
 import time
 from typing import AsyncGenerator
 
 from fastapi import HTTPException, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import ExpiredSignatureError, JWTError, jwt
-from starlette.requests import HTTPConnection
-from tortoise.expressions import Q
 
 from app.core.ctx import CTX_APP_USER_ID, CTX_APP_USER_OBJ
 from app.core.redis import get_redis
@@ -53,7 +50,7 @@ async def _cache_invalidate(token: str) -> None:
 
 async def is_token_valid(token: str) -> bool:
     """检查 JWT 是否在 Redis 黑名单中（已被撤销），带本地 TTL 缓存。"""
-    cached = _cache_get(token)
+    cached = await _cache_get(token)
     if cached is not None:
         return cached
 
@@ -65,7 +62,7 @@ async def is_token_valid(token: str) -> bool:
     except Exception:
         is_valid = True  # Redis 不可用时降级，放行
 
-    _cache_set(token, is_valid)
+    await _cache_set(token, is_valid)
     return is_valid
 
 
@@ -82,7 +79,8 @@ async def is_app_authed(token: str) -> AppUser | None:
 
 def create_app_access_token(user_id: int, expires_delta: timedelta | None = None) -> str:
     """生成 App 用户 JWT access_token。"""
-    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(days=7))
+    default_expires = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.now(timezone.utc) + (expires_delta or default_expires)
     payload = {"sub": str(user_id), "exp": expire}
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
 
@@ -104,6 +102,12 @@ async def decode_app_token(token: str) -> dict | None:
         )
         if payload.get("type") == "refresh":
             return None
+        # 统一校验并归一化 sub，避免后续鉴权链路出现 KeyError/ValueError
+        sub = payload.get("sub")
+        try:
+            payload["sub"] = str(int(sub))
+        except (TypeError, ValueError):
+            return None
         return payload
     except ExpiredSignatureError:
         return None
@@ -122,7 +126,7 @@ async def DependAppAuth(request: Request) -> AsyncGenerator[int, None]:
       5. 检查 token 是否在 Redis 黑名单中（已 logout 的 token 失效）
     """
     bearer = HTTPBearer(auto_error=True)
-    credentials: HTTPAuthorizationCredentials = await bearer(request=http_conn)
+    credentials: HTTPAuthorizationCredentials = await bearer(request=request)
     token = credentials.credentials
 
     payload = await decode_app_token(token)
@@ -144,13 +148,13 @@ async def DependAppAuth(request: Request) -> AsyncGenerator[int, None]:
     if app_user.status == "disabled":
         raise HTTPException(status_code=403, detail="账号已禁用")
 
-    CTX_APP_USER_ID.set(user_id)
-    CTX_APP_USER_OBJ.set(app_user)
+    user_id_token = CTX_APP_USER_ID.set(user_id)
+    user_obj_token = CTX_APP_USER_OBJ.set(app_user)
     try:
         yield user_id
     finally:
-        CTX_APP_USER_ID.reset()
-        CTX_APP_USER_OBJ.reset()
+        CTX_APP_USER_ID.reset(user_id_token)
+        CTX_APP_USER_OBJ.reset(user_obj_token)
 
 
 async def logout_app_user(token: str, expire_seconds: int | None = None) -> bool:

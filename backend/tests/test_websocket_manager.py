@@ -150,6 +150,91 @@ class TestPubsubLoopRouting:
         result = await manager._send_ws(200, {"type": "event", "event": "call_ended", "data": {}})
         assert result is False
 
+    @pytest.mark.asyncio
+    async def test_stale_disconnect_should_not_remove_latest_connection(self):
+        """同一用户新建连接后，旧连接断开不应影响当前活跃连接。"""
+        from app.websocket.manager import ConnectionManager
+
+        manager = ConnectionManager()
+        mock_redis = AsyncMock()
+        mock_redis.sadd = AsyncMock()
+        mock_redis.set = AsyncMock()
+        mock_redis.srem = AsyncMock()
+        mock_redis.delete = AsyncMock()
+
+        ws_old = AsyncMock()
+        ws_old.send_json = AsyncMock()
+        ws_new = AsyncMock()
+        ws_new.send_json = AsyncMock()
+
+        with patch("app.websocket.manager.get_redis", return_value=mock_redis):
+            await manager.connect(100, ws_old)
+            await manager.connect(100, ws_new)
+
+            # 旧连接后到断开：不应移除 user=100 的当前连接（ws_new）
+            await manager.disconnect(100, websocket=ws_old)
+            sent = await manager._send_ws(100, {"type": "event", "event": "call_incoming", "data": {}})
+
+        assert sent is True
+        ws_new.send_json.assert_called_once_with(
+            {"type": "event", "event": "call_incoming", "data": {}}
+        )
+        ws_old.send_json.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_cross_worker_stale_disconnect_should_not_mark_user_offline(self):
+        """跨 worker 重连后，旧 worker 断开不应清掉新 worker 的在线标记。"""
+        from app.websocket import manager as manager_module
+        from app.websocket.manager import ConnectionManager
+
+        class _FakeRedis:
+            def __init__(self):
+                self._sets: dict[str, set[int]] = {}
+                self._strings: dict[str, str] = {}
+
+            async def sadd(self, key: str, value: int):
+                self._sets.setdefault(key, set()).add(int(value))
+                return 1
+
+            async def srem(self, key: str, value: int):
+                self._sets.setdefault(key, set()).discard(int(value))
+                return 1
+
+            async def set(self, key: str, value):
+                self._strings[key] = str(value)
+                return True
+
+            async def get(self, key: str):
+                return self._strings.get(key)
+
+            async def delete(self, key: str):
+                self._strings.pop(key, None)
+                return 1
+
+        fake_redis = _FakeRedis()
+        manager_a = ConnectionManager()
+        manager_b = ConnectionManager()
+        manager_a._pid = 101
+        manager_b._pid = 202
+
+        ws_a = AsyncMock()
+        ws_a.send_json = AsyncMock()
+        ws_b = AsyncMock()
+        ws_b.send_json = AsyncMock()
+
+        with patch("app.websocket.manager.get_redis", return_value=fake_redis):
+            await manager_a.connect(100, ws_a)
+            await manager_b.connect(100, ws_b)
+
+            # 旧 worker 的连接晚到断开
+            await manager_a.disconnect(100, websocket=ws_a)
+
+            # 在线标记仍应保留给新 worker
+            online_members = fake_redis._sets.get(manager_module._WS_ONLINE_KEY, set())
+            self_pid_key = manager_module._user_pid_key(100)
+            assert 100 in online_members
+            assert fake_redis._strings.get(self_pid_key) == str(manager_b._pid)
+
 
 class TestCriticalEventMarkers:
     """测试关键事件集合标记"""

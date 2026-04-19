@@ -1,12 +1,13 @@
 import asyncio
 from fastapi import APIRouter, Depends
+from tortoise.expressions import F
 from tortoise.transactions import in_transaction
 
 from app.core.app_auth import DependAppAuth
 from app.core.ctx import CTX_APP_USER_ID
 from app.core.redis import get_redis
 from app.models import Anchor, AppUser, Gift, GiftRecord
-from app.schemas.app_api import GiftOut, GiftSendIn, GiftSendOut
+from app.schemas.app_api import GiftSendIn, GiftSendOut
 from app.schemas.base import Fail, Success, SuccessExtra
 from app.services.tim_service import send_gift_notification
 
@@ -100,7 +101,7 @@ async def gift_send(req_in: GiftSendIn):
         async with in_transaction() as conn:
             # 原子扣费：使用条件更新避免竞态（扣金币）
             updated = await AppUser.filter(id=sender_id, coins__gte=gift.price).using_db(conn).update(
-                coins=AppUser.coins - gift.price
+                coins=F("coins") - gift.price
             )
             if updated == 0:
                 raise ValueError("余额不足，扣款失败")

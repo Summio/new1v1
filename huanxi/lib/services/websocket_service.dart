@@ -36,11 +36,16 @@ class WsService {
   static final WsService _instance = WsService._();
   static WsService get instance => _instance;
 
+  static const Duration _connectReadyTimeout = Duration(seconds: 10);
+  static const Duration _authTimeout = Duration(seconds: 10);
+
   WebSocketChannel? _channel;
+  StreamSubscription<dynamic>? _channelSubscription;
   StreamController<WsEvent>? _eventController;
   StreamController<WsConnectionEvent>? _connectionController;
   Timer? _reconnectTimer;
   Timer? _pingTimer;
+  Timer? _authTimer;
   bool _isConnecting = false;
   bool _shouldReconnect = false;
 
@@ -77,13 +82,18 @@ class WsService {
   String _buildWsUrl() {
     final base = AppConstants.apiBaseUrl;
     // base 格式: http://host:port/api/v1/ 或 https://host:port/api/v1/
-    // 后端 /ws/app 端点，认证通过首帧 JSON 传递 token
+    // WebSocket 端点位于 /api/v1/ws/app，认证通过首帧 JSON 传递 token
     final uri = Uri.parse(base);
     final scheme = uri.scheme == 'https' ? 'wss' : 'ws';
-    final host = uri.host;
-    final port = uri.port;
-    final portStr = port != 80 && port != 443 ? ':$port' : '';
-    return '$scheme://$host$portStr/ws/app';
+    final basePathSegments = uri.pathSegments.where((s) => s.isNotEmpty);
+    final wsPathSegments = [...basePathSegments, 'ws', 'app'];
+    final wsUri = uri.replace(
+      scheme: scheme,
+      pathSegments: wsPathSegments,
+      query: null,
+      fragment: null,
+    );
+    return wsUri.toString();
   }
 
   /// 是否已认证
@@ -91,7 +101,9 @@ class WsService {
 
   /// 连接 WebSocket（连接后发送认证首帧）
   Future<void> connect() async {
-    if (_isConnecting || isConnected) return;
+    if (_isConnecting) return;
+    // 关键：存在活动连接（含“认证中”）时不重复建连，避免多页面并发 connect 产生旧连接回调互相覆盖。
+    if (_channel != null) return;
 
     final token = StorageService.getToken();
     if (token == null || token.isEmpty) {
@@ -107,28 +119,48 @@ class WsService {
       final url = _buildWsUrl();
       debugPrint('[Ws] 连接中: $url');
 
-      _channel = WebSocketChannel.connect(Uri.parse(url));
+      final channel = WebSocketChannel.connect(Uri.parse(url));
+      _channel = channel;
 
-      await _channel!.ready;
+      await channel.ready.timeout(_connectReadyTimeout);
+      // 若等待 ready 期间连接已被替换/释放，直接放弃本次尝试，避免污染当前状态。
+      if (!identical(_channel, channel)) {
+        try {
+          channel.sink.close();
+        } catch (_) {}
+        return;
+      }
 
-      // 发送认证首帧（后端要求）
-      _channel!.sink.add(jsonEncode({'type': 'auth', 'token': token}));
-
-      // 监听消息
-      _channel!.stream.listen(
-        _onMessage,
-        onError: _onError,
-        onDone: _onDone,
+      // 监听消息（绑定当前 channel，后续旧连接回调会被忽略）
+      _channelSubscription?.cancel();
+      _channelSubscription = channel.stream.listen(
+        (dynamic message) => _onMessage(channel, message),
+        onError: (Object error) => _onError(channel, error),
+        onDone: () => _onDone(channel),
         cancelOnError: false,
       );
 
-      _isConnecting = false;
+      // 发送认证首帧（后端要求）
+      channel.sink.add(jsonEncode({'type': 'auth', 'token': token}));
+      _startAuthTimeout(channel);
     } catch (e) {
       debugPrint('[Ws] 连接失败: $e');
-      _isConnecting = false;
-      _channel = null;
+      _clearActiveChannel();
       _scheduleReconnect();
+    } finally {
+      _isConnecting = false;
     }
+  }
+
+  void _startAuthTimeout(WebSocketChannel channel) {
+    _authTimer?.cancel();
+    _authTimer = Timer(_authTimeout, () {
+      if (!identical(_channel, channel) || _authenticated) return;
+      debugPrint('[Ws] 认证超时，主动关闭连接并重试');
+      try {
+        channel.sink.close();
+      } catch (_) {}
+    });
   }
 
   void _sendPing() {
@@ -137,6 +169,10 @@ class WsService {
       _channel!.sink.add(jsonEncode({'type': 'ping'}));
     } catch (e) {
       debugPrint('[Ws] ping 发送失败: $e');
+      // 关键：ping 失败通常代表底层链路已不可用，主动关闭触发 onDone，避免“僵尸连接”长期不重连。
+      try {
+        _channel?.sink.close();
+      } catch (_) {}
     }
   }
 
@@ -152,18 +188,22 @@ class WsService {
     }
   }
 
-  void _onMessage(dynamic data) {
+  void _onMessage(WebSocketChannel channel, dynamic data) {
+    // 旧连接回调（例如并发重连后迟到消息）直接忽略，防止把新连接状态改坏。
+    if (!identical(_channel, channel)) return;
     try {
       final decoded = jsonDecode(data as String) as Map<String, dynamic>;
       final type = decoded['type'] as String?;
 
       if (type == 'auth_success') {
         _authenticated = true;
+        _authTimer?.cancel();
+        _authTimer = null;
         debugPrint('[Ws] 认证成功, user_id=${decoded['user_id']}');
         _emitConnectionState(WsConnectionState.connected);
-        // 认证成功后再启动 ping 定时器
+        // 认证成功后再启动 ping 定时器；频率小于服务端 heartbeat timeout，避免误判断线
         _pingTimer?.cancel();
-        _pingTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+        _pingTimer = Timer.periodic(const Duration(seconds: 20), (_) {
           _sendPing();
         });
         return;
@@ -171,12 +211,14 @@ class WsService {
 
       if (type == 'error') {
         debugPrint('[Ws] 认证失败: ${decoded['code']} ${decoded['msg']}');
+        _authTimer?.cancel();
+        _authTimer = null;
         _authenticated = false;
         _emitConnectionState(
           WsConnectionState.authFailed,
           message: decoded['msg'] as String?,
         );
-        _channel?.sink.close();
+        channel.sink.close();
         return;
       }
 
@@ -204,21 +246,18 @@ class WsService {
     }
   }
 
-  void _onError(Object error) {
+  void _onError(WebSocketChannel channel, Object error) {
+    if (!identical(_channel, channel)) return;
     debugPrint('[Ws] 连接错误: $error');
-    _isConnecting = false;
-    _authenticated = false;
-    _channel = null;
+    _clearActiveChannel();
     _emitConnectionState(WsConnectionState.reconnecting);
     _scheduleReconnect();
   }
 
-  void _onDone() {
+  void _onDone(WebSocketChannel channel) {
+    if (!identical(_channel, channel)) return;
     debugPrint('[Ws] 连接断开');
-    _authenticated = false;
-    _channel = null;
-    _pingTimer?.cancel();
-    _pingTimer = null;
+    _clearActiveChannel();
     if (_shouldReconnect) {
       _emitConnectionState(WsConnectionState.reconnecting);
       _scheduleReconnect();
@@ -227,10 +266,21 @@ class WsService {
     }
   }
 
+  void _clearActiveChannel() {
+    _authenticated = false;
+    _channel = null;
+    _authTimer?.cancel();
+    _authTimer = null;
+    _pingTimer?.cancel();
+    _pingTimer = null;
+    _channelSubscription?.cancel();
+    _channelSubscription = null;
+  }
+
   void _scheduleReconnect() {
     _reconnectTimer?.cancel();
     _reconnectTimer = Timer(const Duration(seconds: 3), () {
-      if (_shouldReconnect && !isConnected) {
+      if (_shouldReconnect && _channel == null && !_isConnecting) {
         debugPrint('[Ws] 准备重连...');
         connect();
       }
@@ -240,19 +290,25 @@ class WsService {
   /// 断开连接（退出登录时调用）
   Future<void> disconnect() async {
     _shouldReconnect = false;
+    _isConnecting = false;
     _authenticated = false;
     _reconnectTimer?.cancel();
     _pingTimer?.cancel();
+    _authTimer?.cancel();
+    _channelSubscription?.cancel();
+    _channelSubscription = null;
     _pingTimer = null;
+    _authTimer = null;
     _reconnectTimer = null;
 
     if (_channel != null) {
+      final channel = _channel;
+      _channel = null;
       try {
-        await _channel!.sink.close();
+        await channel!.sink.close();
       } catch (e) {
         debugPrint('[Ws] 关闭连接失败: $e');
       }
-      _channel = null;
     }
     _emitConnectionState(WsConnectionState.disconnected);
 

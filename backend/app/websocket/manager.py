@@ -98,14 +98,19 @@ class ConnectionManager:
         except Exception as e:
             logger.warning(f"[WS] presence broadcast on connect failed: {e}")
 
-    async def disconnect(self, user_id: int) -> None:
+    async def disconnect(self, user_id: int, websocket: Any | None = None) -> None:
         """将用户 WebSocket 连接从本实例移除。"""
         removed = False
+        removed_global_online = False
         async with self._lock:
-            if user_id in self._ws_conns:
+            current_ws = self._ws_conns.get(user_id)
+            # 同一用户可能出现新旧连接重叠：仅允许“当前活跃连接”执行清理
+            if current_ws is not None and (websocket is None or current_ws is websocket):
                 del self._ws_conns[user_id]
                 removed = True
                 logger.info(f"[WS] user {user_id} disconnected from pid {self._pid}, remaining={len(self._ws_conns)}")
+            elif current_ws is not None and websocket is not None:
+                logger.debug(f"[WS] ignore stale disconnect for user {user_id} on pid {self._pid}")
 
         if not removed:
             return
@@ -113,18 +118,41 @@ class ConnectionManager:
         # 更新 Redis 在线状态
         try:
             redis = await get_redis()
-            await redis.srem(_WS_ONLINE_KEY, user_id)
-            await redis.delete(_user_pid_key(user_id))
+            owner_pid_raw = await redis.get(_user_pid_key(user_id))
+            owner_pid: int | None = None
+            if owner_pid_raw is not None:
+                try:
+                    if isinstance(owner_pid_raw, bytes):
+                        owner_pid = int(owner_pid_raw.decode("utf-8"))
+                    else:
+                        owner_pid = int(owner_pid_raw)
+                except (TypeError, ValueError):
+                    owner_pid = None
+
+            # 仅当全局 owner 仍是当前进程时，才允许把用户标记为离线；
+            # 防止“跨 worker 重连后，旧 worker 迟到断开”把新连接误判离线。
+            if owner_pid == self._pid:
+                await redis.srem(_WS_ONLINE_KEY, user_id)
+                await redis.delete(_user_pid_key(user_id))
+                removed_global_online = True
+            else:
+                logger.debug(
+                    "[WS] skip global offline cleanup for user {} on pid {} (owner pid: {})",
+                    user_id,
+                    self._pid,
+                    owner_pid,
+                )
             await redis.srem(_pid_users_key(self._pid), user_id)
         except Exception as e:
             logger.warning(f"[WS] Redis update failed on disconnect: {e}")
 
         # 广播下线事件（异步，不阻塞清理）
-        try:
-            from app.websocket.presence import broadcast_presence
-            broadcast_presence(manager=self, user_id=user_id, online=False)
-        except Exception as e:
-            logger.warning(f"[WS] presence broadcast on disconnect failed: {e}")
+        if removed_global_online:
+            try:
+                from app.websocket.presence import broadcast_presence
+                broadcast_presence(manager=self, user_id=user_id, online=False)
+            except Exception as e:
+                logger.warning(f"[WS] presence broadcast on disconnect failed: {e}")
 
     async def _send_ws(self, user_id: int, payload: dict) -> bool:
         """向本实例的 WebSocket 发送消息，不存在则静默忽略。"""
@@ -139,7 +167,8 @@ class ConnectionManager:
             return True
         except Exception as e:
             logger.warning(f"[WS] send to user {user_id} failed, disconnecting: {e}")
-            await self.disconnect(user_id)
+            # 只清理发送失败的这条连接，防止同账号新连接被误删导致后续事件丢失
+            await self.disconnect(user_id, websocket=ws)
             return False
 
     # ===== 跨实例推送 =====

@@ -19,7 +19,7 @@ from app.schemas.app_api import (
     DialingOut,
 )
 from app.schemas.base import Fail, Success
-from tortoise.expressions import Q
+from tortoise.expressions import F, Q
 from tortoise.transactions import in_transaction
 
 router = APIRouter()
@@ -135,7 +135,7 @@ async def _get_free_seconds_before_billing() -> int:
 def _calc_due_minutes_with_free(duration_seconds: int, free_seconds_before_billing: int) -> int:
     if duration_seconds < free_seconds_before_billing:
         return 0
-    return ((duration_seconds - free_seconds_before_billing) // 60) + 1
+    return (duration_seconds + 59) // 60
 
 
 async def _resolve_payer_id(call_record: CallRecord) -> int:
@@ -497,7 +497,7 @@ async def call_end(req_in: CallEndIn):
 
     # 用于事务结束后推送余额更新
     _payer_id_for_balance_push: int | None = None
-    _refund_for_balance_push: int = 0
+    _balance_changed_for_push = False
 
     async with in_transaction() as conn:
         call_record = (
@@ -531,8 +531,7 @@ async def call_end(req_in: CallEndIn):
             )
             actual_fee = due_minutes * int(call_record.call_price or 0)
             deducted_amount = int(call_record.deducted_amount or 0)
-            refund_amount = max(0, deducted_amount - actual_fee)
-            charged_amount = deducted_amount - refund_amount
+            charged_amount = deducted_amount
 
             # P0-3 修复：金额守恒下限校验，防止 deducted_amount 异常时 total_fee 为负
             if charged_amount < 0:
@@ -546,17 +545,43 @@ async def call_end(req_in: CallEndIn):
 
             payer_id = await _resolve_payer_id_with_snapshot(call_record)
 
-            if refund_amount > 0:
+            if actual_fee > deducted_amount and payer_id > 0:
+                top_up_amount = actual_fee - deducted_amount
+                await AppUser.filter(id=payer_id).using_db(conn).select_for_update().first()
+                updated = await AppUser.filter(
+                    id=payer_id,
+                    coins__gte=top_up_amount,
+                ).using_db(conn).update(
+                    coins=F("coins") - top_up_amount
+                )
+                if updated > 0:
+                    charged_amount += top_up_amount
+                    _payer_id_for_balance_push = payer_id
+                    _balance_changed_for_push = True
+                else:
+                    call_record.end_reason = "balance_empty"
+                    logger.warning(
+                        "call_end top-up failed by insufficient balance: call_id={} payer_id={} required={} deducted={} actual_fee={}",
+                        call_record.id,
+                        payer_id,
+                        top_up_amount,
+                        deducted_amount,
+                        actual_fee,
+                    )
+
+            if actual_fee < deducted_amount and payer_id > 0:
+                refund_amount = deducted_amount - actual_fee
                 # 加行锁：防止并发退款导致重复到账
                 await AppUser.filter(id=payer_id).using_db(conn).select_for_update().first()
                 await AppUser.filter(id=payer_id).using_db(conn).update(
-                    coins=AppUser.coins + refund_amount
+                    coins=F("coins") + refund_amount
                 )
-                # 记录下来，事务结束后推送余额更新
+                charged_amount -= refund_amount
                 _payer_id_for_balance_push = payer_id
-                _refund_for_balance_push = refund_amount
+                _balance_changed_for_push = True
 
             call_record.deducted_minutes = due_minutes
+            call_record.deducted_amount = charged_amount
             call_record.total_fee = charged_amount
             call_record.status = "ended"
             call_record.end_reason = call_record.end_reason or "normal"
@@ -585,8 +610,8 @@ async def call_end(req_in: CallEndIn):
         user = await AppUser.filter(id=user_id).using_db(conn).first()
         final_coins = user.coins if user else 0
 
-    # 事务结束后，如有退款则推送余额更新给付费方
-    if _payer_id_for_balance_push is not None and _refund_for_balance_push > 0:
+    # 事务结束后，如余额发生变化则推送余额更新给付费方
+    if _payer_id_for_balance_push is not None and _balance_changed_for_push:
         asyncio.create_task(_ws_push_balance_updated_for_refund(
             payer_id=_payer_id_for_balance_push,
         ))
