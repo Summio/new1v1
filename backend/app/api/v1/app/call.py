@@ -44,6 +44,9 @@ async def _mark_timeout_if_needed(call_record: CallRecord) -> bool:
         call_record.status = "ended"
         call_record.end_reason = "timeout"
         call_record.ended_at = now_local_naive()
+        call_record.effective_ended_at = call_record.ended_at
+        call_record.end_basis = "timeout"
+        call_record.force_exit_user_id = None
         await call_record.save()
         await _append_call_trace(
             call_record,
@@ -387,6 +390,9 @@ async def accept_call(req_in: CallActionIn):
         call_record.billing_free_seconds = await _get_free_seconds_before_billing()
         call_record.payer_user_id = await _resolve_payer_id(call_record)
         call_record.ended_at = None
+        call_record.effective_ended_at = None
+        call_record.end_basis = None
+        call_record.force_exit_user_id = None
         await call_record.save(using_db=conn)
         await _append_call_trace(
             call_record,
@@ -428,6 +434,9 @@ async def reject_call(req_in: CallActionIn):
         call_record.status = "ended"
         call_record.end_reason = "rejected"
         call_record.ended_at = now_local_naive()
+        call_record.effective_ended_at = call_record.ended_at
+        call_record.end_basis = "manual_end"
+        call_record.force_exit_user_id = None
         await call_record.save(using_db=conn)
         await _append_call_trace(
             call_record,
@@ -471,6 +480,9 @@ async def cancel_call(req_in: CallActionIn):
         call_record.status = "ended"
         call_record.end_reason = "cancelled"
         call_record.ended_at = now_local_naive()
+        call_record.effective_ended_at = call_record.ended_at
+        call_record.end_basis = "manual_end"
+        call_record.force_exit_user_id = None
         await call_record.save(using_db=conn)
         await _append_call_trace(
             call_record,
@@ -586,6 +598,9 @@ async def call_end(req_in: CallEndIn):
             call_record.status = "ended"
             call_record.end_reason = call_record.end_reason or "normal"
             call_record.ended_at = now_local_naive()
+            call_record.effective_ended_at = call_record.ended_at
+            call_record.end_basis = "manual_end"
+            call_record.force_exit_user_id = None
             await call_record.save(using_db=conn)
             await _append_call_trace(
                 call_record,

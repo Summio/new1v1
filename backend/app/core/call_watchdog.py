@@ -1,8 +1,13 @@
 import asyncio
 import random
-from datetime import timedelta
+from datetime import datetime, timedelta
 from dataclasses import dataclass
 
+from app.core.call_presence import (
+    clear_left_candidate,
+    get_snapshot,
+    mark_left_candidate,
+)
 from app.log import logger
 from app.models import AppUser, CallRecord
 from app.models.system_config import SystemConfig
@@ -19,6 +24,9 @@ MAX_RENEW_GRACE_SECONDS = 5
 MAX_WATCHDOG_SECONDS = 600
 MIN_WATCHDOG_SECONDS = 1
 MAX_WATCHDOG_BATCH_SIZE = 100
+DEFAULT_PRESENCE_OFFLINE_DETECT_SECONDS = 3
+DEFAULT_PRESENCE_SETTLE_GRACE_SECONDS = 5
+MAX_PRESENCE_SETTLE_GRACE_SECONDS = 30
 
 
 @dataclass(frozen=True)
@@ -27,6 +35,18 @@ class WatchdogConfig:
     ring_timeout_seconds: int
     renew_grace_seconds: int
     free_seconds_before_billing: int
+    presence_offline_detect_seconds: int = DEFAULT_PRESENCE_OFFLINE_DETECT_SECONDS
+    presence_settle_grace_seconds: int = DEFAULT_PRESENCE_SETTLE_GRACE_SECONDS
+
+
+@dataclass(frozen=True)
+class ForceExitDecision:
+    should_end: bool
+    end_reason: str | None
+    effective_ended_at_ms: int | None
+    force_exit_user_id: int | None
+    mark_candidate_roles: tuple[str, ...] = ()
+    clear_candidate_roles: tuple[str, ...] = ()
 
 
 def _safe_parse_int(raw: str | None, default: int) -> int:
@@ -54,6 +74,14 @@ def _clamp_renew_grace_seconds(value: int) -> int:
     return value
 
 
+def _clamp_presence_settle_grace_seconds(value: int) -> int:
+    if value < 0:
+        return 0
+    if value > MAX_PRESENCE_SETTLE_GRACE_SECONDS:
+        return MAX_PRESENCE_SETTLE_GRACE_SECONDS
+    return value
+
+
 async def _load_watchdog_config() -> WatchdogConfig:
     poll_raw = await SystemConfig.get_value(
         "call_watchdog_poll_seconds",
@@ -71,6 +99,14 @@ async def _load_watchdog_config() -> WatchdogConfig:
         "call_billing_free_seconds",
         str(FREE_SECONDS_BEFORE_BILLING),
     )
+    offline_detect_raw = await SystemConfig.get_value(
+        "call_presence_offline_detect_seconds",
+        str(DEFAULT_PRESENCE_OFFLINE_DETECT_SECONDS),
+    )
+    settle_grace_raw = await SystemConfig.get_value(
+        "call_presence_settle_grace_seconds",
+        str(DEFAULT_PRESENCE_SETTLE_GRACE_SECONDS),
+    )
     return WatchdogConfig(
         poll_seconds=_clamp_seconds(_safe_parse_int(poll_raw, DEFAULT_POLL_SECONDS)),
         ring_timeout_seconds=_clamp_seconds(
@@ -80,6 +116,18 @@ async def _load_watchdog_config() -> WatchdogConfig:
             _safe_parse_int(grace_raw, DEFAULT_RENEW_GRACE_SECONDS)
         ),
         free_seconds_before_billing=max(0, _safe_parse_int(free_raw, FREE_SECONDS_BEFORE_BILLING)),
+        presence_offline_detect_seconds=_clamp_seconds(
+            _safe_parse_int(
+                offline_detect_raw,
+                DEFAULT_PRESENCE_OFFLINE_DETECT_SECONDS,
+            )
+        ),
+        presence_settle_grace_seconds=_clamp_presence_settle_grace_seconds(
+            _safe_parse_int(
+                settle_grace_raw,
+                DEFAULT_PRESENCE_SETTLE_GRACE_SECONDS,
+            )
+        ),
     )
 
 
@@ -110,6 +158,81 @@ def _resolve_payer_user_id(raw_snapshot: int | None) -> int | None:
 
 def _build_coins_decrement_expr(amount: int):
     return F("coins") - int(amount)
+
+
+def _now_ms() -> int:
+    return int(now_local_naive().timestamp() * 1000)
+
+
+def _ms_to_local_naive(ms: int) -> datetime:
+    return datetime.fromtimestamp(ms / 1000)
+
+
+def _resolve_force_exit_decision(
+    *,
+    call_id: int,
+    connected_at: datetime,
+    caller_id: int,
+    callee_id: int,
+    snapshot: dict[str, int | None],
+    now_ms: int,
+    offline_detect_seconds: int,
+    settle_grace_seconds: int,
+) -> ForceExitDecision:
+    detect_ms = int(max(0, offline_detect_seconds) * 1000)
+    settle_ms = int(max(0, settle_grace_seconds) * 1000)
+    connected_ms = int(connected_at.timestamp() * 1000)
+
+    mark_roles: list[str] = []
+    clear_roles: list[str] = []
+    settled_candidates: list[tuple[int, int]] = []  # (effective_ms, user_id)
+
+    def _eval_role(role: str, user_id: int) -> None:
+        last_seen = snapshot.get(f"{role}_last_seen_ms")
+        left_candidate = snapshot.get(f"{role}_left_candidate_ms")
+        effective_last_seen = int(last_seen or connected_ms)
+        stale = (now_ms - effective_last_seen) > detect_ms
+        if not stale:
+            if left_candidate is not None:
+                clear_roles.append(role)
+            return
+
+        if left_candidate is None:
+            mark_roles.append(role)
+            return
+
+        if (now_ms - int(left_candidate)) >= settle_ms:
+            settled_candidates.append((effective_last_seen, user_id))
+
+    _eval_role("caller", int(caller_id))
+    _eval_role("callee", int(callee_id))
+
+    if not settled_candidates:
+        return ForceExitDecision(
+            should_end=False,
+            end_reason=None,
+            effective_ended_at_ms=None,
+            force_exit_user_id=None,
+            mark_candidate_roles=tuple(mark_roles),
+            clear_candidate_roles=tuple(clear_roles),
+        )
+
+    settled_candidates.sort(key=lambda x: x[0])
+    effective_ended_at_ms, force_exit_user_id = settled_candidates[0]
+    logger.warning(
+        "watchdog force_exit candidate settled: call_id={} force_exit_user_id={} effective_ms={}",
+        call_id,
+        force_exit_user_id,
+        effective_ended_at_ms,
+    )
+    return ForceExitDecision(
+        should_end=True,
+        end_reason="force_exit",
+        effective_ended_at_ms=effective_ended_at_ms,
+        force_exit_user_id=force_exit_user_id,
+        mark_candidate_roles=tuple(mark_roles),
+        clear_candidate_roles=tuple(clear_roles),
+    )
 
 
 async def _try_become_watchdog_leader() -> bool:
@@ -153,6 +276,9 @@ async def _close_timeout_pending(config: WatchdogConfig) -> None:
                 status="ended",
                 end_reason="timeout",
                 ended_at=now_local_naive(),
+                effective_ended_at=now_local_naive(),
+                end_basis="timeout",
+                force_exit_user_id=None,
             )
             if updated == 0:
                 continue
@@ -220,6 +346,16 @@ async def _close_stale_ongoing(config: WatchdogConfig) -> None:
 
     # 追踪写入移出事务
     for call_record in ended_records:
+        if call_record.end_reason == "force_exit":
+            await trace_service.append(
+                call_record=call_record,
+                phase="force_exit",
+                actor_user_id=int(call_record.force_exit_user_id or call_record.caller_id),
+                reason="force_exit",
+            )
+            asyncio.create_task(_ws_push_call_force_exit(call_record))
+            continue
+
         await trace_service.append(
             call_record=call_record,
             phase="balance_empty",
@@ -242,6 +378,24 @@ async def _process_stale_batch(
     """处理一批通话记录，单独事务，返回(结束的记录列表, 成功扣费的记录列表)"""
     ended_records: list[CallRecord] = []
     charged_records: list[tuple[CallRecord, int]] = []
+
+    def _resolve_payer_id_from_record(raw: dict, call_record_obj: CallRecord) -> int | None:
+        payer_id = _resolve_payer_user_id(getattr(call_record_obj, "payer_user_id", None))
+        if payer_id is not None:
+            return payer_id
+
+        caller_id = int(raw["caller_id"])
+        callee_id = int(raw["callee_id"])
+        caller_is_anchor = caller_id in anchor_user_ids
+        callee_is_anchor = callee_id in anchor_user_ids
+        if caller_is_anchor and not callee_is_anchor:
+            return callee_id
+        if callee_is_anchor and not caller_is_anchor:
+            return caller_id
+        if not caller_is_anchor and not callee_is_anchor:
+            return caller_id
+        return None
+
     async with in_transaction() as conn:
         for r in batch:
             call_record = (
@@ -256,6 +410,90 @@ async def _process_stale_batch(
             if not call_record.connected_at:
                 continue
 
+            now_ms = _now_ms()
+            presence_snapshot = await get_snapshot(call_id=int(call_record.id))
+            force_exit_decision = _resolve_force_exit_decision(
+                call_id=int(call_record.id),
+                connected_at=call_record.connected_at,
+                caller_id=int(r["caller_id"]),
+                callee_id=int(r["callee_id"]),
+                snapshot=presence_snapshot,
+                now_ms=now_ms,
+                offline_detect_seconds=config.presence_offline_detect_seconds,
+                settle_grace_seconds=config.presence_settle_grace_seconds,
+            )
+            for role in force_exit_decision.clear_candidate_roles:
+                await clear_left_candidate(call_id=int(call_record.id), role=role)
+            for role in force_exit_decision.mark_candidate_roles:
+                await mark_left_candidate(
+                    call_id=int(call_record.id),
+                    role=role,
+                    now_ms=now_ms,
+                )
+
+            free_seconds_before_billing = _resolve_billing_free_seconds(
+                getattr(call_record, "billing_free_seconds", None),
+                config.free_seconds_before_billing,
+            )
+
+            if (
+                force_exit_decision.should_end
+                and force_exit_decision.effective_ended_at_ms is not None
+            ):
+                payer_id = _resolve_payer_id_from_record(r, call_record)
+                effective_ended_at = _ms_to_local_naive(
+                    force_exit_decision.effective_ended_at_ms
+                )
+                duration = int(
+                    max(
+                        0,
+                        (
+                            to_utc_aware(effective_ended_at)
+                            - to_utc_aware(call_record.connected_at)
+                        ).total_seconds(),
+                    )
+                )
+                due_minutes = _calc_due_minutes(duration, free_seconds_before_billing)
+                actual_fee = due_minutes * int(call_record.call_price or 0)
+                deducted_amount = int(call_record.deducted_amount or 0)
+                charged_amount = deducted_amount
+
+                if actual_fee > deducted_amount and payer_id is not None and payer_id > 0:
+                    top_up_amount = actual_fee - deducted_amount
+                    await AppUser.filter(id=payer_id).using_db(conn).select_for_update().first()
+                    updated = await AppUser.filter(
+                        id=payer_id,
+                        coins__gte=top_up_amount,
+                    ).using_db(conn).update(
+                        coins=F("coins") - top_up_amount
+                    )
+                    if updated > 0:
+                        charged_amount += top_up_amount
+                        charged_records.append((call_record, payer_id))
+
+                if actual_fee < deducted_amount and payer_id is not None and payer_id > 0:
+                    refund_amount = deducted_amount - actual_fee
+                    await AppUser.filter(id=payer_id).using_db(conn).select_for_update().first()
+                    await AppUser.filter(id=payer_id).using_db(conn).update(
+                        coins=F("coins") + refund_amount
+                    )
+                    charged_amount -= refund_amount
+                    charged_records.append((call_record, payer_id))
+
+                call_record.status = "ended"
+                call_record.end_reason = "force_exit"
+                call_record.duration = duration
+                call_record.deducted_minutes = due_minutes
+                call_record.deducted_amount = charged_amount
+                call_record.total_fee = charged_amount
+                call_record.ended_at = effective_ended_at
+                call_record.effective_ended_at = effective_ended_at
+                call_record.end_basis = "force_exit"
+                call_record.force_exit_user_id = force_exit_decision.force_exit_user_id
+                await call_record.save(using_db=conn)
+                ended_records.append(call_record)
+                continue
+
             duration = int(
                 max(
                     0,
@@ -264,10 +502,6 @@ async def _process_stale_batch(
                         - to_utc_aware(call_record.connected_at)
                     ).total_seconds(),
                 )
-            )
-            free_seconds_before_billing = _resolve_billing_free_seconds(
-                getattr(call_record, "billing_free_seconds", None),
-                config.free_seconds_before_billing,
             )
             deducted_minutes = int(call_record.deducted_minutes or 0)
             due_minutes = _calc_due_minutes(duration, free_seconds_before_billing)
@@ -279,23 +513,11 @@ async def _process_stale_batch(
             if overdue_seconds < config.renew_grace_seconds:
                 continue
 
-            payer_id = _resolve_payer_user_id(getattr(call_record, "payer_user_id", None))
+            payer_id = _resolve_payer_id_from_record(r, call_record)
             if payer_id is None:
-                caller_id = int(r["caller_id"])
-                callee_id = int(r["callee_id"])
-                caller_is_anchor = caller_id in anchor_user_ids
-                callee_is_anchor = callee_id in anchor_user_ids
-
-                if caller_is_anchor and not callee_is_anchor:
-                    payer_id = callee_id
-                elif callee_is_anchor and not caller_is_anchor:
-                    payer_id = caller_id
-                elif not caller_is_anchor and not callee_is_anchor:
-                    payer_id = caller_id
-                else:
-                    call_record.last_renew_at = now_local_naive()
-                    await call_record.save(using_db=conn)
-                    continue
+                call_record.last_renew_at = now_local_naive()
+                await call_record.save(using_db=conn)
+                continue
 
             to_charge_minutes = due_minutes - deducted_minutes
             charge_amount = to_charge_minutes * int(call_record.call_price or 0)
@@ -313,6 +535,9 @@ async def _process_stale_batch(
                 call_record.deducted_minutes = deducted_minutes
                 call_record.total_fee = int(call_record.deducted_amount or 0)
                 call_record.ended_at = now_local_naive()
+                call_record.effective_ended_at = call_record.ended_at
+                call_record.end_basis = "balance_empty"
+                call_record.force_exit_user_id = None
                 await call_record.save(using_db=conn)
                 logger.warning(
                     "watchdog closed call_id={} caller_id={} callee_id={} (balance insufficient) duration={}s",
@@ -334,6 +559,9 @@ async def _process_stale_batch(
                 call_record.deducted_minutes = deducted_minutes
                 call_record.total_fee = int(call_record.deducted_amount or 0)
                 call_record.ended_at = now_local_naive()
+                call_record.effective_ended_at = call_record.ended_at
+                call_record.end_basis = "balance_empty"
+                call_record.force_exit_user_id = None
                 await call_record.save(using_db=conn)
                 logger.warning(
                     "watchdog closed call_id={} caller_id={} callee_id={} (conditional update failed) duration={}s",
@@ -386,6 +614,21 @@ async def _ws_push_call_balance_empty(call_record: CallRecord) -> None:
         )
     except Exception as e:  # noqa: BLE001
         logger.warning("ws push call_balance_empty failed: {}", str(e))
+
+
+async def _ws_push_call_force_exit(call_record: CallRecord) -> None:
+    """推送强退结束事件到 WebSocket（fire-and-forget）。"""
+    try:
+        from app.websocket import events as ws_events
+
+        await ws_events.push_call_ended(
+            caller_id=int(call_record.caller_id),
+            callee_id=int(call_record.callee_id),
+            call_id=int(call_record.id),
+            end_reason="force_exit",
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("ws push force_exit failed: {}", str(e))
 
 
 async def _ws_push_balance_updated_for_charge(payer_id: int) -> None:

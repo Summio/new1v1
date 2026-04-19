@@ -4,20 +4,22 @@ import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import '../../app/providers/anchor_provider.dart';
-import '../../app/providers/auth_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/utils/app_toast.dart';
-import '../../services/websocket_service.dart';
 import '../gift/gift_panel.dart';
+import 'call_end_reason.dart';
+import 'controllers/call_gift_controller.dart';
+import 'controllers/call_rtc_controller.dart';
+import 'controllers/call_session_controller.dart';
+import 'controllers/call_ws_controller.dart';
 
 /// 通话房间页面
-/// 基于声网 RTC 实现实时视频通话
+/// 页面职责：渲染 + 交互分发 + side-effect 监听
 class CallRoomPage extends ConsumerStatefulWidget {
   final int callId;
 
@@ -41,41 +43,8 @@ class CallRoomPage extends ConsumerStatefulWidget {
 }
 
 class _CallRoomPageState extends ConsumerState<CallRoomPage> {
-  static const Duration _wsGracePeriod = Duration(seconds: 10);
-  static const Duration _rtcRemoteOfflineGracePeriod = Duration(seconds: 8);
-  RtcEngine? _engine;
-  RtcEngineEventHandler? _rtcEventHandler;
-  Timer? _durationTimer;
-  Timer? _wsDisconnectTimer;
-  Timer? _remoteOfflineEndTimer;
-  StreamSubscription<WsEvent>? _wsSubscription;
-  StreamSubscription<WsConnectionEvent>? _wsConnectionSubscription;
-
-  // 礼物动画状态
-  bool _giftShowing = false;
-  String _giftName = '';
-  String _giftIcon = '';
-  int _giftPrice = 0;
-  String _giftSenderNickname = '';
-
-  bool _isMicOn = true;
-  bool _isSpeakerOn = true;
-  bool _isCameraOn = true;
-  bool _isFlipping = false;
-  bool _isLoading = true;
-  bool _joined = false;
-  bool _hasEnded = false;
-  bool _endingInProgress = false;
-  bool _rtcJoining = false;
-  bool _endingForBalance = false;
-
-  int? _localUid;
-  int? _remoteUid;
-  String? _channelName;
-  String? _errorMessage;
-
-  Duration _callDuration = Duration.zero;
-  DateTime? _callStartTime;
+  bool _endingConsuming = false;
+  bool _disposed = false;
 
   void _log(String message) {
     debugPrint('[CALL_FLOW][callId=${widget.callId}] $message');
@@ -88,464 +57,121 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       'page init, peerUserId=${widget.peerUserId}, '
       'anchorId=${widget.anchorId}, peerName=${widget.peerName}',
     );
-    _initWebSocket();
-    unawaited(_initRtc());
-  }
 
-  void _initWebSocket() {
-    WsService.instance.connect();
-    _wsSubscription?.cancel();
-    _wsSubscription = WsService.instance.events.listen(_onWsEvent);
-    _wsConnectionSubscription?.cancel();
-    _wsConnectionSubscription = WsService.instance.connectionEvents.listen(
-      _onWsConnectionEvent,
-    );
-  }
+    // 使用 Future.microtask 延迟执行，避免 widget build 阶段修改 provider
+    Future.microtask(() {
+      if (!mounted) return;
+      ref.read(callSessionProvider(widget.callId).notifier).markConnecting();
+      ref.read(callWsControllerProvider(widget.callId).notifier).bind();
 
-  void _onWsConnectionEvent(WsConnectionEvent event) {
-    if (!mounted || _hasEnded) return;
-
-    if (event.state == WsConnectionState.connected) {
-      _wsDisconnectTimer?.cancel();
-      _wsDisconnectTimer = null;
-      return;
-    }
-
-    if (event.state == WsConnectionState.reconnecting ||
-        event.state == WsConnectionState.disconnected ||
-        event.state == WsConnectionState.authFailed) {
-      _wsDisconnectTimer ??= Timer(_wsGracePeriod, () {
-        if (!mounted || _hasEnded || WsService.instance.isConnected) return;
-        _handleEndedByRemote('network_lost');
-      });
-    }
-  }
-
-  void _onWsEvent(WsEvent event) {
-    if (event.event == 'call_balance_empty') {
-      final callId = event.data['call_id'] as int?;
-      if (callId != widget.callId || _hasEnded) return;
-      unawaited(_handleBalanceEmptyEnded());
-      return;
-    }
-
-    // 通话结束类事件：call_ended, call_cancelled, call_timeout, call_rejected
-    final callEndedEvents = {
-      'call_ended',
-      'call_cancelled',
-      'call_timeout',
-      'call_rejected',
-    };
-    if (callEndedEvents.contains(event.event)) {
-      final callId = event.data['call_id'] as int?;
-      if (callId != widget.callId) return;
-      if (_hasEnded) return;
-      _handleEndedByRemote(event.data['end_reason'] as String?);
-    } else if (event.event == 'balance_updated') {
-      final coins = event.data['coins'] as int?;
-      final diamonds = event.data['diamonds'] as int?;
-      if (coins != null || diamonds != null) {
-        ref
-            .read(authProvider.notifier)
-            .syncBalance(coins: coins, diamonds: diamonds);
-      }
-    } else if (event.event == 'gift_received') {
-      _showGiftAnimation(
-        giftName: event.data['gift_name'] as String? ?? '',
-        giftIcon: event.data['gift_icon'] as String? ?? '',
-        giftPrice: event.data['gift_price'] as int? ?? 0,
-        senderNickname: event.data['sender_nickname'] as String? ?? '用户',
-      );
-    }
-  }
-
-  Future<void> _initRtc() async {
-    if (_rtcJoining || _joined || _hasEnded) return;
-    _rtcJoining = true;
-    _log('rtc init start');
-
-    if (mounted) {
-      setState(() {
-        _isLoading = true;
-        _errorMessage = null;
-      });
-    }
-
-    try {
-      final permissionGranted = await _ensureMediaPermissions();
-      if (!permissionGranted) {
-        _log('rtc init aborted: permissions not granted');
-        if (!mounted) return;
-        setState(() {
-          _isLoading = false;
-          _errorMessage = '请先在系统设置中开启相机和麦克风权限';
-        });
-        return;
-      }
-
-      // 防御性处理：清理潜在残留 RTC 状态
-      await _releaseRtcEngine();
-
-      final rtcRes = await DioClient.instance.apiPost(
-        ApiEndpoints.rtcToken,
-        data: {'call_id': widget.callId},
-      );
-      final rtcData = rtcRes['data'] as Map<String, dynamic>?;
-      final appId = (rtcData?['app_id'] as String?)?.trim() ?? '';
-      final channel = (rtcData?['channel'] as String?)?.trim() ?? '';
-      final token = (rtcData?['token'] as String?)?.trim() ?? '';
-      final uid = (rtcData?['uid'] as num?)?.toInt() ?? 0;
-
-      if (appId.isEmpty || channel.isEmpty || token.isEmpty || uid <= 0) {
-        _log('rtc init failed: invalid rtc params');
-        throw Exception('RTC 参数不完整');
-      }
-      _log('rtc token ready, channel=$channel uid=$uid');
-
-      final engine = createAgoraRtcEngine();
-      _engine = engine;
-      _channelName = channel;
-      final joinCompleter = Completer<void>();
-
-      await engine.initialize(
-        RtcEngineContext(
-          appId: appId,
-          channelProfile: ChannelProfileType.channelProfileCommunication,
+      unawaited(
+        ref.read(callRtcControllerProvider(widget.callId).notifier).initRtc(
+          onCallConnected: () {
+            if (!mounted) return;
+            ref.read(callSessionProvider(widget.callId).notifier).markOngoing();
+          },
+          onRemoteEnd: (endReason) {
+            if (!mounted) return;
+            ref.read(callSessionProvider(widget.callId).notifier).beginEnding(
+              endReason: endReason,
+              notifyEndApi: false,
+            );
+          },
+          onLog: _log,
         ),
       );
-
-      _rtcEventHandler = RtcEngineEventHandler(
-        onJoinChannelSuccess: (RtcConnection connection, int elapsed) {
-          if (!mounted) return;
-          _log(
-            'join success, localUid=${connection.localUid}, elapsed=$elapsed',
-          );
-          if (!joinCompleter.isCompleted) {
-            joinCompleter.complete();
-          }
-          setState(() {
-            _joined = true;
-            _localUid = connection.localUid;
-          });
-          _startDurationTimer();
-        },
-        onConnectionStateChanged:
-            (
-              RtcConnection connection,
-              ConnectionStateType state,
-              ConnectionChangedReasonType reason,
-            ) {
-              _log('connection state changed: state=$state, reason=$reason');
-              if (!mounted) return;
-              if (state == ConnectionStateType.connectionStateConnected &&
-                  !_joined) {
-                _log('fallback mark joined by connection state');
-                setState(() {
-                  _joined = true;
-                  _localUid = uid;
-                });
-                _startDurationTimer();
-              }
-            },
-        onUserJoined: (RtcConnection connection, int remoteUid, int elapsed) {
-          if (!mounted) return;
-          _log('remote joined, uid=$remoteUid');
-          _remoteOfflineEndTimer?.cancel();
-          _remoteOfflineEndTimer = null;
-          setState(() => _remoteUid = remoteUid);
-        },
-        onFirstRemoteVideoFrame:
-            (
-              RtcConnection connection,
-              int remoteUid,
-              int width,
-              int height,
-              int elapsed,
-            ) {
-              _log(
-                'first remote video frame, uid=$remoteUid, ${width}x$height, elapsed=$elapsed',
-              );
-            },
-        onRemoteVideoStateChanged:
-            (
-              RtcConnection connection,
-              int remoteUid,
-              RemoteVideoState state,
-              RemoteVideoStateReason reason,
-              int elapsed,
-            ) {
-              _log(
-                'remote video state, uid=$remoteUid, state=$state, reason=$reason, elapsed=$elapsed',
-              );
-            },
-        onLocalVideoStateChanged:
-            (
-              VideoSourceType source,
-              LocalVideoStreamState state,
-              LocalVideoStreamReason reason,
-            ) {
-              _log(
-                'local video state, source=$source, state=$state, reason=$reason',
-              );
-              if (!mounted) return;
-              if (reason ==
-                  LocalVideoStreamReason
-                      .localVideoStreamReasonDeviceNoPermission) {
-                setState(() => _errorMessage = '相机权限不足，请在系统设置中开启后重试');
-                return;
-              }
-              if (reason ==
-                  LocalVideoStreamReason.localVideoStreamReasonDeviceBusy) {
-                setState(() => _errorMessage = '相机被其他应用占用，请关闭占用后重试');
-                return;
-              }
-              if (reason ==
-                  LocalVideoStreamReason.localVideoStreamReasonCaptureFailure) {
-                setState(() => _errorMessage = '相机采集失败，请重试或切换网络后再试');
-                return;
-              }
-            },
-        onUserOffline:
-            (
-              RtcConnection connection,
-              int remoteUid,
-              UserOfflineReasonType reason,
-            ) {
-              if (!mounted) return;
-              if (_remoteUid == remoteUid) {
-                _log('remote offline, uid=$remoteUid, reason=$reason');
-                setState(() => _remoteUid = null);
-                _remoteOfflineEndTimer?.cancel();
-                // WS 结束事件偶发丢失时，RTC 对端离线作为兜底结束信号，避免通话卡死在进行中。
-                _remoteOfflineEndTimer = Timer(
-                  _rtcRemoteOfflineGracePeriod,
-                  () {
-                    if (!mounted || _hasEnded) return;
-                    // 对端若在 grace 期内重新入会，onUserJoined 会清理该定时器。
-                    if (_remoteUid == null) {
-                      _log('remote offline grace timeout, fallback end call');
-                      unawaited(_handleEndedByRemote('peer_left'));
-                    }
-                  },
-                );
-              }
-            },
-        onError: (ErrorCodeType err, String msg) {
-          if (!mounted) return;
-          _log('rtc error: code=$err msg=$msg');
-          setState(() => _errorMessage = 'RTC 错误: $msg');
-        },
-        onPermissionError: (permissionType) {
-          if (!mounted) return;
-          final isCamera = permissionType == PermissionType.camera;
-          setState(() {
-            _errorMessage = isCamera
-                ? '相机权限被拒绝，请在系统设置中开启后重试'
-                : '麦克风权限被拒绝，请在系统设置中开启后重试';
-          });
-          _log('permission error: type=$permissionType');
-        },
-        onLocalAudioStateChanged: (connection, state, reason) {
-          if (!mounted) return;
-          if (reason ==
-              LocalAudioStreamReason.localAudioStreamReasonDeviceNoPermission) {
-            _log('local audio state: no permission');
-            setState(() => _errorMessage = '麦克风权限不足，请在系统设置中开启后重试');
-            return;
-          }
-          if (reason ==
-              LocalAudioStreamReason.localAudioStreamReasonDeviceBusy) {
-            _log('local audio state: device busy');
-            setState(() => _errorMessage = '麦克风被其他应用占用，请关闭占用后重试');
-            return;
-          }
-        },
-      );
-      engine.registerEventHandler(_rtcEventHandler!);
-
-      await engine.enableVideo();
-      await engine.setClientRole(role: ClientRoleType.clientRoleBroadcaster);
-      await engine.startPreview();
-
-      Future<void> doJoin() async {
-        _log('join start, channel=$channel uid=$uid');
-        await engine.joinChannel(
-          token: token,
-          channelId: channel,
-          uid: uid,
-          options: const ChannelMediaOptions(
-            channelProfile: ChannelProfileType.channelProfileCommunication,
-            clientRoleType: ClientRoleType.clientRoleBroadcaster,
-            publishCameraTrack: true,
-            publishMicrophoneTrack: true,
-            autoSubscribeAudio: true,
-            autoSubscribeVideo: true,
-          ),
-        );
-        _log('join api returned');
-      }
-
-      Future<bool> isJoinRejected(Object error) async {
-        if (error is AgoraRtcException) {
-          return error.code == -17 || error.code == 17;
-        }
-        final text = error.toString();
-        return text.contains('-17') || text.contains('17');
-      }
-
-      try {
-        await doJoin();
-      } catch (e) {
-        // 对 -17 做一次快速重试
-        if (await isJoinRejected(e)) {
-          _log('join rejected(-17), retry once');
-          await engine.leaveChannel();
-          await Future.delayed(const Duration(milliseconds: 300));
-          await doJoin();
-        } else {
-          _log('join failed, error=$e');
-          rethrow;
-        }
-      }
-
-      // 等待 join success 回调；若超时不主动重建，避免进入反复 release/rejoin 循环
-      if (!joinCompleter.isCompleted) {
-        try {
-          await joinCompleter.future.timeout(const Duration(seconds: 5));
-        } catch (_) {
-          _log(
-            'join success callback timeout, keep waiting for connection state',
-          );
-          if (mounted) {
-            setState(() {
-              _isLoading = false;
-              _errorMessage = '连接中，请稍候...';
-            });
-          }
-          return;
-        }
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-      });
-    } catch (e) {
-      _log('rtc init failed: $e');
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-        _errorMessage = '视频通话初始化失败，请稍后重试';
-      });
-    } finally {
-      _rtcJoining = false;
-      _log('rtc init end');
-    }
-  }
-
-  Future<bool> _ensureMediaPermissions() async {
-    final statuses = await [Permission.camera, Permission.microphone].request();
-
-    final cameraGranted = statuses[Permission.camera]?.isGranted ?? false;
-    final micGranted = statuses[Permission.microphone]?.isGranted ?? false;
-    return cameraGranted && micGranted;
-  }
-
-  void _startDurationTimer() {
-    _durationTimer?.cancel();
-    _callStartTime = DateTime.now();
-    _durationTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (_callStartTime != null && mounted) {
-        final duration = DateTime.now().difference(_callStartTime!);
-        setState(() {
-          _callDuration = duration;
-        });
-      }
     });
   }
 
-  Future<void> _handleBalanceEmptyEnded() async {
-    if (_endingForBalance || _hasEnded || !mounted) return;
-    _endingForBalance = true;
-    _log('received call_balance_empty, auto exit in 3s');
-    AppToast.showSnackBar(
-      context,
-      const SnackBar(content: Text('余额不足，通话即将结束')),
-    );
-    await Future.delayed(const Duration(seconds: 3));
-    if (mounted && !_hasEnded) {
-      await _leaveAndExit(notifyEndApi: false);
+  Future<void> _consumeEnding(CallSessionState sessionState) async {
+    if (_endingConsuming || sessionState.hasEnded) {
+      return;
+    }
+    _endingConsuming = true;
+
+    final endReason = (sessionState.endReason ?? 'normal').trim();
+    _log('session ending, reason=$endReason notifyEndApi=${sessionState.notifyEndApi}');
+
+    try {
+      if (sessionState.isEndingForBalance || endReason == 'balance_empty') {
+        if (mounted) {
+          AppToast.showSnackBar(
+            context,
+            const SnackBar(content: Text('余额不足，通话即将结束')),
+          );
+        }
+        await Future.delayed(const Duration(seconds: 3));
+      } else if (endReason != 'normal') {
+        if (mounted) {
+          AppToast.showSnackBar(
+            context,
+            SnackBar(content: Text(callEndReasonText(endReason))),
+          );
+        }
+      }
+
+      final current = ref.read(callSessionProvider(widget.callId));
+      if (!current.hasEnded) {
+        await _leaveAndExit(
+          notifyEndApi: current.notifyEndApi,
+          endReason: endReason,
+        );
+      }
+    } finally {
+      _endingConsuming = false;
     }
   }
 
   Future<void> _endCall() async {
-    if (_endingInProgress || _hasEnded) return;
-    _endingInProgress = true;
-    try {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('确认挂断'),
-          content: const Text('确定要结束当前通话吗？'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('取消'),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('挂断'),
-            ),
-          ],
-        ),
-      );
-
-      if (confirmed != true) {
-        _log('end call canceled by user');
-        _endingInProgress = false;
-        return;
-      }
-
-      _log('end call confirmed');
-      await _leaveAndExit();
-    } catch (_) {
-      _endingInProgress = false;
-      rethrow;
+    final session = ref.read(callSessionProvider(widget.callId));
+    if (session.endingInProgress || session.hasEnded) {
+      return;
     }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认挂断'),
+        content: const Text('确定要结束当前通话吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('挂断'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) {
+      _log('end call canceled by user');
+      return;
+    }
+
+    _log('end call confirmed');
+    ref.read(callSessionProvider(widget.callId).notifier).beginEnding(
+      endReason: 'normal',
+      notifyEndApi: true,
+    );
   }
 
-  Future<void> _handleEndedByRemote(String? endReason) async {
-    if (_hasEnded) return;
-
-    String tip = '通话已结束';
-    if (endReason == 'rejected') {
-      tip = '对方已拒绝';
-    } else if (endReason == 'timeout') {
-      tip = '无人接听，通话超时';
-    } else if (endReason == 'cancelled') {
-      tip = '对方已取消呼叫';
-    } else if (endReason == 'peer_left') {
-      tip = '对方已离开通话';
+  Future<void> _leaveAndExit({
+    required bool notifyEndApi,
+    required String endReason,
+  }) async {
+    final sessionNotifier = ref.read(callSessionProvider(widget.callId).notifier);
+    final current = ref.read(callSessionProvider(widget.callId));
+    if (current.hasEnded) {
+      return;
     }
 
-    if (mounted) {
-      AppToast.showSnackBar(context, SnackBar(content: Text(tip)));
-    }
-
-    await _leaveAndExit(notifyEndApi: false);
-  }
-
-  Future<void> _leaveAndExit({bool notifyEndApi = true}) async {
-    if (_hasEnded) return;
-    _hasEnded = true;
-    _log('leave and exit start, notifyEndApi=$notifyEndApi');
-    _wsDisconnectTimer?.cancel();
-    _remoteOfflineEndTimer?.cancel();
-    _durationTimer?.cancel();
+    _log('leave and exit start, notifyEndApi=$notifyEndApi reason=$endReason');
 
     try {
       if (notifyEndApi) {
-        _log('call end api request');
         await DioClient.instance.apiPost(
           ApiEndpoints.callEnd,
           data: {'call_id': widget.callId},
@@ -553,68 +179,19 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       }
     } catch (_) {}
 
-    await _releaseRtcEngine();
+    ref.read(callWsControllerProvider(widget.callId).notifier).unbind();
+    await ref
+        .read(callRtcControllerProvider(widget.callId).notifier)
+        .leaveAndRelease(onLog: _log);
+    sessionNotifier.markEnded(endReason: endReason);
 
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
     if (context.canPop()) {
-      _log('route pop');
       context.pop();
     } else {
-      _log('route go index');
       context.go(AppRoutes.index);
-    }
-  }
-
-  Future<void> _releaseRtcEngine() async {
-    final engine = _engine;
-    _engine = null;
-    if (engine == null) return;
-    _log('rtc release start');
-    try {
-      if (_rtcEventHandler != null) {
-        engine.unregisterEventHandler(_rtcEventHandler!);
-      }
-    } catch (_) {}
-    _rtcEventHandler = null;
-    try {
-      await engine.leaveChannel();
-    } catch (_) {}
-    try {
-      await engine.release();
-    } catch (_) {}
-    _log('rtc release end');
-  }
-
-  Future<void> _toggleMic() async {
-    final next = !_isMicOn;
-    await _engine?.muteLocalAudioStream(!next);
-    if (!mounted) return;
-    setState(() => _isMicOn = next);
-  }
-
-  Future<void> _toggleSpeaker() async {
-    final next = !_isSpeakerOn;
-    await _engine?.setEnableSpeakerphone(next);
-    if (!mounted) return;
-    setState(() => _isSpeakerOn = next);
-  }
-
-  Future<void> _toggleCamera() async {
-    final next = !_isCameraOn;
-    await _engine?.muteLocalVideoStream(!next);
-    if (!mounted) return;
-    setState(() => _isCameraOn = next);
-  }
-
-  Future<void> _flipCamera() async {
-    setState(() => _isFlipping = true);
-    try {
-      await _engine?.switchCamera();
-    } catch (_) {
-    } finally {
-      if (mounted) {
-        setState(() => _isFlipping = false);
-      }
     }
   }
 
@@ -623,7 +200,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     if (fromRoute != null && fromRoute > 0) {
       return fromRoute;
     }
-    // 兼容：未显式传 anchorId 时，若对端在主播列表里可反查 Anchor.id。
     return anchor?.id;
   }
 
@@ -636,6 +212,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       );
       return;
     }
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -647,28 +224,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     );
   }
 
-  void _showGiftAnimation({
-    required String giftName,
-    required String giftIcon,
-    required int giftPrice,
-    required String senderNickname,
-  }) {
-    if (!mounted) return;
-    setState(() {
-      _giftShowing = true;
-      _giftName = giftName;
-      _giftIcon = giftIcon;
-      _giftPrice = giftPrice;
-      _giftSenderNickname = senderNickname;
-    });
-    // 3秒后自动隐藏
-    Future.delayed(const Duration(seconds: 3), () {
-      if (mounted) {
-        setState(() => _giftShowing = false);
-      }
-    });
-  }
-
   String _formatDuration(Duration d) {
     final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
     final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
@@ -676,36 +231,18 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
   }
 
   bool _shouldBestEffortTerminateOnDispose() {
-    return !_hasEnded && _joined;
-  }
-
-  @override
-  void dispose() {
-    final shouldTerminate = _shouldBestEffortTerminateOnDispose();
-    if (shouldTerminate) {
-      _log('dispose with active joined call, best effort terminate');
-      unawaited(_bestEffortTerminateCall());
-    } else {
-      _log(
-        'dispose skip best effort terminate, '
-        'hasEnded=$_hasEnded joined=$_joined',
-      );
-    }
-    _wsDisconnectTimer?.cancel();
-    _remoteOfflineEndTimer?.cancel();
-    _durationTimer?.cancel();
-    _wsSubscription?.cancel();
-    _wsConnectionSubscription?.cancel();
-    unawaited(_releaseRtcEngine());
-    super.dispose();
+    final session = ref.read(callSessionProvider(widget.callId));
+    final rtcState = ref.read(callRtcControllerProvider(widget.callId));
+    return !session.hasEnded && rtcState.isJoined;
   }
 
   Future<void> _bestEffortTerminateCall() async {
-    if (_hasEnded) return;
-    _hasEnded = true;
+    final session = ref.read(callSessionProvider(widget.callId));
+    if (session.hasEnded) {
+      return;
+    }
     _log('best effort terminate start');
     try {
-      _log('best effort call end api request');
       await DioClient.instance.apiPost(
         ApiEndpoints.callEnd,
         data: {'call_id': widget.callId},
@@ -715,7 +252,38 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
   }
 
   @override
+  void dispose() {
+    _disposed = true;
+    Future.microtask(() {
+      if (!_disposed) {
+        ref.read(callWsControllerProvider(widget.callId).notifier).unbind();
+        ref
+            .read(callRtcControllerProvider(widget.callId).notifier)
+            .leaveAndRelease(onLog: _log);
+      }
+    });
+    if (_shouldBestEffortTerminateOnDispose()) {
+      unawaited(_bestEffortTerminateCall());
+    }
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    ref.listen<CallSessionState>(callSessionProvider(widget.callId), (
+      previous,
+      next,
+    ) {
+      if (next.phase == CallPhase.ending && previous?.phase != CallPhase.ending) {
+        unawaited(_consumeEnding(next));
+      }
+    });
+
+    final rtcState = ref.watch(callRtcControllerProvider(widget.callId));
+    final rtcController = ref.watch(callRtcControllerProvider(widget.callId).notifier);
+    final sessionState = ref.watch(callSessionProvider(widget.callId));
+    final giftState = ref.watch(callGiftControllerProvider(widget.callId));
+
     final anchorState = ref.watch(anchorListProvider);
     AnchorInfo? found;
     for (final a in anchorState.anchors) {
@@ -748,26 +316,30 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              _buildRemoteView(),
-              if (_giftShowing) _buildGiftAnimationOverlay(),
+              _buildRemoteView(rtcState: rtcState, rtcController: rtcController),
+              if (giftState.isShowing)
+                _buildGiftAnimationOverlay(giftState: giftState),
               Positioned(
                 top: MediaQuery.of(context).padding.top + 16,
                 right: 16,
                 child: GestureDetector(
-                  onTap: _flipCamera,
+                  onTap: () => unawaited(rtcController.flipCamera()),
                   child: AnimatedContainer(
                     duration: Duration.zero,
                     width: 90,
                     height: 120,
                     decoration: BoxDecoration(
-                      color: _isCameraOn
+                      color: rtcState.isCameraOn
                           ? const Color(0xFF2A2A2A)
                           : Colors.black,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: Colors.white24),
                     ),
                     clipBehavior: Clip.hardEdge,
-                    child: _buildLocalPreview(),
+                    child: _buildLocalPreview(
+                      rtcState: rtcState,
+                      rtcController: rtcController,
+                    ),
                   ),
                 ),
               ),
@@ -809,7 +381,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
                               ),
                             ),
                             Text(
-                              _formatDuration(_callDuration),
+                              _formatDuration(sessionState.callDuration),
                               style: const TextStyle(
                                 color: Colors.white70,
                                 fontSize: 13,
@@ -862,22 +434,26 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: [
                       _ControlButton(
-                        icon: _isMicOn ? Icons.mic : Icons.mic_off,
-                        label: _isMicOn ? '麦克风' : '静音',
-                        isActive: !_isMicOn,
-                        onTap: () => _toggleMic(),
+                        icon: rtcState.isMicOn ? Icons.mic : Icons.mic_off,
+                        label: rtcState.isMicOn ? '麦克风' : '静音',
+                        isActive: !rtcState.isMicOn,
+                        onTap: () => unawaited(rtcController.toggleMic()),
                       ),
                       _ControlButton(
-                        icon: _isSpeakerOn ? Icons.volume_up : Icons.volume_off,
+                        icon: rtcState.isSpeakerOn
+                            ? Icons.volume_up
+                            : Icons.volume_off,
                         label: '扬声器',
-                        isActive: !_isSpeakerOn,
-                        onTap: () => _toggleSpeaker(),
+                        isActive: !rtcState.isSpeakerOn,
+                        onTap: () => unawaited(rtcController.toggleSpeaker()),
                       ),
                       _ControlButton(
-                        icon: _isCameraOn ? Icons.videocam : Icons.videocam_off,
+                        icon: rtcState.isCameraOn
+                            ? Icons.videocam
+                            : Icons.videocam_off,
                         label: '摄像头',
-                        isActive: !_isCameraOn,
-                        onTap: () => _toggleCamera(),
+                        isActive: !rtcState.isCameraOn,
+                        onTap: () => unawaited(rtcController.toggleCamera()),
                       ),
                       _ControlButton(
                         icon: Icons.card_giftcard,
@@ -887,8 +463,8 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
                       _ControlButton(
                         icon: Icons.flip_camera_ios,
                         label: '翻转',
-                        isSpinning: _isFlipping,
-                        onTap: () => _flipCamera(),
+                        isSpinning: rtcState.isFlipping,
+                        onTap: () => unawaited(rtcController.flipCamera()),
                       ),
                       GestureDetector(
                         onTap: _endCall,
@@ -910,7 +486,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
                   ),
                 ),
               ),
-              if (_isLoading)
+              if (rtcState.isLoading)
                 Container(
                   color: Colors.black45,
                   child: const Center(
@@ -924,15 +500,17 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     );
   }
 
-  Widget _buildRemoteView() {
-    final engine = _engine;
-    final channelName = _channelName;
-    if (_errorMessage != null) {
+  Widget _buildRemoteView({
+    required CallRtcState rtcState,
+    required CallRtcController rtcController,
+  }) {
+    final engine = rtcController.engine;
+    if (rtcState.errorMessage != null) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 28),
           child: Text(
-            _errorMessage!,
+            rtcState.errorMessage!,
             textAlign: TextAlign.center,
             style: const TextStyle(color: Colors.white70, fontSize: 16),
           ),
@@ -940,22 +518,27 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       );
     }
 
-    if (_remoteUid != null && engine != null && channelName != null) {
+    if (rtcState.remoteUid != null &&
+        engine != null &&
+        rtcState.channelName != null) {
       return AgoraVideoView(
         controller: VideoViewController.remote(
           rtcEngine: engine,
-          canvas: VideoCanvas(uid: _remoteUid),
-          connection: RtcConnection(channelId: channelName),
+          canvas: VideoCanvas(uid: rtcState.remoteUid),
+          connection: RtcConnection(channelId: rtcState.channelName),
         ),
       );
     }
 
-    return _buildPlaceholder();
+    return _buildPlaceholder(rtcState);
   }
 
-  Widget _buildLocalPreview() {
-    final engine = _engine;
-    if (!_isCameraOn || engine == null) {
+  Widget _buildLocalPreview({
+    required CallRtcState rtcState,
+    required CallRtcController rtcController,
+  }) {
+    final engine = rtcController.engine;
+    if (!rtcState.isCameraOn || engine == null) {
       return const Icon(Icons.videocam_off, color: Colors.white30, size: 32);
     }
 
@@ -967,13 +550,10 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     );
   }
 
-  Widget _buildPlaceholder() {
-    String statusText;
-    if (_joined) {
-      statusText = '等待对方加入...';
-    } else {
-      statusText = '正在连接视频通话...';
-    }
+  Widget _buildPlaceholder(CallRtcState rtcState) {
+    final statusText = rtcState.hasPeerLeft
+        ? '对方已离开通话'
+        : (rtcState.isJoined ? '等待对方加入...' : '正在连接视频通话...');
 
     return Center(
       child: Column(
@@ -998,11 +578,11 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
             statusText,
             style: const TextStyle(color: Colors.white54, fontSize: 16),
           ),
-          if (_localUid != null && _channelName != null)
+          if (rtcState.localUid != null && rtcState.channelName != null)
             Padding(
               padding: const EdgeInsets.only(top: 8),
               child: Text(
-                '频道: $_channelName  UID: $_localUid',
+                '频道: ${rtcState.channelName}  UID: ${rtcState.localUid}',
                 style: const TextStyle(color: Colors.white38, fontSize: 12),
               ),
             ),
@@ -1011,7 +591,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     );
   }
 
-  Widget _buildGiftAnimationOverlay() {
+  Widget _buildGiftAnimationOverlay({required CallGiftState giftState}) {
     return Positioned.fill(
       child: IgnorePointer(
         child: Center(
@@ -1040,9 +620,9 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  _giftIcon.isNotEmpty
+                  giftState.giftIcon.isNotEmpty
                       ? Image.network(
-                          _giftIcon,
+                          giftState.giftIcon,
                           width: 48,
                           height: 48,
                           errorBuilder: (context, error, stackTrace) =>
@@ -1063,23 +643,23 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        _giftSenderNickname,
+                        giftState.senderNickname,
                         style: const TextStyle(
                           color: Colors.white70,
                           fontSize: 14,
                         ),
                       ),
                       Text(
-                        '送出了 $_giftName',
+                        '送出了 ${giftState.giftName}',
                         style: const TextStyle(
                           color: Colors.white,
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
                       ),
-                      if (_giftPrice > 0)
+                      if (giftState.giftPrice > 0)
                         Text(
-                          '价值 ¥${_giftPrice.toStringAsFixed(0)}',
+                          '价值 ¥${giftState.giftPrice.toStringAsFixed(0)}',
                           style: const TextStyle(
                             color: AppTheme.secondaryColor,
                             fontSize: 13,

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/routes/app_router.dart';
@@ -10,8 +11,10 @@ import '../../core/network/dio_client.dart';
 import '../../core/utils/app_toast.dart';
 import '../../services/websocket_service.dart';
 import 'call_end_reason.dart';
+import 'call_event_mapper.dart';
+import 'controllers/call_incoming_controller.dart';
 
-class IncomingCallPage extends StatefulWidget {
+class IncomingCallPage extends ConsumerStatefulWidget {
   final int callId;
   final String peerUserId;
   final String peerName;
@@ -28,25 +31,29 @@ class IncomingCallPage extends StatefulWidget {
   });
 
   @override
-  State<IncomingCallPage> createState() => _IncomingCallPageState();
+  ConsumerState<IncomingCallPage> createState() => _IncomingCallPageState();
 }
 
-class _IncomingCallPageState extends State<IncomingCallPage> {
+class _IncomingCallPageState extends ConsumerState<IncomingCallPage> {
   static const Duration _wsGracePeriod = Duration(seconds: 10);
-  Timer? _countdownTimer;
   Timer? _wsDisconnectTimer;
   StreamSubscription<WsEvent>? _wsSubscription;
   StreamSubscription<WsConnectionEvent>? _wsConnectionSubscription;
-  bool _actionInFlight = false;
-  bool _pageClosing = false;
-  int _leftSeconds = 30;
+  bool _disposed = false;
 
   @override
   void initState() {
     super.initState();
-    _leftSeconds = widget.leftSeconds > 0 ? widget.leftSeconds : 30;
-    _initWebSocket();
-    _startCountdown();
+    final initLeft = widget.leftSeconds > 0 ? widget.leftSeconds : 30;
+    // 使用 Future.microtask 延迟执行，避免 widget build 阶段修改 provider
+    Future.microtask(() {
+      if (!mounted) return;
+      ref.read(callIncomingControllerProvider.notifier).setPageClosing(false);
+      ref
+          .read(callIncomingControllerProvider.notifier)
+          .initCountdown(initLeft, onTimeout: () => _closeWithReason('timeout'));
+      _initWebSocket();
+    });
   }
 
   void _initWebSocket() {
@@ -60,7 +67,9 @@ class _IncomingCallPageState extends State<IncomingCallPage> {
   }
 
   void _onWsConnectionEvent(WsConnectionEvent event) {
-    if (!mounted || _pageClosing) return;
+    if (_disposed) return;
+    final ctrl = ref.read(callIncomingControllerProvider);
+    if (!mounted || ctrl.isPageClosing) return;
 
     if (event.state == WsConnectionState.connected) {
       _wsDisconnectTimer?.cancel();
@@ -72,72 +81,53 @@ class _IncomingCallPageState extends State<IncomingCallPage> {
         event.state == WsConnectionState.disconnected ||
         event.state == WsConnectionState.authFailed) {
       _wsDisconnectTimer ??= Timer(_wsGracePeriod, () {
-        if (!mounted || _pageClosing || WsService.instance.isConnected) return;
-        _closeWithReason('network_lost');
+        final current = ref.read(callIncomingControllerProvider);
+        if (!mounted || current.isPageClosing || WsService.instance.isConnected) {
+          return;
+        }
+        unawaited(_closeWithReason('network_lost'));
       });
     }
   }
 
   void _onWsEvent(WsEvent event) {
-    if (!mounted || _pageClosing) return;
+    if (_disposed) return;
+    final ctrl = ref.read(callIncomingControllerProvider);
+    if (!mounted || ctrl.isPageClosing) return;
     final eventCallId = (event.data['call_id'] as num?)?.toInt();
     if (eventCallId == null || eventCallId != widget.callId) return;
-
-    switch (event.event) {
-      case 'call_cancelled':
-      case 'call_timeout':
-      case 'call_ended':
-      case 'call_balance_empty':
-        _closeWithReason(_reasonFromWsEvent(event));
-        break;
-      default:
-        break;
+    final mapped = CallEventMapper.map(event: event.event, data: event.data);
+    if (mapped.shouldExit) {
+      unawaited(_closeWithReason(_reasonFromMapped(mapped.endReason)));
     }
   }
 
-  String _reasonFromWsEvent(WsEvent event) {
-    final reasonFromData = (event.data['end_reason'] as String?)?.trim();
-    if (reasonFromData != null && reasonFromData.isNotEmpty) {
-      return reasonFromData;
-    }
-    final reasonFromEvent = (event.data['reason'] as String?)?.trim();
-    if (reasonFromEvent != null && reasonFromEvent.isNotEmpty) {
-      return reasonFromEvent;
-    }
-
-    switch (event.event) {
-      case 'call_timeout':
+  String _reasonFromMapped(CallEndReason? reason) {
+    switch (reason) {
+      case CallEndReason.rejected:
+        return 'rejected';
+      case CallEndReason.timeout:
         return 'timeout';
-      case 'call_cancelled':
+      case CallEndReason.cancelled:
         return 'cancelled';
-      case 'call_balance_empty':
+      case CallEndReason.balanceEmpty:
         return 'balance_empty';
-      default:
+      case CallEndReason.forceExit:
+        return 'force_exit';
+      case CallEndReason.peerLeft:
+        return 'peer_left';
+      case CallEndReason.networkLost:
+        return 'network_lost';
+      case CallEndReason.normal:
+      case null:
         return 'normal';
     }
   }
 
-  void _startCountdown() {
-    _countdownTimer?.cancel();
-    if (_leftSeconds <= 0) return;
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted || _pageClosing) {
-        timer.cancel();
-        return;
-      }
-      if (_leftSeconds <= 0) {
-        timer.cancel();
-        _closeWithReason('timeout');
-        return;
-      }
-      setState(() => _leftSeconds -= 1);
-    });
-  }
-
   Future<void> _closeWithReason(String reason) async {
-    if (!mounted || _pageClosing) return;
-    _pageClosing = true;
-    _countdownTimer?.cancel();
+    final ctrl = ref.read(callIncomingControllerProvider);
+    if (!mounted || ctrl.isPageClosing) return;
+    ref.read(callIncomingControllerProvider.notifier).setPageClosing(true);
     _wsDisconnectTimer?.cancel();
     AppToast.showSnackBar(
       context,
@@ -151,16 +141,16 @@ class _IncomingCallPageState extends State<IncomingCallPage> {
   }
 
   Future<void> _acceptCall() async {
-    if (_actionInFlight || _pageClosing) return;
-    _actionInFlight = true;
+    final ctrl = ref.read(callIncomingControllerProvider);
+    if (ctrl.isActionInFlight || ctrl.isPageClosing) return;
+    ref.read(callIncomingControllerProvider.notifier).setActionInFlight(true);
     try {
       await DioClient.instance.apiPost(
         ApiEndpoints.callAccept,
         data: {'call_id': widget.callId},
       );
       if (!mounted) return;
-      _pageClosing = true;
-      _countdownTimer?.cancel();
+      ref.read(callIncomingControllerProvider.notifier).setPageClosing(true);
       _wsDisconnectTimer?.cancel();
       context.pushReplacement(
         Uri(
@@ -179,21 +169,21 @@ class _IncomingCallPageState extends State<IncomingCallPage> {
         const SnackBar(content: Text('接听失败，请重试')),
       );
     } finally {
-      _actionInFlight = false;
+      ref.read(callIncomingControllerProvider.notifier).setActionInFlight(false);
     }
   }
 
   Future<void> _rejectCall() async {
-    if (_actionInFlight || _pageClosing) return;
-    _actionInFlight = true;
+    final ctrl = ref.read(callIncomingControllerProvider);
+    if (ctrl.isActionInFlight || ctrl.isPageClosing) return;
+    ref.read(callIncomingControllerProvider.notifier).setActionInFlight(true);
     try {
       await DioClient.instance.apiPost(
         ApiEndpoints.callReject,
         data: {'call_id': widget.callId},
       );
       if (!mounted) return;
-      _pageClosing = true;
-      _countdownTimer?.cancel();
+      ref.read(callIncomingControllerProvider.notifier).setPageClosing(true);
       _wsDisconnectTimer?.cancel();
       if (context.canPop()) {
         context.pop();
@@ -207,14 +197,14 @@ class _IncomingCallPageState extends State<IncomingCallPage> {
         const SnackBar(content: Text('拒绝失败，请重试')),
       );
     } finally {
-      _actionInFlight = false;
+      ref.read(callIncomingControllerProvider.notifier).setActionInFlight(false);
     }
   }
 
   @override
   void dispose() {
-    _pageClosing = true;
-    _countdownTimer?.cancel();
+    _disposed = true;
+    ref.read(callIncomingControllerProvider.notifier).setPageClosing(true);
     _wsDisconnectTimer?.cancel();
     _wsSubscription?.cancel();
     _wsConnectionSubscription?.cancel();
@@ -223,75 +213,76 @@ class _IncomingCallPageState extends State<IncomingCallPage> {
 
   @override
   Widget build(BuildContext context) {
+    final incomingState = ref.watch(callIncomingControllerProvider);
     return PopScope(
       canPop: false,
       child: Scaffold(
         backgroundColor: const Color(0xFF0F172A),
         body: SafeArea(
-          child: Column(
-            children: [
-              const SizedBox(height: 48),
-              Text(
-                '视频来电',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.9),
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(height: 48),
+                Text(
+                  '视频来电',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 20),
-              CircleAvatar(
-                radius: 56,
-                backgroundColor: Colors.white12,
-                backgroundImage:
-                    (widget.peerAvatar != null && widget.peerAvatar!.isNotEmpty)
-                    ? NetworkImage(widget.peerAvatar!)
-                    : null,
-                child:
-                    (widget.peerAvatar == null || widget.peerAvatar!.isEmpty)
-                    ? const Icon(Icons.person, color: Colors.white70, size: 50)
-                    : null,
-              ),
-              const SizedBox(height: 18),
-              Text(
-                widget.peerName,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.w700,
+                const SizedBox(height: 20),
+                CircleAvatar(
+                  radius: 56,
+                  backgroundColor: Colors.white12,
+                  backgroundImage:
+                      (widget.peerAvatar != null && widget.peerAvatar!.isNotEmpty)
+                      ? NetworkImage(widget.peerAvatar!)
+                      : null,
+                  child:
+                      (widget.peerAvatar == null || widget.peerAvatar!.isEmpty)
+                      ? const Icon(Icons.person, color: Colors.white70, size: 50)
+                      : null,
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '$_leftSeconds 秒后自动挂断',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.7),
-                  fontSize: 14,
+                const SizedBox(height: 18),
+                Text(
+                  widget.peerName,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 24,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ),
-              const Spacer(),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 36),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                const SizedBox(height: 8),
+                Text(
+                  '${incomingState.leftSeconds} 秒后自动挂断',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    fontSize: 14,
+                  ),
+                ),
+                const Spacer(),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
                     _ActionButton(
                       color: AppTheme.errorColor,
                       icon: Icons.call_end,
-                      label: '拒绝',
+                      label: incomingState.isActionInFlight ? '处理中...' : '拒绝',
                       onTap: _rejectCall,
                     ),
                     _ActionButton(
-                      color: const Color(0xFF22C55E),
+                      color: AppTheme.onlineGreen,
                       icon: Icons.call,
-                      label: '接听',
+                      label: incomingState.isActionInFlight ? '处理中...' : '接听',
                       onTap: _acceptCall,
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 56),
-            ],
+                const SizedBox(height: 56),
+              ],
+            ),
           ),
         ),
       ),

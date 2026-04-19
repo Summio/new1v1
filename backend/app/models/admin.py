@@ -132,6 +132,16 @@ class CallRecord(BaseModel, TimestampMixin):
     end_reason = fields.CharField(max_length=50, null=True, description="结束原因")
     connected_at = fields.DatetimeField(null=True, description="实际接通时间")
     ended_at = fields.DatetimeField(null=True, description="结束时间")
+    effective_ended_at = fields.DatetimeField(
+        null=True,
+        description="结算使用的实际结束时间",
+    )
+    end_basis = fields.CharField(
+        max_length=32,
+        null=True,
+        description="manual_end/force_exit/timeout/balance_empty",
+    )
+    force_exit_user_id = fields.BigIntField(null=True, description="先离场用户ID")
     deducted_amount = fields.BigIntField(default=0, description="已扣费总额(分)")
     deducted_minutes = fields.BigIntField(default=0, description="已扣费分钟数")
     last_renew_at = fields.DatetimeField(null=True, description="最后一次续租时间")

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/routes/app_router.dart';
@@ -11,8 +12,10 @@ import '../../core/network/dio_client.dart';
 import '../../core/utils/app_toast.dart';
 import '../../services/websocket_service.dart';
 import 'call_end_reason.dart';
+import 'call_event_mapper.dart';
+import 'controllers/call_outgoing_controller.dart';
 
-class CallOutgoingPage extends StatefulWidget {
+class CallOutgoingPage extends ConsumerStatefulWidget {
   final int? callId;
   final String peerUserId;
   final String peerName;
@@ -31,19 +34,16 @@ class CallOutgoingPage extends StatefulWidget {
   });
 
   @override
-  State<CallOutgoingPage> createState() => _CallOutgoingPageState();
+  ConsumerState<CallOutgoingPage> createState() => _CallOutgoingPageState();
 }
 
-class _CallOutgoingPageState extends State<CallOutgoingPage> {
+class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
   static const Duration _wsGracePeriod = Duration(seconds: 10);
-  Timer? _countdownTimer;
+
   Timer? _wsDisconnectTimer;
   StreamSubscription<WsEvent>? _wsSubscription;
   StreamSubscription<WsConnectionEvent>? _wsConnectionSubscription;
-  bool _pageClosing = false;
-  bool _actionInFlight = false;
-  bool _dialingInFlight = false;
-  int _leftSeconds = 30;
+  bool _disposed = false;
   int? _callId;
   String _peerUserId = '';
   String _peerName = '';
@@ -53,22 +53,25 @@ class _CallOutgoingPageState extends State<CallOutgoingPage> {
   @override
   void initState() {
     super.initState();
-    _callId = widget.callId != null && widget.callId! > 0
-        ? widget.callId
-        : null;
+    _callId = widget.callId != null && widget.callId! > 0 ? widget.callId : null;
     _peerUserId = widget.peerUserId;
     _peerName = widget.peerName;
     _peerAvatar = widget.peerAvatar;
     _callPrice = widget.callPrice;
-    _leftSeconds = 30;
 
-    _initWebSocket();
-
-    if (_callId != null) {
-      _startCountdown();
-    } else {
-      _startDialing();
-    }
+    // 使用 Future.microtask 延迟执行，避免 widget build 阶段修改 provider
+    Future.microtask(() {
+      if (!mounted) return;
+      ref.read(callOutgoingControllerProvider.notifier).setPageClosing(false);
+      _initWebSocket();
+      if (_callId != null) {
+        ref
+            .read(callOutgoingControllerProvider.notifier)
+            .initCountdown(30, onTimeout: () => _closeWithReason('timeout'));
+      } else {
+        unawaited(_startDialing());
+      }
+    });
   }
 
   void _initWebSocket() {
@@ -82,7 +85,9 @@ class _CallOutgoingPageState extends State<CallOutgoingPage> {
   }
 
   void _onWsConnectionEvent(WsConnectionEvent event) {
-    if (!mounted || _pageClosing) return;
+    if (_disposed) return;
+    final ctrl = ref.read(callOutgoingControllerProvider);
+    if (!mounted || ctrl.isPageClosing) return;
 
     if (event.state == WsConnectionState.connected) {
       _wsDisconnectTimer?.cancel();
@@ -94,14 +99,19 @@ class _CallOutgoingPageState extends State<CallOutgoingPage> {
         event.state == WsConnectionState.disconnected ||
         event.state == WsConnectionState.authFailed) {
       _wsDisconnectTimer ??= Timer(_wsGracePeriod, () {
-        if (!mounted || _pageClosing || WsService.instance.isConnected) return;
-        _handleNetworkLost();
+        final current = ref.read(callOutgoingControllerProvider);
+        if (!mounted || current.isPageClosing || WsService.instance.isConnected) {
+          return;
+        }
+        unawaited(_handleNetworkLost());
       });
     }
   }
 
   void _onWsEvent(WsEvent event) {
-    if (!mounted || _pageClosing) return;
+    if (_disposed) return;
+    final ctrl = ref.read(callOutgoingControllerProvider);
+    if (!mounted || ctrl.isPageClosing) return;
 
     final callId = _callId;
     if (callId == null || callId <= 0) return;
@@ -114,61 +124,37 @@ class _CallOutgoingPageState extends State<CallOutgoingPage> {
       return;
     }
 
-    const endedEvents = {
-      'call_rejected',
-      'call_timeout',
-      'call_cancelled',
-      'call_ended',
-      'call_balance_empty',
-    };
-    if (endedEvents.contains(event.event)) {
-      _closeWithReason(_reasonFromWsEvent(event));
+    final mapped = CallEventMapper.map(event: event.event, data: event.data);
+    if (mapped.shouldExit) {
+      unawaited(_closeWithReason(_reasonFromMapped(mapped.endReason)));
     }
   }
 
-  String _reasonFromWsEvent(WsEvent event) {
-    final reasonFromData = (event.data['end_reason'] as String?)?.trim();
-    if (reasonFromData != null && reasonFromData.isNotEmpty) {
-      return reasonFromData;
-    }
-    final reasonFromEvent = (event.data['reason'] as String?)?.trim();
-    if (reasonFromEvent != null && reasonFromEvent.isNotEmpty) {
-      return reasonFromEvent;
-    }
-
-    switch (event.event) {
-      case 'call_rejected':
+  String _reasonFromMapped(CallEndReason? reason) {
+    switch (reason) {
+      case CallEndReason.rejected:
         return 'rejected';
-      case 'call_timeout':
+      case CallEndReason.timeout:
         return 'timeout';
-      case 'call_cancelled':
+      case CallEndReason.cancelled:
         return 'cancelled';
-      case 'call_balance_empty':
+      case CallEndReason.balanceEmpty:
         return 'balance_empty';
-      default:
+      case CallEndReason.forceExit:
+        return 'force_exit';
+      case CallEndReason.peerLeft:
+        return 'peer_left';
+      case CallEndReason.networkLost:
+        return 'network_lost';
+      case CallEndReason.normal:
+      case null:
         return 'normal';
     }
   }
 
-  void _startCountdown() {
-    _countdownTimer?.cancel();
-    if (_leftSeconds <= 0) return;
-    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted || _pageClosing) {
-        timer.cancel();
-        return;
-      }
-      if (_leftSeconds <= 0) {
-        timer.cancel();
-        _closeWithReason('timeout');
-        return;
-      }
-      setState(() => _leftSeconds -= 1);
-    });
-  }
-
   Future<void> _startDialing() async {
-    if (_dialingInFlight || _pageClosing) return;
+    final ctrl = ref.read(callOutgoingControllerProvider);
+    if (ctrl.isDialingInFlight || ctrl.isPageClosing) return;
     final anchorId = int.tryParse((widget.anchorId ?? '').trim());
     if (anchorId == null || anchorId <= 0) {
       if (!mounted) return;
@@ -184,7 +170,7 @@ class _CallOutgoingPageState extends State<CallOutgoingPage> {
       return;
     }
 
-    _dialingInFlight = true;
+    ref.read(callOutgoingControllerProvider.notifier).setDialingInFlight(true);
     try {
       final dialingRes = await DioClient.instance.apiPost(
         ApiEndpoints.dialing,
@@ -196,7 +182,8 @@ class _CallOutgoingPageState extends State<CallOutgoingPage> {
         throw const ApiException(code: 400, message: '呼叫创建失败，请稍后重试');
       }
 
-      if (!mounted || _pageClosing) return;
+      final current = ref.read(callOutgoingControllerProvider);
+      if (!mounted || current.isPageClosing) return;
 
       setState(() {
         _callId = callId;
@@ -216,14 +203,14 @@ class _CallOutgoingPageState extends State<CallOutgoingPage> {
         if (callPrice != null && callPrice >= 0) {
           _callPrice = callPrice;
         }
-        final leftSeconds = (dialingData?['left_seconds'] as num?)?.toInt();
-        if (leftSeconds != null && leftSeconds >= 0) {
-          _leftSeconds = leftSeconds;
-        }
       });
-      _startCountdown();
+      final leftSeconds = (dialingData?['left_seconds'] as num?)?.toInt() ?? 30;
+      ref
+          .read(callOutgoingControllerProvider.notifier)
+          .initCountdown(leftSeconds, onTimeout: () => _closeWithReason('timeout'));
     } on ApiException catch (e) {
-      if (!mounted || _pageClosing) return;
+      final current = ref.read(callOutgoingControllerProvider);
+      if (!mounted || current.isPageClosing) return;
       AppToast.showSnackBar(context, SnackBar(content: Text(e.message)));
       if (context.canPop()) {
         context.pop();
@@ -231,7 +218,8 @@ class _CallOutgoingPageState extends State<CallOutgoingPage> {
         context.go(AppRoutes.index);
       }
     } catch (_) {
-      if (!mounted || _pageClosing) return;
+      final current = ref.read(callOutgoingControllerProvider);
+      if (!mounted || current.isPageClosing) return;
       AppToast.showSnackBar(
         context,
         const SnackBar(content: Text('通话启动失败，请稍后重试')),
@@ -242,14 +230,14 @@ class _CallOutgoingPageState extends State<CallOutgoingPage> {
         context.go(AppRoutes.index);
       }
     } finally {
-      _dialingInFlight = false;
+      ref.read(callOutgoingControllerProvider.notifier).setDialingInFlight(false);
     }
   }
 
   void _goToCallRoom(int callId) {
-    if (!mounted || _pageClosing) return;
-    _pageClosing = true;
-    _countdownTimer?.cancel();
+    final ctrl = ref.read(callOutgoingControllerProvider);
+    if (!mounted || ctrl.isPageClosing) return;
+    ref.read(callOutgoingControllerProvider.notifier).setPageClosing(true);
     _wsDisconnectTimer?.cancel();
     context.pushReplacement(
       Uri(
@@ -265,9 +253,9 @@ class _CallOutgoingPageState extends State<CallOutgoingPage> {
   }
 
   Future<void> _closeWithReason(String reason) async {
-    if (!mounted || _pageClosing) return;
-    _pageClosing = true;
-    _countdownTimer?.cancel();
+    final ctrl = ref.read(callOutgoingControllerProvider);
+    if (!mounted || ctrl.isPageClosing) return;
+    ref.read(callOutgoingControllerProvider.notifier).setPageClosing(true);
     _wsDisconnectTimer?.cancel();
     AppToast.showSnackBar(
       context,
@@ -281,7 +269,8 @@ class _CallOutgoingPageState extends State<CallOutgoingPage> {
   }
 
   Future<void> _handleNetworkLost() async {
-    if (!mounted || _pageClosing) return;
+    final ctrl = ref.read(callOutgoingControllerProvider);
+    if (!mounted || ctrl.isPageClosing) return;
     final callId = _callId;
     if (callId != null && callId > 0) {
       try {
@@ -295,8 +284,9 @@ class _CallOutgoingPageState extends State<CallOutgoingPage> {
   }
 
   Future<void> _cancelCall() async {
-    if (_actionInFlight || _pageClosing) return;
-    _actionInFlight = true;
+    final ctrl = ref.read(callOutgoingControllerProvider);
+    if (ctrl.isActionInFlight || ctrl.isPageClosing) return;
+    ref.read(callOutgoingControllerProvider.notifier).setActionInFlight(true);
     try {
       final callId = _callId;
       if (callId != null && callId > 0) {
@@ -306,8 +296,7 @@ class _CallOutgoingPageState extends State<CallOutgoingPage> {
         );
       }
       if (!mounted) return;
-      _pageClosing = true;
-      _countdownTimer?.cancel();
+      ref.read(callOutgoingControllerProvider.notifier).setPageClosing(true);
       _wsDisconnectTimer?.cancel();
       if (context.canPop()) {
         context.pop();
@@ -321,14 +310,14 @@ class _CallOutgoingPageState extends State<CallOutgoingPage> {
         const SnackBar(content: Text('取消失败，请稍后重试')),
       );
     } finally {
-      _actionInFlight = false;
+      ref.read(callOutgoingControllerProvider.notifier).setActionInFlight(false);
     }
   }
 
   @override
   void dispose() {
-    _pageClosing = true;
-    _countdownTimer?.cancel();
+    _disposed = true;
+    ref.read(callOutgoingControllerProvider.notifier).setPageClosing(true);
     _wsDisconnectTimer?.cancel();
     _wsSubscription?.cancel();
     _wsConnectionSubscription?.cancel();
@@ -337,77 +326,80 @@ class _CallOutgoingPageState extends State<CallOutgoingPage> {
 
   @override
   Widget build(BuildContext context) {
+    final outgoingState = ref.watch(callOutgoingControllerProvider);
     final hasCallId = _callId != null && _callId! > 0;
     final countdownText = !hasCallId
         ? '正在发起呼叫...'
         : _callPrice > 0
-        ? '$_leftSeconds 秒后自动结束 · $_callPrice/分'
-        : '$_leftSeconds 秒后自动结束';
+        ? '${outgoingState.leftSeconds} 秒后自动结束 · $_callPrice/分'
+        : '${outgoingState.leftSeconds} 秒后自动结束';
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, result) {
         if (!didPop) {
-          _cancelCall();
+          unawaited(_cancelCall());
         }
       },
       child: Scaffold(
         backgroundColor: const Color(0xFF0F172A),
         body: SafeArea(
-          child: Column(
-            children: [
-              const SizedBox(height: 48),
-              Text(
-                hasCallId ? '视频呼叫中' : '正在连接',
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.9),
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 20),
-              CircleAvatar(
-                radius: 56,
-                backgroundColor: Colors.white12,
-                backgroundImage:
-                    (_peerAvatar != null && _peerAvatar!.isNotEmpty)
-                    ? NetworkImage(_peerAvatar!)
-                    : null,
-                child: (_peerAvatar == null || _peerAvatar!.isEmpty)
-                    ? const Icon(Icons.person, color: Colors.white70, size: 50)
-                    : null,
-              ),
-              const SizedBox(height: 18),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Text(
-                  _peerName,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
+          child: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const SizedBox(height: 48),
+                Text(
+                  hasCallId ? '视频呼叫中' : '正在连接',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
                   ),
                 ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                countdownText,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.7),
-                  fontSize: 14,
+                const SizedBox(height: 20),
+                CircleAvatar(
+                  radius: 56,
+                  backgroundColor: Colors.white12,
+                  backgroundImage: (_peerAvatar != null && _peerAvatar!.isNotEmpty)
+                      ? NetworkImage(_peerAvatar!)
+                      : null,
+                  child: (_peerAvatar == null || _peerAvatar!.isEmpty)
+                      ? const Icon(Icons.person, color: Colors.white70, size: 50)
+                      : null,
                 ),
-              ),
-              const Spacer(),
-              _ActionButton(
-                color: AppTheme.errorColor,
-                icon: Icons.call_end,
-                label: '取消',
-                onTap: _cancelCall,
-              ),
-              const SizedBox(height: 56),
-            ],
+                const SizedBox(height: 18),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Text(
+                    _peerName,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  countdownText,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    fontSize: 14,
+                  ),
+                ),
+                const Spacer(),
+                _ActionButton(
+                  color: AppTheme.errorColor,
+                  icon: Icons.call_end,
+                  label: outgoingState.isActionInFlight ? '处理中...' : '取消',
+                  onTap: _cancelCall,
+                ),
+                const SizedBox(height: 56),
+              ],
+            ),
           ),
         ),
       ),

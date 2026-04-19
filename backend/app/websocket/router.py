@@ -9,13 +9,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 from app.core.app_auth import is_app_authed
+from app.core.call_presence import update_last_seen
 from app.log import logger
+from app.models import CallRecord
 from app.websocket.manager import get_manager
 
 router = APIRouter()
@@ -135,6 +138,14 @@ async def ws_app(websocket: WebSocket) -> None:
                     logger.warning(f"[WS] set_online_status failed for {user_id}: {e}")
                     await _send_error(websocket, 500, "状态切换失败")
 
+            elif msg_type == "call_heartbeat":
+                ok = await _handle_call_heartbeat_message(
+                    user_id=int(user_id),
+                    msg=msg,
+                )
+                if not ok:
+                    await _send_error(websocket, 403, "心跳无效或无权限")
+
             else:
                 # 忽略其他消息类型
                 pass
@@ -179,3 +190,38 @@ async def _send_error(websocket: WebSocket, code: int, msg: str) -> None:
         await websocket.send_json({"type": "error", "code": code, "msg": msg})
     except Exception:
         pass
+
+
+def _now_ms() -> int:
+    return int(time.time() * 1000)
+
+
+async def _handle_call_heartbeat_message(*, user_id: int, msg: dict[str, Any]) -> bool:
+    call_id_raw = msg.get("call_id")
+    try:
+        call_id = int(call_id_raw)
+    except (TypeError, ValueError):
+        return False
+    if call_id <= 0:
+        return False
+
+    call_record = await CallRecord.filter(id=call_id, status="ongoing").first()
+    if call_record is None:
+        return False
+
+    role: str
+    if int(call_record.caller_id) == int(user_id):
+        role = "caller"
+    elif int(call_record.callee_id) == int(user_id):
+        role = "callee"
+    else:
+        return False
+
+    # role 由服务端关系推断，不信任客户端上报 role 字段。
+    await update_last_seen(
+        call_id=call_id,
+        user_id=int(user_id),
+        role=role,
+        now_ms=_now_ms(),
+    )
+    return True

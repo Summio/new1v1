@@ -188,12 +188,30 @@ class WsService {
     }
   }
 
+  /// 通话中发送心跳，用于服务端判定 last_seen（强退结算口径）。
+  Future<void> sendCallHeartbeat({required int callId}) async {
+    if (callId <= 0) return;
+    if (_channel == null || !_authenticated) return;
+    try {
+      _channel!.sink.add(
+        jsonEncode({'type': 'call_heartbeat', 'call_id': callId}),
+      );
+    } catch (e) {
+      debugPrint('[Ws] call_heartbeat 发送失败: $e');
+    }
+  }
+
   void _onMessage(WebSocketChannel channel, dynamic data) {
     // 旧连接回调（例如并发重连后迟到消息）直接忽略，防止把新连接状态改坏。
     if (!identical(_channel, channel)) return;
     try {
-      final decoded = jsonDecode(data as String) as Map<String, dynamic>;
-      final type = decoded['type'] as String?;
+      // 安全解析 JSON，检查是否为有效字符串
+      if (data is! String) {
+        debugPrint('[Ws] 收到非字符串消息: ${data.runtimeType}');
+        return;
+      }
+      final decoded = jsonDecode(data) as Map<String, dynamic>;
+      final type = decoded['type']?.toString() ?? '';
 
       if (type == 'auth_success') {
         _authenticated = true;
@@ -209,16 +227,41 @@ class WsService {
         return;
       }
 
-      if (type == 'error') {
-        debugPrint('[Ws] 认证失败: ${decoded['code']} ${decoded['msg']}');
-        _authTimer?.cancel();
-        _authTimer = null;
-        _authenticated = false;
-        _emitConnectionState(
-          WsConnectionState.authFailed,
-          message: decoded['msg'] as String?,
-        );
-        channel.sink.close();
+      // type 可能是字符串 "error" 或数字 (如 1, 2)
+      final typeIsError = type == 'error' || type == '1' || type == '1';
+      if (typeIsError) {
+        try {
+          // 注意: code 可能是 int (如 403) 或 String (如 "403")
+          final errorCode = decoded['code'];
+          final errorMsg = decoded['msg']?.toString();
+          debugPrint('[Ws] 收到错误响应: code=$errorCode msg=$errorMsg');
+
+          // 心跳无效错误不关闭连接，继续保持连接等待业务事件
+          // 只有认证失败时才关闭连接并重连
+          final codeStr = errorCode?.toString() ?? '';
+          final isAuthError = codeStr == '401' || codeStr == '403' &&
+              (errorMsg?.contains('认证') == true ||
+               errorMsg?.contains('auth') == true ||
+               errorMsg?.contains('token') == true);
+
+          if (isAuthError) {
+            debugPrint('[Ws] 认证失败，关闭连接并重连');
+            _authTimer?.cancel();
+            _authTimer = null;
+            _authenticated = false;
+            _emitConnectionState(
+              WsConnectionState.authFailed,
+              message: errorMsg,
+            );
+            channel.sink.close();
+          } else {
+            // 心跳或其他错误，只记录日志不断开连接
+            debugPrint('[Ws] 非认证错误，继续保持连接');
+          }
+        } catch (e) {
+          debugPrint('[Ws] 处理错误响应时发生异常: $e');
+          // 不关闭连接，继续等待业务事件
+        }
         return;
       }
 
@@ -228,19 +271,27 @@ class WsService {
 
       // 业务事件: {"type": "event", "event": "call_incoming", "data": {...}}
       if (type == 'event') {
-        final eventName = decoded['event'] as String?;
-        final eventData = decoded['data'] as Map<String, dynamic>?;
-        if (eventName != null && eventName.isNotEmpty) {
-          debugPrint('[Ws] 收到事件: $eventName');
-          _ensureController();
-          _eventController!.add(
-            WsEvent(event: eventName, data: eventData ?? {}),
-          );
+        try {
+          // event 字段可能是 String 或 int，需要安全处理
+          final rawEvent = decoded['event'];
+          final eventName = rawEvent?.toString() ?? '';
+          if (eventName.isNotEmpty) {
+            debugPrint('[Ws] 收到事件: $eventName');
+            _ensureController();
+            _eventController!.add(
+              WsEvent(event: eventName, data: decoded['data'] ?? {}),
+            );
+          } else {
+            debugPrint('[Ws] 收到事件但 event 字段为空: $rawEvent');
+          }
+        } catch (e) {
+          debugPrint('[Ws] 处理业务事件时发生异常: $e');
         }
         return;
       }
 
       // 忽略其他未知消息类型
+      debugPrint('[Ws] 收到未知类型消息: type=$type');
     } catch (e) {
       debugPrint('[Ws] 消息解析失败: $e, data=$data');
     }
@@ -321,5 +372,28 @@ class WsService {
   /// 释放资源
   void dispose() {
     disconnect();
+  }
+
+  @visibleForTesting
+  void debugInstallChannelForTest(
+    WebSocketChannel channel, {
+    bool authenticated = true,
+  }) {
+    _channel = channel;
+    _authenticated = authenticated;
+  }
+
+  @visibleForTesting
+  void debugResetForTest() {
+    _authenticated = false;
+    _channel = null;
+    _channelSubscription?.cancel();
+    _channelSubscription = null;
+    _pingTimer?.cancel();
+    _pingTimer = null;
+    _reconnectTimer?.cancel();
+    _reconnectTimer = null;
+    _authTimer?.cancel();
+    _authTimer = null;
   }
 }
