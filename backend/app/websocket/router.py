@@ -51,6 +51,7 @@ async def ws_app(websocket: WebSocket) -> None:
 
     # 接受连接
     await websocket.accept()
+
     user_id: int | None = None
 
     try:

@@ -226,10 +226,12 @@ class _AnchorListPageState extends ConsumerState<_AnchorListPage> {
       );
     }
 
+    // RefreshIndicator 包裹 GridView，每个 PageView 页面独立支持下拉刷新
     return RefreshIndicator(
       onRefresh: () => ref.read(anchorListProvider.notifier).refresh(),
       child: GridView.builder(
         controller: _scrollController,
+        physics: const AlwaysScrollableScrollPhysics(), // 确保可以 overscroll 触发下拉刷新
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
@@ -392,7 +394,7 @@ class _AnchorCardState extends State<_AnchorCard> {
                       const Icon(Icons.diamond_outlined, size: 10, color: Color(0xFFFFD700)),
                       const SizedBox(width: 2),
                       Text(
-                        '${anchor.diamonds}',
+                        '${anchor.callPrice?.toStringAsFixed(0) ?? '0'}/分',
                         style: TextStyle(
                           fontSize: 10,
                           color: Colors.white.withValues(alpha: 0.8),

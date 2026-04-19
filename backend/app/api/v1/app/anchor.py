@@ -32,13 +32,11 @@ async def anchor_list(
         q = q.filter(app_user__gender=gender)
 
     all_anchors = await q.prefetch_related("app_user")
-    # 过滤出在线主播
-    online_anchors = [a for a in all_anchors if a.app_user_id in online_ids]
-    total = len(online_anchors)
+    total = len(all_anchors)
 
     # 分页
     start = (page - 1) * page_size
-    page_anchors = online_anchors[start:start + page_size]
+    page_anchors = all_anchors[start:start + page_size]
 
     all_rows = []
     for anchor in page_anchors:
@@ -52,7 +50,7 @@ async def anchor_list(
             "intro": anchor.intro or "",
             "tags": anchor.tags or [],
             "call_price": anchor.call_price,
-            "is_online": True,  # 由 Redis 保障
+            "is_online": app_user.id in online_ids,
         })
 
     has_more = total > page * page_size
