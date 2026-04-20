@@ -78,6 +78,7 @@ class AppInitState {
   final String diamondName;
   final int? imSdkAppId;
   final bool imConfigured;
+  final String? faceBeautyKey;
 
   const AppInitState({
     this.isLoading = false,
@@ -86,6 +87,7 @@ class AppInitState {
     this.diamondName = '钻石',
     this.imSdkAppId,
     this.imConfigured = false,
+    this.faceBeautyKey,
   });
 
   AppInitState copyWith({
@@ -95,6 +97,7 @@ class AppInitState {
     String? diamondName,
     int? imSdkAppId,
     bool? imConfigured,
+    Object? faceBeautyKey = const _NoValue(),
   }) {
     return AppInitState(
       isLoading: isLoading ?? this.isLoading,
@@ -103,8 +106,15 @@ class AppInitState {
       diamondName: diamondName ?? this.diamondName,
       imSdkAppId: imSdkAppId ?? this.imSdkAppId,
       imConfigured: imConfigured ?? this.imConfigured,
+      faceBeautyKey: identical(faceBeautyKey, const _NoValue())
+          ? this.faceBeautyKey
+          : faceBeautyKey as String?,
     );
   }
+}
+
+class _NoValue {
+  const _NoValue();
 }
 
 /// 认证 Provider
@@ -311,6 +321,7 @@ class AppInitNotifier extends StateNotifier<AppInitState> {
       final im = respData['im'] as Map<String, dynamic>?;
       final sdkAppIdRaw = im?['sdk_app_id'];
       final sdkAppId = sdkAppIdRaw is num ? sdkAppIdRaw.toInt() : null;
+      final faceBeautyKey = respData['face_beauty']?['key'] as String?;
 
       state = state.copyWith(
         isLoading: false,
@@ -319,6 +330,7 @@ class AppInitNotifier extends StateNotifier<AppInitState> {
         diamondName: tokenNames?['diamond_name'] as String? ?? '钻石',
         imConfigured: im?['configured'] == true,
         imSdkAppId: sdkAppId,
+        faceBeautyKey: faceBeautyKey,
       );
     } catch (e) {
       debugPrint('appInit.init error: $e');
@@ -351,4 +363,9 @@ final tokenNamesProvider = Provider<TokenNamesState>((ref) {
 /// 是否已登录
 final isLoggedInProvider = Provider<bool>((ref) {
   return ref.watch(authProvider).isLoggedIn;
+});
+
+/// FaceBeauty SDK Key Provider
+final faceBeautyKeyProvider = Provider<String?>((ref) {
+  return ref.watch(appInitProvider).faceBeautyKey;
 });

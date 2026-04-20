@@ -38,14 +38,14 @@ class MtPlugin {
   }
 
   ///设置渲染的开启&关闭
-  static setRenderEnable(bool enable) async {
+  static Future<void> setRenderEnable(bool enable) async {
     print("call.method:" + enable.toString());
     await _channel.invokeMethod(MTAction.SET_RENDER_ENABLE.methodName,
         <String, dynamic>{"enable": enable});
   }
 
   ///设置单美颜的开关
-  static setFaceBeautyEnable(bool enable) async {
+  static Future<void> setFaceBeautyEnable(bool enable) async {
     await _channel.invokeMethod(MTAction.SET_FACE_BEAUTY_ENABLE.methodName,
         <String, dynamic>{"enable": enable});
   }
@@ -87,7 +87,7 @@ class MtPlugin {
       <String, dynamic>{"value": value});
 
   ///美型的开关
-  static setFaceShapeEnable(bool isEnable) async =>
+  static Future<void> setFaceShapeEnable(bool isEnable) async =>
       await _channel.invokeMethod(MTAction.SET_FACE_SHAPE_ENABLE.methodName,
           <String, dynamic>{"value": isEnable});
 
@@ -221,7 +221,7 @@ class MtPlugin {
   ///开眼角[0-100]
   static setEyeCornerEnlargingValue(int value) async =>
       await _channel.invokeListMethod(
-          MTAction.SET_EYE_CORNER_TRIMMING_VALUE.methodName,
+          MTAction.SET_EYE_CORNER_ENLARGING_VALUE.methodName,
           <String, dynamic>{"value": value});
 
   ///动态
@@ -295,15 +295,14 @@ class MtPlugin {
           <String, dynamic>{"name": name});
 
   ///设置一键美颜
-  static setBeautyStyle(
-          int type) async =>
-      await _channel.invokeMethod(MTAction.SET_BEAUTY_STYLE.methodName,
-          // {"style": mtQuickBeautyDefault.filterName});
-          <String, dynamic>{"type": type});
+  static setBeautyStyle(int type) async {
+    await _channel.invokeMethod(MTAction.SET_BEAUTY_STYLE.methodName,
+        <String, dynamic>{"type": type});
+  }
 
-    ///设置人像抠图
+  ///设置人像抠图
   static setPortraitName(String name) async {
     await _channel
-        .invokeMethod(MTAction.SET_PORTRAIT_NAME.methodName, {"name": name});
+        .invokeListMethod(MTAction.SET_PORTRAIT_NAME.methodName, {"name": name});
   }
 }

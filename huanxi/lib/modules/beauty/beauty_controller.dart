@@ -108,7 +108,6 @@ class BeautyController extends StateNotifier<BeautyState> {
 
   BeautyController({this.onLog}) : super(const BeautyState()) {
     _log('BeautyController init');
-    _syncToNative();
     Future.microtask(() async {
       await _loadFromStorage();
       _syncToNative();
@@ -177,19 +176,26 @@ class BeautyController extends StateNotifier<BeautyState> {
   void _syncToNative() {
     _log('sync beauty params: whitening=${state.whitening}, blurriness=${state.blurriness}');
     MtPlugin.setRenderEnable(state.isRenderEnabled);
-    MtPlugin.setFaceBeautyEnable(state.isBeautyEnabled);
-    MtPlugin.setWhitenessValue(state.whitening);
-    MtPlugin.setBlurrinessValue(state.blurriness);
-    MtPlugin.setRosinessValue(state.rosiness);
-    MtPlugin.setClearnessValue(state.clearness);
-    MtPlugin.setBrightnessValue(state.brightness);
-    MtPlugin.setEyeEnlargingValue(state.eyeEnlarging);
-    MtPlugin.setEyeRoundingValue(state.eyeRounding);
-    MtPlugin.setCheekThinningValue(state.cheekThinning);
-    MtPlugin.setCheekVValue(state.cheekV);
-    MtPlugin.setCheekNarrowingValue(state.cheekNarrowing);
-    MtPlugin.setFaceShapeEnable(state.isFaceShapeEnabled);
-    if (state.currentFilter != null && state.currentFilter!.isNotEmpty) {
+
+    // SDK 当前将 SET_FACE_BEAUTY_ENABLE/SET_FACE_SHAPE_ENABLE 都映射到全局渲染开关，
+    // 这里改为按分组参数置零来控制开关，避免互相覆盖。
+    MtPlugin.setWhitenessValue(state.isBeautyEnabled ? state.whitening : 0);
+    MtPlugin.setBlurrinessValue(state.isBeautyEnabled ? state.blurriness : 0);
+    MtPlugin.setRosinessValue(state.isBeautyEnabled ? state.rosiness : 0);
+    MtPlugin.setClearnessValue(state.isBeautyEnabled ? state.clearness : 0);
+    MtPlugin.setBrightnessValue(state.isBeautyEnabled ? state.brightness : 0);
+
+    MtPlugin.setEyeEnlargingValue(state.isFaceShapeEnabled ? state.eyeEnlarging : 0);
+    MtPlugin.setEyeRoundingValue(state.isFaceShapeEnabled ? state.eyeRounding : 0);
+    MtPlugin.setCheekThinningValue(state.isFaceShapeEnabled ? state.cheekThinning : 0);
+    MtPlugin.setCheekVValue(state.isFaceShapeEnabled ? state.cheekV : 0);
+    MtPlugin.setCheekNarrowingValue(state.isFaceShapeEnabled ? state.cheekNarrowing : 0);
+    MtPlugin.setChinTrimmingValue(state.isFaceShapeEnabled ? state.chin : 0);
+    MtPlugin.setForeheadTrimmingValue(state.isFaceShapeEnabled ? state.forehead : 0);
+    MtPlugin.setNoseThinningValue(state.isFaceShapeEnabled ? state.noseThinning : 0);
+
+    // 空字符串表示“原图”，也需要下发到原生以清除上一个滤镜。
+    if (state.currentFilter != null) {
       MtPlugin.setBeautyFilterName(state.currentFilter!, state.filterIntensity);
     }
   }
@@ -315,6 +321,29 @@ class BeautyController extends StateNotifier<BeautyState> {
       chin: 0,
       forehead: 0,
       noseThinning: 0,
+    ));
+  }
+
+  void resetAll() {
+    _log('reset all beauty params');
+    _update((s) => s.copyWith(
+      isBeautyEnabled: true,
+      isFaceShapeEnabled: false,
+      whitening: 50,
+      blurriness: 50,
+      rosiness: 20,
+      clearness: 10,
+      brightness: 0,
+      eyeEnlarging: 0,
+      eyeRounding: 0,
+      cheekThinning: 0,
+      cheekV: 0,
+      cheekNarrowing: 0,
+      chin: 0,
+      forehead: 0,
+      noseThinning: 0,
+      currentFilter: '',
+      filterIntensity: 60,
     ));
   }
 }

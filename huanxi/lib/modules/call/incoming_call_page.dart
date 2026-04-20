@@ -169,7 +169,9 @@ class _IncomingCallPageState extends ConsumerState<IncomingCallPage> {
         const SnackBar(content: Text('接听失败，请重试')),
       );
     } finally {
-      ref.read(callIncomingControllerProvider.notifier).setActionInFlight(false);
+      if (mounted) {
+        ref.read(callIncomingControllerProvider.notifier).setActionInFlight(false);
+      }
     }
   }
 
@@ -197,14 +199,15 @@ class _IncomingCallPageState extends ConsumerState<IncomingCallPage> {
         const SnackBar(content: Text('拒绝失败，请重试')),
       );
     } finally {
-      ref.read(callIncomingControllerProvider.notifier).setActionInFlight(false);
+      if (mounted) {
+        ref.read(callIncomingControllerProvider.notifier).setActionInFlight(false);
+      }
     }
   }
 
   @override
   void dispose() {
     _disposed = true;
-    ref.read(callIncomingControllerProvider.notifier).setPageClosing(true);
     _wsDisconnectTimer?.cancel();
     _wsSubscription?.cancel();
     _wsConnectionSubscription?.cancel();

@@ -230,7 +230,9 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
         context.go(AppRoutes.index);
       }
     } finally {
-      ref.read(callOutgoingControllerProvider.notifier).setDialingInFlight(false);
+      if (mounted) {
+        ref.read(callOutgoingControllerProvider.notifier).setDialingInFlight(false);
+      }
     }
   }
 
@@ -310,14 +312,15 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
         const SnackBar(content: Text('取消失败，请稍后重试')),
       );
     } finally {
-      ref.read(callOutgoingControllerProvider.notifier).setActionInFlight(false);
+      if (mounted) {
+        ref.read(callOutgoingControllerProvider.notifier).setActionInFlight(false);
+      }
     }
   }
 
   @override
   void dispose() {
     _disposed = true;
-    ref.read(callOutgoingControllerProvider.notifier).setPageClosing(true);
     _wsDisconnectTimer?.cancel();
     _wsSubscription?.cancel();
     _wsConnectionSubscription?.cancel();

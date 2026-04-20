@@ -1,0 +1,1 @@
+int string game_view_content_description 0x0

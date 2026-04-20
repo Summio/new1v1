@@ -53,6 +53,8 @@ dependencies:
   flutter_secure_storage: ^10.0.0
   agora_rtc_engine: ^6.5.2
   permission_handler: ^11.4.0
+  mt_plugin:
+    path: lib/packages/mt_plugin
 
 dev_dependencies:
   flutter_test:

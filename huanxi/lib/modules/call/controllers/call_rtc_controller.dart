@@ -88,6 +88,10 @@ class CallRtcController extends StateNotifier<CallRtcState> {
   RtcEngine? _engine;
   RtcEngineEventHandler? _rtcEventHandler;
   bool _joinedCallbackEmitted = false;
+  int _externalFrameLogCounter = 0;
+  int _externalBlackFrameCounter = 0;
+  int _externalFrameWarnCounter = 0;
+  int _externalFrameRotation = 180;
 
   // MethodChannel 用于与原生 FaceBeauty 通信
   static const MethodChannel _beautyChannel = MethodChannel('beauty_plugin');
@@ -95,41 +99,138 @@ class CallRtcController extends StateNotifier<CallRtcState> {
   RtcEngine? get engine => _engine;
 
   Future<dynamic> _handleNativeMethod(MethodCall call) async {
+    if (call.method == 'previewReady') {
+      final args = (call.arguments as Map<dynamic, dynamic>? ?? const {});
+      final width = args['width'];
+      final height = args['height'];
+      final cameraId = (args['cameraId'] as num?)?.toInt();
+      // Android Camera 常量：后摄=0，前摄=1。
+      // 该项目链路下：前摄 180 更稳定；后摄使用 0，避免内容横置。
+      if (cameraId == 1) {
+        _externalFrameRotation = 180;
+      } else if (cameraId == 0) {
+        _externalFrameRotation = 0;
+      }
+      // ignore: avoid_print
+      print(
+        '[CALL_FLOW][callId=$callId] native preview ready: '
+        'size=${width}x$height cameraId=$cameraId rotation=$_externalFrameRotation '
+        'joined=${state.isJoined}, cameraOn=${state.isCameraOn}',
+      );
+      if (state.isJoined && state.isCameraOn) {
+        _startNativePush();
+      }
+      return;
+    }
     if (call.method == 'onFrame') {
       try {
         final args = call.arguments as Map<dynamic, dynamic>;
         final bytes = args['bytes'] as Uint8List;
         final width = args['width'] as int;
         final height = args['height'] as int;
-        final stride = args['stride'] as int;
-
-        if (bytes.length != stride * height) {
+        final strideRaw = args['stride'] as int;
+        if (width <= 0 || height <= 0 || strideRaw <= 0) {
           return;
         }
 
-        await _engine?.getMediaEngine().pushVideoFrame(
-          frame: ExternalVideoFrame(
-            type: VideoBufferType.videoBufferRawData,
-            format: VideoPixelFormat.videoPixelBgra,
-            buffer: bytes,
-            stride: width,
-            height: height,
-            rotation: 180,
-            timestamp: DateTime.now().millisecondsSinceEpoch,
-          ),
-        );
-      } catch (_) {
-        // 忽略帧推送错误，避免影响通话
+        // Agora 需要 stride 为像素数；原生侧有可能上报的是字节数，做一次自适应换算。
+        var strideInPixels = strideRaw;
+        final expectedBytesByPixelStride = strideInPixels * height * 4;
+        if (bytes.length != expectedBytesByPixelStride) {
+          if (strideRaw % 4 == 0 && (strideRaw ~/ 4) * height * 4 == bytes.length) {
+            strideInPixels = strideRaw ~/ 4;
+          } else {
+            _externalFrameWarnCounter += 1;
+            if (_externalFrameWarnCounter <= 5 || _externalFrameWarnCounter % 30 == 0) {
+              // ignore: avoid_print
+              print(
+                '[CALL_FLOW][callId=$callId] ext frame dropped: '
+                'bytes=${bytes.length}, width=$width, height=$height, strideRaw=$strideRaw',
+              );
+            }
+            return;
+          }
+        }
+
+        if (strideInPixels < width) {
+          return;
+        }
+
+        // 采样外部帧亮度，用于定位“已解码但黑屏”是否来自发送黑帧。
+        _externalFrameLogCounter += 1;
+        if (_externalFrameLogCounter % 30 == 0) {
+          var acc = 0;
+          var cnt = 0;
+          // BGRA，每 16 像素采样一次，控制开销。
+          for (var i = 0; i + 2 < bytes.length && cnt < 2000; i += 16 * 4) {
+            final b = bytes[i];
+            final g = bytes[i + 1];
+            final r = bytes[i + 2];
+            acc += (r + g + b) ~/ 3;
+            cnt += 1;
+          }
+          if (cnt > 0) {
+            final luma = acc ~/ cnt;
+            if (luma <= 6) {
+              _externalBlackFrameCounter += 1;
+            } else {
+              _externalBlackFrameCounter = 0;
+            }
+            // 统一在 flutter log 输出，便于你直接从日志判断发送内容是否为黑帧。
+            // ignore: avoid_print
+            print(
+              '[CALL_FLOW][callId=$callId] ext frame luma=$luma '
+              'blackSeq=$_externalBlackFrameCounter size=${width}x$height '
+              'strideRaw=$strideRaw stridePx=$strideInPixels',
+            );
+          }
+        }
+
+        try {
+          await _engine?.getMediaEngine().pushVideoFrame(
+            frame: ExternalVideoFrame(
+              type: VideoBufferType.videoBufferRawData,
+              format: VideoPixelFormat.videoPixelRgba,
+              buffer: bytes,
+              stride: strideInPixels,
+              height: height,
+              rotation: _externalFrameRotation,
+              timestamp: DateTime.now().millisecondsSinceEpoch,
+            ),
+          );
+        } catch (e) {
+          _externalFrameWarnCounter += 1;
+          if (_externalFrameWarnCounter <= 5 || _externalFrameWarnCounter % 30 == 0) {
+            // ignore: avoid_print
+            print('[CALL_FLOW][callId=$callId] pushVideoFrame failed: $e');
+          }
+        }
+      } catch (e) {
+        _externalFrameWarnCounter += 1;
+        if (_externalFrameWarnCounter <= 5 || _externalFrameWarnCounter % 30 == 0) {
+          // ignore: avoid_print
+          print('[CALL_FLOW][callId=$callId] onFrame handle failed: $e');
+        }
       }
     }
   }
 
   void _startNativePush() {
-    _beautyChannel.invokeMethod('startAgoraPush').catchError((_) {});
+    // ignore: avoid_print
+    print('[CALL_FLOW][callId=$callId] invoke startAgoraPush');
+    _beautyChannel.invokeMethod('startAgoraPush').catchError((e) {
+      // ignore: avoid_print
+      print('[CALL_FLOW][callId=$callId] startAgoraPush failed: $e');
+    });
   }
 
   void _stopNativePush() {
-    _beautyChannel.invokeMethod('stopAgoraPush').catchError((_) {});
+    // ignore: avoid_print
+    print('[CALL_FLOW][callId=$callId] invoke stopAgoraPush');
+    _beautyChannel.invokeMethod('stopAgoraPush').catchError((e) {
+      // ignore: avoid_print
+      print('[CALL_FLOW][callId=$callId] stopAgoraPush failed: $e');
+    });
   }
 
   void _switchNativeCamera() {
@@ -142,7 +243,9 @@ class CallRtcController extends StateNotifier<CallRtcState> {
     void Function(String message)? onLog,
     String? faceBeautyKey,
   }) async {
+    final initStartAt = DateTime.now();
     if (state.isJoining || state.isJoined) {
+      onLog?.call('rtc init skipped: joining=${state.isJoining}, joined=${state.isJoined}');
       return;
     }
     _joinedCallbackEmitted = false;
@@ -179,6 +282,9 @@ class CallRtcController extends StateNotifier<CallRtcState> {
       final channel = (rtcData?['channel'] as String?)?.trim() ?? '';
       final token = (rtcData?['token'] as String?)?.trim() ?? '';
       final uid = (rtcData?['uid'] as num?)?.toInt() ?? 0;
+      onLog?.call(
+        'rtc token ready: appIdLen=${appId.length}, channel=$channel, uid=$uid, tokenLen=${token.length}',
+      );
 
       if (appId.isEmpty || channel.isEmpty || token.isEmpty || uid <= 0) {
         throw Exception('RTC 参数不完整');
@@ -186,11 +292,17 @@ class CallRtcController extends StateNotifier<CallRtcState> {
 
       // 初始化 FaceBeauty SDK
       if (faceBeautyKey != null && faceBeautyKey.isNotEmpty) {
+        final beautyInitAt = DateTime.now();
         try {
           MtPlugin.initSdk(faceBeautyKey);
+          onLog?.call(
+            'faceBeauty init done in ${DateTime.now().difference(beautyInitAt).inMilliseconds}ms',
+          );
         } catch (e) {
           onLog?.call('FaceBeauty SDK init failed: $e');
         }
+      } else {
+        onLog?.call('faceBeauty key missing, skip sdk init');
       }
 
       final engine = createAgoraRtcEngine();
@@ -205,12 +317,14 @@ class CallRtcController extends StateNotifier<CallRtcState> {
           channelProfile: ChannelProfileType.channelProfileCommunication,
         ),
       );
+      onLog?.call('agora engine initialized');
 
       // 启用外部视频源模式（FaceBeauty 原生相机采集 + 美颜处理）
       await engine.getMediaEngine().setExternalVideoSource(
         enabled: true,
         useTexture: false,
       );
+      onLog?.call('external video source enabled');
 
       void markJoined(int localUid) {
         if (!mounted) {
@@ -261,6 +375,55 @@ class CallRtcController extends StateNotifier<CallRtcState> {
           state = state.copyWith(remoteUid: remoteUid);
           onLog?.call('remote joined, uid=$remoteUid');
         },
+        onUserMuteVideo: (RtcConnection connection, int remoteUid, bool muted) {
+          onLog?.call('remote mute video: uid=$remoteUid, muted=$muted');
+        },
+        onRemoteVideoStateChanged: (
+          RtcConnection connection,
+          int remoteUid,
+          RemoteVideoState state,
+          RemoteVideoStateReason reason,
+          int elapsed,
+        ) {
+          onLog?.call(
+            'remote video state: uid=$remoteUid, state=$state, reason=$reason, elapsed=$elapsed',
+          );
+        },
+        onFirstRemoteVideoDecoded: (
+          RtcConnection connection,
+          int uid,
+          int width,
+          int height,
+          int elapsed,
+        ) {
+          onLog?.call(
+            'first remote video decoded: uid=$uid size=${width}x$height elapsed=$elapsed',
+          );
+        },
+        onFirstRemoteVideoFrame: (
+          RtcConnection connection,
+          int uid,
+          int width,
+          int height,
+          int elapsed,
+        ) {
+          onLog?.call(
+            'first remote video frame: uid=$uid size=${width}x$height elapsed=$elapsed',
+          );
+        },
+        onVideoSizeChanged: (
+          RtcConnection connection,
+          VideoSourceType sourceType,
+          int sourceUid,
+          int width,
+          int height,
+          int rotation,
+        ) {
+          onLog?.call(
+            'video size changed: sourceType=$sourceType uid=$sourceUid '
+            'size=${width}x$height rotation=$rotation',
+          );
+        },
         onUserOffline: (
           RtcConnection connection,
           int remoteUid,
@@ -303,6 +466,7 @@ class CallRtcController extends StateNotifier<CallRtcState> {
           if (!mounted) {
             return;
           }
+          onLog?.call('rtc error: code=$err, msg=$msg');
           state = state.copyWith(errorMessage: 'RTC 错误: $msg');
         },
         onPermissionError: (permissionType) {
@@ -335,6 +499,19 @@ class CallRtcController extends StateNotifier<CallRtcState> {
 
       await engine.enableVideo();
       await engine.setClientRole(role: ClientRoleType.clientRoleBroadcaster);
+      await engine.setVideoEncoderConfiguration(
+        const VideoEncoderConfiguration(
+          dimensions: VideoDimensions(width: 720, height: 1280),
+          frameRate: 15,
+          bitrate: 1800,
+          orientationMode: OrientationMode.orientationModeAdaptive,
+          degradationPreference:
+              DegradationPreference.maintainBalanced,
+        ),
+      );
+      onLog?.call(
+        'enableVideo + setClientRole + encoder(720x1280@15fps/1800kbps) done',
+      );
       // 移除 startPreview()，改为使用原生相机采集
       // await engine.startPreview();
 
@@ -348,6 +525,9 @@ class CallRtcController extends StateNotifier<CallRtcState> {
             clientRoleType: ClientRoleType.clientRoleBroadcaster,
             // 外部视频源模式下，不发布内置摄像头轨道
             publishCameraTrack: false,
+            // 外部源帧通过 pushVideoFrame(trackId=0) 推送，需要发布自定义视频轨。
+            publishCustomVideoTrack: true,
+            customVideoTrackId: 0,
             publishMicrophoneTrack: true,
             autoSubscribeAudio: true,
             autoSubscribeVideo: true,
@@ -365,6 +545,7 @@ class CallRtcController extends StateNotifier<CallRtcState> {
 
       try {
         await doJoin();
+        onLog?.call('joinChannel called');
       } catch (e) {
         if (await isJoinRejected(e)) {
           onLog?.call('join rejected(-17), retry once');
@@ -390,6 +571,9 @@ class CallRtcController extends StateNotifier<CallRtcState> {
       }
 
       state = state.copyWith(isJoining: false, isLoading: false);
+      onLog?.call(
+        'rtc init finished in ${DateTime.now().difference(initStartAt).inMilliseconds}ms',
+      );
     } catch (e) {
       onLog?.call('rtc init failed: $e');
       state = state.copyWith(

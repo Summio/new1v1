@@ -1,15 +1,30 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mt_plugin/mt_plugin.dart';
 
-import '../../app/theme/app_theme.dart';
+import '../../app/providers/auth_provider.dart';
 import 'beauty_camera_view.dart';
 import 'beauty_panel.dart';
 
-class BeautySettingsPage extends ConsumerWidget {
+class BeautySettingsPage extends ConsumerStatefulWidget {
   const BeautySettingsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<BeautySettingsPage> createState() => _BeautySettingsPageState();
+}
+
+class _BeautySettingsPageState extends ConsumerState<BeautySettingsPage> {
+  @override
+  void initState() {
+    super.initState();
+    final key = ref.read(faceBeautyKeyProvider);
+    if (key != null && key.isNotEmpty) {
+      MtPlugin.initSdk(key);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
       body: Column(

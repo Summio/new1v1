@@ -25,6 +25,7 @@ async def get_app_bootstrap():
     im_secret_key = (config_map.get("im_secret_key") or "").strip()
     rtc_app_id = (config_map.get("rtc_app_id") or "").strip()
     rtc_app_certificate = (config_map.get("rtc_app_certificate") or "").strip()
+    face_beauty_key = (config_map.get("face_beauty_key") or "").strip()
     try:
         im_sdk_app_id = int(im_sdk_app_id_raw) if im_sdk_app_id_raw else None
     except ValueError:
@@ -61,6 +62,9 @@ async def get_app_bootstrap():
             "call": {
                 "reject_inbound_protect_seconds": call_reject_inbound_protect_seconds,
                 "reject_pair_protect_seconds": call_reject_pair_protect_seconds,
+            },
+            "face_beauty": {
+                "key": face_beauty_key,
             },
         }
     )

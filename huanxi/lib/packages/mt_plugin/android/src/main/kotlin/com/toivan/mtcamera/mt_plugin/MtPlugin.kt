@@ -9,6 +9,10 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
+import io.flutter.plugin.common.StandardMessageCodec
+import io.flutter.plugin.platform.PlatformViewsController
+import com.toivan.mtcamera.mt_plugin.view.MtCameraPlatformView
+import com.toivan.mtcamera.mt_plugin.view.MtSurfaceCameraView
 import com.nimo.facebeauty.FBEffect
 import com.nimo.facebeauty.model.FBBeautyEnum
 import com.nimo.facebeauty.model.FBItemEnum
@@ -20,7 +24,6 @@ class MtPlugin : FlutterPlugin, MethodCallHandler {
 
     private lateinit var channel: MethodChannel
 
-    //用于初始化的Context
     private lateinit var applicationContext: Context
 
     override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
@@ -30,17 +33,31 @@ class MtPlugin : FlutterPlugin, MethodCallHandler {
         applicationContext = flutterPluginBinding.applicationContext
 
         channel.setMethodCallHandler(this)
+
+        Log.i("MtPlugin", "Registering CameraView platform factory...")
+        flutterPluginBinding.platformViewRegistry.registerViewFactory(
+            "CameraView",
+            MtCameraPlatformView(StandardMessageCodec())
+        )
+        Log.i("MtPlugin", "CameraView platform factory registered.")
+
         beautyChannel.setMethodCallHandler(object : MethodChannel.MethodCallHandler {
 
             override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
-                Log.d("MtPlugin", "call: ${call.method}")
+                Log.d("beauty.method:", call.method)
                 when (call.method) {
                     "startAgoraPush" -> {
                         shouldPushToAgora = true
+                        Log.i("MtPlugin", "startAgoraPush received, shouldPushToAgora=true")
                         result.success(null)
                     }
                     "stopAgoraPush" -> {
                         shouldPushToAgora = false
+                        Log.i("MtPlugin", "stopAgoraPush received, shouldPushToAgora=false")
+                        result.success(null)
+                    }
+                    "switchCamera" -> {
+                        cameraViewInstance?.switchCamera()
                         result.success(null)
                     }
                 }
@@ -52,7 +69,7 @@ class MtPlugin : FlutterPlugin, MethodCallHandler {
 
     override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
 
-        Log.d("MtPlugin", "call: ${call.method}")
+        Log.d("mt_plugin.method:", call.method)
 
         when (call.method) {
             "getPlatformVersion" -> {
@@ -66,23 +83,12 @@ class MtPlugin : FlutterPlugin, MethodCallHandler {
                 }
             }
 
-
             MtAction.SET_FACE_BEAUTY_ENABLE.name -> {
                 val isEnable: Boolean? = call.argument("enable")
                 isEnable?.let {
-                    // 如果禁用美颜，将所有美颜参数设为0；如果启用美颜，渲染管线保持开启
-                    if (!it) {
-                        FBEffect.shareInstance().setBeauty(FBBeautyEnum.FBBeautySkinWhitening.value, 0)
-                        FBEffect.shareInstance().setBeauty(FBBeautyEnum.FBBeautyClearSmoothing.value, 0)
-                        FBEffect.shareInstance().setBeauty(FBBeautyEnum.FBBeautySkinRosiness.value, 0)
-                        FBEffect.shareInstance().setBeauty(FBBeautyEnum.FBBeautyImageSharpness.value, 0)
-                        FBEffect.shareInstance().setBeauty(FBBeautyEnum.FBBeautyImageBrightness.value, 0)
-                        FBEffect.shareInstance().setBeauty(FBBeautyEnum.FBBeautyDarkCircleLessening.value, 0)
-                        FBEffect.shareInstance().setBeauty(FBBeautyEnum.FBBeautyNasolabialLessening.value, 0)
-                    }
+                    FBEffect.shareInstance().setRenderEnable(isEnable)
                 }
             }
-
 
             MtAction.INIT_PATH.name -> {
                 val paths = ConstraintsMap()
@@ -94,263 +100,165 @@ class MtPlugin : FlutterPlugin, MethodCallHandler {
             }
 
             MtAction.INIT_SDK.name -> {
-                Log.i("MtPlugin", "INIT_SDK: 初始化触发")
+                Log.i("INIT_SDK:", "初始化触发")
                 val key: String? = call.argument("key")
-                if (key == null) {
-                    Log.e("MtPlugin", "INIT_SDK: key 参数为空")
-                    return
-                }
                 applicationContext.let {
-                    FBEffect.shareInstance().initFaceBeauty(it, key, object : FBEffect.InitCallback {
+                    FBEffect.shareInstance().initFaceBeauty(it, key ?: "", object : FBEffect.InitCallback {
                         override fun onInitSuccess() {
-                            Log.i("MtPlugin", "FaceBeauty SDK 初始化成功, key=$key")
+                            Log.i("FBEffect", "init success")
                         }
                         override fun onInitFailure() {
-                            Log.e("MtPlugin", "FaceBeauty SDK 初始化失败, key=$key")
+                            Log.e("FBEffect", "init failure")
                         }
                     })
                 }
+                result.success(true)
             }
 
             MtAction.SET_WHITENESS_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setBeauty(FBBeautyEnum.FBBeautySkinWhitening.value, value)
-                    Log.d("MtPlugin", "SET_WHITENESS: $value")
+                    FBEffect.shareInstance().setBeauty(FBBeautyEnum.FBBeautySkinWhitening.value, value)
                 }
             }
-
 
             MtAction.SET_BLURRINESS_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setBeauty(FBBeautyEnum.FBBeautyClearSmoothing.value, value)
-                    Log.d("MtPlugin", "SET_BLURRINESS: $value")
+                    FBEffect.shareInstance().setBeauty(FBBeautyEnum.FBBeautyClearSmoothing.value, value)
                 }
             }
 
             MtAction.SET_ROSINESS_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setBeauty(FBBeautyEnum.FBBeautySkinRosiness.value, value)
-                    Log.d("MtPlugin", "SET_ROSINESS: $value")
+                    FBEffect.shareInstance().setBeauty(FBBeautyEnum.FBBeautySkinRosiness.value, value)
                 }
             }
 
             MtAction.SET_CLEAR_NESS_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setBeauty(FBBeautyEnum.FBBeautyImageSharpness.value, value)
-                    Log.d("MtPlugin", "SET_CLEARNESS: $value")
+                    FBEffect.shareInstance().setBeauty(FBBeautyEnum.FBBeautyImageSharpness.value, value)
                 }
             }
 
             MtAction.SET_BRIGHTNESS_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setBeauty(FBBeautyEnum.FBBeautyImageBrightness.value, value)
-                    Log.d("MtPlugin", "SET_BRIGHTNESS: $value")
-                }
-            }
-
-            MtAction.SET_EYE_ENLARGING_VALUE.name -> {
-                val value: Int? = call.argument("value")
-                value?.let {
-                    FBEffect.shareInstance()
-                        .setReshape(FBReshapeEnum.FBReshapeEyeEnlarging.value, value)
-                    Log.d("MtPlugin", "SET_EYE_ENLARGING: $value")
-                }
-            }
-
-            MtAction.SET_CHEEK_THINNING_VALUE.name -> {
-                val value: Int? = call.argument("value")
-                value?.let {
-                    FBEffect.shareInstance()
-                        .setReshape(FBReshapeEnum.FBReshapeCheekThinning.value, value)
-                    Log.d("MtPlugin", "SET_CHEEK_THINNING: $value")
-                }
-            }
-
-            MtAction.SET_BEAUTY_FILTER_NAME.name -> {
-                val name: String? = call.argument("name")
-                val value: Int? = call.argument("value")
-                name?.let {
-                    FBEffect.shareInstance().setFilter(FBFilterEnum.FBFilterBeauty.value, name, value ?: 60)
-                    Log.d("MtPlugin", "SET_FILTER: name=$name, intensity=${value ?: 60}")
-                }
-            }
-
-            MtAction.SET_PORTRAIT_NAME.name -> {
-                val value: String? = call.argument("name")
-                value?.let {
-                    FBEffect.shareInstance().setAISegEffect(value)
-                }
-            }
-
-            MtAction.SET_ROSINESS_VALUE.name -> {
-                val value: Int? = call.argument("value")
-                value?.let {
-                    FBEffect.shareInstance()
-                        .setBeauty(FBBeautyEnum.FBBeautySkinRosiness.value, value)
-                }
-            }
-
-            MtAction.SET_CLEAR_NESS_VALUE.name -> {
-                val value: Int? = call.argument("value")
-                value?.let {
-                    FBEffect.shareInstance()
-                        .setBeauty(FBBeautyEnum.FBBeautyImageSharpness.value, value)
-                }
-            }
-
-            MtAction.SET_BRIGHTNESS_VALUE.name -> {
-                val value: Int? = call.argument("value")
-                value?.let {
-                    FBEffect.shareInstance()
-                        .setBeauty(FBBeautyEnum.FBBeautyImageBrightness.value, value)
+                    FBEffect.shareInstance().setBeauty(FBBeautyEnum.FBBeautyImageBrightness.value, value)
                 }
             }
 
             MtAction.SET_UNDEREYE_CIRCLES_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setBeauty(FBBeautyEnum.FBBeautyDarkCircleLessening.value, value)
+                    FBEffect.shareInstance().setBeauty(FBBeautyEnum.FBBeautyDarkCircleLessening.value, value)
                 }
             }
 
             MtAction.SET_NASOLABIAL_FOLD_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setBeauty(FBBeautyEnum.FBBeautyNasolabialLessening.value, value)
+                    FBEffect.shareInstance().setBeauty(FBBeautyEnum.FBBeautyNasolabialLessening.value, value)
                 }
             }
 
             MtAction.SET_FACE_SHAPE_ENABLE.name -> {
                 val isEnable: Boolean? = call.argument("value")
                 isEnable?.let {
-                    // 如果禁用美型，将所有美型参数设为0
-                    if (!it) {
-                        FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeEyeEnlarging.value, 0)
-                        FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeEyeRounding.value, 0)
-                        FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeCheekThinning.value, 0)
-                        FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeCheekVShaping.value, 0)
-                        FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeCheekNarrowing.value, 0)
-                        FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeChinTrimming.value, 0)
-                        FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeForeheadTrimming.value, 0)
-                        FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeNoseThinning.value, 0)
-                    }
+                    FBEffect.shareInstance().setRenderEnable(isEnable)
                 }
             }
 
             MtAction.SET_EYE_ENLARGING_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setReshape(FBReshapeEnum.FBReshapeEyeEnlarging.value, value);
+                    FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeEyeEnlarging.value, value)
                 }
             }
 
             MtAction.SET_EYE_ROUNDING_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setReshape(FBReshapeEnum.FBReshapeEyeRounding.value, value);
+                    FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeEyeRounding.value, value)
                 }
             }
 
             MtAction.SET_CHEEK_V_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setReshape(FBReshapeEnum.FBReshapeCheekVShaping.value, value);
+                    FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeCheekVShaping.value, value)
                 }
             }
 
             MtAction.SET_FACE_SHORTENING_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setReshape(FBReshapeEnum.FBReshapeCheekShortening.value, value);
+                    FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeCheekShortening.value, value)
                 }
             }
 
             MtAction.SET_CHEEK_NARROWING_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setReshape(FBReshapeEnum.FBReshapeCheekNarrowing.value, value);
+                    FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeCheekNarrowing.value, value)
                 }
             }
 
             MtAction.SET_CHEEK_THINNING_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setReshape(FBReshapeEnum.FBReshapeCheekThinning.value, value);
+                    FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeCheekThinning.value, value)
                 }
             }
 
             MtAction.SET_CHIN_TRIMMING_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setReshape(FBReshapeEnum.FBReshapeChinTrimming.value, value);
+                    FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeChinTrimming.value, value)
                 }
             }
 
             MtAction.SET_FOREHEAD_TRIMMING_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setReshape(FBReshapeEnum.FBReshapeForeheadTrimming.value, value);
+                    FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeForeheadTrimming.value, value)
                 }
             }
 
             MtAction.SET_MOUTH_TRIMMING_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setReshape(FBReshapeEnum.FBReshapeMouthTrimming.value, value);
+                    FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeMouthTrimming.value, value)
                 }
             }
 
             MtAction.SET_NOSE_THINNING_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setReshape(FBReshapeEnum.FBReshapeNoseThinning.value, value);
+                    FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeNoseThinning.value, value)
                 }
             }
 
             MtAction.SET_NOSE_ENLARGING_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setReshape(FBReshapeEnum.FBReshapeNoseEnlarging.value, value);
+                    FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeNoseEnlarging.value, value)
                 }
             }
-
 
             MtAction.SET_EYE_SPACING_TRIMMING_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setReshape(FBReshapeEnum.FBReshapeEyeSpaceTrimming.value, value);
+                    FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeEyeSpaceTrimming.value, value)
                 }
             }
 
             MtAction.SET_EYE_CORNER_TRIMMING_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setReshape(FBReshapeEnum.FBReshapeEyeCornerTrimming.value, value);
+                    FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeEyeCornerTrimming.value, value)
                 }
             }
 
@@ -359,12 +267,6 @@ class MtPlugin : FlutterPlugin, MethodCallHandler {
                 value?.let {
                     Log.d("应用贴纸:", value)
                     FBEffect.shareInstance().setARItem(FBItemEnum.FBItemSticker.value, value)
-                }
-            }
-
-            MtAction.SET_EXPRESSION_RECREATION_NAME.name -> {
-                val value: String? = call.argument("name")
-                value?.let {
                 }
             }
 
@@ -389,86 +291,66 @@ class MtPlugin : FlutterPlugin, MethodCallHandler {
                 }
             }
 
-            MtAction.SET_WATER_NAME.name -> {
-
-                val name: String? = call.argument("name")
-
-                name?.let {
-                    FBEffect.shareInstance().setARItem(FBItemEnum.FBItemWatermark.value, name)
-                }
-
-            }
-
             MtAction.SET_PHILTRUM_TRIMMING_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setReshape(FBReshapeEnum.FBReshapePhiltrumTrimming.value, value);
+                    FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapePhiltrumTrimming.value, value)
                 }
             }
-
 
             MtAction.SET_NOSE_APEX_LESSENING_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setReshape(FBReshapeEnum.FBReshapeNoseApexLessening.value, value);
+                    FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeNoseApexLessening.value, value)
                 }
             }
 
             MtAction.SET_TEMPLE_ENLARG_ING_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setReshape(FBReshapeEnum.FBReshapeTempleEnlarging.value, value);
+                    FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeTempleEnlarging.value, value)
                 }
             }
 
             MtAction.SET_FACE_LESSENING_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setReshape(FBReshapeEnum.FBReshapeFaceLessening.value, value);
+                    FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeFaceLessening.value, value)
                 }
             }
 
             MtAction.SET_HEAD_LESSENING_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setReshape(FBReshapeEnum.FBReshapeHeadLessening.value, value);
+                    FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeHeadLessening.value, value)
                 }
             }
 
             MtAction.SET_NOSE_ROOT_RNLARING.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setReshape(FBReshapeEnum.FBReshapeNoseRootEnlarging.value, value);
+                    FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeNoseRootEnlarging.value, value)
                 }
             }
 
             MtAction.SET_JAW_BONE_THINNING_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setReshape(FBReshapeEnum.FBReshapeJawboneThinning.value, value);
+                    FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeJawboneThinning.value, value)
                 }
             }
 
             MtAction.SET_CHEEK_BONE_THINNING.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setReshape(FBReshapeEnum.FBReshapeCheekboneThinning.value, value);
+                    FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeCheekboneThinning.value, value)
                 }
             }
 
             MtAction.SET_MOUTH_SMILING_ENLARGING_VALUE.name -> {
                 val value: Int? = call.argument("value")
                 value?.let {
-                    FBEffect.shareInstance()
-                        .setReshape(FBReshapeEnum.FBReshapeMouthSmiling.value, value);
+                    FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeMouthSmiling.value, value)
                 }
             }
 
@@ -488,16 +370,11 @@ class MtPlugin : FlutterPlugin, MethodCallHandler {
             }
 
             MtAction.SET_EFFECT_FILTER_TYPE.name -> {
-
                 val name: String? = call.argument("name")
-
-                val value: Int = call.argument("progress") ?: 0
-
-
+                val intensity: Int? = call.argument("progress")
                 name?.let {
-                    FBEffect.shareInstance().setFilter(FBFilterEnum.FBFilterEffect.value, name)
+                    FBEffect.shareInstance().setFilter(FBFilterEnum.FBFilterEffect.value, name, intensity ?: 60)
                 }
-
             }
 
             MtAction.SET_FUNNY_FILTER_TYPE.name -> {
@@ -506,6 +383,61 @@ class MtPlugin : FlutterPlugin, MethodCallHandler {
                     FBEffect.shareInstance().setFilter(FBFilterEnum.FBFilterFunny.value, filterName)
                 }
             }
+
+            MtAction.SET_PORTRAIT_NAME.name -> {
+                val value: String? = call.argument("name")
+                value?.let {
+                    FBEffect.shareInstance().setAISegEffect(value)
+                }
+            }
+
+            MtAction.SET_EYE_CORNER_ENLARGING_VALUE.name -> {
+                val value: Int? = call.argument("value")
+                value?.let {
+                    FBEffect.shareInstance().setReshape(FBReshapeEnum.FBReshapeEyeCornerEnlarging.value, value)
+                }
+            }
+
+            MtAction.SET_MAGIC_FILTER_TYPE.name -> {
+                // Magic filter not available in current SDK
+                val filterName: String? = call.argument("name")
+                Log.d("MtPlugin", "SET_MAGIC_FILTER_TYPE: name=$filterName (not implemented)")
+            }
+
+            MtAction.SET_TONE_FILTER_TYPE.name -> {
+                // Tone filter not available in current SDK
+                val filterName: String? = call.argument("name")
+                Log.d("MtPlugin", "SET_TONE_FILTER_TYPE: name=$filterName (not implemented)")
+            }
+
+            MtAction.SET_BEAUTY_STYLE.name -> {
+                val style: Int? = call.argument("type")
+                Log.d("MtPlugin", "SET_BEAUTY_STYLE: type=$style")
+            }
+
+            MtAction.SET_GREEN_SCREEN.name -> {
+                val name: String? = call.argument("name")
+                name?.let {
+                    Log.d("MtPlugin", "SET_GREEN_SCREEN: name=$name")
+                }
+            }
+
+            MtAction.SET_EXPRESSION_RECREATION_NAME.name -> {
+                val name: String? = call.argument("name")
+                name?.let {
+                    Log.d("MtPlugin", "SET_EXPRESSION_RECREATION: name=$name")
+                }
+            }
+
+            MtAction.SET_WATER_NAME.name -> {
+                val name: String? = call.argument("name")
+                val x: Int? = call.argument("x")
+                val y: Int? = call.argument("y")
+                val ratio: Int? = call.argument("ratio")
+                Log.d("MtPlugin", "SET_WATER_NAME: name=$name, x=$x, y=$y, ratio=$ratio")
+            }
+
+            else -> result.notImplemented()
         }
     }
 
@@ -517,5 +449,6 @@ class MtPlugin : FlutterPlugin, MethodCallHandler {
     companion object {
         lateinit var beautyChannel: MethodChannel
         var shouldPushToAgora: Boolean = false
+        var cameraViewInstance: MtSurfaceCameraView? = null
     }
 }

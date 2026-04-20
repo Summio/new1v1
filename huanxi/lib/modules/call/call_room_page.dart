@@ -6,11 +6,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/providers/anchor_provider.dart';
+import '../../app/providers/auth_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/utils/app_toast.dart';
+import '../beauty/beauty_camera_view.dart';
+import '../beauty/beauty_panel.dart';
 import '../gift/gift_panel.dart';
 import 'call_end_reason.dart';
 import 'controllers/call_gift_controller.dart';
@@ -78,6 +81,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
             );
           },
           onLog: _log,
+          faceBeautyKey: ref.read(faceBeautyKeyProvider),
         ),
       );
     });
@@ -221,6 +225,15 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
         anchorId: targetAnchorId.toString(),
         onClose: () => Navigator.pop(context),
       ),
+    );
+  }
+
+  void _showBeautyPanel() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const BeautyPanel(),
     );
   }
 
@@ -461,28 +474,40 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
                         onTap: () => _showGiftPanel(anchor),
                       ),
                       _ControlButton(
+                        icon: Icons.auto_awesome,
+                        label: '美颜',
+                        onTap: _showBeautyPanel,
+                      ),
+                      _ControlButton(
                         icon: Icons.flip_camera_ios,
                         label: '翻转',
                         isSpinning: rtcState.isFlipping,
                         onTap: () => unawaited(rtcController.flipCamera()),
                       ),
-                      GestureDetector(
-                        onTap: _endCall,
-                        child: Container(
-                          width: 60,
-                          height: 60,
-                          decoration: const BoxDecoration(
-                            color: AppTheme.errorColor,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.call_end,
-                            color: Colors.white,
-                            size: 30,
-                          ),
-                        ),
-                      ),
                     ],
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: MediaQuery.of(context).padding.bottom + 116,
+                child: Center(
+                  child: GestureDetector(
+                    onTap: _endCall,
+                    child: Container(
+                      width: 62,
+                      height: 62,
+                      decoration: const BoxDecoration(
+                        color: AppTheme.errorColor,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.call_end,
+                        color: Colors.white,
+                        size: 30,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -521,11 +546,27 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     if (rtcState.remoteUid != null &&
         engine != null &&
         rtcState.channelName != null) {
-      return AgoraVideoView(
-        controller: VideoViewController.remote(
-          rtcEngine: engine,
-          canvas: VideoCanvas(uid: rtcState.remoteUid),
-          connection: RtcConnection(channelId: rtcState.channelName),
+      final screenSize = MediaQuery.of(context).size;
+      return Positioned.fill(
+        child: SizedBox(
+          width: screenSize.width,
+          height: screenSize.height,
+          child: AgoraVideoView(
+            key: ValueKey('remote_full_${widget.callId}_${rtcState.remoteUid}'),
+            controller: VideoViewController.remote(
+              rtcEngine: engine,
+              canvas: VideoCanvas(
+                uid: rtcState.remoteUid,
+                renderMode: RenderModeType.renderModeHidden,
+              ),
+              connection: RtcConnection(
+                channelId: rtcState.channelName,
+                localUid: rtcState.localUid,
+              ),
+              // 与本地 BeautyCameraView(PlatformView) 同屏时优先 Texture，避免 Android 叠层黑屏。
+              useFlutterTexture: true,
+            ),
+          ),
         ),
       );
     }
@@ -537,17 +578,11 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     required CallRtcState rtcState,
     required CallRtcController rtcController,
   }) {
-    final engine = rtcController.engine;
-    if (!rtcState.isCameraOn || engine == null) {
+    if (!rtcState.isCameraOn) {
       return const Icon(Icons.videocam_off, color: Colors.white30, size: 32);
     }
 
-    return AgoraVideoView(
-      controller: VideoViewController(
-        rtcEngine: engine,
-        canvas: const VideoCanvas(uid: 0),
-      ),
-    );
+    return const BeautyCameraView();
   }
 
   Widget _buildPlaceholder(CallRtcState rtcState) {

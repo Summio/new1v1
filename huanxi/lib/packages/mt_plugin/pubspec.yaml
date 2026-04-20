@@ -1,0 +1,25 @@
+name: mt_plugin
+description: FaceBeauty 美颜 SDK Flutter 插件
+version: 0.0.1
+publish_to: 'none'
+
+environment:
+  sdk: ^3.0.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.toivan.mtcamera.mt_plugin
+        pluginClass: MtPlugin
+      ios:
+        package: com.toivan.mtcamera.mt_plugin
+        pluginClass: MtPlugin
+
+  assets:
+    - mt_icon/
+    - assets/
