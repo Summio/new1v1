@@ -29,10 +29,12 @@ class MtPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 
         channel.setMethodCallHandler(this)
 
+        Log.i("MtPlugin", "Registering CameraView platform factory...")
         flutterPluginBinding.platformViewRegistry.registerViewFactory(
             "CameraView",
             MtCameraPlatformView(StandardMessageCodec())
         )
+        Log.i("MtPlugin", "CameraView platform factory registered.")
 
         beautyChannel.setMethodCallHandler(object : MethodChannel.MethodCallHandler {
             override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {

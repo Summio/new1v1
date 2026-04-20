@@ -6,6 +6,7 @@ import android.view.ViewGroup
 import io.flutter.plugin.common.MessageCodec
 import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
+import io.flutter.plugin.platform.PlatformViewsController
 import com.toivan.mtcamera.mt_plugin.MtPlugin
 import com.nimo.facebeauty.FBEffect
 
@@ -29,5 +30,9 @@ class MtCameraPlatformView(createArgsCodec: MessageCodec<Any>?) : PlatformViewFa
         }.apply {
             view.layoutParams = lp
         }
+    }
+
+    override fun createForTextureLayer(context: Context, viewId: Int, args: Any?, textureRegistry: PlatformViewsController.TextureRegistry): PlatformView {
+        return create(context, viewId, args)
     }
 }
