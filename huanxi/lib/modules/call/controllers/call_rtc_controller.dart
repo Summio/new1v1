@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:mt_plugin/mt_plugin.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../../app/providers/auth_provider.dart';
 import '../../../core/constants/api_endpoints.dart';
 import '../../../core/network/dio_client.dart';
 
@@ -85,12 +89,58 @@ class CallRtcController extends StateNotifier<CallRtcState> {
   RtcEngineEventHandler? _rtcEventHandler;
   bool _joinedCallbackEmitted = false;
 
+  // MethodChannel 用于与原生 FaceBeauty 通信
+  static const MethodChannel _beautyChannel = MethodChannel('beauty_plugin');
+
   RtcEngine? get engine => _engine;
+
+  Future<dynamic> _handleNativeMethod(MethodCall call) async {
+    if (call.method == 'onFrame') {
+      try {
+        final args = call.arguments as Map<dynamic, dynamic>;
+        final bytes = args['bytes'] as Uint8List;
+        final width = args['width'] as int;
+        final height = args['height'] as int;
+        final stride = args['stride'] as int;
+
+        if (bytes.length != stride * height) {
+          return;
+        }
+
+        await _engine?.getMediaEngine().pushVideoFrame(
+          frame: ExternalVideoFrame(
+            type: VideoBufferType.videoBufferRawData,
+            format: VideoPixelFormat.videoPixelBgra,
+            buffer: bytes,
+            stride: width,
+            height: height,
+            rotation: 180,
+            timestamp: DateTime.now().millisecondsSinceEpoch,
+          ),
+        );
+      } catch (_) {
+        // 忽略帧推送错误，避免影响通话
+      }
+    }
+  }
+
+  void _startNativePush() {
+    _beautyChannel.invokeMethod('startAgoraPush').catchError((_) {});
+  }
+
+  void _stopNativePush() {
+    _beautyChannel.invokeMethod('stopAgoraPush').catchError((_) {});
+  }
+
+  void _switchNativeCamera() {
+    _beautyChannel.invokeMethod('switchCamera').catchError((_) {});
+  }
 
   Future<void> initRtc({
     required void Function() onCallConnected,
     required void Function(String endReason) onRemoteEnd,
     void Function(String message)? onLog,
+    String? faceBeautyKey,
   }) async {
     if (state.isJoining || state.isJoined) {
       return;
@@ -102,6 +152,9 @@ class CallRtcController extends StateNotifier<CallRtcState> {
       errorMessage: null,
     );
     onLog?.call('rtc init start');
+
+    // 设置原生回调
+    _beautyChannel.setMethodCallHandler(_handleNativeMethod);
 
     try {
       final permissionGranted = await _ensureMediaPermissions();
@@ -131,6 +184,15 @@ class CallRtcController extends StateNotifier<CallRtcState> {
         throw Exception('RTC 参数不完整');
       }
 
+      // 初始化 FaceBeauty SDK
+      if (faceBeautyKey != null && faceBeautyKey.isNotEmpty) {
+        try {
+          MtPlugin.initSdk(faceBeautyKey);
+        } catch (e) {
+          onLog?.call('FaceBeauty SDK init failed: $e');
+        }
+      }
+
       final engine = createAgoraRtcEngine();
       _engine = engine;
       state = state.copyWith(channelName: channel, errorMessage: null);
@@ -142,6 +204,12 @@ class CallRtcController extends StateNotifier<CallRtcState> {
           appId: appId,
           channelProfile: ChannelProfileType.channelProfileCommunication,
         ),
+      );
+
+      // 启用外部视频源模式（FaceBeauty 原生相机采集 + 美颜处理）
+      await engine.getMediaEngine().setExternalVideoSource(
+        enabled: true,
+        useTexture: false,
       );
 
       void markJoined(int localUid) {
@@ -159,6 +227,8 @@ class CallRtcController extends StateNotifier<CallRtcState> {
         if (!_joinedCallbackEmitted) {
           _joinedCallbackEmitted = true;
           onCallConnected();
+          // 加入频道成功后再通知原生开始相机采集 + 美颜推流
+          _startNativePush();
         }
       }
 
@@ -265,7 +335,8 @@ class CallRtcController extends StateNotifier<CallRtcState> {
 
       await engine.enableVideo();
       await engine.setClientRole(role: ClientRoleType.clientRoleBroadcaster);
-      await engine.startPreview();
+      // 移除 startPreview()，改为使用原生相机采集
+      // await engine.startPreview();
 
       Future<void> doJoin() async {
         await engine.joinChannel(
@@ -275,7 +346,8 @@ class CallRtcController extends StateNotifier<CallRtcState> {
           options: const ChannelMediaOptions(
             channelProfile: ChannelProfileType.channelProfileCommunication,
             clientRoleType: ClientRoleType.clientRoleBroadcaster,
-            publishCameraTrack: true,
+            // 外部视频源模式下，不发布内置摄像头轨道
+            publishCameraTrack: false,
             publishMicrophoneTrack: true,
             autoSubscribeAudio: true,
             autoSubscribeVideo: true,
@@ -329,6 +401,9 @@ class CallRtcController extends StateNotifier<CallRtcState> {
   }
 
   Future<void> leaveAndRelease({void Function(String message)? onLog}) async {
+    // 离开前先停止原生推流
+    _stopNativePush();
+
     final engine = _engine;
     _engine = null;
     _joinedCallbackEmitted = false;
@@ -389,7 +464,11 @@ class CallRtcController extends StateNotifier<CallRtcState> {
   Future<void> toggleCamera() async {
     final next = !state.isCameraOn;
     try {
-      await _engine?.muteLocalVideoStream(!next);
+      if (next) {
+        _beautyChannel.invokeMethod('startAgoraPush');
+      } else {
+        _beautyChannel.invokeMethod('stopAgoraPush');
+      }
     } catch (_) {}
     if (!mounted) {
       return;
@@ -400,7 +479,7 @@ class CallRtcController extends StateNotifier<CallRtcState> {
   Future<void> flipCamera() async {
     state = state.copyWith(isFlipping: true);
     try {
-      await _engine?.switchCamera();
+      _switchNativeCamera();
     } catch (_) {
     } finally {
       if (mounted) {
@@ -419,6 +498,7 @@ class CallRtcController extends StateNotifier<CallRtcState> {
   @override
   void dispose() {
     unawaited(leaveAndRelease());
+    _beautyChannel.setMethodCallHandler(null);
     super.dispose();
   }
 }
