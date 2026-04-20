@@ -22,6 +22,7 @@ import '../../modules/im/im_page.dart';
 import '../../modules/gift/gift_panel.dart';
 import '../../modules/home/anchor_detail_page.dart';
 import '../../modules/home/wallet_page.dart';
+import '../../modules/beauty/beauty_settings_page.dart';
 import '../../app/providers/anchor_provider.dart';
 import '../../core/storage/storage.dart';
 
@@ -36,6 +37,7 @@ class AppRoutes {
   static const String anchorDetail = '/anchor/detail';
   static const String profile = '/profile';
   static const String recharge = '/profile/recharge';
+  static const String beautySettings = '/profile/beauty';
   static const String wallet = '/wallet';
   static const String editProfile = '/profile/edit';
   static const String settings = '/settings';
@@ -181,6 +183,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.recharge,
       builder: (context, state) => const RechargePage(),
+    ),
+    GoRoute(
+      path: AppRoutes.beautySettings,
+      builder: (context, state) => const BeautySettingsPage(),
     ),
     GoRoute(
       path: AppRoutes.wallet,
