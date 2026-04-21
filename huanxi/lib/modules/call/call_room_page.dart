@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -56,6 +57,11 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
   @override
   void initState() {
     super.initState();
+    unawaited(
+      SystemChrome.setPreferredOrientations(const [
+        DeviceOrientation.portraitUp,
+      ]),
+    );
     _log(
       'page init, peerUserId=${widget.peerUserId}, '
       'anchorId=${widget.anchorId}, peerName=${widget.peerName}',
@@ -267,6 +273,14 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
   @override
   void dispose() {
     _disposed = true;
+    unawaited(
+      SystemChrome.setPreferredOrientations(const [
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]),
+    );
     Future.microtask(() {
       if (!_disposed) {
         ref.read(callWsControllerProvider(widget.callId).notifier).unbind();
@@ -329,6 +343,15 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
           child: Stack(
             fit: StackFit.expand,
             children: [
+              if (rtcState.isCameraOn)
+                const Positioned.fill(
+                  child: IgnorePointer(
+                    child: Opacity(
+                      opacity: 0.01,
+                      child: BeautyCameraView(),
+                    ),
+                  ),
+                ),
               _buildRemoteView(rtcState: rtcState, rtcController: rtcController),
               if (giftState.isShowing)
                 _buildGiftAnimationOverlay(giftState: giftState),
@@ -337,13 +360,13 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
                 right: 16,
                 child: GestureDetector(
                   onTap: () => unawaited(rtcController.flipCamera()),
-                  child: AnimatedContainer(
-                    duration: Duration.zero,
-                    width: 90,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      color: rtcState.isCameraOn
-                          ? const Color(0xFF2A2A2A)
+                    child: AnimatedContainer(
+                      duration: Duration.zero,
+                      width: 90,
+                      height: 160,
+                      decoration: BoxDecoration(
+                        color: rtcState.isCameraOn
+                            ? const Color(0xFF2A2A2A)
                           : Colors.black,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: Colors.white24),
@@ -557,7 +580,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
               rtcEngine: engine,
               canvas: VideoCanvas(
                 uid: rtcState.remoteUid,
-                renderMode: RenderModeType.renderModeHidden,
+                renderMode: RenderModeType.renderModeFit,
               ),
               connection: RtcConnection(
                 channelId: rtcState.channelName,
@@ -582,7 +605,24 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       return const Icon(Icons.videocam_off, color: Colors.white30, size: 32);
     }
 
-    return const BeautyCameraView();
+    final engine = rtcController.engine;
+    if (engine == null) {
+      return const Center(
+        child: Icon(Icons.videocam, color: Colors.white70, size: 30),
+      );
+    }
+
+    return AgoraVideoView(
+      controller: VideoViewController(
+        rtcEngine: engine,
+        canvas: const VideoCanvas(
+          uid: 0,
+          sourceType: VideoSourceType.videoSourceCustom,
+          renderMode: RenderModeType.renderModeHidden,
+        ),
+        useFlutterTexture: true,
+      ),
+    );
   }
 
   Widget _buildPlaceholder(CallRtcState rtcState) {
