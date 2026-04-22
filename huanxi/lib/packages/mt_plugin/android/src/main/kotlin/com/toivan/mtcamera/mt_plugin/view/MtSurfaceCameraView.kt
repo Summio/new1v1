@@ -40,7 +40,7 @@ class MtSurfaceCameraView(mContext: Context) : AutoFitGlSurfaceView(mContext), G
     private var oesTextureId: Int = 0
 
     //用于标记前后置镜头
-    private var isFrontCamera = true
+    private var isFrontCamera = MtPlugin.preferFrontCamera
 
     private var isCameraSwitched = false
 
@@ -75,19 +75,73 @@ class MtSurfaceCameraView(mContext: Context) : AutoFitGlSurfaceView(mContext), G
 
     private var textureId = 2
 
+    private fun rotationForCamera(front: Boolean): FBRotationEnum {
+        return if (front) {
+            FBRotationEnum.FBRotationClockwise270
+        } else {
+            FBRotationEnum.FBRotationClockwise0
+        }
+    }
+
+    private fun frameRotationForAgora(front: Boolean): Int {
+        return if (front) 180 else 0
+    }
+
+    private fun previewRotationForCamera(front: Boolean): Int {
+        return if (front) 270 else 90
+    }
+
+    fun setPreferredCamera(front: Boolean) {
+        MtPlugin.preferFrontCamera = front
+        if (isFrontCamera == front) {
+            return
+        }
+        // 当前视图仍在时，立即对齐到目标镜头。
+        switchCamera()
+    }
+
+    fun notifyCameraState() {
+        MtPlugin.preferFrontCamera = isFrontCamera
+        val cameraId =
+            if (isFrontCamera) Camera.CameraInfo.CAMERA_FACING_FRONT else Camera.CameraInfo.CAMERA_FACING_BACK
+        uiHandler.post {
+            MtPlugin.beautyChannel.invokeMethod(
+                "cameraSwitchResult",
+                mapOf(
+                    "success" to true,
+                    "from" to if (isFrontCamera) "front" else "back",
+                    "to" to if (isFrontCamera) "front" else "back",
+                    "cameraId" to cameraId,
+                    "width" to imageWidth,
+                    "height" to imageHeight,
+                    "frameRotation" to frameRotationForAgora(isFrontCamera)
+                )
+            )
+            MtPlugin.beautyChannel.invokeMethod(
+                "previewReady",
+                mapOf(
+                    "width" to imageWidth,
+                    "height" to imageHeight,
+                    "rawWidth" to imageWidth,
+                    "rawHeight" to imageHeight,
+                    "cameraId" to cameraId,
+                    "frameRotation" to frameRotationForAgora(isFrontCamera)
+                )
+            )
+        }
+    }
+
     fun switchCamera() {
         val fromFront = isFrontCamera
         isFrontCamera = !isFrontCamera
+        MtPlugin.preferFrontCamera = isFrontCamera
         isCameraSwitched = true
 
         val cameraId =
             if (isFrontCamera) Camera.CameraInfo.CAMERA_FACING_FRONT else Camera.CameraInfo.CAMERA_FACING_BACK
 
-        mtRotation = if (isFrontCamera) {
-            FBRotationEnum.FBRotationClockwise270
-        } else {
-            FBRotationEnum.FBRotationClockwise0
-        }
+        mtRotation = rotationForCamera(isFrontCamera)
+        previewRenderer?.setPreviewRotation(previewRotationForCamera(isFrontCamera))
 
         val currentSurface = surfaceTexture
         if (currentSurface == null) {
@@ -116,29 +170,7 @@ class MtSurfaceCameraView(mContext: Context) : AutoFitGlSurfaceView(mContext), G
 
         camera.startPreview()
 
-        uiHandler.post {
-            MtPlugin.beautyChannel.invokeMethod(
-                "cameraSwitchResult",
-                mapOf(
-                    "success" to true,
-                    "from" to if (fromFront) "front" else "back",
-                    "to" to if (isFrontCamera) "front" else "back",
-                    "cameraId" to cameraId,
-                    "width" to imageWidth,
-                    "height" to imageHeight
-                )
-            )
-            MtPlugin.beautyChannel.invokeMethod(
-                "previewReady",
-                mapOf(
-                    "width" to imageWidth,
-                    "height" to imageHeight,
-                    "rawWidth" to imageWidth,
-                    "rawHeight" to imageHeight,
-                    "cameraId" to cameraId
-                )
-            )
-        }
+        notifyCameraState()
 
     }
 
@@ -168,7 +200,7 @@ class MtSurfaceCameraView(mContext: Context) : AutoFitGlSurfaceView(mContext), G
 
 
         previewRenderer = FBPreviewRenderer(width, height)
-        previewRenderer?.setPreviewRotation(270)
+        previewRenderer?.setPreviewRotation(previewRotationForCamera(isFrontCamera))
         previewRenderer?.create(isFrontCamera)
 
         oesTextureId = FBGLUtils.getExternalOESTextureID()
@@ -180,13 +212,16 @@ class MtSurfaceCameraView(mContext: Context) : AutoFitGlSurfaceView(mContext), G
         val cameraId =
             if (isFrontCamera) Camera.CameraInfo.CAMERA_FACING_FRONT else Camera.CameraInfo.CAMERA_FACING_BACK
 
-        mtRotation = if (isFrontCamera) FBRotationEnum.FBRotationClockwise270 else FBRotationEnum.FBRotationClockwise0
+        mtRotation = rotationForCamera(isFrontCamera)
 
         camera.openCamera(cameraId, imageWidth, imageHeight)
 
         camera.setPreviewSurface(surfaceTexture)
 
         camera.startPreview()
+
+        // 视图重建（如关开摄像头）后主动同步当前镜头状态，避免 Flutter 端沿用旧旋转。
+        notifyCameraState()
 
     }
 

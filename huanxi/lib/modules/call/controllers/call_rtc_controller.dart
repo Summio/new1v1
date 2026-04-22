@@ -12,6 +12,41 @@ import '../../../core/constants/api_endpoints.dart';
 import '../../../core/network/dio_client.dart';
 
 const _rtcNoValue = Object();
+const int _nativeBackCameraId = 0;
+const int _nativeFrontCameraId = 1;
+
+bool? resolveFrontCameraFromNativeState({String? facing, int? cameraId}) {
+  final normalized = facing?.trim().toLowerCase();
+  if (normalized == 'front') {
+    return true;
+  }
+  if (normalized == 'back') {
+    return false;
+  }
+  if (cameraId == _nativeFrontCameraId) {
+    return true;
+  }
+  if (cameraId == _nativeBackCameraId) {
+    return false;
+  }
+  return null;
+}
+
+int? resolveFrameRotationFromNativeState(dynamic frameRotation) {
+  final value = (frameRotation as num?)?.toInt();
+  if (value == null) {
+    return null;
+  }
+  switch (value) {
+    case 0:
+    case 90:
+    case 180:
+    case 270:
+      return value;
+    default:
+      return null;
+  }
+}
 
 class CallRtcState {
   final bool isMicOn;
@@ -95,6 +130,8 @@ class CallRtcController extends StateNotifier<CallRtcState> {
   int _externalPushOkCounter = 0;
   int _externalFrameRotation = 0;
   bool _isFrontCamera = true;
+  bool _dropFramesDuringCameraSwitch = false;
+  Timer? _cameraSwitchDropGuardTimer;
   bool _nativePushStarted = false;
   int _logSeq = 0;
 
@@ -102,6 +139,28 @@ class CallRtcController extends StateNotifier<CallRtcState> {
   static const MethodChannel _beautyChannel = MethodChannel('beauty_plugin');
 
   RtcEngine? get engine => _engine;
+
+  static const int _frontCameraRotation = 180;
+  static const int _backCameraRotation = 0;
+
+  int _rotationForCamera(bool isFrontCamera) {
+    return isFrontCamera ? _frontCameraRotation : _backCameraRotation;
+  }
+
+  void _applyCameraFacing(bool isFrontCamera) {
+    _isFrontCamera = isFrontCamera;
+    _externalFrameRotation = _rotationForCamera(isFrontCamera);
+  }
+
+  void _applyNativeCameraState({bool? isFrontCamera, int? frameRotation}) {
+    if (isFrontCamera != null) {
+      _isFrontCamera = isFrontCamera;
+      _externalFrameRotation = _rotationForCamera(isFrontCamera);
+    }
+    if (frameRotation != null) {
+      _externalFrameRotation = frameRotation;
+    }
+  }
 
   void _flowLog(
     String event, {
@@ -131,8 +190,14 @@ class CallRtcController extends StateNotifier<CallRtcState> {
       final rawWidth = args['rawWidth'];
       final rawHeight = args['rawHeight'];
       final cameraId = (args['cameraId'] as num?)?.toInt();
-      // 以“前置 180 / 后置 0”为准，默认前置；cameraId 在部分链路不稳定，仅记录。
-      _externalFrameRotation = _isFrontCamera ? 180 : 0;
+      final frameRotation = resolveFrameRotationFromNativeState(
+        args['frameRotation'],
+      );
+      final nativeIsFront = resolveFrontCameraFromNativeState(cameraId: cameraId);
+      _applyNativeCameraState(
+        isFrontCamera: nativeIsFront,
+        frameRotation: frameRotation,
+      );
       _flowLog(
         'native.previewReady',
         extra: <String, Object?>{
@@ -141,6 +206,7 @@ class CallRtcController extends StateNotifier<CallRtcState> {
           'rawWidth': rawWidth,
           'rawHeight': rawHeight,
           'cameraId': cameraId,
+          'nativeFrameRotation': frameRotation,
           'rotation': _externalFrameRotation,
         },
       );
@@ -151,21 +217,49 @@ class CallRtcController extends StateNotifier<CallRtcState> {
     }
     if (call.method == 'cameraSwitchResult') {
       final args = (call.arguments as Map<dynamic, dynamic>? ?? const {});
+      final success = args['success'] as bool? ?? true;
       final cameraId = (args['cameraId'] as num?)?.toInt();
+      final from = (args['from'] as String?)?.trim().toLowerCase();
       final to = (args['to'] as String?)?.trim().toLowerCase();
-      if (to == 'front') {
-        _isFrontCamera = true;
-      } else if (to == 'back') {
-        _isFrontCamera = false;
+      final frameRotation = resolveFrameRotationFromNativeState(
+        args['frameRotation'],
+      );
+      final nativeFrom = resolveFrontCameraFromNativeState(facing: from);
+      final nativeTo = resolveFrontCameraFromNativeState(
+        facing: to,
+        cameraId: cameraId,
+      );
+      if (success) {
+        _applyNativeCameraState(
+          isFrontCamera: nativeTo,
+          frameRotation: frameRotation,
+        );
+      } else if (nativeFrom != null) {
+        // 切换失败时回滚到切换前镜头，避免旋转状态错误。
+        _applyNativeCameraState(
+          isFrontCamera: nativeFrom,
+          frameRotation: frameRotation,
+        );
+      } else {
+        final fallbackByCameraId = resolveFrontCameraFromNativeState(
+          cameraId: cameraId,
+        );
+        _applyNativeCameraState(
+          isFrontCamera: fallbackByCameraId,
+          frameRotation: frameRotation,
+        );
       }
-      _externalFrameRotation = _isFrontCamera ? 180 : 0;
+      _cameraSwitchDropGuardTimer?.cancel();
+      _cameraSwitchDropGuardTimer = null;
+      _dropFramesDuringCameraSwitch = false;
       _flowLog(
         'native.cameraSwitchResult',
         extra: <String, Object?>{
-          'success': args['success'],
-          'from': args['from'],
+          'success': success,
+          'from': from ?? args['from'],
           'to': to ?? args['to'],
           'cameraId': cameraId,
+          'nativeFrameRotation': frameRotation,
           'width': args['width'],
           'height': args['height'],
           'rotation': _externalFrameRotation,
@@ -174,6 +268,9 @@ class CallRtcController extends StateNotifier<CallRtcState> {
       return;
     }
     if (call.method == 'onFrame') {
+      if (_dropFramesDuringCameraSwitch) {
+        return;
+      }
       try {
         final args = call.arguments as Map<dynamic, dynamic>;
         final bytes = args['bytes'] as Uint8List;
@@ -350,8 +447,7 @@ class CallRtcController extends StateNotifier<CallRtcState> {
       return;
     }
     _joinedCallbackEmitted = false;
-    _isFrontCamera = true;
-    _externalFrameRotation = 180;
+    _applyCameraFacing(true);
     state = state.copyWith(
       isJoining: true,
       isLoading: true,
@@ -743,8 +839,10 @@ class CallRtcController extends StateNotifier<CallRtcState> {
     try {
       if (next) {
         await _beautyChannel.invokeMethod('startAgoraPush');
+        _nativePushStarted = true;
       } else {
         await _beautyChannel.invokeMethod('stopAgoraPush');
+        _nativePushStarted = false;
       }
       _flowLog(
         'ui.toggleCamera.nativeAck',
@@ -766,20 +864,42 @@ class CallRtcController extends StateNotifier<CallRtcState> {
   Future<void> flipCamera() async {
     _flowLog('ui.flipCamera.start');
     state = state.copyWith(isFlipping: true);
+    final predictedNextIsFrontCamera = !_isFrontCamera;
+    _flowLog(
+      'ui.flipCamera.rotationPredicted',
+      extra: <String, Object?>{
+        'from': _isFrontCamera ? 'front' : 'back',
+        'to': predictedNextIsFrontCamera ? 'front' : 'back',
+        'rotation': _rotationForCamera(predictedNextIsFrontCamera),
+      },
+    );
+    _dropFramesDuringCameraSwitch = true;
+    _cameraSwitchDropGuardTimer?.cancel();
+    _cameraSwitchDropGuardTimer = Timer(const Duration(seconds: 2), () {
+      _dropFramesDuringCameraSwitch = false;
+      _cameraSwitchDropGuardTimer = null;
+      _flowLog('ui.flipCamera.dropGuardTimeout');
+    });
     try {
-      final shouldResumePush = state.isCameraOn && state.isJoined;
-      if (shouldResumePush) {
+      final shouldPausePush = state.isCameraOn && state.isJoined;
+      if (shouldPausePush) {
         _stopNativePush();
       }
       await _switchNativeCamera();
-      if (shouldResumePush) {
-        _startNativePush();
-      }
+      // 切镜头后由 native 回调（cameraSwitchResult/previewReady）统一恢复推流，
+      // 避免在旋转状态尚未更新前提前推送，导致短暂倒置。
     } catch (e) {
       _flowLog(
         'ui.flipCamera.error',
-        extra: <String, Object?>{'error': e.toString()},
+        extra: <String, Object?>{
+          'error': e.toString(),
+          'current': _isFrontCamera ? 'front' : 'back',
+          'rotation': _externalFrameRotation,
+        },
       );
+      _cameraSwitchDropGuardTimer?.cancel();
+      _cameraSwitchDropGuardTimer = null;
+      _dropFramesDuringCameraSwitch = false;
     } finally {
       if (mounted) {
         state = state.copyWith(isFlipping: false);
@@ -797,6 +917,8 @@ class CallRtcController extends StateNotifier<CallRtcState> {
 
   @override
   void dispose() {
+    _cameraSwitchDropGuardTimer?.cancel();
+    _cameraSwitchDropGuardTimer = null;
     unawaited(leaveAndRelease());
     _beautyChannel.setMethodCallHandler(null);
     super.dispose();
