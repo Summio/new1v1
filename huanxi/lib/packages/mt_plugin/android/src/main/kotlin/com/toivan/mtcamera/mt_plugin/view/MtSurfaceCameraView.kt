@@ -201,7 +201,8 @@ class MtSurfaceCameraView(mContext: Context) : AutoFitGlSurfaceView(mContext), G
 
         previewRenderer = FBPreviewRenderer(width, height)
         previewRenderer?.setPreviewRotation(previewRotationForCamera(isFrontCamera))
-        previewRenderer?.create(isFrontCamera)
+        // 统一关闭镜像：前后置都使用非镜像预览。
+        previewRenderer?.create(false)
 
         oesTextureId = FBGLUtils.getExternalOESTextureID()
 
@@ -238,7 +239,8 @@ class MtSurfaceCameraView(mContext: Context) : AutoFitGlSurfaceView(mContext), G
             MtSharedPreferences.getInstance().initAllSPValues()
             FBEffect.shareInstance().releaseTextureOESRenderer();
             //添加渲染
-            isRenderInit = FBEffect.shareInstance().initTextureOESRenderer(imageWidth, imageHeight, mtRotation, isFrontCamera, 5);
+            // 统一关闭镜像：前后置都使用非镜像纹理渲染。
+            isRenderInit = FBEffect.shareInstance().initTextureOESRenderer(imageWidth, imageHeight, mtRotation, false, 5);
 
         }
 //        android.util.Log.d(TAG, "onDrawFrame: "+imageWidth+"×"+imageHeight)

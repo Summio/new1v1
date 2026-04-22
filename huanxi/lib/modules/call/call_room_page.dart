@@ -47,8 +47,12 @@ class CallRoomPage extends ConsumerStatefulWidget {
 }
 
 class _CallRoomPageState extends ConsumerState<CallRoomPage> {
+  static const double _beautyPanelInitialFactor = 0.42;
   bool _endingConsuming = false;
   bool _disposed = false;
+  bool _isRemoteInMainView = true;
+  bool _isBeautyPanelVisible = false;
+  double _beautyPanelHeightFactor = _beautyPanelInitialFactor;
 
   void _log(String message) {
     debugPrint('[CALL_FLOW][callId=${widget.callId}] $message');
@@ -234,12 +238,75 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     );
   }
 
-  void _showBeautyPanel() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => const BeautyPanel(),
+  void _toggleBeautyPanel() {
+    setState(() {
+      if (_isBeautyPanelVisible) {
+        _isBeautyPanelVisible = false;
+        return;
+      }
+      // 通话中调美颜时，优先让本地画面全屏，符合主流产品交互习惯。
+      _isRemoteInMainView = false;
+      _beautyPanelHeightFactor = _beautyPanelInitialFactor;
+      _isBeautyPanelVisible = true;
+    });
+  }
+
+  void _closeBeautyPanel() {
+    if (!_isBeautyPanelVisible) return;
+    setState(() {
+      _isBeautyPanelVisible = false;
+    });
+  }
+
+  Widget _buildInlineBeautyPanel(BuildContext context) {
+    final screenHeight = MediaQuery.of(context).size.height;
+    final minHeight = computeCallBeautySheetMinHeight(screenHeight);
+    final maxHeight = computeCallBeautySheetMaxHeight(screenHeight);
+    final panelHeight = (_beautyPanelHeightFactor * screenHeight)
+        .clamp(minHeight, maxHeight)
+        .toDouble();
+
+    void resizeByDeltaY(double deltaY) {
+      final currentHeight = (_beautyPanelHeightFactor * screenHeight)
+          .clamp(minHeight, maxHeight)
+          .toDouble();
+      final nextHeight = (currentHeight - deltaY).clamp(minHeight, maxHeight);
+      setState(() {
+        _beautyPanelHeightFactor = nextHeight / screenHeight;
+      });
+    }
+
+    return Align(
+      alignment: Alignment.bottomCenter,
+      child: SizedBox(
+        height: panelHeight,
+        child: Stack(
+          children: [
+            const BeautyPanel(),
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 44,
+              child: GestureDetector(
+                behavior: HitTestBehavior.translucent,
+                onVerticalDragUpdate: (details) {
+                  resizeByDeltaY(details.delta.dy);
+                },
+                child: const SizedBox(height: 36),
+              ),
+            ),
+            Positioned(
+              top: 4,
+              right: 4,
+              child: IconButton(
+                onPressed: _closeBeautyPanel,
+                icon: const Icon(Icons.close, color: Colors.white70),
+                tooltip: '关闭美颜面板',
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -359,23 +426,34 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
                 top: MediaQuery.of(context).padding.top + 16,
                 right: 16,
                 child: GestureDetector(
-                  onTap: () => unawaited(rtcController.flipCamera()),
-                    child: AnimatedContainer(
-                      duration: Duration.zero,
-                      width: 90,
-                      height: 160,
-                      decoration: BoxDecoration(
-                        color: rtcState.isCameraOn
-                            ? const Color(0xFF2A2A2A)
+                  onTap: () {
+                    setState(() {
+                      _isRemoteInMainView = !_isRemoteInMainView;
+                      _isBeautyPanelVisible = false;
+                    });
+                  },
+                  child: AnimatedContainer(
+                    duration: Duration.zero,
+                    width: 90,
+                    height: 160,
+                    decoration: BoxDecoration(
+                      color: rtcState.isCameraOn
+                          ? const Color(0xFF2A2A2A)
                           : Colors.black,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: Colors.white24),
                     ),
                     clipBehavior: Clip.hardEdge,
-                    child: _buildLocalPreview(
-                      rtcState: rtcState,
-                      rtcController: rtcController,
-                    ),
+                    child: _isRemoteInMainView
+                        ? _buildLocalPreview(
+                            rtcState: rtcState,
+                            rtcController: rtcController,
+                          )
+                        : _buildRemoteVideo(
+                            rtcState: rtcState,
+                            rtcController: rtcController,
+                            usePlaceholder: false,
+                          ),
                   ),
                 ),
               ),
@@ -448,92 +526,104 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
                   ),
                 ),
               ),
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  padding: EdgeInsets.only(
-                    left: 24,
-                    right: 24,
-                    bottom: MediaQuery.of(context).padding.bottom + 24,
-                    top: 20,
-                  ),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                      colors: [Colors.black54, Colors.transparent],
+              if (!_isBeautyPanelVisible)
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    padding: EdgeInsets.only(
+                      left: 24,
+                      right: 24,
+                      bottom: MediaQuery.of(context).padding.bottom + 24,
+                      top: 20,
+                    ),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.bottomCenter,
+                        end: Alignment.topCenter,
+                        colors: [Colors.black54, Colors.transparent],
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        _ControlButton(
+                          icon: rtcState.isMicOn ? Icons.mic : Icons.mic_off,
+                          label: rtcState.isMicOn ? '麦克风' : '静音',
+                          isActive: !rtcState.isMicOn,
+                          onTap: () => unawaited(rtcController.toggleMic()),
+                        ),
+                        _ControlButton(
+                          icon: rtcState.isSpeakerOn
+                              ? Icons.volume_up
+                              : Icons.volume_off,
+                          label: '扬声器',
+                          isActive: !rtcState.isSpeakerOn,
+                          onTap: () => unawaited(rtcController.toggleSpeaker()),
+                        ),
+                        _ControlButton(
+                          icon: rtcState.isCameraOn
+                              ? Icons.videocam
+                              : Icons.videocam_off,
+                          label: '摄像头',
+                          isActive: !rtcState.isCameraOn,
+                          onTap: () => unawaited(rtcController.toggleCamera()),
+                        ),
+                        _ControlButton(
+                          icon: Icons.card_giftcard,
+                          label: '礼物',
+                          onTap: () => _showGiftPanel(anchor),
+                        ),
+                        _ControlButton(
+                          icon: Icons.auto_awesome,
+                          label: '美颜',
+                          isActive: _isBeautyPanelVisible,
+                          onTap: _toggleBeautyPanel,
+                        ),
+                        _ControlButton(
+                          icon: Icons.flip_camera_ios,
+                          label: '翻转',
+                          isSpinning: rtcState.isFlipping,
+                          onTap: () => unawaited(rtcController.flipCamera()),
+                        ),
+                      ],
                     ),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _ControlButton(
-                        icon: rtcState.isMicOn ? Icons.mic : Icons.mic_off,
-                        label: rtcState.isMicOn ? '麦克风' : '静音',
-                        isActive: !rtcState.isMicOn,
-                        onTap: () => unawaited(rtcController.toggleMic()),
+                ),
+              if (!_isBeautyPanelVisible)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: MediaQuery.of(context).padding.bottom + 116,
+                  child: Center(
+                    child: GestureDetector(
+                      onTap: _endCall,
+                      child: Container(
+                        width: 62,
+                        height: 62,
+                        decoration: const BoxDecoration(
+                          color: AppTheme.errorColor,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.call_end,
+                          color: Colors.white,
+                          size: 30,
+                        ),
                       ),
-                      _ControlButton(
-                        icon: rtcState.isSpeakerOn
-                            ? Icons.volume_up
-                            : Icons.volume_off,
-                        label: '扬声器',
-                        isActive: !rtcState.isSpeakerOn,
-                        onTap: () => unawaited(rtcController.toggleSpeaker()),
-                      ),
-                      _ControlButton(
-                        icon: rtcState.isCameraOn
-                            ? Icons.videocam
-                            : Icons.videocam_off,
-                        label: '摄像头',
-                        isActive: !rtcState.isCameraOn,
-                        onTap: () => unawaited(rtcController.toggleCamera()),
-                      ),
-                      _ControlButton(
-                        icon: Icons.card_giftcard,
-                        label: '礼物',
-                        onTap: () => _showGiftPanel(anchor),
-                      ),
-                      _ControlButton(
-                        icon: Icons.auto_awesome,
-                        label: '美颜',
-                        onTap: _showBeautyPanel,
-                      ),
-                      _ControlButton(
-                        icon: Icons.flip_camera_ios,
-                        label: '翻转',
-                        isSpinning: rtcState.isFlipping,
-                        onTap: () => unawaited(rtcController.flipCamera()),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-              ),
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: MediaQuery.of(context).padding.bottom + 116,
-                child: Center(
+              if (_isBeautyPanelVisible)
+                Positioned.fill(
                   child: GestureDetector(
-                    onTap: _endCall,
-                    child: Container(
-                      width: 62,
-                      height: 62,
-                      decoration: const BoxDecoration(
-                        color: AppTheme.errorColor,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.call_end,
-                        color: Colors.white,
-                        size: 30,
-                      ),
-                    ),
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _closeBeautyPanel,
+                    child: const SizedBox.expand(),
                   ),
                 ),
-              ),
+              if (_isBeautyPanelVisible) _buildInlineBeautyPanel(context),
               if (rtcState.isLoading)
                 Container(
                   color: Colors.black45,
@@ -552,6 +642,29 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     required CallRtcState rtcState,
     required CallRtcController rtcController,
   }) {
+    if (!_isRemoteInMainView) {
+      return Positioned.fill(
+        child: _buildLocalPreview(
+          rtcState: rtcState,
+          rtcController: rtcController,
+        ),
+      );
+    }
+
+    return Positioned.fill(
+      child: _buildRemoteVideo(
+        rtcState: rtcState,
+        rtcController: rtcController,
+        usePlaceholder: true,
+      ),
+    );
+  }
+
+  Widget _buildRemoteVideo({
+    required CallRtcState rtcState,
+    required CallRtcController rtcController,
+    required bool usePlaceholder,
+  }) {
     final engine = rtcController.engine;
     if (rtcState.errorMessage != null) {
       return Center(
@@ -569,27 +682,32 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     if (rtcState.remoteUid != null &&
         engine != null &&
         rtcState.channelName != null) {
-      final screenSize = MediaQuery.of(context).size;
-      return Positioned.fill(
-        child: SizedBox(
-          width: screenSize.width,
-          height: screenSize.height,
-          child: AgoraVideoView(
-            key: ValueKey('remote_full_${widget.callId}_${rtcState.remoteUid}'),
-            controller: VideoViewController.remote(
-              rtcEngine: engine,
-              canvas: VideoCanvas(
-                uid: rtcState.remoteUid,
-                renderMode: RenderModeType.renderModeFit,
-              ),
-              connection: RtcConnection(
-                channelId: rtcState.channelName,
-                localUid: rtcState.localUid,
-              ),
-              // 与本地 BeautyCameraView(PlatformView) 同屏时优先 Texture，避免 Android 叠层黑屏。
-              useFlutterTexture: true,
-            ),
+      final viewKey = usePlaceholder
+          ? ValueKey('remote_full_${widget.callId}_${rtcState.remoteUid}')
+          : ValueKey('remote_preview_${widget.callId}_${rtcState.remoteUid}');
+      return AgoraVideoView(
+        key: viewKey,
+        controller: VideoViewController.remote(
+          rtcEngine: engine,
+          canvas: VideoCanvas(
+            uid: rtcState.remoteUid,
+            renderMode: RenderModeType.renderModeFit,
           ),
+          connection: RtcConnection(
+            channelId: rtcState.channelName,
+            localUid: rtcState.localUid,
+          ),
+          // 与本地 BeautyCameraView(PlatformView) 同屏时优先 Texture，避免 Android 叠层黑屏。
+          useFlutterTexture: true,
+        ),
+      );
+    }
+
+    if (!usePlaceholder) {
+      return Container(
+        color: Colors.black,
+        child: const Center(
+          child: Icon(Icons.person, color: Colors.white30, size: 28),
         ),
       );
     }
@@ -750,6 +868,16 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       ),
     );
   }
+}
+
+double computeCallBeautySheetMaxHeight(double screenHeight) {
+  final maxByRatio = screenHeight * 0.72;
+  return maxByRatio.clamp(420.0, 680.0).toDouble();
+}
+
+double computeCallBeautySheetMinHeight(double screenHeight) {
+  final minByRatio = screenHeight * 0.32;
+  return minByRatio.clamp(260.0, 420.0).toDouble();
 }
 
 /// 控制按钮组件

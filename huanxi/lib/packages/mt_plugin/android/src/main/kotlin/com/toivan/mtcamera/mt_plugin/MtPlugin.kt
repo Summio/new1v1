@@ -60,6 +60,18 @@ class MtPlugin : FlutterPlugin, MethodCallHandler {
                         cameraViewInstance?.switchCamera()
                         result.success(null)
                     }
+                    "setPreferredCamera" -> {
+                        val front = call.argument<Boolean>("front")
+                        if (front != null) {
+                            preferFrontCamera = front
+                            cameraViewInstance?.setPreferredCamera(front)
+                        }
+                        result.success(null)
+                    }
+                    "syncCameraState" -> {
+                        cameraViewInstance?.notifyCameraState()
+                        result.success(null)
+                    }
                 }
             }
 
@@ -450,5 +462,6 @@ class MtPlugin : FlutterPlugin, MethodCallHandler {
         lateinit var beautyChannel: MethodChannel
         var shouldPushToAgora: Boolean = false
         var cameraViewInstance: MtSurfaceCameraView? = null
+        var preferFrontCamera: Boolean = true
     }
 }
