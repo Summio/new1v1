@@ -94,6 +94,7 @@ class CallRtcController extends StateNotifier<CallRtcState> {
   int _externalFrameWarnCounter = 0;
   int _externalPushOkCounter = 0;
   int _externalFrameRotation = 0;
+  bool _isFrontCamera = true;
   bool _nativePushStarted = false;
   int _logSeq = 0;
 
@@ -130,7 +131,8 @@ class CallRtcController extends StateNotifier<CallRtcState> {
       final rawWidth = args['rawWidth'];
       final rawHeight = args['rawHeight'];
       final cameraId = (args['cameraId'] as num?)?.toInt();
-      _externalFrameRotation = 180;
+      // 以“前置 180 / 后置 0”为准，默认前置；cameraId 在部分链路不稳定，仅记录。
+      _externalFrameRotation = _isFrontCamera ? 180 : 0;
       _flowLog(
         'native.previewReady',
         extra: <String, Object?>{
@@ -149,15 +151,24 @@ class CallRtcController extends StateNotifier<CallRtcState> {
     }
     if (call.method == 'cameraSwitchResult') {
       final args = (call.arguments as Map<dynamic, dynamic>? ?? const {});
+      final cameraId = (args['cameraId'] as num?)?.toInt();
+      final to = (args['to'] as String?)?.trim().toLowerCase();
+      if (to == 'front') {
+        _isFrontCamera = true;
+      } else if (to == 'back') {
+        _isFrontCamera = false;
+      }
+      _externalFrameRotation = _isFrontCamera ? 180 : 0;
       _flowLog(
         'native.cameraSwitchResult',
         extra: <String, Object?>{
           'success': args['success'],
           'from': args['from'],
-          'to': args['to'],
-          'cameraId': args['cameraId'],
+          'to': to ?? args['to'],
+          'cameraId': cameraId,
           'width': args['width'],
           'height': args['height'],
+          'rotation': _externalFrameRotation,
         },
       );
       return;
@@ -178,7 +189,7 @@ class CallRtcController extends StateNotifier<CallRtcState> {
           return;
         }
 
-        const int frameRotation = 180;
+        final int frameRotation = _externalFrameRotation;
 
         if (_externalFrameHeadLogCounter < 5) {
           _externalFrameHeadLogCounter += 1;
@@ -339,6 +350,8 @@ class CallRtcController extends StateNotifier<CallRtcState> {
       return;
     }
     _joinedCallbackEmitted = false;
+    _isFrontCamera = true;
+    _externalFrameRotation = 180;
     state = state.copyWith(
       isJoining: true,
       isLoading: true,
@@ -754,7 +767,14 @@ class CallRtcController extends StateNotifier<CallRtcState> {
     _flowLog('ui.flipCamera.start');
     state = state.copyWith(isFlipping: true);
     try {
+      final shouldResumePush = state.isCameraOn && state.isJoined;
+      if (shouldResumePush) {
+        _stopNativePush();
+      }
       await _switchNativeCamera();
+      if (shouldResumePush) {
+        _startNativePush();
+      }
     } catch (e) {
       _flowLog(
         'ui.flipCamera.error',

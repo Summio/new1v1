@@ -76,28 +76,69 @@ class MtSurfaceCameraView(mContext: Context) : AutoFitGlSurfaceView(mContext), G
     private var textureId = 2
 
     fun switchCamera() {
-
-        previewRenderer = FBPreviewRenderer(surfaceWidth, surfaceHeight)
-        previewRenderer?.create(isFrontCamera)
-//
-        oesTextureId = FBGLUtils.getExternalOESTextureID()
-
-        surfaceTexture = SurfaceTexture(oesTextureId)
-
-        surfaceTexture?.setOnFrameAvailableListener { this.requestRender() }
+        val fromFront = isFrontCamera
+        isFrontCamera = !isFrontCamera
+        isCameraSwitched = true
 
         val cameraId =
             if (isFrontCamera) Camera.CameraInfo.CAMERA_FACING_FRONT else Camera.CameraInfo.CAMERA_FACING_BACK
 
-        mtRotation = if (isFrontCamera) FBRotationEnum.FBRotationClockwise270 else FBRotationEnum.FBRotationClockwise0
+        mtRotation = if (isFrontCamera) {
+            FBRotationEnum.FBRotationClockwise270
+        } else {
+            FBRotationEnum.FBRotationClockwise0
+        }
+
+        val currentSurface = surfaceTexture
+        if (currentSurface == null) {
+            isFrontCamera = fromFront
+            isCameraSwitched = false
+            uiHandler.post {
+                MtPlugin.beautyChannel.invokeMethod(
+                    "cameraSwitchResult",
+                    mapOf(
+                        "success" to false,
+                        "from" to if (fromFront) "front" else "back",
+                        "to" to if (isFrontCamera) "front" else "back",
+                        "cameraId" to cameraId,
+                        "width" to imageWidth,
+                        "height" to imageHeight
+                    )
+                )
+            }
+            return
+        }
 
         camera.releaseCamera()
 
         camera.openCamera(cameraId, imageWidth, imageHeight)
-
-        camera.setPreviewSurface(surfaceTexture)
+        camera.setPreviewSurface(currentSurface)
 
         camera.startPreview()
+
+        uiHandler.post {
+            MtPlugin.beautyChannel.invokeMethod(
+                "cameraSwitchResult",
+                mapOf(
+                    "success" to true,
+                    "from" to if (fromFront) "front" else "back",
+                    "to" to if (isFrontCamera) "front" else "back",
+                    "cameraId" to cameraId,
+                    "width" to imageWidth,
+                    "height" to imageHeight
+                )
+            )
+            MtPlugin.beautyChannel.invokeMethod(
+                "previewReady",
+                mapOf(
+                    "width" to imageWidth,
+                    "height" to imageHeight,
+                    "rawWidth" to imageWidth,
+                    "rawHeight" to imageHeight,
+                    "cameraId" to cameraId
+                )
+            )
+        }
 
     }
 
@@ -116,6 +157,10 @@ class MtSurfaceCameraView(mContext: Context) : AutoFitGlSurfaceView(mContext), G
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
+        surfaceWidth = width
+        surfaceHeight = height
+        surfaceWidthF = width.toFloat()
+        surfaceHeightF = height.toFloat()
 
         post {
             setAspectRatio(imageHeight, imageWidth)
@@ -135,7 +180,7 @@ class MtSurfaceCameraView(mContext: Context) : AutoFitGlSurfaceView(mContext), G
         val cameraId =
             if (isFrontCamera) Camera.CameraInfo.CAMERA_FACING_FRONT else Camera.CameraInfo.CAMERA_FACING_BACK
 
-        mtRotation = if (isFrontCamera) FBRotationEnum.FBRotationClockwise270 else FBRotationEnum.FBRotationClockwise90
+        mtRotation = if (isFrontCamera) FBRotationEnum.FBRotationClockwise270 else FBRotationEnum.FBRotationClockwise0
 
         camera.openCamera(cameraId, imageWidth, imageHeight)
 
