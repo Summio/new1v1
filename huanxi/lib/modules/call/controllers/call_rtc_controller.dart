@@ -56,6 +56,7 @@ class CallRtcState {
   final bool isLoading;
   final bool isJoining;
   final bool isJoined;
+  final bool isFrontCamera;
   final int? localUid;
   final int? remoteUid;
   final bool hasPeerLeft;
@@ -70,6 +71,7 @@ class CallRtcState {
     this.isLoading = false,
     this.isJoining = false,
     this.isJoined = false,
+    this.isFrontCamera = true,
     this.localUid,
     this.remoteUid,
     this.hasPeerLeft = false,
@@ -85,6 +87,7 @@ class CallRtcState {
     bool? isLoading,
     bool? isJoining,
     bool? isJoined,
+    bool? isFrontCamera,
     Object? localUid = _rtcNoValue,
     Object? remoteUid = _rtcNoValue,
     Object? hasPeerLeft = _rtcNoValue,
@@ -99,6 +102,7 @@ class CallRtcState {
       isLoading: isLoading ?? this.isLoading,
       isJoining: isJoining ?? this.isJoining,
       isJoined: isJoined ?? this.isJoined,
+      isFrontCamera: isFrontCamera ?? this.isFrontCamera,
       localUid: identical(localUid, _rtcNoValue) ? this.localUid : localUid as int?,
       remoteUid: identical(remoteUid, _rtcNoValue)
           ? this.remoteUid
@@ -150,12 +154,18 @@ class CallRtcController extends StateNotifier<CallRtcState> {
   void _applyCameraFacing(bool isFrontCamera) {
     _isFrontCamera = isFrontCamera;
     _externalFrameRotation = _rotationForCamera(isFrontCamera);
+    if (mounted) {
+      state = state.copyWith(isFrontCamera: isFrontCamera);
+    }
   }
 
   void _applyNativeCameraState({bool? isFrontCamera, int? frameRotation}) {
     if (isFrontCamera != null) {
       _isFrontCamera = isFrontCamera;
       _externalFrameRotation = _rotationForCamera(isFrontCamera);
+      if (mounted) {
+        state = state.copyWith(isFrontCamera: isFrontCamera);
+      }
     }
     if (frameRotation != null) {
       _externalFrameRotation = frameRotation;

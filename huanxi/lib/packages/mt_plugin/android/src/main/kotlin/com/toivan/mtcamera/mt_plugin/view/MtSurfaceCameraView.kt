@@ -88,7 +88,7 @@ class MtSurfaceCameraView(mContext: Context) : AutoFitGlSurfaceView(mContext), G
     }
 
     private fun previewRotationForCamera(front: Boolean): Int {
-        return if (front) 270 else 90
+        return if (front) 90 else 90
     }
 
     fun setPreferredCamera(front: Boolean) {
@@ -274,7 +274,12 @@ class MtSurfaceCameraView(mContext: Context) : AutoFitGlSurfaceView(mContext), G
                     "width" to captureWidth,
                     "height" to captureHeight,
                     "stride" to rowStride,
-                    "bytes" to rgbaToBgra(byteArray)
+                    "bytes" to rgbaToBgra(
+                        rgba = byteArray,
+                        width = captureWidth,
+                        height = captureHeight,
+                        mirrorHorizontal = !isFrontCamera
+                    )
                 )
                 MtPlugin.beautyChannel.invokeMethod("onFrame", data)
             }
@@ -297,21 +302,35 @@ class MtSurfaceCameraView(mContext: Context) : AutoFitGlSurfaceView(mContext), G
         isRenderInit = false;
     }
 
-    fun rgbaToBgra(rgba: ByteArray): ByteArray {
+    fun rgbaToBgra(
+        rgba: ByteArray,
+        width: Int,
+        height: Int,
+        mirrorHorizontal: Boolean
+    ): ByteArray {
         val bgra = ByteArray(rgba.size)
-        var i = 0
-        while (i < rgba.size) {
-            val r = rgba[i]
-            val g = rgba[i + 1]
-            val b = rgba[i + 2]
-            val a = rgba[i + 3]
+        val rowStride = width * 4
+        var row = 0
+        while (row < height) {
+            val rowOffset = row * rowStride
+            var x = 0
+            while (x < width) {
+                val src = rowOffset + x * 4
+                val dstX = if (mirrorHorizontal) (width - 1 - x) else x
+                val dst = rowOffset + dstX * 4
 
-            bgra[i] = b     // B
-            bgra[i + 1] = g // G
-            bgra[i + 2] = r // R
-            bgra[i + 3] = a // A
+                val r = rgba[src]
+                val g = rgba[src + 1]
+                val b = rgba[src + 2]
+                val a = rgba[src + 3]
 
-            i += 4
+                bgra[dst] = b     // B
+                bgra[dst + 1] = g // G
+                bgra[dst + 2] = r // R
+                bgra[dst + 3] = a // A
+                x += 1
+            }
+            row += 1
         }
         return bgra
     }

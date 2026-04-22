@@ -692,6 +692,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
           canvas: VideoCanvas(
             uid: rtcState.remoteUid,
             renderMode: RenderModeType.renderModeFit,
+            mirrorMode: VideoMirrorModeType.videoMirrorModeDisabled,
           ),
           connection: RtcConnection(
             channelId: rtcState.channelName,
@@ -733,10 +734,13 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     return AgoraVideoView(
       controller: VideoViewController(
         rtcEngine: engine,
-        canvas: const VideoCanvas(
+        canvas: VideoCanvas(
           uid: 0,
           sourceType: VideoSourceType.videoSourceCustom,
           renderMode: RenderModeType.renderModeHidden,
+          mirrorMode: rtcState.isFrontCamera
+              ? VideoMirrorModeType.videoMirrorModeDisabled
+              : VideoMirrorModeType.videoMirrorModeDisabled,
         ),
         useFlutterTexture: true,
       ),
