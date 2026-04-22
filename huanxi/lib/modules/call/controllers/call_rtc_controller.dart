@@ -136,6 +136,8 @@ class CallRtcController extends StateNotifier<CallRtcState> {
   bool _isFrontCamera = true;
   bool _dropFramesDuringCameraSwitch = false;
   Timer? _cameraSwitchDropGuardTimer;
+  Timer? _flipUiGuardTimer;
+  Timer? _cameraSwitchResumePushTimer;
   bool _nativePushStarted = false;
   int _logSeq = 0;
 
@@ -192,6 +194,35 @@ class CallRtcController extends StateNotifier<CallRtcState> {
     print('[CALL_FLOW][callId=$callId] $snapshot');
   }
 
+  void _finishFlipTransition({Duration delay = const Duration(milliseconds: 280)}) {
+    _flipUiGuardTimer?.cancel();
+    _flipUiGuardTimer = Timer(delay, () {
+      if (!mounted) {
+        return;
+      }
+      state = state.copyWith(isFlipping: false);
+      _flowLog('ui.flipCamera.end');
+    });
+  }
+
+  void _scheduleResumePushAfterCameraSwitch() {
+    _cameraSwitchResumePushTimer?.cancel();
+    _cameraSwitchResumePushTimer = Timer(
+      const Duration(milliseconds: 320),
+      () {
+        _cameraSwitchResumePushTimer = null;
+        _dropFramesDuringCameraSwitch = false;
+        if (state.isJoined && state.isCameraOn) {
+          _startNativePush();
+        }
+        if (state.isFlipping) {
+          _finishFlipTransition();
+        }
+        _flowLog('ui.flipCamera.resumePushAfterStable');
+      },
+    );
+  }
+
   Future<dynamic> _handleNativeMethod(MethodCall call) async {
     if (call.method == 'previewReady') {
       final args = (call.arguments as Map<dynamic, dynamic>? ?? const {});
@@ -220,8 +251,15 @@ class CallRtcController extends StateNotifier<CallRtcState> {
           'rotation': _externalFrameRotation,
         },
       );
-      if (state.isJoined && state.isCameraOn) {
-        _startNativePush();
+      if (_dropFramesDuringCameraSwitch) {
+        _scheduleResumePushAfterCameraSwitch();
+      } else {
+        if (state.isJoined && state.isCameraOn) {
+          _startNativePush();
+        }
+        if (state.isFlipping) {
+          _finishFlipTransition();
+        }
       }
       return;
     }
@@ -261,7 +299,16 @@ class CallRtcController extends StateNotifier<CallRtcState> {
       }
       _cameraSwitchDropGuardTimer?.cancel();
       _cameraSwitchDropGuardTimer = null;
-      _dropFramesDuringCameraSwitch = false;
+      if (success) {
+        _scheduleResumePushAfterCameraSwitch();
+      } else {
+        _cameraSwitchResumePushTimer?.cancel();
+        _cameraSwitchResumePushTimer = null;
+        _dropFramesDuringCameraSwitch = false;
+        if (!success && state.isFlipping) {
+          _finishFlipTransition(delay: Duration.zero);
+        }
+      }
       _flowLog(
         'native.cameraSwitchResult',
         extra: <String, Object?>{
@@ -888,6 +935,14 @@ class CallRtcController extends StateNotifier<CallRtcState> {
     _cameraSwitchDropGuardTimer = Timer(const Duration(seconds: 2), () {
       _dropFramesDuringCameraSwitch = false;
       _cameraSwitchDropGuardTimer = null;
+      _cameraSwitchResumePushTimer?.cancel();
+      _cameraSwitchResumePushTimer = null;
+      if (state.isJoined && state.isCameraOn) {
+        _startNativePush();
+      }
+      if (state.isFlipping) {
+        _finishFlipTransition(delay: Duration.zero);
+      }
       _flowLog('ui.flipCamera.dropGuardTimeout');
     });
     try {
@@ -910,7 +965,6 @@ class CallRtcController extends StateNotifier<CallRtcState> {
       _cameraSwitchDropGuardTimer?.cancel();
       _cameraSwitchDropGuardTimer = null;
       _dropFramesDuringCameraSwitch = false;
-    } finally {
       if (mounted) {
         state = state.copyWith(isFlipping: false);
         _flowLog('ui.flipCamera.end');
@@ -929,6 +983,10 @@ class CallRtcController extends StateNotifier<CallRtcState> {
   void dispose() {
     _cameraSwitchDropGuardTimer?.cancel();
     _cameraSwitchDropGuardTimer = null;
+    _cameraSwitchResumePushTimer?.cancel();
+    _cameraSwitchResumePushTimer = null;
+    _flipUiGuardTimer?.cancel();
+    _flipUiGuardTimer = null;
     unawaited(leaveAndRelease());
     _beautyChannel.setMethodCallHandler(null);
     super.dispose();

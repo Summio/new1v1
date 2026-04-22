@@ -724,6 +724,21 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       return const Icon(Icons.videocam_off, color: Colors.white30, size: 32);
     }
 
+    if (rtcState.isFlipping) {
+      return Container(
+        color: Colors.black,
+        alignment: Alignment.center,
+        child: const SizedBox(
+          width: 22,
+          height: 22,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.2,
+            color: Colors.white70,
+          ),
+        ),
+      );
+    }
+
     final engine = rtcController.engine;
     if (engine == null) {
       return const Center(

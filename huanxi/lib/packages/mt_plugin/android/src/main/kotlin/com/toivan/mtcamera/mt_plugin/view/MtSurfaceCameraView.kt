@@ -46,6 +46,12 @@ class MtSurfaceCameraView(mContext: Context) : AutoFitGlSurfaceView(mContext), G
 
     private var mtRotation: FBRotationEnum? = null
 
+    private var pendingCameraStateDispatch = false
+
+    private var pendingSwitchFromFront: Boolean? = null
+
+    private var pendingWarmupFrames = 0
+
 
     private var previewRenderer: FBPreviewRenderer? = null
 
@@ -75,6 +81,15 @@ class MtSurfaceCameraView(mContext: Context) : AutoFitGlSurfaceView(mContext), G
 
     private var textureId = 2
 
+    private fun scheduleCameraStateDispatch(fromFront: Boolean?) {
+        pendingSwitchFromFront = fromFront
+        pendingCameraStateDispatch = true
+        // 切前后摄后首帧矩阵仍可能处于切换过程，额外预热几帧再恢复推流，
+        // 避免 Agora 吃到瞬时倒置帧。
+        pendingWarmupFrames = 3
+        requestRender()
+    }
+
     private fun rotationForCamera(front: Boolean): FBRotationEnum {
         return if (front) {
             FBRotationEnum.FBRotationClockwise270
@@ -100,7 +115,7 @@ class MtSurfaceCameraView(mContext: Context) : AutoFitGlSurfaceView(mContext), G
         switchCamera()
     }
 
-    fun notifyCameraState() {
+    private fun dispatchCameraState(fromFront: Boolean? = null) {
         MtPlugin.preferFrontCamera = isFrontCamera
         val cameraId =
             if (isFrontCamera) Camera.CameraInfo.CAMERA_FACING_FRONT else Camera.CameraInfo.CAMERA_FACING_BACK
@@ -109,7 +124,7 @@ class MtSurfaceCameraView(mContext: Context) : AutoFitGlSurfaceView(mContext), G
                 "cameraSwitchResult",
                 mapOf(
                     "success" to true,
-                    "from" to if (isFrontCamera) "front" else "back",
+                    "from" to if ((fromFront ?: isFrontCamera)) "front" else "back",
                     "to" to if (isFrontCamera) "front" else "back",
                     "cameraId" to cameraId,
                     "width" to imageWidth,
@@ -131,11 +146,16 @@ class MtSurfaceCameraView(mContext: Context) : AutoFitGlSurfaceView(mContext), G
         }
     }
 
+    fun notifyCameraState() {
+        dispatchCameraState()
+    }
+
     fun switchCamera() {
         val fromFront = isFrontCamera
         isFrontCamera = !isFrontCamera
         MtPlugin.preferFrontCamera = isFrontCamera
         isCameraSwitched = true
+        scheduleCameraStateDispatch(fromFront)
 
         val cameraId =
             if (isFrontCamera) Camera.CameraInfo.CAMERA_FACING_FRONT else Camera.CameraInfo.CAMERA_FACING_BACK
@@ -169,8 +189,6 @@ class MtSurfaceCameraView(mContext: Context) : AutoFitGlSurfaceView(mContext), G
         camera.setPreviewSurface(currentSurface)
 
         camera.startPreview()
-
-        notifyCameraState()
 
     }
 
@@ -221,12 +239,14 @@ class MtSurfaceCameraView(mContext: Context) : AutoFitGlSurfaceView(mContext), G
 
         camera.startPreview()
 
-        // 视图重建（如关开摄像头）后主动同步当前镜头状态，避免 Flutter 端沿用旧旋转。
-        notifyCameraState()
+        // 视图重建（如关开摄像头）后，等首帧真正到达再同步当前镜头状态，
+        // 避免 Flutter 端在新纹理尚未就绪时提前恢复推流。
+        scheduleCameraStateDispatch(null)
 
     }
 
     override fun onDrawFrame(gl: GL10?) {
+        surfaceTexture?.updateTexImage()
 
         if (isCameraSwitched) {
             FBEffect.shareInstance().releaseTextureOESRenderer()
@@ -248,7 +268,15 @@ class MtSurfaceCameraView(mContext: Context) : AutoFitGlSurfaceView(mContext), G
 
         previewRenderer?.render(textureId)
 
-        surfaceTexture?.updateTexImage()
+        if (pendingCameraStateDispatch && pendingWarmupFrames > 0) {
+            pendingWarmupFrames -= 1
+            requestRender()
+        } else if (pendingCameraStateDispatch) {
+            dispatchCameraState(pendingSwitchFromFront)
+            pendingSwitchFromFront = null
+            pendingCameraStateDispatch = false
+            pendingWarmupFrames = 0
+        }
 
         //Log.i(TAG, "shouldPushToAgora ${MtPlugin.shouldPushToAgora}")
         if (MtPlugin.shouldPushToAgora) {
