@@ -56,9 +56,15 @@ class ApiInterceptor extends Interceptor {
       options.headers['token'] = token; // 后端自定义要求的 token header
     }
 
-    // 设置 content-type
-    if (!options.headers.containsKey('Content-Type')) {
-      options.headers['Content-Type'] = 'application/json';
+    // 设置 content-type：
+    // - FormData 上传不手动设置，交给 Dio 自动附带 boundary
+    // - 其他请求默认 application/json
+    final requestData = options.data;
+    if (requestData is FormData) {
+      options.headers.remove('Content-Type');
+      options.headers.remove('content-type');
+    } else if (!options.headers.containsKey('Content-Type')) {
+      options.headers['Content-Type'] = Headers.jsonContentType;
     }
 
     final queryParameters = options.queryParameters;
@@ -67,7 +73,6 @@ class ApiInterceptor extends Interceptor {
           requestTransformer!.transformQueryParameters(queryParameters, options);
     }
 
-    final requestData = options.data;
     if (requestTransformer != null && requestData != null) {
       options.data = requestTransformer!.transformBody(requestData, options);
     }

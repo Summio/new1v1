@@ -27,10 +27,24 @@ class AppTheme {
   static const Color backgroundColor = Color(0xFFFFFFFF);
   /// 容器表面色
   static const Color surfaceColor = Color(0xFFF2F2F7);
+  /// 占位背景色
+  static const Color placeholderColor = Color(0xFFEFEFF4);
   /// 珊瑚红 - 错误/挂断
   static const Color errorColor = Color(0xFFFF3B30);
   /// 分隔线
   static const Color dividerColor = Color(0xFFE5E5EA);
+  /// 钻石金色
+  static const Color diamondGold = Color(0xFFFFD700);
+  /// 卡片背景色
+  static const Color cardBackground = Color(0xFFF2F2F7);
+  /// 微弱阴影色
+  static Color get shadowLight => Colors.black.withValues(alpha: 0.04);
+  /// 中等阴影色
+  static Color get overlayMedium => Colors.black.withValues(alpha: 0.4);
+  /// 徽章背景色
+  static Color get badgeBackground => Colors.white.withValues(alpha: 0.9);
+  /// 次要文字色（带透明度）
+  static Color get textSecondaryFaint => Colors.white.withValues(alpha: 0.8);
 
   // ============ 渐变 ============
   /// 仅在核心通话按钮使用的渐变 - 更有深度的蓝色

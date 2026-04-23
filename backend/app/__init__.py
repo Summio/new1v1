@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
 import asyncio
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from tortoise import Tortoise
 
 from app.core.bgtask import run_auditlog_cleanup
@@ -59,6 +61,9 @@ def create_app() -> FastAPI:
     )
     register_exceptions(app)
     register_routers(app, prefix="/api")
+    uploads_dir = Path(settings.BASE_DIR) / "uploads"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    app.mount("/uploads", StaticFiles(directory=str(uploads_dir)), name="uploads")
     return app
 
 

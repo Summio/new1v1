@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../app/providers/gift_provider.dart';
 import '../../app/theme/app_theme.dart';
+import '../../app/widgets/status_view.dart';
 import '../../services/websocket_service.dart';
 import 'package:huanxi/core/utils/app_toast.dart';
 
@@ -213,7 +214,7 @@ class _GiftPanelState extends ConsumerState<GiftPanel> {
           SizedBox(
             height: 200,
             child: giftState.isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? StatusView.loading()
                 : giftState.error != null
                 ? Center(
                     child: Column(

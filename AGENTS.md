@@ -1,38 +1,40 @@
 # AGENTS.md
 
 本文件用于指导在本仓库中执行开发任务的智能体与协作者。
+最后更新：2026-04-23
 
 ## 项目概述
 
 **欢喜 (Huanxi)**：1v1 付费音视频交友平台。
-当前仓库包含三部分：
+当前仓库主要包含四部分：
 
 - `huanxi/`：Flutter 客户端（用户端）
 - `backend/`：FastAPI 后端服务（含 App API 与管理 API）
 - `backend/web/`：Vue3 管理后台前端
+- `face_beauty_sdk/`：美颜 SDK 与示例工程（联调参考）
 
-## 当前项目状态（基于仓库现状）
+## 当前项目状态（以仓库现状为准）
 
-- 核心链路可运行：登录、推荐、速配、呼叫、通话心跳计费、礼物、钱包、提现申请。
+- 核心链路已具备：登录、推荐、速配、呼叫、通话心跳计费、礼物、钱包、提现申请。
 - Flutter 端基础框架已完成：Riverpod + Dio + go_router + 本地存储。
 - 后端 App API 已实现主要业务接口，管理端 RBAC 能力可用。
-- **仍在完善**：
+- 持续完善方向：
   - 礼物面板与后端完整联动
   - 充值页与余额/下单联动
-- **尚未落地真实能力**：
+- 尚未落地真实能力（仍需外部服务打通）：
   - WebRTC 实时音视频
   - 腾讯 IM 真实 UserSig 与消息链路
   - 微信/支付宝真实支付网关
 
-参考开发进度：`TODO.md`（最后更新日期：2026-04-13）。
+进度与设计记录请查看 `docs/`（如 `docs/reports/`、`docs/superpowers/specs/`、`docs/superpowers/plans/`）。
 
 ## 目录结构（当前）
 
 ```text
 D:/1v1/new1v1/
 ├── AGENTS.md
-├── TODO.md
 ├── docs/
+├── face_beauty_sdk/
 ├── huanxi/                  # Flutter App
 │   ├── lib/
 │   ├── assets/
@@ -41,6 +43,8 @@ D:/1v1/new1v1/
 └── backend/                 # FastAPI + Admin
     ├── app/
     ├── migrations/
+    ├── scripts/
+    ├── tests/
     ├── web/                 # Vue3 管理后台
     ├── run.py
     ├── pyproject.toml
@@ -50,9 +54,9 @@ D:/1v1/new1v1/
 ## 关键入口与环境
 
 - Flutter 入口：`huanxi/lib/main.dart`
-- 后端入口：`backend/run.py`（加载 `app:app`）
-- 本地数据库：MySQL `localhost:3306`，数据库 `huanxi`
-- 后端配置：`backend/.env`
+- 后端入口：`backend/run.py`（加载 `app:app`，默认端口 `9999`）
+- 本地数据库默认：MySQL `localhost:3306`，数据库 `huanxi`（见 `backend/app/settings/config.py`）
+- 后端配置：`backend/.env`（参考 `backend/.env.example`）
 
 ## 常用开发命令
 
@@ -62,6 +66,7 @@ D:/1v1/new1v1/
 cd D:/1v1/new1v1/huanxi
 flutter pub get
 flutter analyze
+flutter test
 flutter run
 flutter build apk --debug
 ```
@@ -74,6 +79,7 @@ python run.py
 ruff check ./app
 black ./ --check
 isort ./ --profile black --check
+pytest -vv -s --cache-clear ./
 ```
 
 ### 后端（迁移）
@@ -90,6 +96,8 @@ aerich upgrade
 cd D:/1v1/new1v1/backend/web
 pnpm i   # 或 npm i
 pnpm dev # 或 npm run dev
+pnpm build
+pnpm lint
 ```
 
 ## API 分层约定
@@ -120,5 +128,5 @@ App 端接口默认使用 `Authorization: Bearer <token>`。
 ## 任务执行建议
 
 - 修改前先确认影响范围（前端页面、后端接口、数据模型）。
-- 修改后至少完成对应侧检查（Flutter analyze / 后端 lint）。
+- 修改后至少完成对应侧检查（Flutter analyze / 后端 lint / 后端 tests）。
 - 涉及支付、IM、通话链路时，优先给出降级方案与回滚点。

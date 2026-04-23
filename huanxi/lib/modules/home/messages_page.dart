@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:tencent_cloud_chat_sdk/models/v2_tim_conversation.dart';
 import 'package:tencent_cloud_chat_sdk/models/v2_tim_user_full_info.dart';
 import '../../app/theme/app_theme.dart';
+import '../../app/widgets/status_view.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../core/constants/api_endpoints.dart';
@@ -265,7 +266,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
         ),
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? StatusView.loading()
           : _conversations.isEmpty
           ? Center(
               child: Column(

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'dart:io' show Platform;
 import '../../app/routes/app_router.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../app/theme/app_theme.dart';
@@ -85,10 +86,18 @@ class _SplashPageState extends ConsumerState<SplashPage> {
 
   Future<void> _requestMediaPermissions() async {
     try {
-      await [
+      final permissions = <Permission>[
         Permission.camera,
         Permission.microphone,
-      ].request();
+      ];
+
+      if (Platform.isIOS) {
+        permissions.add(Permission.photos);
+      } else if (Platform.isAndroid) {
+        permissions.add(Permission.storage);
+      }
+
+      await permissions.request();
     } catch (e) {
       debugPrint('Splash permission request error: $e');
     }

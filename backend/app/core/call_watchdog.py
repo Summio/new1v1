@@ -13,6 +13,7 @@ from app.models import AppUser, CallRecord
 from app.models.system_config import SystemConfig
 from app.core.time_utils import now_local_naive, to_utc_aware
 from app.services.call_trace_service import CallTraceService
+from app.utils.parse import safe_parse_int, clamp_int
 from tortoise.expressions import F
 from tortoise.transactions import in_transaction
 
@@ -49,37 +50,16 @@ class ForceExitDecision:
     clear_candidate_roles: tuple[str, ...] = ()
 
 
-def _safe_parse_int(raw: str | None, default: int) -> int:
-    if raw is None:
-        return default
-    try:
-        return int(str(raw).strip())
-    except (TypeError, ValueError):
-        return default
-
-
 def _clamp_seconds(value: int) -> int:
-    if value < MIN_WATCHDOG_SECONDS:
-        return MIN_WATCHDOG_SECONDS
-    if value > MAX_WATCHDOG_SECONDS:
-        return MAX_WATCHDOG_SECONDS
-    return value
+    return clamp_int(value, MIN_WATCHDOG_SECONDS, MAX_WATCHDOG_SECONDS)
 
 
 def _clamp_renew_grace_seconds(value: int) -> int:
-    if value < 0:
-        return 0
-    if value > MAX_RENEW_GRACE_SECONDS:
-        return MAX_RENEW_GRACE_SECONDS
-    return value
+    return clamp_int(value, 0, MAX_RENEW_GRACE_SECONDS)
 
 
 def _clamp_presence_settle_grace_seconds(value: int) -> int:
-    if value < 0:
-        return 0
-    if value > MAX_PRESENCE_SETTLE_GRACE_SECONDS:
-        return MAX_PRESENCE_SETTLE_GRACE_SECONDS
-    return value
+    return clamp_int(value, 0, MAX_PRESENCE_SETTLE_GRACE_SECONDS)
 
 
 async def _load_watchdog_config() -> WatchdogConfig:
@@ -108,22 +88,22 @@ async def _load_watchdog_config() -> WatchdogConfig:
         str(DEFAULT_PRESENCE_SETTLE_GRACE_SECONDS),
     )
     return WatchdogConfig(
-        poll_seconds=_clamp_seconds(_safe_parse_int(poll_raw, DEFAULT_POLL_SECONDS)),
+        poll_seconds=_clamp_seconds(safe_parse_int(poll_raw, DEFAULT_POLL_SECONDS)),
         ring_timeout_seconds=_clamp_seconds(
-            _safe_parse_int(ring_raw, DEFAULT_RING_TIMEOUT_SECONDS)
+            safe_parse_int(ring_raw, DEFAULT_RING_TIMEOUT_SECONDS)
         ),
         renew_grace_seconds=_clamp_renew_grace_seconds(
-            _safe_parse_int(grace_raw, DEFAULT_RENEW_GRACE_SECONDS)
+            safe_parse_int(grace_raw, DEFAULT_RENEW_GRACE_SECONDS)
         ),
-        free_seconds_before_billing=max(0, _safe_parse_int(free_raw, FREE_SECONDS_BEFORE_BILLING)),
+        free_seconds_before_billing=max(0, safe_parse_int(free_raw, FREE_SECONDS_BEFORE_BILLING)),
         presence_offline_detect_seconds=_clamp_seconds(
-            _safe_parse_int(
+            safe_parse_int(
                 offline_detect_raw,
                 DEFAULT_PRESENCE_OFFLINE_DETECT_SECONDS,
             )
         ),
         presence_settle_grace_seconds=_clamp_presence_settle_grace_seconds(
-            _safe_parse_int(
+            safe_parse_int(
                 settle_grace_raw,
                 DEFAULT_PRESENCE_SETTLE_GRACE_SECONDS,
             )

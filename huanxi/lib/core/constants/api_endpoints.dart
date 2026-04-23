@@ -12,6 +12,10 @@ class ApiEndpoints {
 
   /// 获取当前用户信息
   static const String userInfo = 'app/user/info';
+  /// 更新当前用户资料
+  static const String userProfileUpdate = 'app/user/profile/update';
+  /// 上传资料图片
+  static const String userUploadImage = 'app/user/upload-image';
 
   /// 按 user_id 获取公开用户资料
   static const String userPublic = 'app/user/public';

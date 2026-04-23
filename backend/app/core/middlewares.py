@@ -92,13 +92,29 @@ class HttpAuditLogMiddleware(BaseHTTPMiddleware):
 
         # 获取请求体
         if request.method in ["POST", "PUT", "PATCH"]:
-            try:
-                body = await request.json()
-                args.update(body)
-            except json.JSONDecodeError:
+            content_type = (request.headers.get("content-type") or "").lower()
+            is_json = "application/json" in content_type
+            is_multipart = "multipart/form-data" in content_type
+            is_urlencoded = "application/x-www-form-urlencoded" in content_type
+            is_form = is_multipart or is_urlencoded
+
+            if is_json:
+                try:
+                    body = await request.json()
+                    if isinstance(body, dict):
+                        args.update(body)
+                except (json.JSONDecodeError, UnicodeDecodeError, ValueError, TypeError):
+                    # 非法 JSON 请求体不阻断主流程，避免影响业务接口可用性
+                    pass
+            elif is_form:
+                # 关键修复：
+                # multipart 请求体是可消费流，若在中间件提前读取，可能导致下游 File(...) 参数解析失败
+                # 因此对 multipart 仅记录占位信息，不在这里读取 request.form()
+                if is_multipart:
+                    args["__form_data__"] = "[multipart omitted]"
+                    return args
                 try:
                     body = await request.form()
-                    # args.update(body)
                     for k, v in body.items():
                         if hasattr(v, "filename"):  # 文件上传行为
                             args[k] = v.filename
@@ -152,11 +168,16 @@ class HttpAuditLogMiddleware(BaseHTTPMiddleware):
         return self.lenient_json(body)
 
     def lenient_json(self, v: Any) -> Any:
-        if isinstance(v, (str, bytes)):
+        if isinstance(v, bytes):
+            try:
+                return json.loads(v)
+            except (ValueError, TypeError, UnicodeDecodeError):
+                return {"_binary_bytes": len(v)}
+        if isinstance(v, str):
             try:
                 return json.loads(v)
             except (ValueError, TypeError):
-                pass
+                return {"_text": v}
         return v
 
     async def _async_iter(self, items: list[bytes]) -> AsyncGenerator[bytes, None]:
@@ -202,6 +223,10 @@ class HttpAuditLogMiddleware(BaseHTTPMiddleware):
         request.state.request_args = request_args
 
     async def after_request(self, request: Request, response: Response, process_time: int):
+        # 静态资源（如上传图片）不做审计落库，避免无意义日志与二进制解析风险
+        if request.url.path.startswith("/uploads/"):
+            return response
+
         if request.method in self.methods:
             for path in self.exclude_paths:
                 if re.search(path, request.url.path, re.I) is not None:

@@ -187,14 +187,8 @@ class _MainShellState extends ConsumerState<MainShell>
   }
 
   void _onImMessageReceived(dynamic _) {
-    debugPrint('[IM_UNREAD] 收到新消息，主动刷新未读数 (第1次)');
+    debugPrint('[IM_UNREAD] 收到新消息，刷新未读数');
     _refreshUnreadCount();
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (mounted && _imService.isInitialized) {
-        debugPrint('[IM_UNREAD] 延迟刷新未读数 (第2次确认)');
-        _refreshUnreadCount();
-      }
-    });
   }
 
   String? _incomingDedupKey(CallSessionPayload payload) {
@@ -407,7 +401,7 @@ class _MainShellState extends ConsumerState<MainShell>
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.04),
+              color: AppTheme.shadowLight,
               blurRadius: 10,
               offset: const Offset(0, -2),
             ),

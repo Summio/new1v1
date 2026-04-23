@@ -7,9 +7,17 @@ import api from '@/api'
 // 根据后端传来数据构建出前端路由
 
 function buildRoutes(routes = []) {
+  const buildRouteName = (name, path, parentPath = '') => {
+    const fullPath = parentPath ? `${parentPath}/${path}` : path
+    const normalized = String(fullPath || '')
+      .replace(/[:/]+/g, '_')
+      .replace(/^_+|_+$/g, '')
+    return normalized ? `${name}__${normalized}` : name
+  }
+
   return routes.map((e) => {
     const route = {
-      name: e.name,
+      name: buildRouteName(e.name, e.path),
       path: e.path,
       component: shallowRef(Layout),
       isHidden: e.is_hidden,
@@ -19,6 +27,7 @@ function buildRoutes(routes = []) {
         icon: e.icon,
         order: e.order,
         keepAlive: e.keepalive,
+        alwaysShow: !!e?.remark?.alwaysShow,
       },
       children: [],
     }
@@ -26,7 +35,7 @@ function buildRoutes(routes = []) {
     if (e.children && e.children.length > 0) {
       // 有子菜单
       route.children = e.children.map((e_child) => ({
-        name: e_child.name,
+        name: buildRouteName(e_child.name, e_child.path, e.path),
         path: e_child.path,
         component: vueModules[`/src/views${e_child.component}/index.vue`],
         isHidden: e_child.is_hidden,
@@ -40,7 +49,7 @@ function buildRoutes(routes = []) {
     } else {
       // 没有子菜单，创建一个默认的子路由
       route.children.push({
-        name: `${e.name}Default`,
+        name: buildRouteName(`${e.name}Default`, 'default', e.path),
         path: '',
         component: vueModules[`/src/views${e.component}/index.vue`],
         isHidden: true,

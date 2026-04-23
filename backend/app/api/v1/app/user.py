@@ -1,12 +1,20 @@
-from fastapi import APIRouter, Depends
+from datetime import date
+from pathlib import Path
+from uuid import uuid4
+
+from fastapi import APIRouter, Depends, File, UploadFile, Request
 from fastapi import Header, HTTPException, Query
 
 from app.core.app_auth import DependAppAuth, logout_app_user
 from app.core.ctx import CTX_APP_USER_OBJ
 from app.models import Anchor, AppUser
+from app.schemas.app_user import AppUserProfileUpdateIn
 from app.schemas.base import Fail, Success
+from app.settings.config import settings
 
 router = APIRouter()
+_ALLOWED_IMAGE_SUFFIX = {".jpg", ".jpeg", ".png", ".webp"}
+_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
 def _mask_phone(phone: str | None) -> str:
@@ -14,6 +22,24 @@ def _mask_phone(phone: str | None) -> str:
     if not phone or len(phone) < 7:
         return phone or ""
     return f"{phone[:3]}****{phone[-4:]}"
+
+
+def _normalize_album(raw_value) -> list[str]:
+    if not raw_value:
+        return []
+    if isinstance(raw_value, list):
+        seen: set[str] = set()
+        out: list[str] = []
+        for item in raw_value:
+            if not isinstance(item, str):
+                continue
+            v = item.strip()
+            if not v or v in seen:
+                continue
+            seen.add(v)
+            out.append(v)
+        return out
+    return []
 
 
 @router.post("/user/logout", summary="登出")
@@ -42,6 +68,12 @@ async def get_user_info():
             "nickname": app_user.nickname or app_user.phone,
             "avatar": app_user.avatar or "",
             "gender": app_user.gender or "secret",
+            "birth_date": app_user.birth_date.isoformat() if app_user.birth_date else None,
+            "height_cm": app_user.height_cm,
+            "weight_kg": app_user.weight_kg,
+            "location_city": app_user.location_city or "",
+            "album_photos": _normalize_album(app_user.album_photos),
+            "cover_url": app_user.cover_url or "",
             "coins": app_user.coins,
             "diamonds": app_user.diamonds,
             "frozen_diamonds": app_user.frozen_diamonds,
@@ -51,6 +83,123 @@ async def get_user_info():
             "created_at": app_user.created_at.isoformat() if app_user.created_at else None,
         }
     )
+
+
+@router.post("/user/profile/update", summary="更新当前用户资料", dependencies=[Depends(DependAppAuth)])
+async def update_user_profile(req_in: AppUserProfileUpdateIn):
+    app_user = CTX_APP_USER_OBJ.get()
+    if not app_user:
+        return Fail(code=401, msg="用户不存在")
+
+    if app_user.status == "banned":
+        return Fail(code=403, msg=f"账号已被封禁，原因：{app_user.ban_reason or '未知'}")
+
+    current_album = _normalize_album(app_user.album_photos)
+    target_album = current_album
+    if req_in.album_photos is not None:
+        target_album = _normalize_album(req_in.album_photos)
+        if len(target_album) > 6:
+            return Fail(code=400, msg="相册最多上传6张照片")
+
+    update_data = {}
+
+    if req_in.nickname is not None:
+        nickname = req_in.nickname.strip()
+        update_data["nickname"] = nickname or None
+
+    if req_in.avatar is not None:
+        avatar = req_in.avatar.strip()
+        update_data["avatar"] = avatar or None
+
+    if req_in.gender is not None:
+        update_data["gender"] = str(req_in.gender.value)
+
+    if req_in.birth_date is not None:
+        if req_in.birth_date > date.today():
+            return Fail(code=400, msg="出生日期不能晚于今天")
+        update_data["birth_date"] = req_in.birth_date
+
+    if req_in.height_cm is not None:
+        update_data["height_cm"] = req_in.height_cm
+
+    if req_in.weight_kg is not None:
+        update_data["weight_kg"] = req_in.weight_kg
+
+    if req_in.location_city is not None:
+        city = req_in.location_city.strip()
+        update_data["location_city"] = city or None
+
+    if req_in.album_photos is not None:
+        update_data["album_photos"] = target_album
+
+    if req_in.cover_url is not None:
+        cover = req_in.cover_url.strip()
+        if cover and cover not in target_album:
+            return Fail(code=400, msg="封面必须从相册中选择")
+        update_data["cover_url"] = cover or None
+    elif req_in.album_photos is not None:
+        # 相册发生变化时，自动修复无效封面
+        current_cover = (app_user.cover_url or "").strip()
+        if current_cover and current_cover in target_album:
+            update_data["cover_url"] = current_cover
+        else:
+            update_data["cover_url"] = target_album[0] if target_album else None
+
+    if update_data:
+        await AppUser.filter(id=app_user.id).update(**update_data)
+
+    refreshed = await AppUser.filter(id=app_user.id).first()
+    if not refreshed:
+        return Fail(code=500, msg="更新失败")
+
+    return Success(
+        msg="资料更新成功",
+        data={
+            "id": refreshed.id,
+            "nickname": refreshed.nickname or refreshed.phone,
+            "avatar": refreshed.avatar or "",
+            "gender": refreshed.gender or "secret",
+            "birth_date": refreshed.birth_date.isoformat() if refreshed.birth_date else None,
+            "height_cm": refreshed.height_cm,
+            "weight_kg": refreshed.weight_kg,
+            "location_city": refreshed.location_city or "",
+            "album_photos": _normalize_album(refreshed.album_photos),
+            "cover_url": refreshed.cover_url or "",
+        },
+    )
+
+
+@router.post("/user/upload-image", summary="上传资料图片", dependencies=[Depends(DependAppAuth)])
+async def upload_user_image(request: Request, file: UploadFile = File(...)):
+    app_user = CTX_APP_USER_OBJ.get()
+    if not app_user:
+        return Fail(code=401, msg="用户不存在")
+
+    if not file.filename:
+        return Fail(code=400, msg="文件名无效")
+
+    suffix = Path(file.filename).suffix.lower()
+    if suffix not in _ALLOWED_IMAGE_SUFFIX:
+        return Fail(code=400, msg="仅支持 jpg/jpeg/png/webp")
+
+    content = await file.read()
+    if not content:
+        return Fail(code=400, msg="文件为空")
+    if len(content) > _MAX_UPLOAD_BYTES:
+        return Fail(code=400, msg="图片不能超过10MB")
+
+    relative_dir = Path("profile") / str(app_user.id)
+    abs_dir = Path(settings.BASE_DIR) / "uploads" / relative_dir
+    abs_dir.mkdir(parents=True, exist_ok=True)
+
+    filename = f"{uuid4().hex}{suffix}"
+    abs_file = abs_dir / filename
+    abs_file.write_bytes(content)
+
+    relative_url = f"/uploads/{relative_dir.as_posix()}/{filename}"
+    image_url = str(request.base_url).rstrip("/") + relative_url
+
+    return Success(data={"url": image_url})
 
 
 @router.get("/user/public", summary="按 user_id 获取公开用户资料", dependencies=[Depends(DependAppAuth)])
@@ -70,6 +219,7 @@ async def get_user_public_profile(
             "id": app_user.id,
             "nickname": app_user.nickname or f"用户{app_user.id}",
             "avatar": app_user.avatar or "",
+            "cover_url": app_user.cover_url or "",
             "is_anchor": app_user.is_anchor,
             "anchor_id": anchor_id,
             "status": app_user.status or "normal",

@@ -1,7 +1,7 @@
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 from re import compile as re_compile
-from typing import List, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -77,6 +77,12 @@ class AppUserInfoOut(BaseModel):
     nickname: Optional[str] = None
     avatar: Optional[str] = None
     gender: str = "secret"
+    birth_date: Optional[date] = None
+    height_cm: Optional[int] = None
+    weight_kg: Optional[int] = None
+    location_city: Optional[str] = None
+    album_photos: List[str] = Field(default_factory=list)
+    cover_url: Optional[str] = None
     coins: int = 0
     diamonds: int = 0
     frozen_diamonds: int = 0
@@ -84,6 +90,33 @@ class AppUserInfoOut(BaseModel):
     ban_reason: Optional[str] = None
     is_anchor: bool = False
     created_at: Optional[datetime] = None
+
+
+class AppUserProfileUpdateIn(BaseModel):
+    nickname: Optional[str] = Field(default=None, max_length=30, description="昵称")
+    avatar: Optional[str] = Field(default=None, max_length=500, description="头像URL")
+    gender: Optional[GenderType] = Field(default=None, description="性别")
+    birth_date: Optional[date] = Field(default=None, description="出生日期")
+    height_cm: Optional[int] = Field(default=None, ge=50, le=260, description="身高(cm)")
+    weight_kg: Optional[int] = Field(default=None, ge=20, le=300, description="体重(kg)")
+    location_city: Optional[str] = Field(default=None, max_length=50, description="所在地(省-市)")
+    album_photos: Optional[List[str]] = Field(default=None, description="相册URL列表(最多6张)")
+    cover_url: Optional[str] = Field(default=None, max_length=500, description="封面URL")
+
+
+class AppUserAdminUpdateIn(BaseModel):
+    id: int = Field(..., ge=1, description="用户ID")
+    nickname: Optional[str] = Field(default=None, max_length=30, description="昵称")
+    avatar: Optional[str] = Field(default=None, max_length=500, description="头像URL")
+    gender: Optional[GenderType] = Field(default=None, description="性别")
+    birth_date: Optional[date] = Field(default=None, description="出生日期")
+    height_cm: Optional[int] = Field(default=None, ge=50, le=260, description="身高(cm)")
+    weight_kg: Optional[int] = Field(default=None, ge=20, le=300, description="体重(kg)")
+    location_city: Optional[str] = Field(default=None, max_length=50, description="所在地(省-市)")
+    album_photos: Optional[List[str]] = Field(default=None, description="相册URL列表(最多6张)")
+    cover_url: Optional[str] = Field(default=None, max_length=500, description="封面URL")
+    status: Optional[Literal["normal", "banned"]] = Field(default=None, description="状态")
+    is_anchor: Optional[bool] = Field(default=None, description="是否主播")
 
 
 # ===== 主播申请 =====

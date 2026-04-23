@@ -29,6 +29,11 @@ class AuthControl:
 
 
 class PermissionControl:
+    """权限检查，支持 Redis 缓存。"""
+
+    # 权限缓存 TTL：5分钟
+    PERM_CACHE_TTL = 300
+
     @classmethod
     async def has_permission(cls, request: Request, current_user: User = Depends(AuthControl.is_authed)) -> None:
         if current_user.is_superuser:
@@ -39,18 +44,50 @@ class PermissionControl:
         if not role_ids:
             raise HTTPException(status_code=403, detail="The user is not bound to a role")
 
-        # DB 层精确过滤：只查匹配当前请求 method+path 的权限记录，避免全量加载
+        perm_key = f"perm:{current_user.id}"
+        deny_key = f"perm_denied:{current_user.id}"
+        perm_value = f"{method}:{path}"
+
+        # 快速路径：先检查缓存中是否有"拒绝"标记
+        try:
+            redis_client = await get_redis()
+            is_denied = await redis_client.sismember(deny_key, perm_value)
+            if is_denied:
+                raise HTTPException(status_code=403, detail=f"Permission denied method:{method} path:{path}")
+            is_allowed = await redis_client.sismember(perm_key, perm_value)
+            if is_allowed:
+                return  # 有权限（缓存命中）
+        except HTTPException:
+            raise
+        except Exception:
+            # Redis 失败时降级到数据库查询
+            pass
+
+        # 数据库查询（缓存未命中或 Redis 不可用）
         has_perm = await Api.filter(
             role_apis__id__in=role_ids,
             method=method,
             path=path,
         ).exists()
+
+        # 更新缓存（允许/拒绝都记录，避免重复查询数据库）
+        try:
+            redis_client = await get_redis()
+            if has_perm:
+                await redis_client.sadd(perm_key, perm_value)
+                await redis_client.expire(perm_key, cls.PERM_CACHE_TTL)
+            else:
+                await redis_client.sadd(deny_key, perm_value)
+                await redis_client.expire(deny_key, cls.PERM_CACHE_TTL)
+        except Exception:
+            # Redis 失败时静默忽略
+            pass
+
         if not has_perm:
             raise HTTPException(status_code=403, detail=f"Permission denied method:{method} path:{path}")
 
 
 DependAuth = Depends(AuthControl.is_authed)
-DependAdminAuth = Depends(AuthControl.is_authed)
 DependPermission = Depends(PermissionControl.has_permission)
 
 

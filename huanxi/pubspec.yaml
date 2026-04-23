@@ -10,6 +10,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
 
   cupertino_icons: ^1.0.8
 
@@ -53,6 +55,7 @@ dependencies:
   flutter_secure_storage: ^10.0.0
   agora_rtc_engine: ^6.5.2
   permission_handler: ^11.4.0
+  image_picker: ^1.1.2
   mt_plugin:
     path: lib/packages/mt_plugin
 

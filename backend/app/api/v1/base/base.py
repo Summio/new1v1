@@ -43,7 +43,7 @@ async def get_userinfo():
     user_id = CTX_USER_ID.get()
     user_obj = await user_controller.get(id=user_id)
     data = await user_obj.to_dict(exclude_fields=["password"])
-    data["avatar"] = user_obj.avatar or ""
+    data["avatar"] = getattr(user_obj, "avatar", None) or data.get("avatar") or ""
     return Success(data=data)
 
 

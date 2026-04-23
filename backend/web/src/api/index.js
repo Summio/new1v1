@@ -14,6 +14,13 @@ export default {
   updateUser: (data = {}) => request.post('/user/update', data),
   deleteUser: (params = {}) => request.delete(`/user/delete`, { params }),
   resetPassword: (data = {}) => request.post(`/user/reset_password`, data),
+  // app users
+  getAppUserList: (params = {}) => request.get('/app_user/list', { params }),
+  updateAppUser: (data = {}) => request.post('/app_user/update', data),
+  uploadAppUserImage: (data) =>
+    request.post('/app_user/upload-image', data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
   // role
   getRoleList: (params = {}) => request.get('/role/list', { params }),
   createRole: (data = {}) => request.post('/role/create', data),

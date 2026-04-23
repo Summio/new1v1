@@ -19,6 +19,9 @@ from app.schemas.app_api import (
     DialingOut,
 )
 from app.schemas.base import Fail, Success
+from app.utils.parse import safe_parse_int, clamp_int
+from app.utils.billing import calc_due_minutes as _calc_due_minutes_with_free
+from app.websocket import events as ws_events
 from tortoise.expressions import F, Q
 from tortoise.transactions import in_transaction
 
@@ -74,13 +77,6 @@ async def _append_call_trace(
     )
 
 
-def _safe_parse_int(raw: str | None, default: int) -> int:
-    if raw is None:
-        return default
-    try:
-        return int(str(raw).strip())
-    except (TypeError, ValueError):
-        return default
 
 
 async def _get_reject_inbound_protect_seconds() -> int:
@@ -90,12 +86,8 @@ async def _get_reject_inbound_protect_seconds() -> int:
         "call_reject_inbound_protect_seconds",
         str(DEFAULT_REJECT_INBOUND_PROTECT_SECONDS),
     )
-    seconds = _safe_parse_int(raw, DEFAULT_REJECT_INBOUND_PROTECT_SECONDS)
-    if seconds < 0:
-        return 0
-    if seconds > MAX_REJECT_PROTECT_SECONDS:
-        return MAX_REJECT_PROTECT_SECONDS
-    return seconds
+    seconds = safe_parse_int(raw, DEFAULT_REJECT_INBOUND_PROTECT_SECONDS)
+    return clamp_int(seconds, 0, MAX_REJECT_PROTECT_SECONDS)
 
 
 async def _get_reject_pair_protect_seconds() -> int:
@@ -105,12 +97,8 @@ async def _get_reject_pair_protect_seconds() -> int:
         "call_reject_pair_protect_seconds",
         str(DEFAULT_REJECT_PAIR_PROTECT_SECONDS),
     )
-    seconds = _safe_parse_int(raw, DEFAULT_REJECT_PAIR_PROTECT_SECONDS)
-    if seconds < 0:
-        return 0
-    if seconds > MAX_REJECT_PROTECT_SECONDS:
-        return MAX_REJECT_PROTECT_SECONDS
-    return seconds
+    seconds = safe_parse_int(raw, DEFAULT_REJECT_PAIR_PROTECT_SECONDS)
+    return clamp_int(seconds, 0, MAX_REJECT_PROTECT_SECONDS)
 
 
 def _calc_duration_seconds(call_record: CallRecord) -> int:
@@ -127,18 +115,10 @@ async def _get_free_seconds_before_billing() -> int:
         "call_billing_free_seconds",
         str(DEFAULT_FREE_SECONDS_BEFORE_BILLING),
     )
-    seconds = _safe_parse_int(raw, DEFAULT_FREE_SECONDS_BEFORE_BILLING)
-    if seconds < 0:
-        return 0
-    if seconds > MAX_FREE_SECONDS_BEFORE_BILLING:
-        return MAX_FREE_SECONDS_BEFORE_BILLING
-    return seconds
+    seconds = safe_parse_int(raw, DEFAULT_FREE_SECONDS_BEFORE_BILLING)
+    return clamp_int(seconds, 0, MAX_FREE_SECONDS_BEFORE_BILLING)
 
 
-def _calc_due_minutes_with_free(duration_seconds: int, free_seconds_before_billing: int) -> int:
-    if duration_seconds < free_seconds_before_billing:
-        return 0
-    return (duration_seconds + 59) // 60
 
 
 async def _resolve_payer_id(call_record: CallRecord) -> int:
@@ -654,7 +634,6 @@ async def _ws_push_call_incoming(
     left_seconds: int,
 ) -> None:
     try:
-        from app.websocket import events as ws_events
         await ws_events.push_call_incoming(
             callee_id=callee_id,
             call_id=call_id,
@@ -670,7 +649,6 @@ async def _ws_push_call_incoming(
 
 async def _ws_push_call_accepted(caller_id: int, call_id: int) -> None:
     try:
-        from app.websocket import events as ws_events
         await ws_events.push_call_accepted(caller_id=caller_id, call_id=call_id)
     except Exception:  # noqa: BLE001
         pass
@@ -678,7 +656,6 @@ async def _ws_push_call_accepted(caller_id: int, call_id: int) -> None:
 
 async def _ws_push_call_rejected(caller_id: int, call_id: int, reason: str | None = None) -> None:
     try:
-        from app.websocket import events as ws_events
         await ws_events.push_call_rejected(caller_id=caller_id, call_id=call_id, reason=reason)
     except Exception:  # noqa: BLE001
         pass
@@ -686,7 +663,6 @@ async def _ws_push_call_rejected(caller_id: int, call_id: int, reason: str | Non
 
 async def _ws_push_call_cancelled(callee_id: int, call_id: int, reason: str | None = None) -> None:
     try:
-        from app.websocket import events as ws_events
         await ws_events.push_call_cancelled(callee_id=callee_id, call_id=call_id, reason=reason)
     except Exception:  # noqa: BLE001
         pass
@@ -699,7 +675,6 @@ async def _ws_push_call_ended(
     end_reason: str | None = None,
 ) -> None:
     try:
-        from app.websocket import events as ws_events
         await ws_events.push_call_ended(
             caller_id=caller_id,
             callee_id=callee_id,
@@ -735,10 +710,10 @@ async def _ws_push_call_ended_to_peer(
     except Exception:  # noqa: BLE001
         pass
 
+
 async def _ws_push_balance_updated_for_refund(payer_id: int) -> None:
     """通话结束后推送退款后的余额给付费方（fire-and-forget）。"""
     try:
-        from app.websocket import events as ws_events
         from app.models import AppUser
 
         payer = await AppUser.filter(id=payer_id).first()

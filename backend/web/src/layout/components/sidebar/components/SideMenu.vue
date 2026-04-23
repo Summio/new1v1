@@ -59,7 +59,7 @@ function getMenuItem(route, basePath = '') {
 
   if (!visibleChildren.length) return menuItem
 
-  if (visibleChildren.length === 1) {
+  if (visibleChildren.length === 1 && !route.meta?.alwaysShow) {
     // 单个子路由处理
     const singleRoute = visibleChildren[0]
     menuItem = {

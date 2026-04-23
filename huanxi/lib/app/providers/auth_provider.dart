@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:dio/dio.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/storage/storage.dart';
@@ -12,6 +13,13 @@ class AuthState {
   final int? userId;
   final String? username;
   final String? avatar;
+  final String gender;
+  final String? birthDate;
+  final int? heightCm;
+  final int? weightKg;
+  final String? locationCity;
+  final List<String> albumPhotos;
+  final String? coverUrl;
   final String? appRole;
   final int coins;
   final int diamonds;
@@ -23,6 +31,13 @@ class AuthState {
     this.userId,
     this.username,
     this.avatar,
+    this.gender = 'secret',
+    this.birthDate,
+    this.heightCm,
+    this.weightKg,
+    this.locationCity,
+    this.albumPhotos = const [],
+    this.coverUrl,
     this.appRole,
     this.coins = 0,
     this.diamonds = 0,
@@ -35,6 +50,13 @@ class AuthState {
     int? userId,
     String? username,
     String? avatar,
+    String? gender,
+    String? birthDate,
+    int? heightCm,
+    int? weightKg,
+    String? locationCity,
+    List<String>? albumPhotos,
+    String? coverUrl,
     String? appRole,
     int? coins,
     int? diamonds,
@@ -46,6 +68,13 @@ class AuthState {
       userId: userId ?? this.userId,
       username: username ?? this.username,
       avatar: avatar ?? this.avatar,
+      gender: gender ?? this.gender,
+      birthDate: birthDate ?? this.birthDate,
+      heightCm: heightCm ?? this.heightCm,
+      weightKg: weightKg ?? this.weightKg,
+      locationCity: locationCity ?? this.locationCity,
+      albumPhotos: albumPhotos ?? this.albumPhotos,
+      coverUrl: coverUrl ?? this.coverUrl,
       appRole: appRole ?? this.appRole,
       coins: coins ?? this.coins,
       diamonds: diamonds ?? this.diamonds,
@@ -130,6 +159,27 @@ class AuthNotifier extends StateNotifier<AuthState> {
     return null;
   }
 
+  int? _parseNullableInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value.trim());
+    return null;
+  }
+
+  List<String> _parseAlbum(dynamic value) {
+    if (value is! List) return const [];
+    final out = <String>[];
+    final seen = <String>{};
+    for (final item in value) {
+      if (item is! String) continue;
+      final v = item.trim();
+      if (v.isEmpty || seen.contains(v)) continue;
+      seen.add(v);
+      out.add(v);
+    }
+    return out;
+  }
+
   /// 初始化：检查登录状态
   Future<void> init() async {
     final token = StorageService.getToken();
@@ -145,6 +195,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
               cachedInfo['nickname'] as String? ??
               cachedInfo['username'] as String?,
           avatar: cachedInfo['avatar'] as String?,
+          gender: (cachedInfo['gender'] as String?) ?? 'secret',
+          birthDate: cachedInfo['birth_date'] as String?,
+          heightCm: _parseNullableInt(cachedInfo['height_cm']),
+          weightKg: _parseNullableInt(cachedInfo['weight_kg']),
+          locationCity: cachedInfo['location_city'] as String?,
+          albumPhotos: _parseAlbum(cachedInfo['album_photos']),
+          coverUrl: cachedInfo['cover_url'] as String?,
           appRole: cachedInfo['is_anchor'] == true ? 'anchor' : 'user',
           coins: cachedInfo['coins'] as int? ?? 0,
           diamonds: cachedInfo['diamonds'] as int? ?? 0,
@@ -206,6 +263,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
         username:
             respData['nickname'] as String? ?? respData['username'] as String?,
         avatar: respData['avatar'] as String?,
+        gender: (respData['gender'] as String?) ?? 'secret',
+        birthDate: respData['birth_date'] as String?,
+        heightCm: _parseNullableInt(respData['height_cm']),
+        weightKg: _parseNullableInt(respData['weight_kg']),
+        locationCity: respData['location_city'] as String?,
+        albumPhotos: _parseAlbum(respData['album_photos']),
+        coverUrl: respData['cover_url'] as String?,
         appRole: respData['is_anchor'] == true ? 'anchor' : 'user',
         coins: respData['coins'] as int? ?? 0,
         diamonds: respData['diamonds'] as int? ?? 0,
@@ -243,6 +307,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
         username:
             respData['nickname'] as String? ?? respData['username'] as String?,
         avatar: respData['avatar'] as String?,
+        gender: (respData['gender'] as String?) ?? 'secret',
+        birthDate: respData['birth_date'] as String?,
+        heightCm: _parseNullableInt(respData['height_cm']),
+        weightKg: _parseNullableInt(respData['weight_kg']),
+        locationCity: respData['location_city'] as String?,
+        albumPhotos: _parseAlbum(respData['album_photos']),
+        coverUrl: respData['cover_url'] as String?,
         appRole: respData['is_anchor'] == true ? 'anchor' : 'user',
         coins: respData['coins'] as int? ?? 0,
         diamonds: respData['diamonds'] as int? ?? 0,
@@ -254,6 +325,64 @@ class AuthNotifier extends StateNotifier<AuthState> {
       rethrow;
     } catch (e) {
       debugPrint('auth.fetchUserInfo error: $e');
+    }
+  }
+
+  Future<bool> updateProfile(Map<String, dynamic> payload) async {
+    try {
+      final data = await _dio.apiPost(ApiEndpoints.userProfileUpdate, data: payload);
+      final code = data['code'] as int?;
+      if (code != 200) {
+        final msg = data['msg'] as String? ?? '更新资料失败';
+        state = state.copyWith(error: msg);
+        return false;
+      }
+      await fetchUserInfo();
+      return true;
+    } on ApiException catch (e) {
+      state = state.copyWith(error: e.message);
+      return false;
+    } catch (_) {
+      state = state.copyWith(error: '网络错误，请重试');
+      return false;
+    }
+  }
+
+  Future<String?> uploadProfileImage({
+    required List<int> bytes,
+    required String filename,
+  }) async {
+    try {
+      debugPrint('auth.uploadProfileImage start: filename=$filename, bytes=${bytes.length}');
+      final formData = FormData.fromMap({
+        'file': MultipartFile.fromBytes(bytes, filename: filename),
+      });
+      final resp = await _dio.post<Map<String, dynamic>>(
+        ApiEndpoints.userUploadImage,
+        data: formData,
+      );
+      final data = resp.data ?? {};
+      if ((data['code'] as int?) != 200) {
+        final msg = data['msg'] as String? ?? '上传失败';
+        state = state.copyWith(error: msg);
+        debugPrint('auth.uploadProfileImage fail: business code=${data['code']} msg=$msg');
+        return null;
+      }
+      final url = (data['data'] as Map<String, dynamic>?)?['url'] as String?;
+      debugPrint('auth.uploadProfileImage success: url=$url');
+      return (url == null || url.trim().isEmpty) ? null : url.trim();
+    } on ApiException catch (e) {
+      state = state.copyWith(error: e.message);
+      debugPrint('auth.uploadProfileImage ApiException: ${e.message}');
+      return null;
+    } on NetworkException catch (e) {
+      state = state.copyWith(error: e.message);
+      debugPrint('auth.uploadProfileImage NetworkException: ${e.message}');
+      return null;
+    } catch (e) {
+      state = state.copyWith(error: '上传失败，请重试');
+      debugPrint('auth.uploadProfileImage unexpected error: $e');
+      return null;
     }
   }
 

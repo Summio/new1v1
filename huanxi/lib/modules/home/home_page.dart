@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/providers/anchor_provider.dart';
 import '../../app/theme/app_theme.dart';
+import '../../app/widgets/status_view.dart';
 
 /// 首页 - 主播列表 + 分类 Tab
 class HomePage extends ConsumerStatefulWidget {
@@ -134,22 +135,11 @@ class _HomePageState extends ConsumerState<HomePage> with SingleTickerProviderSt
           // 主播列表 - PageView 支持左右滑动
           Expanded(
             child: anchorState.isLoading && anchorState.anchors.isEmpty
-                ? const Center(child: CircularProgressIndicator())
+                ? StatusView.loading(message: '加载中...')
                 : anchorState.error != null && anchorState.anchors.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.error_outline, size: 48, color: AppTheme.errorColor),
-                            const SizedBox(height: 16),
-                            Text(anchorState.error!),
-                            const SizedBox(height: 16),
-                            ElevatedButton(
-                              onPressed: () => ref.read(anchorListProvider.notifier).refresh(),
-                              child: const Text('重试'),
-                            ),
-                          ],
-                        ),
+                    ? StatusView.error(
+                        message: anchorState.error!,
+                        onRetry: () => ref.read(anchorListProvider.notifier).refresh(),
                       )
                     : PageView.builder(
                         controller: _pageController,
@@ -206,23 +196,12 @@ class _AnchorListPageState extends ConsumerState<_AnchorListPage> {
     final anchorState = ref.watch(anchorListProvider);
 
     if (anchorState.isLoading && anchorState.anchors.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return StatusView.loading();
     }
     if (anchorState.error != null && anchorState.anchors.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error_outline, size: 48, color: AppTheme.errorColor),
-            const SizedBox(height: 16),
-            Text(anchorState.error!),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () => ref.read(anchorListProvider.notifier).refresh(),
-              child: const Text('重试'),
-            ),
-          ],
-        ),
+      return StatusView.error(
+        message: anchorState.error!,
+        onRetry: () => ref.read(anchorListProvider.notifier).refresh(),
       );
     }
 
@@ -290,7 +269,7 @@ class _AnchorCardState extends State<_AnchorCard> {
           return Container(
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(24),
-          color: const Color(0xFFF2F2F7),
+          color: AppTheme.cardBackground,
         ),
         clipBehavior: Clip.hardEdge,
         child: Stack(
@@ -308,7 +287,7 @@ class _AnchorCardState extends State<_AnchorCard> {
                       cacheHeight: cacheHeight,
                       loadingBuilder: (context, child, loadingProgress) {
                         if (loadingProgress == null) return child;
-                        return Container(color: const Color(0xFFEFEFF4));
+                        return Container(color: AppTheme.placeholderColor);
                       },
                       errorBuilder: (context, error, stackTrace) {
                         return const Center(
@@ -328,7 +307,7 @@ class _AnchorCardState extends State<_AnchorCard> {
                     end: Alignment.bottomCenter,
                     colors: [
                       Colors.transparent,
-                      Colors.black.withValues(alpha: 0.4),
+                      AppTheme.overlayMedium,
                     ],
                     stops: const [0.7, 1.0],
                   ),
@@ -343,7 +322,7 @@ class _AnchorCardState extends State<_AnchorCard> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.9),
+                  color: AppTheme.badgeBackground,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
@@ -391,13 +370,13 @@ class _AnchorCardState extends State<_AnchorCard> {
                   const SizedBox(height: 2),
                   Row(
                     children: [
-                      const Icon(Icons.diamond_outlined, size: 10, color: Color(0xFFFFD700)),
+                      const Icon(Icons.diamond_outlined, size: 10, color: AppTheme.diamondGold),
                       const SizedBox(width: 2),
                       Text(
                         '${anchor.callPrice?.toStringAsFixed(0) ?? '0'}/分',
                         style: TextStyle(
                           fontSize: 10,
-                          color: Colors.white.withValues(alpha: 0.8),
+                          color: AppTheme.textSecondaryFaint,
                           fontWeight: FontWeight.w500,
                         ),
                       ),

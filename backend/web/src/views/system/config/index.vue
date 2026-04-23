@@ -1,35 +1,21 @@
 <script setup>
-import { h, onMounted, ref } from 'vue'
-import {
-  NButton,
-  NCard,
-  NForm,
-  NFormItem,
-  NInput,
-  NInputNumber,
-  NPopconfirm,
-  NSpace,
-} from 'naive-ui'
+import { onMounted, ref } from 'vue'
+import { NButton, NCard, NForm, NFormItem, NInput, NInputNumber, NSpace } from 'naive-ui'
 
 import CommonPage from '@/components/page/CommonPage.vue'
-import QueryBarItem from '@/components/query-bar/QueryBarItem.vue'
-import CrudModal from '@/components/table/CrudModal.vue'
-import CrudTable from '@/components/table/CrudTable.vue'
-import TheIcon from '@/components/icon/TheIcon.vue'
-import { renderIcon } from '@/utils'
-import { useCRUD } from '@/composables'
 import api from '@/api'
 
 defineOptions({ name: '系统配置' })
 
-const $table = ref(null)
-const queryItems = ref({})
 const allConfigRows = ref([])
 
 const tokenLoading = ref(false)
 const imLoading = ref(false)
 const rtcLoading = ref(false)
+const faceBeautyLoading = ref(false)
+const billingLoading = ref(false)
 const protectLoading = ref(false)
+const watchdogLoading = ref(false)
 
 const tokenForm = ref({
   coin_name: '金币',
@@ -46,101 +32,28 @@ const rtcForm = ref({
   rtc_app_certificate: '',
 })
 
+const faceBeautyForm = ref({
+  face_beauty_key: '',
+})
+
+const billingForm = ref({
+  call_billing_free_seconds: 10,
+})
+
 const protectForm = ref({
   reject_inbound_protect_seconds: 5,
   reject_pair_protect_seconds: 5,
 })
 
-const {
-  modalVisible,
-  modalTitle,
-  modalLoading,
-  handleSave,
-  modalForm,
-  modalFormRef,
-  handleEdit,
-  handleDelete,
-  handleAdd,
-} = useCRUD({
-  name: '系统配置',
-  initForm: {},
-  doCreate: api.createSystemConfig,
-  doUpdate: api.updateSystemConfig,
-  doDelete: api.deleteSystemConfig,
-  refresh: async () => {
-    await loadAllConfigs()
-    $table.value?.handleSearch()
-  },
+const watchdogForm = ref({
+  call_watchdog_poll_seconds: 5,
+  call_watchdog_ring_timeout_seconds: 30,
+  call_watchdog_renew_grace_seconds: 5,
+  call_presence_offline_detect_seconds: 3,
+  call_presence_settle_grace_seconds: 5,
 })
 
-const modalRules = {
-  cfg_key: [
-    {
-      required: true,
-      message: '请输入配置键',
-      trigger: ['input', 'blur'],
-    },
-  ],
-  cfg_value: [
-    {
-      required: true,
-      message: '请输入配置值',
-      trigger: ['input', 'blur'],
-    },
-  ],
-}
-
-const columns = [
-  { title: 'ID', key: 'id', width: 80, align: 'center' },
-  { title: '配置键', key: 'cfg_key', minWidth: 260, align: 'center' },
-  { title: '配置值', key: 'cfg_value', minWidth: 220, align: 'center' },
-  { title: '说明', key: 'description', minWidth: 300, align: 'center' },
-  {
-    title: '操作',
-    key: 'actions',
-    width: 180,
-    align: 'center',
-    fixed: 'right',
-    render(row) {
-      return [
-        h(
-          NButton,
-          {
-            size: 'small',
-            type: 'primary',
-            style: 'margin-right: 8px;',
-            onClick: () => handleEdit(row),
-          },
-          {
-            default: () => '编辑',
-            icon: renderIcon('material-symbols:edit', { size: 16 }),
-          }
-        ),
-        h(
-          NPopconfirm,
-          {
-            onPositiveClick: () => handleDelete({ cfg_id: row.id }, false),
-          },
-          {
-            trigger: () =>
-              h(
-                NButton,
-                { size: 'small', type: 'error' },
-                {
-                  default: () => '删除',
-                  icon: renderIcon('material-symbols:delete-outline', { size: 16 }),
-                }
-              ),
-            default: () => h('div', {}, '确定删除该配置吗?'),
-          }
-        ),
-      ]
-    },
-  },
-]
-
 onMounted(async () => {
-  $table.value?.handleSearch()
   await loadAllConfigs()
 })
 
@@ -159,13 +72,57 @@ async function loadAllConfigs() {
     rtcForm.value.rtc_app_id = findValue('rtc_app_id', '')
     rtcForm.value.rtc_app_certificate = findValue('rtc_app_certificate', '')
 
+    faceBeautyForm.value.face_beauty_key = findValue('face_beauty_key', '')
+
+    billingForm.value.call_billing_free_seconds = normalizeSeconds(
+      findValue('call_billing_free_seconds', '10'),
+      10,
+      0,
+      600
+    )
+
     protectForm.value.reject_inbound_protect_seconds = normalizeSeconds(
       findValue('call_reject_inbound_protect_seconds', '5'),
-      5
+      5,
+      0,
+      600
     )
     protectForm.value.reject_pair_protect_seconds = normalizeSeconds(
       findValue('call_reject_pair_protect_seconds', '5'),
+      5,
+      0,
+      600
+    )
+
+    watchdogForm.value.call_watchdog_poll_seconds = normalizeSeconds(
+      findValue('call_watchdog_poll_seconds', '5'),
+      5,
+      1,
+      600
+    )
+    watchdogForm.value.call_watchdog_ring_timeout_seconds = normalizeSeconds(
+      findValue('call_watchdog_ring_timeout_seconds', '30'),
+      30,
+      1,
+      600
+    )
+    watchdogForm.value.call_watchdog_renew_grace_seconds = normalizeSeconds(
+      findValue('call_watchdog_renew_grace_seconds', '5'),
+      5,
+      0,
       5
+    )
+    watchdogForm.value.call_presence_offline_detect_seconds = normalizeSeconds(
+      findValue('call_presence_offline_detect_seconds', '3'),
+      3,
+      1,
+      600
+    )
+    watchdogForm.value.call_presence_settle_grace_seconds = normalizeSeconds(
+      findValue('call_presence_settle_grace_seconds', '5'),
+      5,
+      0,
+      30
     )
   } catch (_) {}
 }
@@ -180,11 +137,11 @@ function findValue(cfgKey, fallback = '') {
   return (row.cfg_value ?? fallback).toString()
 }
 
-function normalizeSeconds(raw, fallback = 5) {
+function normalizeSeconds(raw, fallback, min = 0, max = 600) {
   const n = Number(raw)
   if (!Number.isFinite(n)) return fallback
-  if (n < 0) return 0
-  if (n > 600) return 600
+  if (n < min) return min
+  if (n > max) return max
   return Math.floor(n)
 }
 
@@ -218,7 +175,6 @@ async function saveTokenConfigs() {
     await upsertConfig('coin_name', tokenForm.value.coin_name.trim() || '金币', '代币名称：金币')
     await upsertConfig('diamond_name', tokenForm.value.diamond_name.trim() || '钻石', '代币名称：钻石')
     await loadAllConfigs()
-    $table.value?.handleSearch()
     $message.success('基础代币配置已保存')
   } catch (_) {
     $message.error('保存失败，请稍后重试')
@@ -234,7 +190,6 @@ async function saveImConfigs() {
     await upsertConfig('im_sdk_app_id', sdkId, '腾讯IM SDK AppID')
     await upsertConfig('im_secret_key', imForm.value.im_secret_key.trim(), '腾讯IM SecretKey')
     await loadAllConfigs()
-    $table.value?.handleSearch()
     $message.success('IM 配置已保存')
   } catch (_) {
     $message.error('保存失败，请稍后重试')
@@ -253,7 +208,6 @@ async function saveRtcConfigs() {
       '声网 RTC App Certificate'
     )
     await loadAllConfigs()
-    $table.value?.handleSearch()
     $message.success('RTC 配置已保存')
   } catch (_) {
     $message.error('保存失败，请稍后重试')
@@ -262,11 +216,42 @@ async function saveRtcConfigs() {
   }
 }
 
+async function saveFaceBeautyConfigs() {
+  faceBeautyLoading.value = true
+  try {
+    await upsertConfig(
+      'face_beauty_key',
+      faceBeautyForm.value.face_beauty_key.trim(),
+      '美颜 SDK License Key'
+    )
+    await loadAllConfigs()
+    $message.success('美颜配置已保存')
+  } catch (_) {
+    $message.error('保存失败，请稍后重试')
+  } finally {
+    faceBeautyLoading.value = false
+  }
+}
+
+async function saveBillingConfigs() {
+  billingLoading.value = true
+  try {
+    const freeSeconds = normalizeSeconds(billingForm.value.call_billing_free_seconds, 10, 0, 600)
+    await upsertConfig('call_billing_free_seconds', String(freeSeconds), '通话免费时长（秒）')
+    await loadAllConfigs()
+    $message.success('计费配置已保存')
+  } catch (_) {
+    $message.error('保存失败，请稍后重试')
+  } finally {
+    billingLoading.value = false
+  }
+}
+
 async function saveProtectConfigs() {
   protectLoading.value = true
   try {
-    const inbound = normalizeSeconds(protectForm.value.reject_inbound_protect_seconds, 5)
-    const pair = normalizeSeconds(protectForm.value.reject_pair_protect_seconds, 5)
+    const inbound = normalizeSeconds(protectForm.value.reject_inbound_protect_seconds, 5, 0, 600)
+    const pair = normalizeSeconds(protectForm.value.reject_pair_protect_seconds, 5, 0, 600)
 
     await upsertConfig(
       'call_reject_inbound_protect_seconds',
@@ -280,7 +265,6 @@ async function saveProtectConfigs() {
     )
 
     await loadAllConfigs()
-    $table.value?.handleSearch()
     $message.success('通话保护配置已保存')
   } catch (_) {
     $message.error('保存失败，请稍后重试')
@@ -288,16 +272,70 @@ async function saveProtectConfigs() {
     protectLoading.value = false
   }
 }
+
+async function saveWatchdogConfigs() {
+  watchdogLoading.value = true
+  try {
+    const pollSeconds = normalizeSeconds(watchdogForm.value.call_watchdog_poll_seconds, 5, 1, 600)
+    const ringTimeout = normalizeSeconds(
+      watchdogForm.value.call_watchdog_ring_timeout_seconds,
+      30,
+      1,
+      600
+    )
+    const renewGrace = normalizeSeconds(
+      watchdogForm.value.call_watchdog_renew_grace_seconds,
+      5,
+      0,
+      5
+    )
+    const offlineDetect = normalizeSeconds(
+      watchdogForm.value.call_presence_offline_detect_seconds,
+      3,
+      1,
+      600
+    )
+    const settleGrace = normalizeSeconds(
+      watchdogForm.value.call_presence_settle_grace_seconds,
+      5,
+      0,
+      30
+    )
+
+    await upsertConfig('call_watchdog_poll_seconds', String(pollSeconds), 'Watchdog 轮询间隔（秒）')
+    await upsertConfig(
+      'call_watchdog_ring_timeout_seconds',
+      String(ringTimeout),
+      '呼叫振铃超时自动结束（秒）'
+    )
+    await upsertConfig(
+      'call_watchdog_renew_grace_seconds',
+      String(renewGrace),
+      '续费宽限时长（秒）'
+    )
+    await upsertConfig(
+      'call_presence_offline_detect_seconds',
+      String(offlineDetect),
+      '在线状态离线判定阈值（秒）'
+    )
+    await upsertConfig(
+      'call_presence_settle_grace_seconds',
+      String(settleGrace),
+      '离线结算宽限时长（秒）'
+    )
+
+    await loadAllConfigs()
+    $message.success('Watchdog 配置已保存')
+  } catch (_) {
+    $message.error('保存失败，请稍后重试')
+  } finally {
+    watchdogLoading.value = false
+  }
+}
 </script>
 
 <template>
-  <CommonPage show-footer title="系统配置">
-    <template #action>
-      <NButton type="primary" @click="handleAdd">
-        <TheIcon icon="material-symbols:add" :size="18" class="mr-5" />新建配置
-      </NButton>
-    </template>
-
+  <CommonPage title="系统配置">
     <NSpace vertical :size="16" class="mb-20">
       <NCard title="基础配置（代币名称）">
         <NForm label-placement="left" label-align="left" :label-width="160" :model="tokenForm">
@@ -345,6 +383,36 @@ async function saveProtectConfigs() {
         <NButton type="primary" :loading="rtcLoading" @click="saveRtcConfigs">保存 RTC 配置</NButton>
       </NCard>
 
+      <NCard title="美颜配置">
+        <NForm label-placement="left" label-align="left" :label-width="200" :model="faceBeautyForm">
+          <NFormItem label="美颜 Key face_beauty_key">
+            <NInput
+              v-model:value="faceBeautyForm.face_beauty_key"
+              type="password"
+              show-password-on="mousedown"
+              placeholder="请输入美颜 SDK Key"
+            />
+          </NFormItem>
+        </NForm>
+        <NButton type="primary" :loading="faceBeautyLoading" @click="saveFaceBeautyConfigs">
+          保存美颜配置
+        </NButton>
+      </NCard>
+
+      <NCard title="通话计费配置">
+        <NForm label-placement="left" label-align="left" :label-width="260" :model="billingForm">
+          <NFormItem label="通话免费时长（秒） call_billing_free_seconds">
+            <NInputNumber
+              v-model:value="billingForm.call_billing_free_seconds"
+              :min="0"
+              :max="600"
+              placeholder="例如 10"
+            />
+          </NFormItem>
+        </NForm>
+        <NButton type="primary" :loading="billingLoading" @click="saveBillingConfigs">保存计费配置</NButton>
+      </NCard>
+
       <NCard title="通话保护配置">
         <NForm
           label-placement="left"
@@ -373,56 +441,54 @@ async function saveProtectConfigs() {
           保存通话保护配置
         </NButton>
       </NCard>
+
+      <NCard title="Watchdog 配置">
+        <NForm label-placement="left" label-align="left" :label-width="300" :model="watchdogForm">
+          <NFormItem label="轮询间隔（秒） call_watchdog_poll_seconds">
+            <NInputNumber
+              v-model:value="watchdogForm.call_watchdog_poll_seconds"
+              :min="1"
+              :max="600"
+              placeholder="例如 5"
+            />
+          </NFormItem>
+          <NFormItem label="振铃超时（秒） call_watchdog_ring_timeout_seconds">
+            <NInputNumber
+              v-model:value="watchdogForm.call_watchdog_ring_timeout_seconds"
+              :min="1"
+              :max="600"
+              placeholder="例如 30"
+            />
+          </NFormItem>
+          <NFormItem label="续费宽限（秒） call_watchdog_renew_grace_seconds">
+            <NInputNumber
+              v-model:value="watchdogForm.call_watchdog_renew_grace_seconds"
+              :min="0"
+              :max="5"
+              placeholder="例如 5"
+            />
+          </NFormItem>
+          <NFormItem label="离线判定阈值（秒） call_presence_offline_detect_seconds">
+            <NInputNumber
+              v-model:value="watchdogForm.call_presence_offline_detect_seconds"
+              :min="1"
+              :max="600"
+              placeholder="例如 3"
+            />
+          </NFormItem>
+          <NFormItem label="离线结算宽限（秒） call_presence_settle_grace_seconds">
+            <NInputNumber
+              v-model:value="watchdogForm.call_presence_settle_grace_seconds"
+              :min="0"
+              :max="30"
+              placeholder="例如 5"
+            />
+          </NFormItem>
+        </NForm>
+        <NButton type="primary" :loading="watchdogLoading" @click="saveWatchdogConfigs">
+          保存 Watchdog 配置
+        </NButton>
+      </NCard>
     </NSpace>
-
-    <CrudTable
-      ref="$table"
-      v-model:query-items="queryItems"
-      :columns="columns"
-      :get-data="api.getSystemConfigList"
-    >
-      <template #queryBar>
-        <QueryBarItem label="配置键" :label-width="60">
-          <NInput
-            v-model:value="queryItems.cfg_key"
-            clearable
-            type="text"
-            placeholder="请输入配置键"
-            @keypress.enter="$table?.handleSearch()"
-          />
-        </QueryBarItem>
-      </template>
-    </CrudTable>
-
-    <CrudModal
-      v-model:visible="modalVisible"
-      :title="modalTitle"
-      :loading="modalLoading"
-      @save="handleSave"
-    >
-      <NForm
-        ref="modalFormRef"
-        label-placement="left"
-        label-align="left"
-        :label-width="80"
-        :model="modalForm"
-        :rules="modalRules"
-      >
-        <NFormItem label="配置键" path="cfg_key">
-          <NInput v-model:value="modalForm.cfg_key" clearable placeholder="请输入配置键" />
-        </NFormItem>
-        <NFormItem label="配置值" path="cfg_value">
-          <NInput v-model:value="modalForm.cfg_value" clearable placeholder="请输入配置值" />
-        </NFormItem>
-        <NFormItem label="说明" path="description">
-          <NInput
-            v-model:value="modalForm.description"
-            type="textarea"
-            clearable
-            placeholder="请输入说明"
-          />
-        </NFormItem>
-      </NForm>
-    </CrudModal>
   </CommonPage>
 </template>
