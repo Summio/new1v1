@@ -1,7 +1,7 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/constants/api_endpoints.dart';
+import '../../core/utils/app_logger.dart';
 
 /// 礼物信息
 class GiftInfo {
@@ -83,7 +83,7 @@ class GiftListNotifier extends StateNotifier<GiftListState> {
 
       state = state.copyWith(gifts: gifts, isLoading: false);
     } catch (e) {
-      debugPrint('gift.fetchGifts error: $e');
+      AppLogger.debug('gift.fetchGifts error: $e');
       state = state.copyWith(isLoading: false, error: '礼物加载失败，请稍后重试');
     }
   }
@@ -96,16 +96,13 @@ class GiftListNotifier extends StateNotifier<GiftListState> {
     try {
       final data = await _dio.apiPost(
         ApiEndpoints.giftSend,
-        data: {
-          'gift_id': giftId,
-          'anchor_id': anchorId,
-        },
+        data: {'gift_id': giftId, 'anchor_user_id': anchorId},
       );
       final success = data['code'] == 200;
       final coins = (data['data'] as Map<String, dynamic>?)?['coins'] as int?;
       return GiftSendResult(success: success, coins: coins);
     } catch (e) {
-      debugPrint('gift._sendGiftInternal error: $e');
+      AppLogger.debug('gift._sendGiftInternal error: $e');
       return const GiftSendResult(success: false);
     }
   }
@@ -120,7 +117,8 @@ class GiftListNotifier extends StateNotifier<GiftListState> {
 }
 
 /// 礼物列表 Provider
-final giftListProvider =
-    StateNotifierProvider<GiftListNotifier, GiftListState>((ref) {
-  return GiftListNotifier(DioClient.instance);
-});
+final giftListProvider = StateNotifierProvider<GiftListNotifier, GiftListState>(
+  (ref) {
+    return GiftListNotifier(DioClient.instance);
+  },
+);

@@ -1,6 +1,20 @@
 <script setup>
-import { h, onMounted, ref } from 'vue'
-import { NButton, NForm, NFormItem, NImage, NInput, NInputNumber, NModal, NSelect, NSwitch, NTag } from 'naive-ui'
+import { h, onMounted, reactive, ref } from 'vue'
+import {
+  NButton,
+  NDataTable,
+  NForm,
+  NFormItem,
+  NImage,
+  NInput,
+  NInputNumber,
+  NModal,
+  NSelect,
+  NSwitch,
+  NTabPane,
+  NTag,
+  NTabs,
+} from 'naive-ui'
 
 import CommonPage from '@/components/page/CommonPage.vue'
 import QueryBarItem from '@/components/query-bar/QueryBarItem.vue'
@@ -14,6 +28,7 @@ const $table = ref(null)
 const queryItems = ref({})
 const editModalVisible = ref(false)
 const saving = ref(false)
+const activeEditTab = ref('basic')
 const modalForm = ref({
   id: null,
   phone: '',
@@ -28,6 +43,37 @@ const modalForm = ref({
   is_anchor: false,
   cover_url: '',
   album_photos: [],
+  coins: 0,
+  diamonds: 0,
+  frozen_diamonds: 0,
+  created_at: '',
+  last_login: '',
+})
+const callRecordLoading = ref(false)
+const callRecordRows = ref([])
+const peerJumpLoading = ref(false)
+const callRecordQuery = reactive({
+  status: null,
+  end_reason: null,
+})
+const callRecordPagination = reactive({
+  page: 1,
+  pageSize: 6,
+  itemCount: 0,
+  pageSizes: [6, 10, 20],
+  showSizePicker: true,
+  prefix({ itemCount }) {
+    return `共 ${itemCount} 条`
+  },
+  onChange(page) {
+    callRecordPagination.page = page
+    fetchUserCallRecords()
+  },
+  onUpdatePageSize(pageSize) {
+    callRecordPagination.pageSize = pageSize
+    callRecordPagination.page = 1
+    fetchUserCallRecords()
+  },
 })
 
 onMounted(() => {
@@ -49,6 +95,36 @@ const anchorOptions = [
   { label: '主播', value: true },
   { label: '普通用户', value: false },
 ]
+const callRecordStatusOptions = [
+  { label: '待接听', value: 'pending' },
+  { label: '通话中', value: 'ongoing' },
+  { label: '已结束', value: 'ended' },
+  { label: '失败', value: 'failed' },
+  { label: '超时', value: 'timeout' },
+]
+const callRecordEndReasonOptions = [
+  { label: '正常结束', value: 'normal' },
+  { label: '被叫拒接', value: 'rejected' },
+  { label: '主叫取消', value: 'cancelled' },
+  { label: '呼叫超时', value: 'timeout' },
+  { label: '余额不足', value: 'balance_empty' },
+  { label: '用户离场', value: 'force_exit' },
+]
+const callRecordStatusMap = {
+  pending: { type: 'warning', text: '待接听' },
+  ongoing: { type: 'info', text: '通话中' },
+  ended: { type: 'success', text: '已结束' },
+  failed: { type: 'error', text: '失败' },
+  timeout: { type: 'default', text: '超时' },
+}
+const callRecordEndReasonMap = {
+  normal: '正常结束',
+  rejected: '被叫拒接',
+  cancelled: '主叫取消',
+  timeout: '呼叫超时',
+  balance_empty: '余额不足',
+  force_exit: '用户离场',
+}
 
 const avatarImgStyle = {
   width: '44px',
@@ -104,12 +180,157 @@ function openEditModal(row) {
     is_anchor: !!row.is_anchor,
     cover_url: row.cover_url || '',
     album_photos: album,
+    coins: row.coins ?? 0,
+    diamonds: row.diamonds ?? 0,
+    frozen_diamonds: row.frozen_diamonds ?? 0,
+    created_at: row.created_at || '',
+    last_login: row.last_login || '',
   }
+  activeEditTab.value = 'basic'
+  callRecordRows.value = []
+  callRecordPagination.page = 1
+  callRecordPagination.itemCount = 0
+  callRecordQuery.status = null
+  callRecordQuery.end_reason = null
   editModalVisible.value = true
 }
 
 function handleViewEdit(row) {
   openEditModal(row)
+}
+
+function formatDuration(seconds) {
+  const total = Number(seconds || 0)
+  const hVal = Math.floor(total / 3600)
+  const mVal = Math.floor((total % 3600) / 60)
+  const sVal = total % 60
+  if (hVal > 0) return `${hVal}小时 ${mVal}分 ${sVal}秒`
+  if (mVal > 0) return `${mVal}分 ${sVal}秒`
+  return `${sVal}秒`
+}
+
+function resolvePeerInfo(row) {
+  const currentId = Number(modalForm.value.id || 0)
+  const callerId = Number(row.caller_id || 0)
+  const isCaller = currentId === callerId
+  const peerId = isCaller ? row.callee_id : row.caller_id
+  const peerNickname = isCaller ? row.callee_nickname : row.caller_nickname
+  const peerPhone = isCaller ? row.callee_phone : row.caller_phone
+  return {
+    peerId: Number(peerId || 0),
+    text: `ID:${peerId} ${peerNickname || '-'} / ${peerPhone || '-'}`,
+  }
+}
+
+async function handleOpenPeerUser(row) {
+  const peer = resolvePeerInfo(row)
+  if (!peer.peerId) return
+  if (peer.peerId === Number(modalForm.value.id || 0)) return
+  peerJumpLoading.value = true
+  try {
+    const res = await api.getAppUserById({ id: peer.peerId })
+    if (res?.data) {
+      openEditModal(res.data)
+    }
+  } catch (error) {
+    window.$message?.error(error?.message || '加载对端用户失败')
+  } finally {
+    peerJumpLoading.value = false
+  }
+}
+
+const callRecordColumns = [
+  { title: '通话ID', key: 'id', width: 80, align: 'center' },
+  {
+    title: '对端用户',
+    key: 'peer',
+    minWidth: 180,
+    render(row) {
+      const peer = resolvePeerInfo(row)
+      return h(
+        NButton,
+        {
+          text: true,
+          type: 'primary',
+          disabled: !peer.peerId || peerJumpLoading.value,
+          loading: peerJumpLoading.value,
+          onClick: () => handleOpenPeerUser(row),
+        },
+        { default: () => peer.text }
+      )
+    },
+  },
+  {
+    title: '状态',
+    key: 'status',
+    width: 90,
+    align: 'center',
+    render(row) {
+      const item = callRecordStatusMap[row.status] || { type: 'default', text: row.status || '-' }
+      return h(NTag, { type: item.type }, { default: () => item.text })
+    },
+  },
+  {
+    title: '结束原因',
+    key: 'end_reason',
+    width: 110,
+    align: 'center',
+    render(row) {
+      if (!row.end_reason) return '-'
+      return callRecordEndReasonMap[row.end_reason] || row.end_reason
+    },
+  },
+  { title: '时长', key: 'duration', width: 90, align: 'center', render: row => formatDuration(row.duration) },
+  { title: '总费用(金币)', key: 'total_fee', width: 100, align: 'center' },
+  {
+    title: '创建时间',
+    key: 'created_at',
+    width: 150,
+    align: 'center',
+    render(row) {
+      return row.created_at ? formatDate(row.created_at, 'YYYY-MM-DD HH:mm:ss') : '-'
+    },
+  },
+]
+
+async function fetchUserCallRecords() {
+  if (!modalForm.value.id) return
+  callRecordLoading.value = true
+  try {
+    const res = await api.getCallRecordList({
+      user_id: modalForm.value.id,
+      page: callRecordPagination.page,
+      page_size: callRecordPagination.pageSize,
+      status: callRecordQuery.status || undefined,
+      end_reason: callRecordQuery.end_reason || undefined,
+    })
+    callRecordRows.value = res?.data || []
+    callRecordPagination.itemCount = Number(res?.total || 0)
+  } catch (error) {
+    callRecordRows.value = []
+    callRecordPagination.itemCount = 0
+  } finally {
+    callRecordLoading.value = false
+  }
+}
+
+async function handleSearchUserCallRecords() {
+  callRecordPagination.page = 1
+  await fetchUserCallRecords()
+}
+
+async function handleResetUserCallRecords() {
+  callRecordQuery.status = null
+  callRecordQuery.end_reason = null
+  callRecordPagination.page = 1
+  await fetchUserCallRecords()
+}
+
+async function handleEditTabChange(name) {
+  activeEditTab.value = name
+  if (name === 'call_records' && !callRecordRows.value.length) {
+    await fetchUserCallRecords()
+  }
 }
 
 async function handleSave() {
@@ -446,99 +667,157 @@ const columns = [
       </template>
     </CrudTable>
 
-    <NModal v-model:show="editModalVisible" preset="card" title="查看/编辑 App用户" style="width: 860px">
-      <NForm label-placement="left" label-width="90" class="edit-form-grid">
-        <NFormItem label="用户ID">
-          <NInput :value="String(modalForm.id || '')" readonly />
-        </NFormItem>
-        <NFormItem label="手机号">
-          <NInput v-model:value="modalForm.phone" readonly />
-        </NFormItem>
-        <NFormItem label="昵称">
-          <NInput v-model:value="modalForm.nickname" />
-        </NFormItem>
-        <NFormItem label="性别">
-          <NSelect v-model:value="modalForm.gender" :options="genderOptions" />
-        </NFormItem>
-        <NFormItem label="出生日期">
-          <NInput v-model:value="modalForm.birth_date" placeholder="YYYY-MM-DD" />
-        </NFormItem>
-        <NFormItem label="所在地">
-          <NInput v-model:value="modalForm.location_city" placeholder="省-市" />
-        </NFormItem>
-        <NFormItem label="身高(cm)">
-          <NInputNumber v-model:value="modalForm.height_cm" style="width: 100%" clearable />
-        </NFormItem>
-        <NFormItem label="体重(kg)">
-          <NInputNumber v-model:value="modalForm.weight_kg" style="width: 100%" clearable />
-        </NFormItem>
-        <NFormItem label="状态">
-          <NSelect v-model:value="modalForm.status" :options="statusOptions" />
-        </NFormItem>
-        <NFormItem label="主播">
-          <NSwitch v-model:value="modalForm.is_anchor" />
-        </NFormItem>
+    <NModal v-model:show="editModalVisible" preset="card" title="查看/编辑 App用户" style="width: 1120px">
+      <NTabs :value="activeEditTab" type="line" animated @update:value="handleEditTabChange">
+        <NTabPane name="basic" tab="基础信息">
+          <NForm label-placement="left" label-width="90" class="edit-form-grid">
+            <NFormItem label="用户ID">
+              <NInput :value="String(modalForm.id || '')" readonly />
+            </NFormItem>
+            <NFormItem label="手机号">
+              <NInput v-model:value="modalForm.phone" readonly />
+            </NFormItem>
+            <NFormItem label="昵称">
+              <NInput v-model:value="modalForm.nickname" />
+            </NFormItem>
+            <NFormItem label="性别">
+              <NSelect v-model:value="modalForm.gender" :options="genderOptions" />
+            </NFormItem>
+            <NFormItem label="出生日期">
+              <NInput v-model:value="modalForm.birth_date" placeholder="YYYY-MM-DD" />
+            </NFormItem>
+            <NFormItem label="所在地">
+              <NInput v-model:value="modalForm.location_city" placeholder="省-市" />
+            </NFormItem>
+            <NFormItem label="身高(cm)">
+              <NInputNumber v-model:value="modalForm.height_cm" style="width: 100%" clearable />
+            </NFormItem>
+            <NFormItem label="体重(kg)">
+              <NInputNumber v-model:value="modalForm.weight_kg" style="width: 100%" clearable />
+            </NFormItem>
+            <NFormItem label="状态">
+              <NSelect v-model:value="modalForm.status" :options="statusOptions" />
+            </NFormItem>
+            <NFormItem label="主播">
+              <NSwitch v-model:value="modalForm.is_anchor" />
+            </NFormItem>
+          </NForm>
+        </NTabPane>
 
-        <NFormItem label="头像" class="full-span">
-          <div class="media-row">
-            <div class="media-thumb-lg">
-              <NImage
-                v-if="modalForm.avatar"
-                :src="modalForm.avatar"
-                width="92"
-                height="92"
-                object-fit="cover"
-              />
-              <span v-else>暂无头像</span>
-            </div>
-            <NButton type="primary" secondary @click="handleUploadAvatar">上传头像</NButton>
-          </div>
-        </NFormItem>
-        <NFormItem label="封面" class="full-span">
-          <div class="media-row">
-            <div class="media-thumb-lg">
-              <NImage
-                v-if="modalForm.cover_url"
-                :src="modalForm.cover_url"
-                width="92"
-                height="92"
-                object-fit="cover"
-              />
-              <span v-else>未设置封面</span>
-            </div>
-            <NSelect
-              v-model:value="modalForm.cover_url"
-              :options="(modalForm.album_photos || []).map((item, idx) => ({ label: `相册图 ${idx + 1}`, value: item }))"
-              placeholder="从相册中选择封面"
-              clearable
-              style="width: 220px"
-            />
-          </div>
-        </NFormItem>
-        <NFormItem label="相册" class="full-span">
-          <div class="album-editor">
-            <div class="album-actions">
-              <NButton type="primary" secondary @click="handleAddAlbumPhoto">新增照片</NButton>
-              <span class="hint">最多6张，点击“设为封面”即可切换封面</span>
-            </div>
-            <div v-if="(modalForm.album_photos || []).length" class="album-grid">
-              <div v-for="(url, idx) in modalForm.album_photos" :key="`${url}-${idx}`" class="album-card">
-                <div class="media-thumb-md">
-                  <NImage :src="url" width="100%" height="120" object-fit="cover" />
+        <NTabPane name="media" tab="媒体资料">
+          <NForm label-placement="left" label-width="90">
+            <NFormItem label="头像" class="full-span">
+              <div class="media-row">
+                <div class="media-thumb-lg">
+                  <NImage
+                    v-if="modalForm.avatar"
+                    :src="modalForm.avatar"
+                    width="92"
+                    height="92"
+                    object-fit="cover"
+                  />
+                  <span v-else>暂无头像</span>
                 </div>
-                <div class="album-btns">
-                  <NButton size="tiny" @click="handleReplaceAlbumPhoto(idx)">更换</NButton>
-                  <NButton size="tiny" type="info" @click="handleSetCover(url)">
-                    {{ modalForm.cover_url === url ? '当前封面' : '设为封面' }}
-                  </NButton>
-                  <NButton size="tiny" type="error" @click="handleRemoveAlbumPhoto(idx)">删除</NButton>
-                </div>
+                <NButton type="primary" secondary @click="handleUploadAvatar">上传头像</NButton>
               </div>
-            </div>
-            <div v-else class="hint">暂无相册图片</div>
+            </NFormItem>
+            <NFormItem label="封面" class="full-span">
+              <div class="media-row">
+                <div class="media-thumb-lg">
+                  <NImage
+                    v-if="modalForm.cover_url"
+                    :src="modalForm.cover_url"
+                    width="92"
+                    height="92"
+                    object-fit="cover"
+                  />
+                  <span v-else>未设置封面</span>
+                </div>
+                <NSelect
+                  v-model:value="modalForm.cover_url"
+                  :options="(modalForm.album_photos || []).map((item, idx) => ({ label: `相册图 ${idx + 1}`, value: item }))"
+                  placeholder="从相册中选择封面"
+                  clearable
+                  style="width: 220px"
+                />
+              </div>
+            </NFormItem>
+            <NFormItem label="相册" class="full-span">
+              <div class="album-editor">
+                <div class="album-actions">
+                  <NButton type="primary" secondary @click="handleAddAlbumPhoto">新增照片</NButton>
+                  <span class="hint">最多6张，点击“设为封面”即可切换封面</span>
+                </div>
+                <div v-if="(modalForm.album_photos || []).length" class="album-grid">
+                  <div v-for="(url, idx) in modalForm.album_photos" :key="`${url}-${idx}`" class="album-card">
+                    <div class="media-thumb-md">
+                      <NImage :src="url" width="100%" height="120" object-fit="cover" />
+                    </div>
+                    <div class="album-btns">
+                      <NButton size="tiny" @click="handleReplaceAlbumPhoto(idx)">更换</NButton>
+                      <NButton size="tiny" type="info" @click="handleSetCover(url)">
+                        {{ modalForm.cover_url === url ? '当前封面' : '设为封面' }}
+                      </NButton>
+                      <NButton size="tiny" type="error" @click="handleRemoveAlbumPhoto(idx)">删除</NButton>
+                    </div>
+                  </div>
+                </div>
+                <div v-else class="hint">暂无相册图片</div>
+              </div>
+            </NFormItem>
+          </NForm>
+        </NTabPane>
+
+        <NTabPane name="assets" tab="资产信息">
+          <NForm label-placement="left" label-width="100" class="edit-form-grid">
+            <NFormItem label="金币">
+              <NInput :value="String(modalForm.coins ?? 0)" readonly />
+            </NFormItem>
+            <NFormItem label="钻石">
+              <NInput :value="String(modalForm.diamonds ?? 0)" readonly />
+            </NFormItem>
+            <NFormItem label="冻结钻石">
+              <NInput :value="String(modalForm.frozen_diamonds ?? 0)" readonly />
+            </NFormItem>
+            <NFormItem label="创建时间">
+              <NInput :value="modalForm.created_at ? formatDate(modalForm.created_at, 'YYYY-MM-DD HH:mm:ss') : '-'" readonly />
+            </NFormItem>
+            <NFormItem label="最后登录">
+              <NInput :value="modalForm.last_login ? formatDate(modalForm.last_login, 'YYYY-MM-DD HH:mm:ss') : '-'" readonly />
+            </NFormItem>
+          </NForm>
+        </NTabPane>
+
+        <NTabPane name="call_records" tab="通话记录">
+          <div class="call-record-query">
+            <NSelect
+              v-model:value="callRecordQuery.status"
+              clearable
+              :options="callRecordStatusOptions"
+              placeholder="筛选状态"
+              style="width: 150px"
+            />
+            <NSelect
+              v-model:value="callRecordQuery.end_reason"
+              clearable
+              :options="callRecordEndReasonOptions"
+              placeholder="筛选结束原因"
+              style="width: 170px"
+            />
+            <NButton type="primary" @click="handleSearchUserCallRecords">查询</NButton>
+            <NButton @click="handleResetUserCallRecords">重置</NButton>
           </div>
-        </NFormItem>
-      </NForm>
+          <NDataTable
+            :loading="callRecordLoading"
+            :columns="callRecordColumns"
+            :data="callRecordRows"
+            :pagination="callRecordPagination"
+            :scroll-x="900"
+            :bordered="false"
+            :single-line="false"
+          />
+        </NTabPane>
+      </NTabs>
 
       <template #action>
         <NButton @click="editModalVisible = false">取消</NButton>
@@ -722,6 +1001,13 @@ const columns = [
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+.call-record-query {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
 }
 
 </style>

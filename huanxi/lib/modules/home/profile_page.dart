@@ -26,6 +26,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   void initState() {
     super.initState();
     _initPresenceListener();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(authProvider.notifier).fetchUserInfo();
+    });
   }
 
   void _initPresenceListener() {

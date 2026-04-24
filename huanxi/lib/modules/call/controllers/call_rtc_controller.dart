@@ -1,15 +1,13 @@
 import 'dart:async';
-import 'dart:typed_data';
-
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:mt_plugin/mt_plugin.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import '../../../app/providers/auth_provider.dart';
 import '../../../core/constants/api_endpoints.dart';
 import '../../../core/network/dio_client.dart';
+import '../../../core/utils/app_logger.dart';
 
 const _rtcNoValue = Object();
 const int _nativeBackCameraId = 0;
@@ -103,7 +101,9 @@ class CallRtcState {
       isJoining: isJoining ?? this.isJoining,
       isJoined: isJoined ?? this.isJoined,
       isFrontCamera: isFrontCamera ?? this.isFrontCamera,
-      localUid: identical(localUid, _rtcNoValue) ? this.localUid : localUid as int?,
+      localUid: identical(localUid, _rtcNoValue)
+          ? this.localUid
+          : localUid as int?,
       remoteUid: identical(remoteUid, _rtcNoValue)
           ? this.remoteUid
           : remoteUid as int?,
@@ -190,11 +190,12 @@ class CallRtcController extends StateNotifier<CallRtcState> {
       'remoteUid': state.remoteUid,
       'rotation': _externalFrameRotation,
     }..addAll(extra);
-    // ignore: avoid_print
-    print('[CALL_FLOW][callId=$callId] $snapshot');
+    AppLogger.debugJson('[CALL_FLOW][callId=$callId]', snapshot);
   }
 
-  void _finishFlipTransition({Duration delay = const Duration(milliseconds: 280)}) {
+  void _finishFlipTransition({
+    Duration delay = const Duration(milliseconds: 280),
+  }) {
     _flipUiGuardTimer?.cancel();
     _flipUiGuardTimer = Timer(delay, () {
       if (!mounted) {
@@ -207,20 +208,17 @@ class CallRtcController extends StateNotifier<CallRtcState> {
 
   void _scheduleResumePushAfterCameraSwitch() {
     _cameraSwitchResumePushTimer?.cancel();
-    _cameraSwitchResumePushTimer = Timer(
-      const Duration(milliseconds: 320),
-      () {
-        _cameraSwitchResumePushTimer = null;
-        _dropFramesDuringCameraSwitch = false;
-        if (state.isJoined && state.isCameraOn) {
-          _startNativePush();
-        }
-        if (state.isFlipping) {
-          _finishFlipTransition();
-        }
-        _flowLog('ui.flipCamera.resumePushAfterStable');
-      },
-    );
+    _cameraSwitchResumePushTimer = Timer(const Duration(milliseconds: 320), () {
+      _cameraSwitchResumePushTimer = null;
+      _dropFramesDuringCameraSwitch = false;
+      if (state.isJoined && state.isCameraOn) {
+        _startNativePush();
+      }
+      if (state.isFlipping) {
+        _finishFlipTransition();
+      }
+      _flowLog('ui.flipCamera.resumePushAfterStable');
+    });
   }
 
   Future<dynamic> _handleNativeMethod(MethodCall call) async {
@@ -234,7 +232,9 @@ class CallRtcController extends StateNotifier<CallRtcState> {
       final frameRotation = resolveFrameRotationFromNativeState(
         args['frameRotation'],
       );
-      final nativeIsFront = resolveFrontCameraFromNativeState(cameraId: cameraId);
+      final nativeIsFront = resolveFrontCameraFromNativeState(
+        cameraId: cameraId,
+      );
       _applyNativeCameraState(
         isFrontCamera: nativeIsFront,
         frameRotation: frameRotation,
@@ -415,7 +415,8 @@ class CallRtcController extends StateNotifier<CallRtcState> {
             ),
           );
           _externalPushOkCounter += 1;
-          if (_externalPushOkCounter <= 5 || _externalPushOkCounter % 120 == 0) {
+          if (_externalPushOkCounter <= 5 ||
+              _externalPushOkCounter % 120 == 0) {
             _flowLog(
               'ext.pushVideoFrameOk',
               extra: <String, Object?>{
@@ -429,7 +430,8 @@ class CallRtcController extends StateNotifier<CallRtcState> {
           }
         } catch (e) {
           _externalFrameWarnCounter += 1;
-          if (_externalFrameWarnCounter <= 5 || _externalFrameWarnCounter % 30 == 0) {
+          if (_externalFrameWarnCounter <= 5 ||
+              _externalFrameWarnCounter % 30 == 0) {
             _flowLog(
               'ext.pushVideoFrameFailed',
               extra: <String, Object?>{'error': e.toString()},
@@ -438,7 +440,8 @@ class CallRtcController extends StateNotifier<CallRtcState> {
         }
       } catch (e) {
         _externalFrameWarnCounter += 1;
-        if (_externalFrameWarnCounter <= 5 || _externalFrameWarnCounter % 30 == 0) {
+        if (_externalFrameWarnCounter <= 5 ||
+            _externalFrameWarnCounter % 30 == 0) {
           _flowLog(
             'ext.onFrameHandleFailed',
             extra: <String, Object?>{'error': e.toString()},
@@ -500,7 +503,9 @@ class CallRtcController extends StateNotifier<CallRtcState> {
   }) async {
     final initStartAt = DateTime.now();
     if (state.isJoining || state.isJoined) {
-      onLog?.call('rtc init skipped: joining=${state.isJoining}, joined=${state.isJoined}');
+      onLog?.call(
+        'rtc init skipped: joining=${state.isJoining}, joined=${state.isJoined}',
+      );
       return;
     }
     _joinedCallbackEmitted = false;
@@ -612,18 +617,20 @@ class CallRtcController extends StateNotifier<CallRtcState> {
           );
           markJoined(connection.localUid ?? uid);
         },
-        onConnectionStateChanged: (
-          RtcConnection connection,
-          ConnectionStateType connectionState,
-          ConnectionChangedReasonType reason,
-        ) {
-          onLog?.call(
-            'connection state changed: state=$connectionState, reason=$reason',
-          );
-          if (connectionState == ConnectionStateType.connectionStateConnected) {
-            markJoined(uid);
-          }
-        },
+        onConnectionStateChanged:
+            (
+              RtcConnection connection,
+              ConnectionStateType connectionState,
+              ConnectionChangedReasonType reason,
+            ) {
+              onLog?.call(
+                'connection state changed: state=$connectionState, reason=$reason',
+              );
+              if (connectionState ==
+                  ConnectionStateType.connectionStateConnected) {
+                markJoined(uid);
+              }
+            },
         onUserJoined: (RtcConnection connection, int remoteUid, int elapsed) {
           if (!mounted) {
             return;
@@ -634,90 +641,98 @@ class CallRtcController extends StateNotifier<CallRtcState> {
         onUserMuteVideo: (RtcConnection connection, int remoteUid, bool muted) {
           onLog?.call('remote mute video: uid=$remoteUid, muted=$muted');
         },
-        onRemoteVideoStateChanged: (
-          RtcConnection connection,
-          int remoteUid,
-          RemoteVideoState state,
-          RemoteVideoStateReason reason,
-          int elapsed,
-        ) {
-          onLog?.call(
-            'remote video state: uid=$remoteUid, state=$state, reason=$reason, elapsed=$elapsed',
-          );
-        },
-        onFirstRemoteVideoDecoded: (
-          RtcConnection connection,
-          int uid,
-          int width,
-          int height,
-          int elapsed,
-        ) {
-          onLog?.call(
-            'first remote video decoded: uid=$uid size=${width}x$height elapsed=$elapsed',
-          );
-        },
-        onFirstRemoteVideoFrame: (
-          RtcConnection connection,
-          int uid,
-          int width,
-          int height,
-          int elapsed,
-        ) {
-          onLog?.call(
-            'first remote video frame: uid=$uid size=${width}x$height elapsed=$elapsed',
-          );
-        },
-        onVideoSizeChanged: (
-          RtcConnection connection,
-          VideoSourceType sourceType,
-          int sourceUid,
-          int width,
-          int height,
-          int rotation,
-        ) {
-          onLog?.call(
-            'video size changed: sourceType=$sourceType uid=$sourceUid '
-            'size=${width}x$height rotation=$rotation',
-          );
-        },
-        onUserOffline: (
-          RtcConnection connection,
-          int remoteUid,
-          UserOfflineReasonType reason,
-        ) {
-          if (!mounted) {
-            return;
-          }
-          if (state.remoteUid != remoteUid) {
-            return;
-          }
-          state = state.copyWith(remoteUid: null, hasPeerLeft: true);
-          onLog?.call('remote offline, immediately ending call');
-          onRemoteEnd('peer_left');
-        },
-        onLocalVideoStateChanged: (
-          VideoSourceType source,
-          LocalVideoStreamState localVideoState,
-          LocalVideoStreamReason reason,
-        ) {
-          if (!mounted) {
-            return;
-          }
-          if (reason ==
-              LocalVideoStreamReason.localVideoStreamReasonDeviceNoPermission) {
-            state = state.copyWith(errorMessage: '相机权限不足，请在系统设置中开启后重试');
-            return;
-          }
-          if (reason == LocalVideoStreamReason.localVideoStreamReasonDeviceBusy) {
-            state = state.copyWith(errorMessage: '相机被其他应用占用，请关闭占用后重试');
-            return;
-          }
-          if (reason ==
-              LocalVideoStreamReason.localVideoStreamReasonCaptureFailure) {
-            state = state.copyWith(errorMessage: '相机采集失败，请重试或切换网络后再试');
-            return;
-          }
-        },
+        onRemoteVideoStateChanged:
+            (
+              RtcConnection connection,
+              int remoteUid,
+              RemoteVideoState state,
+              RemoteVideoStateReason reason,
+              int elapsed,
+            ) {
+              onLog?.call(
+                'remote video state: uid=$remoteUid, state=$state, reason=$reason, elapsed=$elapsed',
+              );
+            },
+        onFirstRemoteVideoDecoded:
+            (
+              RtcConnection connection,
+              int uid,
+              int width,
+              int height,
+              int elapsed,
+            ) {
+              onLog?.call(
+                'first remote video decoded: uid=$uid size=${width}x$height elapsed=$elapsed',
+              );
+            },
+        onFirstRemoteVideoFrame:
+            (
+              RtcConnection connection,
+              int uid,
+              int width,
+              int height,
+              int elapsed,
+            ) {
+              onLog?.call(
+                'first remote video frame: uid=$uid size=${width}x$height elapsed=$elapsed',
+              );
+            },
+        onVideoSizeChanged:
+            (
+              RtcConnection connection,
+              VideoSourceType sourceType,
+              int sourceUid,
+              int width,
+              int height,
+              int rotation,
+            ) {
+              onLog?.call(
+                'video size changed: sourceType=$sourceType uid=$sourceUid '
+                'size=${width}x$height rotation=$rotation',
+              );
+            },
+        onUserOffline:
+            (
+              RtcConnection connection,
+              int remoteUid,
+              UserOfflineReasonType reason,
+            ) {
+              if (!mounted) {
+                return;
+              }
+              if (state.remoteUid != remoteUid) {
+                return;
+              }
+              state = state.copyWith(remoteUid: null, hasPeerLeft: true);
+              onLog?.call('remote offline, immediately ending call');
+              onRemoteEnd('peer_left');
+            },
+        onLocalVideoStateChanged:
+            (
+              VideoSourceType source,
+              LocalVideoStreamState localVideoState,
+              LocalVideoStreamReason reason,
+            ) {
+              if (!mounted) {
+                return;
+              }
+              if (reason ==
+                  LocalVideoStreamReason
+                      .localVideoStreamReasonDeviceNoPermission) {
+                state = state.copyWith(errorMessage: '相机权限不足，请在系统设置中开启后重试');
+                return;
+              }
+              if (reason ==
+                  LocalVideoStreamReason.localVideoStreamReasonDeviceBusy) {
+                state = state.copyWith(errorMessage: '相机被其他应用占用，请关闭占用后重试');
+                return;
+              }
+              if (reason ==
+                  LocalVideoStreamReason.localVideoStreamReasonCaptureFailure) {
+                state = state.copyWith(errorMessage: '相机采集失败，请重试或切换网络后再试');
+                return;
+              }
+            },
         onError: (ErrorCodeType err, String msg) {
           if (!mounted) {
             return;
@@ -745,7 +760,8 @@ class CallRtcController extends StateNotifier<CallRtcState> {
             state = state.copyWith(errorMessage: '麦克风权限不足，请在系统设置中开启后重试');
             return;
           }
-          if (reason == LocalAudioStreamReason.localAudioStreamReasonDeviceBusy) {
+          if (reason ==
+              LocalAudioStreamReason.localAudioStreamReasonDeviceBusy) {
             state = state.copyWith(errorMessage: '麦克风被其他应用占用，请关闭占用后重试');
             return;
           }
@@ -915,7 +931,10 @@ class CallRtcController extends StateNotifier<CallRtcState> {
       return;
     }
     state = state.copyWith(isCameraOn: next);
-    _flowLog('ui.toggleCamera.stateUpdated', extra: <String, Object?>{'next': next});
+    _flowLog(
+      'ui.toggleCamera.stateUpdated',
+      extra: <String, Object?>{'next': next},
+    );
   }
 
   Future<void> flipCamera() async {
@@ -993,7 +1012,7 @@ class CallRtcController extends StateNotifier<CallRtcState> {
   }
 }
 
-final callRtcControllerProvider =
-    StateNotifierProvider.autoDispose.family<CallRtcController, CallRtcState, int>(
+final callRtcControllerProvider = StateNotifierProvider.autoDispose
+    .family<CallRtcController, CallRtcState, int>(
       (ref, callId) => CallRtcController(callId: callId),
     );

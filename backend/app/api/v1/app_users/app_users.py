@@ -9,6 +9,7 @@ from app.models import AppUser
 from app.schemas.app_user import AppUserAdminUpdateIn
 from app.schemas.base import Fail, Success, SuccessExtra
 from app.settings.config import settings
+from app.utils.media_url import normalize_media_list, to_relative_media_url
 
 router = APIRouter()
 _ALLOWED_IMAGE_SUFFIX = {".jpg", ".jpeg", ".png", ".webp"}
@@ -26,21 +27,7 @@ def _json_safe(value):
 
 
 def _normalize_album(raw_value) -> list[str]:
-    if not raw_value:
-        return []
-    if isinstance(raw_value, list):
-        seen: set[str] = set()
-        out: list[str] = []
-        for item in raw_value:
-            if not isinstance(item, str):
-                continue
-            v = item.strip()
-            if not v or v in seen:
-                continue
-            seen.add(v)
-            out.append(v)
-        return out
-    return []
+    return normalize_media_list(raw_value)
 
 
 @router.get("/list", summary="查看App用户列表")
@@ -78,9 +65,26 @@ async def list_app_user(
 
     data = [_json_safe(await row.to_dict(exclude_fields=["password"])) for row in records]
     for row in data:
+        row["avatar"] = to_relative_media_url(row.get("avatar"))
+        row["cover_url"] = to_relative_media_url(row.get("cover_url"))
+        row["album_photos"] = _normalize_album(row.get("album_photos"))
         album = row.get("album_photos")
         row["album_count"] = len(album) if isinstance(album, list) else 0
     return SuccessExtra(data=data, total=total, page=page, page_size=page_size)
+
+
+@router.get("/get", summary="查看App用户详情")
+async def get_app_user(id: int = Query(..., ge=1, description="用户ID")):
+    app_user = await AppUser.filter(id=id).first()
+    if not app_user:
+        return Fail(code=404, msg="用户不存在")
+    data = _json_safe(await app_user.to_dict(exclude_fields=["password"]))
+    data["avatar"] = to_relative_media_url(data.get("avatar"))
+    data["cover_url"] = to_relative_media_url(data.get("cover_url"))
+    data["album_photos"] = _normalize_album(data.get("album_photos"))
+    album = data.get("album_photos")
+    data["album_count"] = len(album) if isinstance(album, list) else 0
+    return Success(data=data)
 
 
 @router.post("/update", summary="更新App用户")
@@ -101,7 +105,7 @@ async def update_app_user(req_in: AppUserAdminUpdateIn):
         v = req_in.nickname.strip()
         update_data["nickname"] = v or None
     if req_in.avatar is not None:
-        v = req_in.avatar.strip()
+        v = to_relative_media_url(req_in.avatar)
         update_data["avatar"] = v or None
     if req_in.gender is not None:
         update_data["gender"] = str(req_in.gender.value)
@@ -120,10 +124,40 @@ async def update_app_user(req_in: AppUserAdminUpdateIn):
         update_data["status"] = req_in.status
     if req_in.is_anchor is not None:
         update_data["is_anchor"] = req_in.is_anchor
+        if req_in.is_anchor:
+            update_data["anchor_apply_status"] = "approved"
+            update_data["anchor_reviewed_at"] = datetime.now()
+    if req_in.anchor_intro is not None:
+        v = req_in.anchor_intro.strip()
+        update_data["anchor_intro"] = v or None
+    if req_in.anchor_tags is not None:
+        tags: list[str] = []
+        for item in req_in.anchor_tags:
+            if not isinstance(item, str):
+                continue
+            tag = item.strip()
+            if tag:
+                tags.append(tag)
+        update_data["anchor_tags"] = tags
+    if req_in.anchor_call_price is not None:
+        update_data["anchor_call_price"] = req_in.anchor_call_price
+    if req_in.anchor_reject_reason is not None:
+        v = req_in.anchor_reject_reason.strip()
+        update_data["anchor_reject_reason"] = v or None
+    if req_in.anchor_apply_status is not None:
+        update_data["anchor_apply_status"] = req_in.anchor_apply_status
+        update_data["anchor_reviewed_at"] = datetime.now()
+        if req_in.anchor_apply_status == "approved":
+            update_data["is_anchor"] = True
+            update_data["anchor_reject_reason"] = None
+        elif req_in.anchor_apply_status in {"none", "rejected"}:
+            update_data["is_anchor"] = False
+        if req_in.anchor_apply_status == "pending":
+            update_data["anchor_apply_at"] = datetime.now()
     if req_in.album_photos is not None:
         update_data["album_photos"] = target_album
     if req_in.cover_url is not None:
-        cover = req_in.cover_url.strip()
+        cover = to_relative_media_url(req_in.cover_url)
         if cover and cover not in target_album:
             return Fail(code=400, msg="封面必须从相册中选择")
         update_data["cover_url"] = cover or None
@@ -163,5 +197,4 @@ async def upload_app_user_image(request: Request, file: UploadFile = File(...)):
     abs_file.write_bytes(content)
 
     relative_url = f"/uploads/{relative_dir.as_posix()}/{filename}"
-    image_url = str(request.base_url).rstrip("/") + relative_url
-    return Success(data={"url": image_url})
+    return Success(data={"url": relative_url})

@@ -5,6 +5,7 @@ from app.core.dependency import LimitLogin, LimitRegister
 from app.models import AppUser
 from app.schemas.app_user import AppLoginIn, AppRegisterIn, AppRegisterOut
 from app.schemas.base import Fail, Success
+from app.utils.media_url import to_relative_media_url
 from app.utils.password import get_password_hash, verify_password
 
 router = APIRouter()
@@ -33,7 +34,7 @@ async def app_login(req_in: AppLoginIn):
             "token": token,
             "user_id": app_user.id,
             "nickname": app_user.nickname or app_user.phone,
-            "avatar": app_user.avatar or "",
+            "avatar": to_relative_media_url(app_user.avatar),
             "is_anchor": app_user.is_anchor,
         }
     )

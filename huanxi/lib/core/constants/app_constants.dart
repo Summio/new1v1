@@ -6,15 +6,15 @@ class AppConstants {
   static const String appVersion = '1.0.0';
 
   /// API 基础地址
-  /// 开发环境指向后端服务
-  /// 生产环境需改为实际服务器地址或通过环境变量配置
+  /// 必须通过 Dart define 显式配置，避免不同环境误连默认地址。
   static String get apiBaseUrl {
-    // 可通过 Dart define 或环境变量切换
     // 编译时传入: flutter build --dart-define=API_BASE_URL=https://api.example.com
     final env = String.fromEnvironment('API_BASE_URL', defaultValue: '');
-    if (env.isNotEmpty) return env;
-    // 默认开发地址
-    return 'http://192.168.31.93:9999/api/v1/';
+    final value = env.trim();
+    if (value.isNotEmpty) {
+      return value;
+    }
+    throw StateError('必须通过 --dart-define=API_BASE_URL=... 配置 API 地址');
   }
 
   /// 本地存储 Keys

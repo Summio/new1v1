@@ -6,10 +6,11 @@ from tortoise.transactions import in_transaction
 from app.core.app_auth import DependAppAuth
 from app.core.ctx import CTX_APP_USER_ID
 from app.core.redis import get_redis
-from app.models import Anchor, AppUser, Gift, GiftRecord
+from app.models import AppUser, Gift, GiftRecord
 from app.schemas.app_api import GiftSendIn, GiftSendOut
 from app.schemas.base import Fail, Success, SuccessExtra
 from app.services.tim_service import send_gift_notification
+from app.utils.media_url import to_relative_media_url
 
 router = APIRouter()
 
@@ -66,18 +67,26 @@ async def gift_send(req_in: GiftSendIn):
     if not gift:
         return Fail(code=404, msg="礼物不存在或已下架")
 
-    # 查找主播（需审批通过）
-    anchor = await Anchor.filter(id=req_in.anchor_id, apply_status="approved").first()
-    if not anchor:
+    anchor_user_id = int(req_in.anchor_user_id or 0)
+    if anchor_user_id <= 0:
+        return Fail(code=400, msg="主播参数错误")
+
+    # anchor_user_id 直接使用 app_user.id
+    anchor_user = await AppUser.filter(
+        id=anchor_user_id,
+        is_anchor=True,
+        status="normal",
+    ).first()
+    if not anchor_user:
         return Fail(code=404, msg="主播不存在或未认证")
 
     # P17 + L-5 修复：使用 Redis 在线状态检查（WebSocket 方式）
     from app.websocket.presence import is_online as check_anchor_online
-    if not await check_anchor_online(anchor.app_user_id):
+    if not await check_anchor_online(anchor_user.id):
         return Fail(code=404, msg="主播不在线，暂无法发送礼物")
 
     # C-3 修复：原子 SET NX EX，TTL 从 30s 增至 60s，避免 setnx+expire 非原子导致的竞态窗口
-    idempotency_key = f"gift:send:{sender_id}:{req_in.gift_id}:{req_in.anchor_id}"
+    idempotency_key = f"gift:send:{sender_id}:{req_in.gift_id}:{anchor_user_id}"
     try:
         redis = await get_redis()
         if not await redis.set(idempotency_key, "1", nx=True, ex=60):
@@ -90,7 +99,7 @@ async def gift_send(req_in: GiftSendIn):
     # L-2 修复：先查昵称（只读查询，无锁），再开启事务扣钻
     sender = await AppUser.filter(id=sender_id).first()
     sender_nickname = sender.nickname if sender else f"用户{sender_id}"
-    sender_avatar = sender.avatar if sender else None
+    sender_avatar = to_relative_media_url(sender.avatar) if sender else None
 
     # H3 修复：余额检查放在事务外，避免在 async with in_transaction() 块内 return
     if not sender or sender.coins < gift.price:
@@ -109,7 +118,7 @@ async def gift_send(req_in: GiftSendIn):
             # 记录礼物（同一事务内）
             await GiftRecord.create(
                 sender_id=sender_id,
-                receiver_id=anchor.app_user_id,
+                receiver_id=anchor_user.id,
                 gift_id=gift.id,
                 gift_name=gift.name,
                 price=gift.price,
@@ -126,7 +135,7 @@ async def gift_send(req_in: GiftSendIn):
     asyncio.create_task(
         send_gift_notification(
             sender_id=sender_id,
-            receiver_id=anchor.app_user_id,
+            receiver_id=anchor_user.id,
             gift_name=gift.name,
             gift_icon=gift.icon or "",
             gift_price=gift.price,
@@ -136,7 +145,7 @@ async def gift_send(req_in: GiftSendIn):
 
     # 推送 WebSocket 礼物通知给主播（fire-and-forget）
     asyncio.create_task(_ws_push_gift_received(
-        anchor_id=int(anchor.app_user_id),
+        anchor_id=int(anchor_user.id),
         sender_id=sender_id,
         sender_nickname=sender_nickname,
         sender_avatar=sender_avatar,

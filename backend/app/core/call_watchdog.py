@@ -295,8 +295,7 @@ async def _close_stale_ongoing(config: WatchdogConfig) -> None:
     trace_service = CallTraceService()
     ended_records: list[CallRecord] = []
 
-    # 预加载 anchor 状态（跨批次复用，避免重复查询）
-    from app.models import Anchor
+    # 预加载主播状态（跨批次复用，避免重复查询）
     raw_records = (
         await CallRecord.filter(id__in=list(ids), status="ongoing")
         .order_by("id")
@@ -309,10 +308,10 @@ async def _close_stale_ongoing(config: WatchdogConfig) -> None:
         all_user_ids.add(int(r["caller_id"]))
         all_user_ids.add(int(r["callee_id"]))
     anchor_user_ids = set(
-        await Anchor.filter(
-            app_user_id__in=list(all_user_ids),
-            apply_status="approved",
-        ).values_list("app_user_id", flat=True)
+        await AppUser.filter(
+            id__in=list(all_user_ids),
+            is_anchor=True,
+        ).values_list("id", flat=True)
     )
 
     # P-6 修复：分批处理，每批 20 条记录，避免单事务持有过多行锁

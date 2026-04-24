@@ -8,6 +8,7 @@ import 'package:tencent_cloud_chat_sdk/enum/V2TimSDKListener.dart';
 import 'package:tencent_cloud_chat_sdk/enum/log_level_enum.dart';
 import 'package:tencent_cloud_chat_sdk/tencent_im_sdk_plugin.dart';
 import '../core/im/call_trace_message.dart';
+import '../core/utils/media_url.dart';
 
 /// IM 服务封装
 /// 腾讯云 IM ( TIM ) Flutter SDK
@@ -428,4 +429,6 @@ class IMService {
     }
     return '[暂无文本消息]';
   }
+
+  String normalizeMediaUrl(String? raw) => toAbsoluteMediaUrl(raw);
 }

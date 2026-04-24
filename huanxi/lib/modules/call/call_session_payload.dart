@@ -1,3 +1,5 @@
+import '../../core/utils/media_url.dart';
+
 class CallSessionPayload {
   final int? callId;
   final String status;
@@ -80,7 +82,7 @@ class CallSessionPayload {
           (peerNicknameRaw != null && peerNicknameRaw.isNotEmpty)
               ? peerNicknameRaw
               : '用户',
-      peerAvatar: (payload['peer_avatar'] as String?)?.trim(),
+      peerAvatar: toAbsoluteMediaUrl((payload['peer_avatar'] as String?)?.trim()),
       callPrice: _toInt(payload['call_price']),
       ringTimeoutSeconds: _toInt(payload['ring_timeout_seconds'], fallback: 30),
       leftSeconds: _toInt(payload['left_seconds']),

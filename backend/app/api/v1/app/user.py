@@ -7,10 +7,11 @@ from fastapi import Header, HTTPException, Query
 
 from app.core.app_auth import DependAppAuth, logout_app_user
 from app.core.ctx import CTX_APP_USER_OBJ
-from app.models import Anchor, AppUser
+from app.models import AppUser
 from app.schemas.app_user import AppUserProfileUpdateIn
 from app.schemas.base import Fail, Success
 from app.settings.config import settings
+from app.utils.media_url import normalize_media_list, to_relative_media_url
 
 router = APIRouter()
 _ALLOWED_IMAGE_SUFFIX = {".jpg", ".jpeg", ".png", ".webp"}
@@ -25,21 +26,7 @@ def _mask_phone(phone: str | None) -> str:
 
 
 def _normalize_album(raw_value) -> list[str]:
-    if not raw_value:
-        return []
-    if isinstance(raw_value, list):
-        seen: set[str] = set()
-        out: list[str] = []
-        for item in raw_value:
-            if not isinstance(item, str):
-                continue
-            v = item.strip()
-            if not v or v in seen:
-                continue
-            seen.add(v)
-            out.append(v)
-        return out
-    return []
+    return normalize_media_list(raw_value)
 
 
 @router.post("/user/logout", summary="登出")
@@ -48,7 +35,7 @@ async def logout(authorization: str = Header(None, alias="Authorization")):
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="无效的认证信息")
     token = authorization[7:]
-    ok = await logout_app_user(token)
+    await logout_app_user(token)
     return Success(msg="登出成功")
 
 
@@ -66,14 +53,14 @@ async def get_user_info():
             "id": app_user.id,
             "phone": _mask_phone(app_user.phone),
             "nickname": app_user.nickname or app_user.phone,
-            "avatar": app_user.avatar or "",
+            "avatar": to_relative_media_url(app_user.avatar),
             "gender": app_user.gender or "secret",
             "birth_date": app_user.birth_date.isoformat() if app_user.birth_date else None,
             "height_cm": app_user.height_cm,
             "weight_kg": app_user.weight_kg,
             "location_city": app_user.location_city or "",
             "album_photos": _normalize_album(app_user.album_photos),
-            "cover_url": app_user.cover_url or "",
+            "cover_url": to_relative_media_url(app_user.cover_url),
             "coins": app_user.coins,
             "diamonds": app_user.diamonds,
             "frozen_diamonds": app_user.frozen_diamonds,
@@ -108,7 +95,7 @@ async def update_user_profile(req_in: AppUserProfileUpdateIn):
         update_data["nickname"] = nickname or None
 
     if req_in.avatar is not None:
-        avatar = req_in.avatar.strip()
+        avatar = to_relative_media_url(req_in.avatar)
         update_data["avatar"] = avatar or None
 
     if req_in.gender is not None:
@@ -133,7 +120,7 @@ async def update_user_profile(req_in: AppUserProfileUpdateIn):
         update_data["album_photos"] = target_album
 
     if req_in.cover_url is not None:
-        cover = req_in.cover_url.strip()
+        cover = to_relative_media_url(req_in.cover_url)
         if cover and cover not in target_album:
             return Fail(code=400, msg="封面必须从相册中选择")
         update_data["cover_url"] = cover or None
@@ -157,14 +144,14 @@ async def update_user_profile(req_in: AppUserProfileUpdateIn):
         data={
             "id": refreshed.id,
             "nickname": refreshed.nickname or refreshed.phone,
-            "avatar": refreshed.avatar or "",
+            "avatar": to_relative_media_url(refreshed.avatar),
             "gender": refreshed.gender or "secret",
             "birth_date": refreshed.birth_date.isoformat() if refreshed.birth_date else None,
             "height_cm": refreshed.height_cm,
             "weight_kg": refreshed.weight_kg,
             "location_city": refreshed.location_city or "",
             "album_photos": _normalize_album(refreshed.album_photos),
-            "cover_url": refreshed.cover_url or "",
+            "cover_url": to_relative_media_url(refreshed.cover_url),
         },
     )
 
@@ -197,9 +184,7 @@ async def upload_user_image(request: Request, file: UploadFile = File(...)):
     abs_file.write_bytes(content)
 
     relative_url = f"/uploads/{relative_dir.as_posix()}/{filename}"
-    image_url = str(request.base_url).rstrip("/") + relative_url
-
-    return Success(data={"url": image_url})
+    return Success(data={"url": relative_url})
 
 
 @router.get("/user/public", summary="按 user_id 获取公开用户资料", dependencies=[Depends(DependAppAuth)])
@@ -209,19 +194,16 @@ async def get_user_public_profile(
     app_user = await AppUser.filter(id=user_id).first()
     if not app_user:
         return Fail(code=404, msg="用户不存在")
-    anchor_id = None
-    if app_user.is_anchor:
-        anchor = await Anchor.filter(app_user_id=app_user.id, apply_status="approved").first()
-        anchor_id = anchor.id if anchor else None
 
     return Success(
         data={
             "id": app_user.id,
             "nickname": app_user.nickname or f"用户{app_user.id}",
-            "avatar": app_user.avatar or "",
-            "cover_url": app_user.cover_url or "",
+            "avatar": to_relative_media_url(app_user.avatar),
+            "cover_url": to_relative_media_url(app_user.cover_url),
             "is_anchor": app_user.is_anchor,
-            "anchor_id": anchor_id,
+            "anchor_id": app_user.id if app_user.is_anchor else None,
+            "anchor_user_id": app_user.id if app_user.is_anchor else None,
             "status": app_user.status or "normal",
         }
     )

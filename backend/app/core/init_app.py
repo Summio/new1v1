@@ -32,6 +32,63 @@ from .middlewares import BackGroundTaskMiddleware, HttpAuditLogMiddleware
 from .middlewares import AppFriendlyStatusMiddleware
 
 
+def build_operation_children(parent_id: int) -> list[Menu]:
+    return [
+        Menu(
+            menu_type=MenuType.MENU,
+            name="用户管理",
+            path="app-user",
+            order=1,
+            parent_id=parent_id,
+            icon="material-symbols:group-outline-rounded",
+            is_hidden=False,
+            component="/operation/app-user",
+            keepalive=False,
+        ),
+        Menu(
+            menu_type=MenuType.MENU,
+            name="通话记录",
+            path="call-record",
+            order=2,
+            parent_id=parent_id,
+            icon="material-symbols:call-log-outline-rounded",
+            is_hidden=False,
+            component="/operation/call-record",
+            keepalive=False,
+        ),
+    ]
+
+
+async def _ensure_menu_exists(
+    *,
+    name: str,
+    parent_id: int,
+    menu_type: MenuType,
+    path: str,
+    order: int,
+    icon: str,
+    component: str,
+    keepalive: bool = False,
+    redirect: str | None = None,
+    is_hidden: bool = False,
+) -> Menu:
+    existing = await Menu.filter(path=path, parent_id=parent_id).first()
+    if existing:
+        return existing
+    return await Menu.create(
+        menu_type=menu_type,
+        name=name,
+        path=path,
+        order=order,
+        parent_id=parent_id,
+        icon=icon,
+        is_hidden=is_hidden,
+        component=component,
+        keepalive=keepalive,
+        redirect=redirect,
+    )
+
+
 def make_middlewares():
     middleware = [
         Middleware(
@@ -102,112 +159,94 @@ async def init_superuser():
 
 
 async def init_menus():
-    menus = await Menu.exists()
-    if not menus:
-        parent_menu = await Menu.create(
-            menu_type=MenuType.CATALOG,
-            name="系统管理",
-            path="/system",
-            order=1,
-            parent_id=0,
-            icon="carbon:gui-management",
-            is_hidden=False,
-            component="Layout",
-            keepalive=False,
-            redirect="/system/user",
-        )
-        children_menu = [
-            Menu(
-                menu_type=MenuType.MENU,
-                name="用户管理",
-                path="user",
-                order=1,
-                parent_id=parent_menu.id,
-                icon="material-symbols:person-outline-rounded",
-                is_hidden=False,
-                component="/system/user",
-                keepalive=False,
-            ),
-            Menu(
-                menu_type=MenuType.MENU,
-                name="角色管理",
-                path="role",
-                order=2,
-                parent_id=parent_menu.id,
-                icon="carbon:user-role",
-                is_hidden=False,
-                component="/system/role",
-                keepalive=False,
-            ),
-            Menu(
-                menu_type=MenuType.MENU,
-                name="菜单管理",
-                path="menu",
-                order=3,
-                parent_id=parent_menu.id,
-                icon="material-symbols:list-alt-outline",
-                is_hidden=False,
-                component="/system/menu",
-                keepalive=False,
-            ),
-            Menu(
-                menu_type=MenuType.MENU,
-                name="API管理",
-                path="api",
-                order=4,
-                parent_id=parent_menu.id,
-                icon="ant-design:api-outlined",
-                is_hidden=False,
-                component="/system/api",
-                keepalive=False,
-            ),
-            Menu(
-                menu_type=MenuType.MENU,
-                name="部门管理",
-                path="dept",
-                order=5,
-                parent_id=parent_menu.id,
-                icon="mingcute:department-line",
-                is_hidden=False,
-                component="/system/dept",
-                keepalive=False,
-            ),
-            Menu(
-                menu_type=MenuType.MENU,
-                name="审计日志",
-                path="auditlog",
-                order=6,
-                parent_id=parent_menu.id,
-                icon="ph:clipboard-text-bold",
-                is_hidden=False,
-                component="/system/auditlog",
-                keepalive=False,
-            ),
-            Menu(
-                menu_type=MenuType.MENU,
-                name="系统配置",
-                path="config",
-                order=7,
-                parent_id=parent_menu.id,
-                icon="material-symbols:settings-outline-rounded",
-                is_hidden=False,
-                component="/system/config",
-                keepalive=False,
-            ),
-        ]
-        await Menu.bulk_create(children_menu)
-        await Menu.create(
+    parent_menu = await _ensure_menu_exists(
+        name="系统管理",
+        parent_id=0,
+        menu_type=MenuType.CATALOG,
+        path="/system",
+        order=1,
+        icon="carbon:gui-management",
+        is_hidden=False,
+        component="Layout",
+        keepalive=False,
+        redirect="/system/user",
+    )
+    system_children = [
+        {
+            "name": "用户管理",
+            "path": "user",
+            "order": 1,
+            "icon": "material-symbols:person-outline-rounded",
+            "component": "/system/user",
+        },
+        {"name": "角色管理", "path": "role", "order": 2, "icon": "carbon:user-role", "component": "/system/role"},
+        {
+            "name": "菜单管理",
+            "path": "menu",
+            "order": 3,
+            "icon": "material-symbols:list-alt-outline",
+            "component": "/system/menu",
+        },
+        {"name": "API管理", "path": "api", "order": 4, "icon": "ant-design:api-outlined", "component": "/system/api"},
+        {"name": "部门管理", "path": "dept", "order": 5, "icon": "mingcute:department-line", "component": "/system/dept"},
+        {"name": "审计日志", "path": "auditlog", "order": 6, "icon": "ph:clipboard-text-bold", "component": "/system/auditlog"},
+        {
+            "name": "系统配置",
+            "path": "config",
+            "order": 7,
+            "icon": "material-symbols:settings-outline-rounded",
+            "component": "/system/config",
+        },
+    ]
+    for child in system_children:
+        await _ensure_menu_exists(
+            name=child["name"],
+            parent_id=parent_menu.id,
             menu_type=MenuType.MENU,
-            name="一级菜单",
-            path="/top-menu",
-            order=2,
-            parent_id=0,
-            icon="material-symbols:featured-play-list-outline",
-            is_hidden=False,
-            component="/top-menu",
+            path=child["path"],
+            order=child["order"],
+            icon=child["icon"],
+            component=child["component"],
             keepalive=False,
-            redirect="",
         )
+
+    operation_parent = await _ensure_menu_exists(
+        name="运营中心",
+        parent_id=0,
+        menu_type=MenuType.CATALOG,
+        path="/operation",
+        order=2,
+        icon="material-symbols:monitoring-outline-rounded",
+        is_hidden=False,
+        component="Layout",
+        keepalive=False,
+        redirect="/operation/app-user",
+    )
+    for child in build_operation_children(parent_id=operation_parent.id):
+        await _ensure_menu_exists(
+            name=child.name,
+            parent_id=operation_parent.id,
+            menu_type=child.menu_type,
+            path=child.path,
+            order=child.order,
+            icon=child.icon,
+            component=child.component,
+            keepalive=child.keepalive,
+            is_hidden=child.is_hidden,
+        )
+
+    await _ensure_menu_exists(
+        name="一级菜单",
+        parent_id=0,
+        menu_type=MenuType.MENU,
+        path="/top-menu",
+        order=99,
+        icon="material-symbols:featured-play-list-outline",
+        is_hidden=False,
+        component="/top-menu",
+        keepalive=False,
+        redirect="",
+    )
 
 
 async def init_apis():
@@ -269,6 +308,29 @@ async def init_roles():
         # 为普通用户分配基本API
         basic_apis = await Api.filter(Q(method__in=["GET"]) | Q(tags="基础模块"))
         await user_role.apis.add(*basic_apis)
+        return
+
+    # 兼容存量环境：为所有历史角色补齐运营中心菜单与通话记录查询权限（幂等）
+    all_roles = await Role.all()
+    operation_menus = await Menu.filter(path__in=["/operation", "app-user", "call-record"]).all()
+    if all_roles and operation_menus:
+        for role in all_roles:
+            await role.menus.add(*operation_menus)
+
+    call_record_api = await Api.filter(method="GET", path="/api/v1/call_record/list").first()
+    if call_record_api and all_roles:
+        for role in all_roles:
+            await role.apis.add(call_record_api)
+
+    # 兼容存量环境：确保管理员角色始终拥有全部菜单与API（幂等）
+    admin_role = await Role.filter(name="管理员").first()
+    if admin_role:
+        all_apis = await Api.all()
+        if all_apis:
+            await admin_role.apis.add(*all_apis)
+        all_menus = await Menu.all()
+        if all_menus:
+            await admin_role.menus.add(*all_menus)
 
 
 async def init_data():

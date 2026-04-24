@@ -89,7 +89,7 @@ class _ImPageState extends ConsumerState<ImPage> {
       _myAvatarUrl = authState.avatar;
       _peerUserId = _normalizeIMUserId(widget.userId);
       _peerNickname = widget.initialPeerNickname;
-      _peerAvatarUrl = widget.initialPeerAvatarUrl;
+      _peerAvatarUrl = _imService.normalizeMediaUrl(widget.initialPeerAvatarUrl);
       final myNumId = _extractAppUserId(_myUserId ?? '');
       final peerNumId = _extractAppUserId(_peerUserId ?? '');
       if (_myUserId == _peerUserId ||
@@ -195,7 +195,8 @@ class _ImPageState extends ConsumerState<ImPage> {
       final face = profile.faceUrl?.trim();
       setState(() {
         _peerNickname = (nick != null && nick.isNotEmpty) ? nick : null;
-        _peerAvatarUrl = (face != null && face.isNotEmpty) ? face : null;
+        final imAvatar = _imService.normalizeMediaUrl(face);
+        _peerAvatarUrl = imAvatar.isNotEmpty ? imAvatar : null;
       });
     } catch (_) {
       // 昵称/头像拉取失败不影响聊天主流程
@@ -218,12 +219,15 @@ class _ImPageState extends ConsumerState<ImPage> {
       if (!mounted) return;
       setState(() {
         final appNick = (payload['nickname'] as String?)?.trim();
-        final appAvatar = (payload['avatar'] as String?)?.trim();
-        final appAnchorId = (payload['anchor_id'] as num?)?.toInt();
+        final appAvatar = _imService.normalizeMediaUrl(
+          (payload['avatar'] as String?)?.trim(),
+        );
+        final appAnchorId = (payload['anchor_user_id'] as num?)?.toInt() ??
+            (payload['anchor_id'] as num?)?.toInt();
         if (appNick != null && appNick.isNotEmpty) {
           _peerNickname = appNick;
         }
-        if (appAvatar != null && appAvatar.isNotEmpty) {
+        if (appAvatar.isNotEmpty) {
           _peerAvatarUrl = appAvatar;
         }
         _peerAnchorId = appAnchorId;

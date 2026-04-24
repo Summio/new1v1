@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # ===== 主播 =====
@@ -35,7 +35,16 @@ class AnchorListOut(BaseModel):
 # ===== 通话 =====
 
 class DialingIn(BaseModel):
-    anchor_id: int = Field(..., description="主播ID")
+    anchor_user_id: Optional[int] = Field(default=None, description="主播用户ID(app_user.id)")
+    anchor_id: Optional[int] = Field(default=None, description="兼容旧字段: 主播用户ID")
+
+    @model_validator(mode="after")
+    def validate_anchor_user_id(self):
+        if self.anchor_user_id is None and self.anchor_id is None:
+            raise ValueError("anchor_user_id is required")
+        if self.anchor_user_id is None:
+            self.anchor_user_id = self.anchor_id
+        return self
 
 
 class DialingOut(BaseModel):
@@ -94,8 +103,17 @@ class GiftOut(BaseModel):
 
 
 class GiftSendIn(BaseModel):
-    anchor_id: int = Field(..., description="主播ID")
+    anchor_user_id: Optional[int] = Field(default=None, description="主播用户ID(app_user.id)")
+    anchor_id: Optional[int] = Field(default=None, description="兼容旧字段: 主播用户ID")
     gift_id: int = Field(..., description="礼物ID")
+
+    @model_validator(mode="after")
+    def validate_anchor_user_id(self):
+        if self.anchor_user_id is None and self.anchor_id is None:
+            raise ValueError("anchor_user_id is required")
+        if self.anchor_user_id is None:
+            self.anchor_user_id = self.anchor_id
+        return self
 
 
 class GiftSendOut(BaseModel):

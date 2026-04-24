@@ -1,9 +1,9 @@
-import 'dart:convert';
-
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import '../utils/app_logger.dart';
 import '../storage/storage.dart';
 import 'api_exception.dart';
+import 'media_payload_normalizer.dart';
 
 /// 请求转换器扩展点（可用于参数加密、签名等）
 abstract class ApiRequestTransformer {
@@ -69,8 +69,10 @@ class ApiInterceptor extends Interceptor {
 
     final queryParameters = options.queryParameters;
     if (requestTransformer != null && queryParameters.isNotEmpty) {
-      options.queryParameters =
-          requestTransformer!.transformQueryParameters(queryParameters, options);
+      options.queryParameters = requestTransformer!.transformQueryParameters(
+        queryParameters,
+        options,
+      );
     }
 
     if (requestTransformer != null && requestData != null) {
@@ -83,6 +85,8 @@ class ApiInterceptor extends Interceptor {
 
   @override
   void onResponse(Response response, ResponseInterceptorHandler handler) {
+    final normalizedData = normalizeMediaPayload(response.data);
+    response.data = normalizedData;
     _logResponse(response);
     final data = response.data;
     if (data is Map<String, dynamic>) {
@@ -168,7 +172,11 @@ class ApiInterceptor extends Interceptor {
             requestOptions: err.requestOptions,
             response: err.response,
             type: DioExceptionType.badResponse,
-            error: _mapBusinessCodeToException(code, msg ?? '请求失败', responseData),
+            error: _mapBusinessCodeToException(
+              code,
+              msg ?? '请求失败',
+              responseData,
+            ),
           ),
         );
         return;
@@ -216,9 +224,15 @@ class ApiInterceptor extends Interceptor {
           break;
         default:
           if (statusCode >= 500) {
-            apiException = ApiException(code: statusCode, message: '服务繁忙，请稍后重试');
+            apiException = ApiException(
+              code: statusCode,
+              message: '服务繁忙，请稍后重试',
+            );
           } else {
-            apiException = ApiException(code: statusCode, message: '请求参数有误，请检查后重试');
+            apiException = ApiException(
+              code: statusCode,
+              message: '请求参数有误，请检查后重试',
+            );
           }
       }
 
@@ -251,10 +265,10 @@ class ApiInterceptor extends Interceptor {
 
   void _logRequest(RequestOptions options) {
     if (!enableDebugLog) return;
-    final uri = options.uri.toString();
+    final uri = options.uri.replace(query: '').toString();
     final method = options.method.toUpperCase();
-    final body = _safeJson(options.data);
-    final query = _safeJson(options.queryParameters);
+    final body = AppLogger.safeJson(options.data);
+    final query = AppLogger.safeJson(options.queryParameters);
     debugLogger(
       '[API][Request] $method $uri\n'
       'query: $query\n'
@@ -264,10 +278,10 @@ class ApiInterceptor extends Interceptor {
 
   void _logResponse(Response response) {
     if (!enableDebugLog) return;
-    final uri = response.requestOptions.uri.toString();
+    final uri = response.requestOptions.uri.replace(query: '').toString();
     final method = response.requestOptions.method.toUpperCase();
     final statusCode = response.statusCode ?? -1;
-    final body = _safeJson(response.data);
+    final body = AppLogger.safeJson(response.data);
     debugLogger(
       '[API][Response] $method $uri [$statusCode]\n'
       'body: $body',
@@ -288,16 +302,11 @@ class ApiInterceptor extends Interceptor {
       case 501:
         return const InsufficientBalanceException();
       default:
-        return ApiException(code: code, message: message, data: payload['data']);
-    }
-  }
-
-  String _safeJson(dynamic value) {
-    try {
-      if (value == null) return 'null';
-      return value is String ? value : jsonEncode(value);
-    } catch (_) {
-      return value.toString();
+        return ApiException(
+          code: code,
+          message: message,
+          data: payload['data'],
+        );
     }
   }
 }

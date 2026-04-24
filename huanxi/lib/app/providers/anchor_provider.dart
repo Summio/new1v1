@@ -1,7 +1,8 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/constants/api_endpoints.dart';
+import '../../core/utils/app_logger.dart';
 
 /// 主播信息
 class AnchorInfo {
@@ -31,7 +32,7 @@ class AnchorInfo {
     return AnchorInfo(
       id: json['id'] as int,
       userId: json['user_id'] as int,
-      avatar: json['avatar'] as String?,
+      avatar: (json['avatar'] as String?)?.trim(),
       username: (json['nickname'] ?? json['username']) as String?,
       gender: json['gender'] as String?,
       anchorIntro: (json['intro'] ?? json['anchor_intro']) as String?,
@@ -103,6 +104,15 @@ class AnchorListNotifier extends StateNotifier<AnchorListState> {
         return AnchorInfo.fromJson(Map<String, dynamic>.from(e));
       }).toList();
 
+      if (refresh) {
+        // 后台更新头像但 URL 不变时，主动清理对应缓存，避免首页列表显示旧图
+        for (final item in newAnchors) {
+          final avatar = item.avatar?.trim();
+          if (avatar == null || avatar.isEmpty) continue;
+          imageCache.evict(NetworkImage(avatar));
+        }
+      }
+
       state = state.copyWith(
         anchors: refresh ? newAnchors : [...state.anchors, ...newAnchors],
         isLoading: false,
@@ -110,11 +120,8 @@ class AnchorListNotifier extends StateNotifier<AnchorListState> {
         currentPage: page + 1,
       );
     } catch (e) {
-      debugPrint('anchor.fetchAnchors error: $e');
-      state = state.copyWith(
-        isLoading: false,
-        error: '主播列表加载失败，请稍后重试',
-      );
+      AppLogger.debug('anchor.fetchAnchors error: $e');
+      state = state.copyWith(isLoading: false, error: '主播列表加载失败，请稍后重试');
     }
   }
 
@@ -128,5 +135,5 @@ class AnchorListNotifier extends StateNotifier<AnchorListState> {
 /// 主播列表 Provider
 final anchorListProvider =
     StateNotifierProvider<AnchorListNotifier, AnchorListState>((ref) {
-  return AnchorListNotifier(DioClient.instance);
-});
+      return AnchorListNotifier(DioClient.instance);
+    });

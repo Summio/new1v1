@@ -117,6 +117,14 @@ class AppUserAdminUpdateIn(BaseModel):
     cover_url: Optional[str] = Field(default=None, max_length=500, description="封面URL")
     status: Optional[Literal["normal", "banned"]] = Field(default=None, description="状态")
     is_anchor: Optional[bool] = Field(default=None, description="是否主播")
+    anchor_intro: Optional[str] = Field(default=None, max_length=500, description="主播简介")
+    anchor_tags: Optional[List[str]] = Field(default=None, description="主播标签")
+    anchor_call_price: Optional[int] = Field(default=None, ge=10, le=1000, description="主播通话价格(分/分钟)")
+    anchor_apply_status: Optional[Literal["none", "pending", "approved", "rejected"]] = Field(
+        default=None,
+        description="主播申请状态",
+    )
+    anchor_reject_reason: Optional[str] = Field(default=None, max_length=500, description="主播申请拒绝原因")
 
 
 # ===== 主播申请 =====
@@ -132,3 +140,4 @@ class AnchorApplyStatusOut(BaseModel):
     apply_at: Optional[datetime] = None
     reject_reason: Optional[str] = None
     anchor_id: Optional[int] = None  # 审批通过后返回主播ID
+    anchor_user_id: Optional[int] = None

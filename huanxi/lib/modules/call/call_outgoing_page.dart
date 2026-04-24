@@ -10,6 +10,7 @@ import '../../core/constants/api_endpoints.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/utils/app_toast.dart';
+import '../../core/utils/media_url.dart';
 import '../../services/websocket_service.dart';
 import 'call_end_reason.dart';
 import 'call_event_mapper.dart';
@@ -56,7 +57,7 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
     _callId = widget.callId != null && widget.callId! > 0 ? widget.callId : null;
     _peerUserId = widget.peerUserId;
     _peerName = widget.peerName;
-    _peerAvatar = widget.peerAvatar;
+    _peerAvatar = toAbsoluteMediaUrl(widget.peerAvatar);
     _callPrice = widget.callPrice;
 
     // 使用 Future.microtask 延迟执行，避免 widget build 阶段修改 provider
@@ -174,7 +175,7 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
     try {
       final dialingRes = await DioClient.instance.apiPost(
         ApiEndpoints.dialing,
-        data: {'anchor_id': anchorId},
+        data: {'anchor_user_id': anchorId},
       );
       final dialingData = dialingRes['data'] as Map<String, dynamic>?;
       final callId = (dialingData?['call_id'] as num?)?.toInt();
@@ -189,7 +190,9 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
         _callId = callId;
         final peerUserId = (dialingData?['callee_id'] as num?)?.toInt();
         final peerName = (dialingData?['callee_nickname'] as String?)?.trim();
-        final peerAvatar = (dialingData?['callee_avatar'] as String?)?.trim();
+      final peerAvatar = toAbsoluteMediaUrl(
+        (dialingData?['callee_avatar'] as String?)?.trim(),
+      );
         final callPrice = (dialingData?['call_price'] as num?)?.toInt();
         if (peerUserId != null && peerUserId > 0) {
           _peerUserId = peerUserId.toString();
@@ -197,7 +200,7 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
         if (peerName != null && peerName.isNotEmpty) {
           _peerName = peerName;
         }
-        if (peerAvatar != null && peerAvatar.isNotEmpty) {
+        if (peerAvatar.isNotEmpty) {
           _peerAvatar = peerAvatar;
         }
         if (callPrice != null && callPrice >= 0) {

@@ -12,7 +12,9 @@ export default defineConfig(({ command, mode }) => {
 
   const env = loadEnv(mode, process.cwd())
   const viteEnv = convertEnv(env)
-  const { VITE_PORT, VITE_PUBLIC_PATH, VITE_USE_PROXY, VITE_BASE_API } = viteEnv
+  const { VITE_PORT, VITE_PUBLIC_PATH, VITE_USE_PROXY, VITE_BASE_API, VITE_PROXY_TARGET } = viteEnv
+  const apiProxyBase = PROXY_CONFIG[VITE_BASE_API] || {}
+  const proxyTarget = VITE_PROXY_TARGET || apiProxyBase.target
 
   return {
     base: VITE_PUBLIC_PATH || '/',
@@ -30,7 +32,14 @@ export default defineConfig(({ command, mode }) => {
       open: true,
       proxy: VITE_USE_PROXY
         ? {
-            [VITE_BASE_API]: PROXY_CONFIG[VITE_BASE_API],
+            [VITE_BASE_API]: {
+              ...apiProxyBase,
+              target: proxyTarget,
+            },
+            '/uploads': {
+              target: proxyTarget,
+              changeOrigin: true,
+            },
           }
         : undefined,
     },

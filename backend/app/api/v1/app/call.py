@@ -8,7 +8,7 @@ from app.core.ctx import CTX_APP_USER_ID, CTX_APP_USER_OBJ
 from app.log import logger
 from app.core.call_reject_protect import calc_left_seconds, should_block_rejected_call
 from app.core.time_utils import now_local_naive, to_utc_aware
-from app.models import Anchor, AppUser, CallRecord
+from app.models import AppUser, CallRecord
 from app.services.call_trace_service import CallTraceService
 from app.schemas.app_api import (
     CallActionOut,
@@ -19,6 +19,7 @@ from app.schemas.app_api import (
     DialingOut,
 )
 from app.schemas.base import Fail, Success
+from app.utils.media_url import to_relative_media_url
 from app.utils.parse import safe_parse_int, clamp_int
 from app.utils.billing import calc_due_minutes as _calc_due_minutes_with_free
 from app.websocket import events as ws_events
@@ -132,17 +133,13 @@ async def _resolve_payer_id(call_record: CallRecord) -> int:
     caller_id = int(call_record.caller_id)
     callee_id = int(call_record.callee_id)
 
-    # P-3 优化 + B-2 TOCTOU 修复：合并为单次 IN 查询
-    # MySQL SELECT ... WHERE id IN (...) FOR UPDATE 会对所有匹配行加锁
-    anchors = {
-        int(a.app_user_id): a
-        for a in await Anchor.filter(
-            app_user_id__in=[caller_id, callee_id],
-            apply_status="approved",
-        ).select_for_update().all()
+    # 单次 IN 查询 + FOR UPDATE，避免并发状态变化导致 TOCTOU
+    users = {
+        int(u.id): bool(u.is_anchor)
+        for u in await AppUser.filter(id__in=[caller_id, callee_id]).select_for_update().all()
     }
-    caller_is_anchor = caller_id in anchors
-    callee_is_anchor = callee_id in anchors
+    caller_is_anchor = users.get(caller_id, False)
+    callee_is_anchor = users.get(callee_id, False)
 
     # 主播不承担通话费用
     if caller_is_anchor and not callee_is_anchor:
@@ -177,23 +174,29 @@ async def dialing(req_in: DialingIn):
     reject_inbound_protect_seconds = await _get_reject_inbound_protect_seconds()
     reject_pair_protect_seconds = await _get_reject_pair_protect_seconds()
 
-    # 查询主播信息（先查出来用于后续判断）
-    anchor = await Anchor.filter(
-        id=req_in.anchor_id, apply_status="approved"
+    anchor_user_id = int(req_in.anchor_user_id or 0)
+    if anchor_user_id <= 0:
+        return Fail(code=400, msg="主播参数错误")
+
+    # anchor_user_id 直接使用 app_user.id
+    anchor_user = await AppUser.filter(
+        id=anchor_user_id,
+        is_anchor=True,
+        status="normal",
     ).first()
-    if not anchor:
+    if not anchor_user:
         return Fail(code=404, msg="主播不存在或未认证")
 
     # 使用 Redis 在线状态检查（WebSocket 方式）
     from app.websocket.presence import is_online as check_anchor_online
-    if not await check_anchor_online(anchor.app_user_id):
+    if not await check_anchor_online(anchor_user.id):
         return Fail(code=400, msg="主播当前不在线，请稍后再试")
 
     # 禁止自呼叫
-    if caller_id == anchor.app_user_id:
+    if caller_id == anchor_user.id:
         return Fail(code=400, msg="不能呼叫自己")
 
-    call_price = anchor.call_price
+    call_price = int(anchor_user.anchor_call_price or 0)
 
     # 只做余额门槛检查，不预扣（视频通话消耗金币）
     if app_user.coins < call_price:
@@ -203,7 +206,7 @@ async def dialing(req_in: DialingIn):
     async with in_transaction() as conn:
         # 加行锁：锁住主叫和被叫用户行，防止并发创建冲突的通话记录
         await AppUser.filter(id=caller_id).using_db(conn).select_for_update().first()
-        await AppUser.filter(id=anchor.app_user_id).using_db(conn).select_for_update().first()
+        await AppUser.filter(id=anchor_user.id).using_db(conn).select_for_update().first()
 
         # 主叫忙线检测
         caller_busy = (
@@ -220,7 +223,7 @@ async def dialing(req_in: DialingIn):
         # 被叫忙线检测
         callee_busy = (
             await CallRecord.filter(
-                callee_id=anchor.app_user_id,
+                callee_id=anchor_user.id,
                 status__in=["pending", "ongoing"],
             )
             .using_db(conn)
@@ -234,7 +237,7 @@ async def dialing(req_in: DialingIn):
             protect_since_inbound = now_local_naive() - timedelta(seconds=reject_inbound_protect_seconds)
             all_rejected_for_callee = (
                 await CallRecord.filter(
-                    callee_id=anchor.app_user_id,
+                    callee_id=anchor_user.id,
                     status="ended",
                     end_reason="rejected",
                     updated_at__gte=protect_since_inbound,
@@ -253,7 +256,7 @@ async def dialing(req_in: DialingIn):
             all_rejected_for_pair = (
                 await CallRecord.filter(
                     caller_id=caller_id,
-                    callee_id=anchor.app_user_id,
+                    callee_id=anchor_user.id,
                     status="ended",
                     end_reason="rejected",
                     updated_at__gte=protect_since_pair,
@@ -270,20 +273,20 @@ async def dialing(req_in: DialingIn):
         # 创建通话记录（同一事务内，锁已持有，无竞争）
         call_record = await CallRecord.create(
             caller_id=caller_id,
-            callee_id=anchor.app_user_id,
+            callee_id=anchor_user.id,
             call_price=call_price,
             status="pending",
             using_db=conn,
         )
 
     # 事务结束后查询被叫信息（不在锁内执行，减少锁持有时间）
-    callee_user = await AppUser.filter(id=anchor.app_user_id).first()
+    callee_user = await AppUser.filter(id=anchor_user.id).first()
     callee_nickname = (
-        (callee_user.nickname or callee_user.username or f"用户{anchor.app_user_id}")
+        (callee_user.nickname or callee_user.username or f"用户{anchor_user.id}")
         if callee_user
-        else f"用户{anchor.app_user_id}"
+        else f"用户{anchor_user.id}"
     )
-    callee_avatar = callee_user.avatar if callee_user else None
+    callee_avatar = to_relative_media_url(callee_user.avatar) if callee_user else None
     await _append_call_trace(
         call_record,
         phase="dialing",
@@ -291,11 +294,11 @@ async def dialing(req_in: DialingIn):
     )
     # 推送 WebSocket 来电通知给被叫方（fire-and-forget）
     asyncio.create_task(_ws_push_call_incoming(
-        callee_id=int(anchor.app_user_id),
+        callee_id=int(anchor_user.id),
         call_id=int(call_record.id),
         caller_id=int(caller_id),
         caller_name=app_user.nickname or f"用户{caller_id}",
-        caller_avatar=app_user.avatar,
+        caller_avatar=to_relative_media_url(app_user.avatar),
         call_price=int(call_price or 0),
         left_seconds=CALL_RING_TIMEOUT_SECONDS,
     ))
@@ -305,7 +308,7 @@ async def dialing(req_in: DialingIn):
             call_id=call_record.id,
             coins=app_user.coins,
             can_call=True,
-            callee_id=int(anchor.app_user_id),
+            callee_id=int(anchor_user.id),
             callee_nickname=callee_nickname,
             callee_avatar=callee_avatar,
             call_price=int(call_price or 0),

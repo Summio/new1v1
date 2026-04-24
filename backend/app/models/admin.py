@@ -89,26 +89,6 @@ class AuditLog(BaseModel, TimestampMixin):
     response_body = fields.JSONField(null=True, description="返回数据")
 
 
-# ===== App 业务模型 =====
-
-class Anchor(BaseModel, TimestampMixin):
-    """主播资料（关联AppUser）"""
-    app_user = fields.OneToOneField("models.AppUser", related_name="anchor_profile", on_delete=fields.OnDelete.CASCADE)
-    is_online = fields.BooleanField(default=False, description="是否在线", index=True)
-    call_price = fields.BigIntField(default=100, description="每分钟通话价格(分)")
-    intro = fields.CharField(max_length=500, null=True, description="主播简介")
-    tags = fields.JSONField(null=True, description="标签列表")
-    avatar = fields.CharField(max_length=500, null=True, description="头像URL")
-    online_at = fields.DatetimeField(null=True, description="最近上线时间")
-    apply_status = fields.CharField(max_length=20, default="pending", description="pending/approved/rejected", index=True)
-    apply_at = fields.DatetimeField(null=True, description="申请时间")
-    reviewed_at = fields.DatetimeField(null=True, description="审核时间")
-    reject_reason = fields.CharField(max_length=500, null=True, description="拒绝原因")
-
-    class Meta:
-        table = "anchor"
-
-
 class Gift(BaseModel):
     """礼物配置"""
     name = fields.CharField(max_length=50, description="礼物名称", index=True)

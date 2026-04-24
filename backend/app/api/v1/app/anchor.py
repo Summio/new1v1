@@ -1,17 +1,25 @@
-import json
-from typing import Any, Optional
+from typing import Optional
 
 from fastapi import APIRouter, Query
 
-from app.core.redis import get_redis
-from app.models import Anchor
-from app.schemas.app_api import AnchorListOut, AnchorOut
+from app.models import AppUser
 from app.schemas.base import SuccessExtra
+from app.utils.media_url import to_relative_media_url
 
 router = APIRouter()
 
-ANCHOR_LIST_CACHE_KEY = "anchor:list"
-ANCHOR_LIST_CACHE_TTL = 60  # 秒
+
+def _normalize_anchor_tags(raw_value) -> list[str]:
+    if not isinstance(raw_value, list):
+        return []
+    out: list[str] = []
+    for item in raw_value:
+        if not isinstance(item, str):
+            continue
+        tag = item.strip()
+        if tag:
+            out.append(tag)
+    return out
 
 
 @router.get("/anchor/list", summary="主播推荐列表(分页)")
@@ -20,38 +28,37 @@ async def anchor_list(
     page_size: int = Query(20, ge=1, le=50, description="每页数量"),
     gender: Optional[str] = Query(None, description="性别过滤: male/female"),
 ):
-    # 查询已认证主播（不过滤 DB is_online，改用 Redis 在线状态）
     from app.websocket.presence import get_online_user_ids
 
-    # 从 Redis 获取在线用户 ID 集合
     online_ids: set[int] = await get_online_user_ids()
 
-    # 从 DB 查询已认证主播
-    q = Anchor.filter(apply_status="approved")
+    q = AppUser.filter(
+        is_anchor=True,
+        status="normal",
+    )
     if gender:
-        q = q.filter(app_user__gender=gender)
+        q = q.filter(gender=gender)
 
-    all_anchors = await q.prefetch_related("app_user")
-    total = len(all_anchors)
+    total = await q.count()
+    users = (
+        await q.order_by("-id")
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
 
-    # 分页
-    start = (page - 1) * page_size
-    page_anchors = all_anchors[start:start + page_size]
-
-    all_rows = []
-    for anchor in page_anchors:
-        app_user = await anchor.app_user
-        all_rows.append({
-            "id": anchor.id,
-            "user_id": app_user.id,
-            "nickname": app_user.nickname or app_user.phone,
-            "avatar": anchor.avatar or app_user.avatar or "",
-            "gender": app_user.gender or "secret",
-            "intro": anchor.intro or "",
-            "tags": anchor.tags or [],
-            "call_price": anchor.call_price,
-            "is_online": app_user.id in online_ids,
+    rows = []
+    for user in users:
+        rows.append({
+            "id": user.id,
+            "user_id": user.id,
+            "nickname": user.nickname or user.phone,
+            "avatar": to_relative_media_url(user.avatar),
+            "gender": user.gender or "secret",
+            "intro": user.anchor_intro or "",
+            "tags": _normalize_anchor_tags(user.anchor_tags),
+            "call_price": int(user.anchor_call_price or 0),
+            "is_online": user.id in online_ids,
         })
 
     has_more = total > page * page_size
-    return SuccessExtra(rows=all_rows, current=page, total=total, has_more=has_more)
+    return SuccessExtra(rows=rows, current=page, total=total, has_more=has_more)

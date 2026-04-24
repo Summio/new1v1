@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/providers/auth_provider.dart';
+import '../../app/providers/anchor_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/constants/api_endpoints.dart';
@@ -73,6 +74,7 @@ class _MainShellState extends ConsumerState<MainShell>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref.read(authProvider.notifier).refreshBalance();
+      ref.read(authProvider.notifier).fetchUserInfo();
     });
   }
 
@@ -81,6 +83,8 @@ class _MainShellState extends ConsumerState<MainShell>
     _lifecycleState = state;
     if (state == AppLifecycleState.resumed) {
       ref.read(authProvider.notifier).refreshBalance();
+      ref.read(authProvider.notifier).fetchUserInfo();
+      ref.read(anchorListProvider.notifier).refresh();
       _openPendingIncomingOnResume();
       WsService.instance.connect();
       if (_imService.isInitialized) {

@@ -1,10 +1,12 @@
-import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/storage/storage.dart';
 import '../../core/network/api_exception.dart';
+import '../../core/network/media_payload_normalizer.dart';
+import '../../core/utils/app_logger.dart';
 import '../../services/websocket_service.dart';
 
 /// 认证状态
@@ -167,17 +169,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   List<String> _parseAlbum(dynamic value) {
-    if (value is! List) return const [];
-    final out = <String>[];
-    final seen = <String>{};
-    for (final item in value) {
-      if (item is! String) continue;
-      final v = item.trim();
-      if (v.isEmpty || seen.contains(v)) continue;
-      seen.add(v);
-      out.add(v);
-    }
-    return out;
+    final normalized = normalizeMediaPayload(value, parentKey: 'album_photos');
+    if (normalized is! List) return const <String>[];
+    return normalized
+        .whereType<String>()
+        .map((item) => item.trim())
+        .where((item) => item.isNotEmpty)
+        .toList();
   }
 
   /// 初始化：检查登录状态
@@ -194,14 +192,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
           username:
               cachedInfo['nickname'] as String? ??
               cachedInfo['username'] as String?,
-          avatar: cachedInfo['avatar'] as String?,
+          avatar: (normalizeMediaPayload(cachedInfo['avatar']) as String?)
+              ?.trim(),
           gender: (cachedInfo['gender'] as String?) ?? 'secret',
           birthDate: cachedInfo['birth_date'] as String?,
           heightCm: _parseNullableInt(cachedInfo['height_cm']),
           weightKg: _parseNullableInt(cachedInfo['weight_kg']),
           locationCity: cachedInfo['location_city'] as String?,
           albumPhotos: _parseAlbum(cachedInfo['album_photos']),
-          coverUrl: cachedInfo['cover_url'] as String?,
+          coverUrl: (normalizeMediaPayload(cachedInfo['cover_url']) as String?)
+              ?.trim(),
           appRole: cachedInfo['is_anchor'] == true ? 'anchor' : 'user',
           coins: cachedInfo['coins'] as int? ?? 0,
           diamonds: cachedInfo['diamonds'] as int? ?? 0,
@@ -262,14 +262,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
         userId: userId,
         username:
             respData['nickname'] as String? ?? respData['username'] as String?,
-        avatar: respData['avatar'] as String?,
+        avatar: (respData['avatar'] as String?)?.trim(),
         gender: (respData['gender'] as String?) ?? 'secret',
         birthDate: respData['birth_date'] as String?,
         heightCm: _parseNullableInt(respData['height_cm']),
         weightKg: _parseNullableInt(respData['weight_kg']),
         locationCity: respData['location_city'] as String?,
         albumPhotos: _parseAlbum(respData['album_photos']),
-        coverUrl: respData['cover_url'] as String?,
+        coverUrl: (respData['cover_url'] as String?)?.trim(),
         appRole: respData['is_anchor'] == true ? 'anchor' : 'user',
         coins: respData['coins'] as int? ?? 0,
         diamonds: respData['diamonds'] as int? ?? 0,
@@ -295,6 +295,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final respData = data['data'] as Map<String, dynamic>?;
       if (respData == null) return;
 
+      final nextAvatar = (respData['avatar'] as String?)?.trim() ?? '';
+      final currentAvatar = state.avatar?.trim();
+      // 管理后台修改头像但 URL 不变时，主动清理图片缓存，避免继续展示旧图
+      if (nextAvatar.isNotEmpty &&
+          currentAvatar != null &&
+          currentAvatar.isNotEmpty &&
+          nextAvatar == currentAvatar) {
+        imageCache.evict(NetworkImage(nextAvatar));
+      }
+
       final userId = _parseUserId(respData['id']);
       if (userId != null) {
         await StorageService.saveUserId(userId);
@@ -306,14 +316,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
         userId: userId,
         username:
             respData['nickname'] as String? ?? respData['username'] as String?,
-        avatar: respData['avatar'] as String?,
+        avatar: nextAvatar,
         gender: (respData['gender'] as String?) ?? 'secret',
         birthDate: respData['birth_date'] as String?,
         heightCm: _parseNullableInt(respData['height_cm']),
         weightKg: _parseNullableInt(respData['weight_kg']),
         locationCity: respData['location_city'] as String?,
         albumPhotos: _parseAlbum(respData['album_photos']),
-        coverUrl: respData['cover_url'] as String?,
+        coverUrl: (respData['cover_url'] as String?)?.trim(),
         appRole: respData['is_anchor'] == true ? 'anchor' : 'user',
         coins: respData['coins'] as int? ?? 0,
         diamonds: respData['diamonds'] as int? ?? 0,
@@ -324,13 +334,16 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = const AuthState();
       rethrow;
     } catch (e) {
-      debugPrint('auth.fetchUserInfo error: $e');
+      AppLogger.debug('auth.fetchUserInfo error: $e');
     }
   }
 
   Future<bool> updateProfile(Map<String, dynamic> payload) async {
     try {
-      final data = await _dio.apiPost(ApiEndpoints.userProfileUpdate, data: payload);
+      final data = await _dio.apiPost(
+        ApiEndpoints.userProfileUpdate,
+        data: payload,
+      );
       final code = data['code'] as int?;
       if (code != 200) {
         final msg = data['msg'] as String? ?? '更新资料失败';
@@ -353,7 +366,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required String filename,
   }) async {
     try {
-      debugPrint('auth.uploadProfileImage start: filename=$filename, bytes=${bytes.length}');
+      AppLogger.debug(
+        'auth.uploadProfileImage start: filename=$filename, bytes=${bytes.length}',
+      );
       final formData = FormData.fromMap({
         'file': MultipartFile.fromBytes(bytes, filename: filename),
       });
@@ -365,23 +380,25 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if ((data['code'] as int?) != 200) {
         final msg = data['msg'] as String? ?? '上传失败';
         state = state.copyWith(error: msg);
-        debugPrint('auth.uploadProfileImage fail: business code=${data['code']} msg=$msg');
+        AppLogger.debug(
+          'auth.uploadProfileImage fail: business code=${data['code']} msg=$msg',
+        );
         return null;
       }
       final url = (data['data'] as Map<String, dynamic>?)?['url'] as String?;
-      debugPrint('auth.uploadProfileImage success: url=$url');
+      AppLogger.debug('auth.uploadProfileImage success: url=$url');
       return (url == null || url.trim().isEmpty) ? null : url.trim();
     } on ApiException catch (e) {
       state = state.copyWith(error: e.message);
-      debugPrint('auth.uploadProfileImage ApiException: ${e.message}');
+      AppLogger.debug('auth.uploadProfileImage ApiException: ${e.message}');
       return null;
     } on NetworkException catch (e) {
       state = state.copyWith(error: e.message);
-      debugPrint('auth.uploadProfileImage NetworkException: ${e.message}');
+      AppLogger.debug('auth.uploadProfileImage NetworkException: ${e.message}');
       return null;
     } catch (e) {
       state = state.copyWith(error: '上传失败，请重试');
-      debugPrint('auth.uploadProfileImage unexpected error: $e');
+      AppLogger.debug('auth.uploadProfileImage unexpected error: $e');
       return null;
     }
   }
@@ -397,7 +414,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final diamonds = respData['diamonds'] as int? ?? state.diamonds;
       syncBalance(coins: coins, diamonds: diamonds);
     } catch (e) {
-      debugPrint('auth.refreshBalance error: $e');
+      AppLogger.debug('auth.refreshBalance error: $e');
     }
   }
 
@@ -462,7 +479,7 @@ class AppInitNotifier extends StateNotifier<AppInitState> {
         faceBeautyKey: faceBeautyKey,
       );
     } catch (e) {
-      debugPrint('appInit.init error: $e');
+      AppLogger.debug('appInit.init error: $e');
       state = state.copyWith(isLoading: false, loaded: true);
     }
   }

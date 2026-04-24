@@ -13,6 +13,7 @@ import '../../app/theme/app_theme.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/utils/app_toast.dart';
+import '../../core/utils/app_logger.dart';
 import '../beauty/beauty_camera_view.dart';
 import '../beauty/beauty_panel.dart';
 import '../gift/gift_panel.dart';
@@ -55,7 +56,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
   double _beautyPanelHeightFactor = _beautyPanelInitialFactor;
 
   void _log(String message) {
-    debugPrint('[CALL_FLOW][callId=${widget.callId}] $message');
+    AppLogger.debug('[CALL_FLOW][callId=${widget.callId}] $message');
   }
 
   @override
@@ -78,21 +79,24 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       ref.read(callWsControllerProvider(widget.callId).notifier).bind();
 
       unawaited(
-        ref.read(callRtcControllerProvider(widget.callId).notifier).initRtc(
-          onCallConnected: () {
-            if (!mounted) return;
-            ref.read(callSessionProvider(widget.callId).notifier).markOngoing();
-          },
-          onRemoteEnd: (endReason) {
-            if (!mounted) return;
-            ref.read(callSessionProvider(widget.callId).notifier).beginEnding(
-              endReason: endReason,
-              notifyEndApi: false,
-            );
-          },
-          onLog: _log,
-          faceBeautyKey: ref.read(faceBeautyKeyProvider),
-        ),
+        ref
+            .read(callRtcControllerProvider(widget.callId).notifier)
+            .initRtc(
+              onCallConnected: () {
+                if (!mounted) return;
+                ref
+                    .read(callSessionProvider(widget.callId).notifier)
+                    .markOngoing();
+              },
+              onRemoteEnd: (endReason) {
+                if (!mounted) return;
+                ref
+                    .read(callSessionProvider(widget.callId).notifier)
+                    .beginEnding(endReason: endReason, notifyEndApi: false);
+              },
+              onLog: _log,
+              faceBeautyKey: ref.read(faceBeautyKeyProvider),
+            ),
       );
     });
   }
@@ -104,7 +108,9 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     _endingConsuming = true;
 
     final endReason = (sessionState.endReason ?? 'normal').trim();
-    _log('session ending, reason=$endReason notifyEndApi=${sessionState.notifyEndApi}');
+    _log(
+      'session ending, reason=$endReason notifyEndApi=${sessionState.notifyEndApi}',
+    );
 
     try {
       if (sessionState.isEndingForBalance || endReason == 'balance_empty') {
@@ -166,17 +172,18 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     }
 
     _log('end call confirmed');
-    ref.read(callSessionProvider(widget.callId).notifier).beginEnding(
-      endReason: 'normal',
-      notifyEndApi: true,
-    );
+    ref
+        .read(callSessionProvider(widget.callId).notifier)
+        .beginEnding(endReason: 'normal', notifyEndApi: true);
   }
 
   Future<void> _leaveAndExit({
     required bool notifyEndApi,
     required String endReason,
   }) async {
-    final sessionNotifier = ref.read(callSessionProvider(widget.callId).notifier);
+    final sessionNotifier = ref.read(
+      callSessionProvider(widget.callId).notifier,
+    );
     final current = ref.read(callSessionProvider(widget.callId));
     if (current.hasEnded) {
       return;
@@ -368,13 +375,16 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       previous,
       next,
     ) {
-      if (next.phase == CallPhase.ending && previous?.phase != CallPhase.ending) {
+      if (next.phase == CallPhase.ending &&
+          previous?.phase != CallPhase.ending) {
         unawaited(_consumeEnding(next));
       }
     });
 
     final rtcState = ref.watch(callRtcControllerProvider(widget.callId));
-    final rtcController = ref.watch(callRtcControllerProvider(widget.callId).notifier);
+    final rtcController = ref.watch(
+      callRtcControllerProvider(widget.callId).notifier,
+    );
     final sessionState = ref.watch(callSessionProvider(widget.callId));
     final giftState = ref.watch(callGiftControllerProvider(widget.callId));
 
@@ -413,13 +423,13 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
               if (rtcState.isCameraOn)
                 const Positioned.fill(
                   child: IgnorePointer(
-                    child: Opacity(
-                      opacity: 0.01,
-                      child: BeautyCameraView(),
-                    ),
+                    child: Opacity(opacity: 0.01, child: BeautyCameraView()),
                   ),
                 ),
-              _buildRemoteView(rtcState: rtcState, rtcController: rtcController),
+              _buildRemoteView(
+                rtcState: rtcState,
+                rtcController: rtcController,
+              ),
               if (giftState.isShowing)
                 _buildGiftAnimationOverlay(giftState: giftState),
               Positioned(

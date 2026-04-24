@@ -18,6 +18,18 @@ class AppUser(BaseModel, TimestampMixin):
     cover_url = fields.CharField(max_length=500, null=True, description="封面URL(必须来自相册)")
     status = fields.CharField(max_length=20, null=True, default="normal", description="normal/banned", index=True)
     is_anchor = fields.BooleanField(default=False, description="是否为签约主播", index=True)
+    anchor_intro = fields.CharField(max_length=500, null=True, description="主播简介")
+    anchor_tags = fields.JSONField(null=True, description="主播标签列表")
+    anchor_call_price = fields.BigIntField(default=100, description="主播通话价格(分/分钟)")
+    anchor_apply_status = fields.CharField(
+        max_length=20,
+        default="none",
+        description="主播申请状态 none/pending/approved/rejected",
+        index=True,
+    )
+    anchor_apply_at = fields.DatetimeField(null=True, description="主播申请时间")
+    anchor_reviewed_at = fields.DatetimeField(null=True, description="主播审核时间")
+    anchor_reject_reason = fields.CharField(max_length=500, null=True, description="主播申请拒绝原因")
     coins = fields.BigIntField(default=0, description="金币余额(分)")
     diamonds = fields.BigIntField(default=0, description="钻石余额(分)")
     frozen_diamonds = fields.BigIntField(default=0, description="冻结钻石(分)")

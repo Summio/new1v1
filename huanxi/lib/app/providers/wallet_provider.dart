@@ -1,7 +1,7 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/constants/api_endpoints.dart';
+import '../../core/utils/app_logger.dart';
 import '../../app/providers/auth_provider.dart';
 
 /// 交易记录类型
@@ -142,19 +142,22 @@ class WalletNotifier extends StateNotifier<WalletState> {
         frozenDiamonds: respData['frozen_diamonds'] as int? ?? 0,
       );
 
-      _ref.read(authProvider.notifier).syncBalance(
-            coins: state.coins,
-            diamonds: state.diamonds,
-          );
+      _ref
+          .read(authProvider.notifier)
+          .syncBalance(coins: state.coins, diamonds: state.diamonds);
     } catch (e) {
-      debugPrint('wallet.fetchBalance error: $e');
+      AppLogger.debug('wallet.fetchBalance error: $e');
     }
   }
 
   /// 获取交易记录（第一页或切换 filter）
   Future<void> fetchTransactions({TransactionType? type}) async {
     if (type != null) {
-      state = state.copyWith(filterType: type, isLoading: true, transactions: []);
+      state = state.copyWith(
+        filterType: type,
+        isLoading: true,
+        transactions: [],
+      );
     } else {
       state = state.copyWith(isLoading: true);
     }
@@ -163,8 +166,8 @@ class WalletNotifier extends StateNotifier<WalletState> {
       final typeStr = type == TransactionType.income
           ? 'income'
           : type == TransactionType.expense
-              ? 'expense'
-              : 'all';
+          ? 'expense'
+          : 'all';
       final data = await _dio.apiGet(
         ApiEndpoints.walletTransactions,
         params: {'type': typeStr, 'page': 1, 'page_size': 20},
@@ -175,8 +178,11 @@ class WalletNotifier extends StateNotifier<WalletState> {
         return;
       }
 
-      final records = (respData['records'] as List<dynamic>?)
-              ?.map((e) => TransactionRecord.fromJson(e as Map<String, dynamic>))
+      final records =
+          (respData['records'] as List<dynamic>?)
+              ?.map(
+                (e) => TransactionRecord.fromJson(e as Map<String, dynamic>),
+              )
               .toList() ??
           [];
 
@@ -189,7 +195,7 @@ class WalletNotifier extends StateNotifier<WalletState> {
         error: null,
       );
     } catch (e) {
-      debugPrint('wallet.fetchTransactions error: $e');
+      AppLogger.debug('wallet.fetchTransactions error: $e');
       state = state.copyWith(isLoading: false, error: '账单加载失败，请稍后重试');
     }
   }
@@ -204,8 +210,8 @@ class WalletNotifier extends StateNotifier<WalletState> {
       final typeStr = state.filterType == TransactionType.income
           ? 'income'
           : state.filterType == TransactionType.expense
-              ? 'expense'
-              : 'all';
+          ? 'expense'
+          : 'all';
       final nextPage = state.currentPage + 1;
       final data = await _dio.apiGet(
         ApiEndpoints.walletTransactions,
@@ -217,8 +223,11 @@ class WalletNotifier extends StateNotifier<WalletState> {
         return;
       }
 
-      final newRecords = (respData['records'] as List<dynamic>?)
-              ?.map((e) => TransactionRecord.fromJson(e as Map<String, dynamic>))
+      final newRecords =
+          (respData['records'] as List<dynamic>?)
+              ?.map(
+                (e) => TransactionRecord.fromJson(e as Map<String, dynamic>),
+              )
               .toList() ??
           [];
 
@@ -229,7 +238,7 @@ class WalletNotifier extends StateNotifier<WalletState> {
         isLoadingMore: false,
       );
     } catch (e) {
-      debugPrint('wallet.loadMore error: $e');
+      AppLogger.debug('wallet.loadMore error: $e');
       state = state.copyWith(isLoadingMore: false);
     }
   }
@@ -267,21 +276,20 @@ class WalletNotifier extends StateNotifier<WalletState> {
 
       return result;
     } catch (e) {
-      debugPrint('wallet.withdraw error: $e');
+      AppLogger.debug('wallet.withdraw error: $e');
       return null;
     }
   }
 
   /// 刷新全部
   Future<void> refreshAll() async {
-    await Future.wait([
-      fetchBalance(),
-      fetchTransactions(),
-    ]);
+    await Future.wait([fetchBalance(), fetchTransactions()]);
   }
 }
 
 /// 钱包 Provider
-final walletProvider = StateNotifierProvider<WalletNotifier, WalletState>((ref) {
+final walletProvider = StateNotifierProvider<WalletNotifier, WalletState>((
+  ref,
+) {
   return WalletNotifier(DioClient.instance, ref);
 });

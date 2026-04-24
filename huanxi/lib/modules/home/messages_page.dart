@@ -155,12 +155,14 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
               (data['data'] as Map<String, dynamic>?) ??
               const <String, dynamic>{};
           final nickname = (payload['nickname'] as String?)?.trim();
-          final avatarUrl = (payload['avatar'] as String?)?.trim();
+          final avatarUrl = _imService.normalizeMediaUrl(
+            (payload['avatar'] as String?)?.trim(),
+          );
           return MapEntry(
             target.imUserId,
             _PeerAppProfile(
               nickname: (nickname?.isNotEmpty ?? false) ? nickname : null,
-              avatarUrl: (avatarUrl?.isNotEmpty ?? false) ? avatarUrl : null,
+              avatarUrl: avatarUrl.isNotEmpty ? avatarUrl : null,
             ),
           );
         } catch (_) {
@@ -224,9 +226,11 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
     final appAvatar = _appProfileByUserId[userId]?.avatarUrl?.trim() ?? '';
     if (appAvatar.isNotEmpty) return appAvatar;
 
-    final profileFace = _profileByUserId[userId]?.faceUrl?.trim() ?? '';
+    final profileFace = _imService.normalizeMediaUrl(
+      _profileByUserId[userId]?.faceUrl?.trim(),
+    );
     if (profileFace.isNotEmpty) return profileFace;
-    final convFace = conv.faceUrl?.trim() ?? '';
+    final convFace = _imService.normalizeMediaUrl(conv.faceUrl?.trim());
     if (convFace.isNotEmpty) return convFace;
     return null;
   }

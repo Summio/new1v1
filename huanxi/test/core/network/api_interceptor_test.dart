@@ -20,10 +20,50 @@ void main() {
 
       expect(handler.nextOptions, isNotNull);
       expect(handler.nextOptions!.queryParameters['enc_foo'], 'enc_bar');
-      expect(handler.nextOptions!.data, {'encrypted': true, 'payload': {'name': 'alice'}});
+      expect(handler.nextOptions!.data, {
+        'encrypted': true,
+        'payload': {'name': 'alice'},
+      });
     });
 
-    test('should emit request and response logs when debug logging is enabled', () {
+    test(
+      'should emit request and response logs when debug logging is enabled',
+      () {
+        final logs = <String>[];
+        final interceptor = ApiInterceptor(
+          enableDebugLog: true,
+          debugLogger: logs.add,
+        );
+        final requestHandler = _TestRequestHandler();
+        final responseHandler = _TestResponseHandler();
+        final options = RequestOptions(
+          path: '/ping',
+          method: 'GET',
+          queryParameters: {'q': '1'},
+        );
+
+        interceptor.onRequest(options, requestHandler);
+        interceptor.onResponse(
+          Response(
+            requestOptions: options,
+            statusCode: 200,
+            data: {
+              'code': 200,
+              'msg': 'ok',
+              'data': {'pong': true},
+            },
+          ),
+          responseHandler,
+        );
+
+        expect(logs.any((line) => line.contains('[API][Request]')), isTrue);
+        expect(logs.any((line) => line.contains('[API][Response]')), isTrue);
+        expect(logs.join('\n'), contains('/ping'));
+        expect(logs.join('\n'), contains('pong'));
+      },
+    );
+
+    test('should redact sensitive fields from debug logs', () {
       final logs = <String>[];
       final interceptor = ApiInterceptor(
         enableDebugLog: true,
@@ -32,9 +72,10 @@ void main() {
       final requestHandler = _TestRequestHandler();
       final responseHandler = _TestResponseHandler();
       final options = RequestOptions(
-        path: '/ping',
-        method: 'GET',
-        queryParameters: {'q': '1'},
+        path: '/login',
+        method: 'POST',
+        queryParameters: {'phone': '13800138000', 'token': 'query-token'},
+        data: {'password': 'secret-password', 'user_sig': 'user-signature'},
       );
 
       interceptor.onRequest(options, requestHandler);
@@ -42,15 +83,21 @@ void main() {
         Response(
           requestOptions: options,
           statusCode: 200,
-          data: {'code': 200, 'msg': 'ok', 'data': {'pong': true}},
+          data: {
+            'code': 200,
+            'data': {'token': 'response-token', 'phone': '13800138000'},
+          },
         ),
         responseHandler,
       );
 
-      expect(logs.any((line) => line.contains('[API][Request]')), isTrue);
-      expect(logs.any((line) => line.contains('[API][Response]')), isTrue);
-      expect(logs.join('\n'), contains('/ping'));
-      expect(logs.join('\n'), contains('pong'));
+      final output = logs.join('\n');
+      expect(output, isNot(contains('13800138000')));
+      expect(output, isNot(contains('query-token')));
+      expect(output, isNot(contains('secret-password')));
+      expect(output, isNot(contains('user-signature')));
+      expect(output, isNot(contains('response-token')));
+      expect(output, contains('***'));
     });
   });
 }
@@ -62,16 +109,14 @@ class _TestRequestTransformer extends ApiRequestTransformer {
     RequestOptions options,
   ) {
     return {
-      for (final entry in queryParameters.entries) 'enc_${entry.key}': 'enc_${entry.value}',
+      for (final entry in queryParameters.entries)
+        'enc_${entry.key}': 'enc_${entry.value}',
     };
   }
 
   @override
   dynamic transformBody(dynamic body, RequestOptions options) {
-    return {
-      'encrypted': true,
-      'payload': body,
-    };
+    return {'encrypted': true, 'payload': body};
   }
 }
 

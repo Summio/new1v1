@@ -16,11 +16,14 @@ export default {
   resetPassword: (data = {}) => request.post(`/user/reset_password`, data),
   // app users
   getAppUserList: (params = {}) => request.get('/app_user/list', { params }),
+  getAppUserById: (params = {}) => request.get('/app_user/get', { params }),
   updateAppUser: (data = {}) => request.post('/app_user/update', data),
   uploadAppUserImage: (data) =>
     request.post('/app_user/upload-image', data, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+  // call record
+  getCallRecordList: (params = {}) => request.get('/call_record/list', { params }),
   // role
   getRoleList: (params = {}) => request.get('/role/list', { params }),
   createRole: (data = {}) => request.post('/role/create', data),

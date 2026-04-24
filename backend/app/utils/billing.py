@@ -1,6 +1,6 @@
 """通话计费相关工具函数"""
 
-from app.models import Anchor, CallRecord
+from app.models import AppUser, CallRecord
 
 
 async def resolve_payer_id(call_record: CallRecord) -> int:
@@ -24,15 +24,12 @@ async def resolve_payer_id(call_record: CallRecord) -> int:
     callee_id = int(call_record.callee_id)
 
     # 单次 IN 查询获取主播状态
-    anchors = {
-        int(a.app_user_id): a
-        for a in await Anchor.filter(
-            app_user_id__in=[caller_id, callee_id],
-            apply_status="approved",
-        ).all()
+    users = {
+        int(u.id): bool(u.is_anchor)
+        for u in await AppUser.filter(id__in=[caller_id, callee_id]).all()
     }
-    caller_is_anchor = caller_id in anchors
-    callee_is_anchor = callee_id in anchors
+    caller_is_anchor = users.get(caller_id, False)
+    callee_is_anchor = users.get(callee_id, False)
 
     # 主播不承担通话费用
     if caller_is_anchor and not callee_is_anchor:

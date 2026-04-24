@@ -1,7 +1,7 @@
 # AGENTS.md
 
 本文件用于指导在本仓库中执行开发任务的智能体与协作者。
-最后更新：2026-04-23
+最后更新：2026-04-24
 
 ## 项目概述
 
@@ -54,6 +54,7 @@ D:/1v1/new1v1/
 ## 关键入口与环境
 
 - Flutter 入口：`huanxi/lib/main.dart`
+- Flutter API 地址必须通过 `--dart-define=API_BASE_URL=...` 显式传入；客户端禁止内置 debug/profile/release 默认后端地址。
 - 后端入口：`backend/run.py`（加载 `app:app`，默认端口 `9999`）
 - 本地数据库默认：MySQL `localhost:3306`，数据库 `huanxi`（见 `backend/app/settings/config.py`）
 - 后端配置：`backend/.env`（参考 `backend/.env.example`）
@@ -67,8 +68,8 @@ cd D:/1v1/new1v1/huanxi
 flutter pub get
 flutter analyze
 flutter test
-flutter run
-flutter build apk --debug
+flutter run --dart-define=API_BASE_URL=http://<host>:9999/api/v1/
+flutter build apk --debug --dart-define=API_BASE_URL=http://<host>:9999/api/v1/
 ```
 
 ### 后端（API）
@@ -120,6 +121,7 @@ App 端接口默认使用 `Authorization: Bearer <token>`。
 ## 开发约束
 
 - 优先保持现有行为稳定，不做无关改动。
+- `huanxi` 客户端不得为 `API_BASE_URL` 设置任何默认兜底地址；本地、测试、生产都必须由构建命令或环境配置显式传入。
 - 涉及表结构变更时，必须走 Aerich 迁移，禁止直接改库。
 - 生产配置不得依赖默认弱口令，敏感配置必须走环境变量。
 - 新增功能时，同步评估对通话计费、鉴权、余额扣减链路的影响。
