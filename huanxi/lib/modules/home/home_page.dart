@@ -92,7 +92,7 @@ class _HomePageState extends ConsumerState<HomePage> with SingleTickerProviderSt
         actions: [
           IconButton(
             icon: const Icon(Icons.search_rounded, color: Colors.black, size: 28),
-            onPressed: () {},
+            onPressed: () => context.push(AppRoutes.userSearch),
           ),
           const SizedBox(width: 8),
         ],

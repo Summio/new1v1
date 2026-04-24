@@ -383,13 +383,19 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
                       if (userId == null || userId.isEmpty) return;
                       final router = GoRouter.of(context);
                       await _imService.cleanC2CUnread(peerUserId: userId);
-                      await router.push(
+                      final result = await router.push(
                         '${AppRoutes.im}/$userId',
                         extra: {
                           'peerNickname': _displayName(conv),
                           'peerAvatarUrl': _avatarUrl(conv),
                         },
                       );
+                      if (mounted && result is String && result.trim().isNotEmpty) {
+                        AppToast.showSnackBar(
+                          context,
+                          SnackBar(content: Text(result.trim())),
+                        );
+                      }
                       if (!mounted) return;
                       await _loadConversations();
                       await _imService.syncTotalUnreadCount();

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +11,7 @@ import '../../services/im_service.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/network/response_parsers.dart';
+import '../../core/network/api_exception.dart';
 import '../../core/storage/storage.dart';
 import '../../core/im/call_trace_message.dart';
 import '../../app/providers/auth_provider.dart';
@@ -35,7 +38,6 @@ class ImPage extends ConsumerStatefulWidget {
 
 class _ImPageState extends ConsumerState<ImPage> {
   static const String _chatPrefix = 'chat';
-  static const double _composerBaseHeight = 68;
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
   final List<_ChatMessage> _messages = [];
@@ -51,7 +53,6 @@ class _ImPageState extends ConsumerState<ImPage> {
   final Set<String> _messageIds = <String>{};
   V2TimMessage? _lastHistoryMsg;
   bool _isStartingCall = false;
-
   String _normalizeIMUserId(String userId) {
     if (userId.startsWith('chat_')) return userId;
     return '${_chatPrefix}_$userId';
@@ -77,7 +78,8 @@ class _ImPageState extends ConsumerState<ImPage> {
       if (myUserId == null) {
         throw Exception('登录状态失效，请重新登录');
       }
-      final usersigData = await _requestUserSig();
+      final peerNumId = _extractAppUserId(widget.userId);
+      final usersigData = await _requestUserSig(peerUserId: peerNumId);
       final userSig = usersigData.userSig;
       final appInitState = ref.read(appInitProvider);
       final sdkAppId = appInitState.imConfigured
@@ -90,19 +92,6 @@ class _ImPageState extends ConsumerState<ImPage> {
       _peerUserId = _normalizeIMUserId(widget.userId);
       _peerNickname = widget.initialPeerNickname;
       _peerAvatarUrl = _imService.normalizeMediaUrl(widget.initialPeerAvatarUrl);
-      final myNumId = _extractAppUserId(_myUserId ?? '');
-      final peerNumId = _extractAppUserId(_peerUserId ?? '');
-      if (_myUserId == _peerUserId ||
-          (myNumId != null && peerNumId != null && myNumId == peerNumId)) {
-        if (mounted) {
-          AppToast.showSnackBar(
-            context,
-            const SnackBar(content: Text('不能和自己聊天')),
-          );
-          Navigator.of(context).pop();
-        }
-        return;
-      }
 
       // 4. 初始化并登录 IM（全局会话）
       await _imService.ensureReady(
@@ -121,11 +110,23 @@ class _ImPageState extends ConsumerState<ImPage> {
       await _loadHistoryMessages();
       await _imService.cleanC2CUnread(peerUserId: _peerUserId!);
     } catch (e) {
-      if (mounted) {
-        AppToast.showSnackBar(context, SnackBar(content: Text('IM 初始化失败: $e')));
+      if (!mounted) return;
+      if (e is ApiException && e.code == 400) {
+        final message = AppToast.normalizeMessage(e.message);
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop(message);
+        } else {
+          AppToast.showSnackBar(context, SnackBar(content: Text(message)));
+        }
+        return;
       }
+      final message = e is ApiException ? e.message : 'IM 初始化失败: $e';
+      AppToast.showSnackBar(context, SnackBar(content: Text(message)));
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _scrollToBottom();
+      }
     }
   }
 
@@ -212,7 +213,10 @@ class _ImPageState extends ConsumerState<ImPage> {
     try {
       final data = await DioClient.instance.apiGet(
         ApiEndpoints.userPublic,
-        params: {'user_id': peerNumId},
+        params: {
+          'user_id': peerNumId,
+          'scene': 'chat',
+        },
       );
       final payload =
           (data['data'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
@@ -232,6 +236,11 @@ class _ImPageState extends ConsumerState<ImPage> {
         }
         _peerAnchorId = appAnchorId;
       });
+    } on ApiException catch (e) {
+      if (e.code == 400) {
+        rethrow;
+      }
+      // 其它业务错误不影响聊天主链路
     } catch (_) {
       // App 资料兜底失败不影响聊天主链路
     }
@@ -376,8 +385,13 @@ class _ImPageState extends ConsumerState<ImPage> {
     return int.tryParse(imUserId);
   }
 
-  Future<UserSigPayload> _requestUserSig() async {
-    final response = await DioClient.instance.get(ApiEndpoints.imUserSig);
+  Future<UserSigPayload> _requestUserSig({int? peerUserId}) async {
+    final response = await DioClient.instance.get(
+      ApiEndpoints.imUserSig,
+      queryParameters: peerUserId != null
+          ? <String, dynamic>{'peer_user_id': peerUserId}
+          : null,
+    );
     return ResponseParsers.parseUserSigPayload(response.data);
   }
 
@@ -392,29 +406,29 @@ class _ImPageState extends ConsumerState<ImPage> {
       );
       return;
     }
-    final anchorId = _peerAnchorId;
-    if (anchorId == null || anchorId <= 0) {
-      if (!mounted) return;
-      AppToast.showSnackBar(
-        context,
-        const SnackBar(content: Text('对方不是可通话主播，暂不支持视频呼叫')),
-      );
-      return;
-    }
+    final anchorId = _peerAnchorId ?? peerNumId;
 
     setState(() => _isStartingCall = true);
     try {
-      await context.push(
-        Uri(
-          path: AppRoutes.callOutgoing,
-          queryParameters: {
-            'peerUserId': peerNumId.toString(),
-            'anchorId': anchorId.toString(),
-            'peerName': _peerDisplayName(),
-            'peerAvatar': _peerAvatarUrl ?? '',
-            'callPrice': '0',
-          },
-        ).toString(),
+      unawaited(
+        context.push(
+          Uri(
+            path: AppRoutes.callOutgoing,
+            queryParameters: {
+              'peerUserId': peerNumId.toString(),
+              'anchorId': anchorId.toString(),
+              'peerName': _peerDisplayName(),
+              'peerAvatar': _peerAvatarUrl ?? '',
+              'callPrice': '0',
+            },
+          ).toString(),
+        ).then(_handleCallPageResult).catchError((_) {
+          if (!mounted) return;
+          AppToast.showSnackBar(
+            context,
+            const SnackBar(content: Text('通话启动失败，请稍后重试')),
+          );
+        }),
       );
     } catch (_) {
       if (!mounted) return;
@@ -423,23 +437,27 @@ class _ImPageState extends ConsumerState<ImPage> {
         const SnackBar(content: Text('通话启动失败，请稍后重试')),
       );
     } finally {
-      if (mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
         setState(() => _isStartingCall = false);
-      }
+      });
     }
+  }
+
+  void _handleCallPageResult(dynamic result) {
+    if (!mounted) return;
+    final message = result is String ? result.trim() : '';
+    if (message.isEmpty) return;
+    AppToast.showSnackBar(context, SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
-    final media = MediaQuery.of(context);
-    final keyboardInset = media.viewInsets.bottom;
-    final safeBottom = media.padding.bottom;
-    final composerBottom = (keyboardInset > 0 ? keyboardInset : safeBottom) + 8;
-    final listBottomPadding = _composerBaseHeight + composerBottom + 12;
-    final maxBubbleWidth = media.size.width * 0.75;
+    final size = MediaQuery.sizeOf(context);
+    final maxBubbleWidth = size.width * 0.75;
 
     return Scaffold(
-      resizeToAvoidBottomInset: false,
+      resizeToAvoidBottomInset: true,
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         backgroundColor: AppTheme.surfaceColor,
@@ -475,9 +493,9 @@ class _ImPageState extends ConsumerState<ImPage> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Stack(
+          : Column(
               children: [
-                Positioned.fill(
+                Expanded(
                   child: _messages.isEmpty
                       ? const Center(
                           child: Column(
@@ -499,12 +517,7 @@ class _ImPageState extends ConsumerState<ImPage> {
                       : RepaintBoundary(
                           child: ListView.builder(
                             controller: _scrollController,
-                            padding: EdgeInsets.fromLTRB(
-                              12,
-                              12,
-                              12,
-                              listBottomPadding,
-                            ),
+                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
                             keyboardDismissBehavior:
                                 ScrollViewKeyboardDismissBehavior.onDrag,
                             itemCount: _messages.length,
@@ -521,20 +534,11 @@ class _ImPageState extends ConsumerState<ImPage> {
                           ),
                         ),
                 ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    padding: EdgeInsets.only(
-                      left: 12,
-                      right: 12,
-                      top: 8,
-                      bottom: composerBottom,
-                    ),
-                    decoration: const BoxDecoration(
-                      color: AppTheme.surfaceColor,
-                    ),
+                Container(
+                  decoration: const BoxDecoration(color: AppTheme.surfaceColor),
+                  child: SafeArea(
+                    top: false,
+                    minimum: const EdgeInsets.fromLTRB(12, 8, 12, 8),
                     child: Row(
                       children: [
                         IconButton(
@@ -753,3 +757,4 @@ class _BubbleAvatar extends StatelessWidget {
     );
   }
 }
+

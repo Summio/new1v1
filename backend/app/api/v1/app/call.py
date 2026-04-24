@@ -187,14 +187,14 @@ async def dialing(req_in: DialingIn):
     if not anchor_user:
         return Fail(code=404, msg="主播不存在或未认证")
 
+    # 禁止自呼叫
+    if caller_id == anchor_user.id:
+        return Fail(code=400, msg="不能呼叫自己")
+
     # 使用 Redis 在线状态检查（WebSocket 方式）
     from app.websocket.presence import is_online as check_anchor_online
     if not await check_anchor_online(anchor_user.id):
         return Fail(code=400, msg="主播当前不在线，请稍后再试")
-
-    # 禁止自呼叫
-    if caller_id == anchor_user.id:
-        return Fail(code=400, msg="不能呼叫自己")
 
     call_price = int(anchor_user.anchor_call_price or 0)
 

@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, File, UploadFile, Request
 from fastapi import Header, HTTPException, Query
 
 from app.core.app_auth import DependAppAuth, logout_app_user
-from app.core.ctx import CTX_APP_USER_OBJ
+from app.core.ctx import CTX_APP_USER_ID, CTX_APP_USER_OBJ
 from app.models import AppUser
 from app.schemas.app_user import AppUserProfileUpdateIn
 from app.schemas.base import Fail, Success
@@ -190,7 +190,12 @@ async def upload_user_image(request: Request, file: UploadFile = File(...)):
 @router.get("/user/public", summary="按 user_id 获取公开用户资料", dependencies=[Depends(DependAppAuth)])
 async def get_user_public_profile(
     user_id: int = Query(..., description="目标用户ID"),
+    scene: str = Query("", description="调用场景，可选 chat"),
 ):
+    current_user_id = int(CTX_APP_USER_ID.get() or 0)
+    if scene.strip().lower() == "chat" and current_user_id == user_id:
+        return Fail(code=400, msg="不能和自己聊天")
+
     app_user = await AppUser.filter(id=user_id).first()
     if not app_user:
         return Fail(code=404, msg="用户不存在")

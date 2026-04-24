@@ -21,6 +21,7 @@ import '../../modules/settings/change_password_page.dart';
 import '../../modules/im/im_page.dart';
 import '../../modules/gift/gift_panel.dart';
 import '../../modules/home/anchor_detail_page.dart';
+import '../../modules/home/user_search_page.dart';
 import '../../modules/home/wallet_page.dart';
 import '../../modules/beauty/beauty_settings_page.dart';
 import '../../app/providers/anchor_provider.dart';
@@ -35,6 +36,7 @@ class AppRoutes {
   static const String discover = '/discover';
   static const String messages = '/messages';
   static const String anchorDetail = '/anchor/detail';
+  static const String userSearch = '/search';
   static const String profile = '/profile';
   static const String recharge = '/profile/recharge';
   static const String beautySettings = '/profile/beauty';
@@ -181,6 +183,10 @@ final appRouter = GoRouter(
       },
     ),
     GoRoute(
+      path: AppRoutes.userSearch,
+      builder: (context, state) => const UserSearchPage(),
+    ),
+    GoRoute(
       path: AppRoutes.recharge,
       builder: (context, state) => const RechargePage(),
     ),
@@ -223,10 +229,6 @@ final appRouter = GoRouter(
         final extra = state.extra is Map<String, dynamic>
             ? state.extra as Map<String, dynamic>
             : null;
-        final myUserId = StorageService.getUserId();
-        if (myUserId != null && peer == myUserId.toString()) {
-          return const MessagesPage();
-        }
         return ImPage(
           userId: peer,
           initialPeerNickname: extra?['peerNickname'] as String?,

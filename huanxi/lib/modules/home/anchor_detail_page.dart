@@ -1,8 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../app/providers/anchor_provider.dart';
-import '../../app/providers/auth_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import 'package:huanxi/core/utils/app_toast.dart';
@@ -18,54 +19,47 @@ class AnchorDetailPage extends ConsumerStatefulWidget {
 }
 
 class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
-  bool _showExtendedContent = false;
-  bool _isActionNavigating = false;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      setState(() => _showExtendedContent = true);
-    });
-  }
-
   Future<void> _openIm({
-    required bool isSelf,
     required AnchorInfo anchor,
   }) async {
-    if (isSelf || _isActionNavigating) return;
-    setState(() => _isActionNavigating = true);
-    try {
-      await context.push(
-        '${AppRoutes.im}/${anchor.userId}',
-        extra: {
-          'peerNickname': anchor.username,
-          'peerAvatarUrl': anchor.avatar,
-        },
-      );
-    } finally {
-      if (mounted) {
-        setState(() => _isActionNavigating = false);
-      }
-    }
+    final result = await context.push(
+      '${AppRoutes.im}/${anchor.userId}',
+      extra: {
+        'peerNickname': anchor.username,
+        'peerAvatarUrl': anchor.avatar,
+      },
+    );
+    _handleImPageResult(result);
+  }
+
+  void _handleImPageResult(dynamic result) {
+    if (!mounted) return;
+    final message = result is String ? result.trim() : '';
+    if (message.isEmpty) return;
+    AppToast.showSnackBar(context, SnackBar(content: Text(message)));
   }
 
   Future<void> _openCall(AnchorInfo anchor) async {
-    if (_isActionNavigating) return;
-    setState(() => _isActionNavigating = true);
     try {
-      await context.push(
-        Uri(
-          path: AppRoutes.callOutgoing,
-          queryParameters: {
-            'peerUserId': anchor.userId.toString(),
-            'anchorId': anchor.id.toString(),
-            'peerName': anchor.username ?? '主播',
-            'peerAvatar': anchor.avatar ?? '',
-            'callPrice': '0',
-          },
-        ).toString(),
+      unawaited(
+        context.push(
+          Uri(
+            path: AppRoutes.callOutgoing,
+            queryParameters: {
+              'peerUserId': anchor.userId.toString(),
+              'anchorId': anchor.userId.toString(),
+              'peerName': anchor.username ?? '主播',
+              'peerAvatar': anchor.avatar ?? '',
+              'callPrice': '0',
+            },
+          ).toString(),
+        ).then(_handleCallPageResult).catchError((_) {
+          if (!mounted) return;
+          AppToast.showSnackBar(
+            context,
+            const SnackBar(content: Text('通话启动失败，请稍后重试')),
+          );
+        }),
       );
     } catch (_) {
       if (!mounted) return;
@@ -73,18 +67,19 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
         context,
         const SnackBar(content: Text('通话启动失败，请稍后重试')),
       );
-    } finally {
-      if (mounted) {
-        setState(() => _isActionNavigating = false);
-      }
     }
+  }
+
+  void _handleCallPageResult(dynamic result) {
+    if (!mounted) return;
+    final message = result is String ? result.trim() : '';
+    if (message.isEmpty) return;
+    AppToast.showSnackBar(context, SnackBar(content: Text(message)));
   }
 
   @override
   Widget build(BuildContext context) {
     final anchor = widget.anchor;
-    final myUserId = ref.watch(authProvider).userId;
-    final isSelf = myUserId != null && myUserId == anchor.userId;
     final screenWidth = MediaQuery.of(context).size.width;
     final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
     final rawHeaderCacheWidth = (screenWidth * devicePixelRatio).round();
@@ -113,51 +108,48 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
       body: SingleChildScrollView(
         child: Column(
           children: [
-            Hero(
-              tag: 'anchor_avatar_${anchor.userId}',
-              child: SizedBox(
-                height: screenWidth * 1.2,
-                width: double.infinity,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
+            SizedBox(
+              height: screenWidth * 1.2,
+              width: double.infinity,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Container(
+                    color: AppTheme.primaryColor.withValues(alpha: 0.08),
+                  ),
+                  if (hasAvatar)
+                    Image.network(
+                      anchor.avatar!,
+                      fit: BoxFit.cover,
+                      filterQuality: FilterQuality.low,
+                      cacheWidth: headerCacheWidth,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return _buildHeaderPlaceholder();
+                      },
+                      errorBuilder: (context, error, stackTrace) {
+                        return _buildHeaderPlaceholder();
+                      },
+                    )
+                  else
+                    _buildHeaderPlaceholder(),
+                  if (hasAvatar)
                     Container(
-                      color: AppTheme.primaryColor.withValues(alpha: 0.08),
-                    ),
-                    if (hasAvatar)
-                      Image.network(
-                        anchor.avatar!,
-                        fit: BoxFit.cover,
-                        filterQuality: FilterQuality.low,
-                        cacheWidth: headerCacheWidth,
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return _buildHeaderPlaceholder();
-                        },
-                        errorBuilder: (context, error, stackTrace) {
-                          return _buildHeaderPlaceholder();
-                        },
-                      )
-                    else
-                      _buildHeaderPlaceholder(),
-                    if (hasAvatar)
-                      Container(
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              Colors.black.withValues(alpha: 0.3),
-                              Colors.transparent,
-                              Colors.transparent,
-                              Colors.black.withValues(alpha: 0.5),
-                            ],
-                            stops: const [0.0, 0.3, 0.7, 1.0],
-                          ),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.black.withValues(alpha: 0.3),
+                            Colors.transparent,
+                            Colors.transparent,
+                            Colors.black.withValues(alpha: 0.5),
+                          ],
+                          stops: const [0.0, 0.3, 0.7, 1.0],
                         ),
                       ),
-                  ],
-                ),
+                    ),
+                ],
               ),
             ),
             Transform.translate(
@@ -180,7 +172,7 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                anchor.username ?? '主播',
+                                anchor.username ?? (anchor.isAnchor ? '主播' : '用户'),
                                 style: const TextStyle(
                                   fontSize: 26,
                                   fontWeight: FontWeight.bold,
@@ -248,45 +240,45 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                     const SizedBox(height: 24),
                     const Divider(color: AppTheme.dividerColor),
                     const SizedBox(height: 24),
-                    if (_showExtendedContent) ...[
-                      const Text(
-                        '关于我',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary,
+                    const Text(
+                      '关于我',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      anchor.anchorIntro ??
+                          (anchor.isAnchor
+                              ? '这个主播很懒，还没有填写自我介绍哦~'
+                              : '这个用户很懒，还没有填写自我介绍哦~'),
+                      style: const TextStyle(
+                        fontSize: 15,
+                        color: AppTheme.textSecondary,
+                        height: 1.6,
+                      ),
+                    ),
+                    const SizedBox(height: 32),
+                    const Text(
+                      '魅力与礼物',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: List.generate(
+                          5,
+                          (index) => _buildGiftItem(index),
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                        anchor.anchorIntro ?? '这个主播很懒，还没有填写自我介绍哦~',
-                        style: const TextStyle(
-                          fontSize: 15,
-                          color: AppTheme.textSecondary,
-                          height: 1.6,
-                        ),
-                      ),
-                      const SizedBox(height: 32),
-                      const Text(
-                        '魅力与礼物',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
-                          children: List.generate(
-                            5,
-                            (index) => _buildGiftItem(index),
-                          ),
-                        ),
-                      ),
-                    ] else
-                      _buildDeferredSkeleton(),
+                    ),
                     const SizedBox(height: 100),
                   ],
                 ),
@@ -313,9 +305,7 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
               Expanded(
                 flex: 1,
                 child: OutlinedButton(
-                  onPressed: isSelf || _isActionNavigating
-                      ? null
-                      : () => _openIm(isSelf: isSelf, anchor: anchor),
+                  onPressed: () => _openIm(anchor: anchor),
                   style: OutlinedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     side: const BorderSide(color: AppTheme.dividerColor),
@@ -353,9 +343,7 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                     boxShadow: AppTheme.elevatedShadow,
                   ),
                   child: ElevatedButton(
-                    onPressed: _isActionNavigating
-                        ? null
-                        : () => _openCall(anchor),
+                    onPressed: () => _openCall(anchor),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.transparent,
                       shadowColor: Colors.transparent,
@@ -427,64 +415,6 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
     );
   }
 
-  Widget _buildDeferredSkeleton() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 80,
-          height: 18,
-          decoration: BoxDecoration(
-            color: const Color(0xFFEFEFF4),
-            borderRadius: BorderRadius.circular(6),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Container(
-          width: double.infinity,
-          height: 14,
-          decoration: BoxDecoration(
-            color: const Color(0xFFEFEFF4),
-            borderRadius: BorderRadius.circular(6),
-          ),
-        ),
-        const SizedBox(height: 8),
-        Container(
-          width: 220,
-          height: 14,
-          decoration: BoxDecoration(
-            color: const Color(0xFFEFEFF4),
-            borderRadius: BorderRadius.circular(6),
-          ),
-        ),
-        const SizedBox(height: 32),
-        Container(
-          width: 110,
-          height: 18,
-          decoration: BoxDecoration(
-            color: const Color(0xFFEFEFF4),
-            borderRadius: BorderRadius.circular(6),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: List.generate(
-            4,
-            (index) => Container(
-              margin: const EdgeInsets.only(right: 12),
-              width: 60,
-              height: 60,
-              decoration: BoxDecoration(
-                color: const Color(0xFFEFEFF4),
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildGiftItem(int index) {
     return Container(
       margin: const EdgeInsets.only(right: 12),
@@ -501,3 +431,4 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
     );
   }
 }
+

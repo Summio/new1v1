@@ -1,6 +1,6 @@
 import time
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 
 from app.core.app_auth import DependAppAuth
 from app.core.ctx import CTX_APP_USER_ID
@@ -13,7 +13,9 @@ USER_SIG_EXPIRE_SECONDS = 3600 * 2
 
 
 @router.get("/im/usersig", summary="获取IM UserSig", dependencies=[Depends(DependAppAuth)])
-async def get_usersig():
+async def get_usersig(
+    peer_user_id: int | None = Query(default=None, description="目标聊天用户ID"),
+):
     """
     获取腾讯云 IM 的 UserSig。
     使用 TLSSigAPIv2 生成真实签名。
@@ -21,6 +23,9 @@ async def get_usersig():
     from app.models.system_config import SystemConfig
 
     user_id = CTX_APP_USER_ID.get()
+    if peer_user_id is not None and int(peer_user_id) == int(user_id):
+        return Fail(code=400, msg="不能和自己聊天")
+
     config_map = await SystemConfig.get_all_as_dict()
     sdk_app_id_raw = (config_map.get("im_sdk_app_id") or "").strip()
     secret_key = (config_map.get("im_secret_key") or "").strip()

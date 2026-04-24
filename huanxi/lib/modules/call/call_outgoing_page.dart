@@ -156,7 +156,9 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
   Future<void> _startDialing() async {
     final ctrl = ref.read(callOutgoingControllerProvider);
     if (ctrl.isDialingInFlight || ctrl.isPageClosing) return;
-    final anchorId = int.tryParse((widget.anchorId ?? '').trim());
+    final anchorId =
+        int.tryParse((widget.anchorId ?? '').trim()) ??
+        int.tryParse(_peerUserId.trim());
     if (anchorId == null || anchorId <= 0) {
       if (!mounted) return;
       AppToast.showSnackBar(
@@ -214,29 +216,26 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
     } on ApiException catch (e) {
       final current = ref.read(callOutgoingControllerProvider);
       if (!mounted || current.isPageClosing) return;
-      AppToast.showSnackBar(context, SnackBar(content: Text(e.message)));
-      if (context.canPop()) {
-        context.pop();
-      } else {
-        context.go(AppRoutes.index);
-      }
+      _closeWithDialingError(e.message);
     } catch (_) {
       final current = ref.read(callOutgoingControllerProvider);
       if (!mounted || current.isPageClosing) return;
-      AppToast.showSnackBar(
-        context,
-        const SnackBar(content: Text('通话启动失败，请稍后重试')),
-      );
-      if (context.canPop()) {
-        context.pop();
-      } else {
-        context.go(AppRoutes.index);
-      }
+      _closeWithDialingError('通话启动失败，请稍后重试');
     } finally {
       if (mounted) {
         ref.read(callOutgoingControllerProvider.notifier).setDialingInFlight(false);
       }
     }
+  }
+
+  void _closeWithDialingError(String message) {
+    final normalized = AppToast.normalizeMessage(message);
+    if (context.canPop()) {
+      context.pop(normalized);
+      return;
+    }
+    AppToast.showSnackBar(context, SnackBar(content: Text(normalized)));
+    context.go(AppRoutes.index);
   }
 
   void _goToCallRoom(int callId) {

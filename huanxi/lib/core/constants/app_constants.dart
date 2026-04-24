@@ -9,7 +9,7 @@ class AppConstants {
   /// 必须通过 Dart define 显式配置，避免不同环境误连默认地址。
   static String get apiBaseUrl {
     // 编译时传入: flutter build --dart-define=API_BASE_URL=https://api.example.com
-    final env = String.fromEnvironment('API_BASE_URL', defaultValue: '');
+    const env = String.fromEnvironment('API_BASE_URL', defaultValue: '');
     final value = env.trim();
     if (value.isNotEmpty) {
       return value;
