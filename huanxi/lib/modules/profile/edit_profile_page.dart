@@ -136,17 +136,12 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   }
 
   Future<String?> _pickAndUploadImage() async {
-    final picked = await _imagePicker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-      maxWidth: 1440,
-    );
+    final picked = await _imagePicker.pickImage(source: ImageSource.gallery);
     if (picked == null) return null;
     final bytes = await picked.readAsBytes();
-    final url = await ref.read(authProvider.notifier).uploadProfileImage(
-      bytes: bytes,
-      filename: picked.name,
-    );
+    final url = await ref
+        .read(authProvider.notifier)
+        .uploadProfileImage(bytes: bytes, filename: picked.name);
     if (url == null && mounted) {
       final err = ref.read(authProvider).error ?? '上传失败';
       AppToast.showSnackBar(context, SnackBar(content: Text(err)));
@@ -181,8 +176,13 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
       return;
     }
 
-    if (_coverUrl != null && _coverUrl!.trim().isNotEmpty && !album.contains(_coverUrl!.trim())) {
-      AppToast.showSnackBar(context, const SnackBar(content: Text('封面必须从相册中选择')));
+    if (_coverUrl != null &&
+        _coverUrl!.trim().isNotEmpty &&
+        !album.contains(_coverUrl!.trim())) {
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('封面必须从相册中选择')),
+      );
       return;
     }
 
@@ -223,9 +223,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
-      appBar: AppBar(
-        title: const Text('编辑资料'),
-      ),
+      appBar: AppBar(title: const Text('编辑资料')),
       body: GestureDetector(
         onTap: () => FocusScope.of(context).unfocus(),
         child: SingleChildScrollView(
@@ -252,15 +250,24 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                         children: [
                           CircleAvatar(
                             radius: 46,
-                            backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.12),
+                            backgroundColor: AppTheme.primaryColor.withValues(
+                              alpha: 0.12,
+                            ),
                             backgroundImage: avatarUrl.isNotEmpty
                                 ? NetworkImage(avatarUrl)
-                                : (authState.avatar != null && authState.avatar!.trim().isNotEmpty
+                                : (authState.avatar != null &&
+                                          authState.avatar!.trim().isNotEmpty
                                       ? NetworkImage(authState.avatar!.trim())
                                       : null),
-                            child: (avatarUrl.isEmpty &&
-                                    (authState.avatar == null || authState.avatar!.trim().isEmpty))
-                                ? const Icon(Icons.person, size: 46, color: AppTheme.primaryColor)
+                            child:
+                                (avatarUrl.isEmpty &&
+                                    (authState.avatar == null ||
+                                        authState.avatar!.trim().isEmpty))
+                                ? const Icon(
+                                    Icons.person,
+                                    size: 46,
+                                    color: AppTheme.primaryColor,
+                                  )
                                 : null,
                           ),
                           Positioned(
@@ -271,9 +278,16 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                               decoration: BoxDecoration(
                                 color: AppTheme.primaryColor,
                                 borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: Colors.white, width: 2),
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 2,
+                                ),
                               ),
-                              child: const Icon(Icons.edit, size: 14, color: Colors.white),
+                              child: const Icon(
+                                Icons.edit,
+                                size: 14,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ],
@@ -282,7 +296,10 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                     const SizedBox(height: 10),
                     const Text(
                       '点击头像更换',
-                      style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                      ),
                     ),
                   ],
                 ),
@@ -374,7 +391,10 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                       children: [
                         Text(
                           '相册（${_validAlbumList(_albumPhotos).length}/6）',
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                         const Spacer(),
                         FilledButton.tonalIcon(
@@ -393,14 +413,13 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                           color: const Color(0xFFF8F9FC),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: const Center(
-                          child: Text('还没有照片，点击“新增”添加'),
-                        ),
+                        child: const Center(child: Text('还没有照片，点击“新增”添加')),
                       ),
                     ...List.generate(_albumPhotos.length, (index) {
                       final rawUrl = _albumPhotos[index].trim();
                       final hasImage = rawUrl.isNotEmpty;
-                      final isCover = _coverUrl != null && _coverUrl == rawUrl && hasImage;
+                      final isCover =
+                          _coverUrl != null && _coverUrl == rawUrl && hasImage;
                       return Container(
                         margin: const EdgeInsets.only(bottom: 10),
                         padding: const EdgeInsets.all(10),
@@ -424,32 +443,50 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                                       ? Image.network(
                                           rawUrl,
                                           fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) => const Icon(Icons.broken_image_outlined),
+                                          errorBuilder: (_, __, ___) =>
+                                              const Icon(
+                                                Icons.broken_image_outlined,
+                                              ),
                                         )
-                                      : const Icon(Icons.image_outlined, color: AppTheme.textHint),
+                                      : const Icon(
+                                          Icons.image_outlined,
+                                          color: AppTheme.textHint,
+                                        ),
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         '照片 ${index + 1}',
-                                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                                        style: const TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
                                       const SizedBox(height: 6),
                                       Text(
                                         isCover ? '当前封面' : '可用于封面',
-                                        style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: AppTheme.textSecondary,
+                                        ),
                                       ),
                                     ],
                                   ),
                                 ),
                                 if (isCover)
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
                                     decoration: BoxDecoration(
-                                      color: AppTheme.primaryColor.withValues(alpha: 0.12),
+                                      color: AppTheme.primaryColor.withValues(
+                                        alpha: 0.12,
+                                      ),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: const Text(
@@ -475,7 +512,10 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                                     if (url == null || !mounted) return;
                                     _updateAlbumPhoto(index, url);
                                   },
-                                  icon: const Icon(Icons.photo_library_outlined, size: 18),
+                                  icon: const Icon(
+                                    Icons.photo_library_outlined,
+                                    size: 18,
+                                  ),
                                   label: Text(hasImage ? '更换' : '上传'),
                                 ),
                                 TextButton.icon(
@@ -486,12 +526,18 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                                           });
                                         }
                                       : null,
-                                  icon: const Icon(Icons.image_outlined, size: 18),
+                                  icon: const Icon(
+                                    Icons.image_outlined,
+                                    size: 18,
+                                  ),
                                   label: const Text('设为封面'),
                                 ),
                                 TextButton.icon(
                                   onPressed: () => _removeAlbumPhoto(index),
-                                  icon: const Icon(Icons.delete_outline, size: 18),
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    size: 18,
+                                  ),
                                   label: const Text('删除'),
                                 ),
                               ],
@@ -507,7 +553,10 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                           alignment: Alignment.centerLeft,
                           child: Text(
                             '上传相册图片后可设置封面',
-                            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.textSecondary,
+                            ),
                           ),
                         ),
                       ),
@@ -517,7 +566,10 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
 
               const SizedBox(height: 16),
               _buildSectionCard(
-                child: _buildInfoTile('用户ID', authState.userId?.toString() ?? '-'),
+                child: _buildInfoTile(
+                  '用户ID',
+                  authState.userId?.toString() ?? '-',
+                ),
               ),
 
               const SizedBox(height: 20),
@@ -530,7 +582,10 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                       ? const SizedBox(
                           width: 20,
                           height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : const Text('保存资料'),
                 ),
@@ -585,18 +640,10 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: InputDecorator(
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: Icon(icon),
-        ),
+        decoration: InputDecoration(labelText: label, prefixIcon: Icon(icon)),
         child: Row(
           children: [
-            Expanded(
-              child: Text(
-                value,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
+            Expanded(child: Text(value, overflow: TextOverflow.ellipsis)),
             const SizedBox(width: 8),
             const Icon(Icons.chevron_right),
           ],
@@ -622,7 +669,10 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   }
 }
 
-Future<String?> _showCityPicker(BuildContext context, {String initialValue = ''}) async {
+Future<String?> _showCityPicker(
+  BuildContext context, {
+  String initialValue = '',
+}) async {
   const cityMap = <String, List<String>>{
     '北京市': ['北京市'],
     '天津市': ['天津市'],
@@ -694,21 +744,32 @@ Future<String?> _showCityPicker(BuildContext context, {String initialValue = ''}
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Text('选择所在地（到市）', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  const Text(
+                    '选择所在地（到市）',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
                     isExpanded: true,
                     value: selectedProvince,
                     decoration: const InputDecoration(labelText: '省/自治区/直辖市'),
                     items: provinces
-                        .map((item) => DropdownMenuItem(value: item, child: Text(item, overflow: TextOverflow.ellipsis)))
+                        .map(
+                          (item) => DropdownMenuItem(
+                            value: item,
+                            child: Text(item, overflow: TextOverflow.ellipsis),
+                          ),
+                        )
                         .toList(),
                     onChanged: (value) {
                       if (value == null) return;
                       setSheetState(() {
                         selectedProvince = value;
-                        final nextCities = cityMap[selectedProvince] ?? const <String>[];
-                        selectedCity = nextCities.isEmpty ? '' : nextCities.first;
+                        final nextCities =
+                            cityMap[selectedProvince] ?? const <String>[];
+                        selectedCity = nextCities.isEmpty
+                            ? ''
+                            : nextCities.first;
                       });
                     },
                   ),
@@ -718,7 +779,12 @@ Future<String?> _showCityPicker(BuildContext context, {String initialValue = ''}
                     value: cities.contains(selectedCity) ? selectedCity : null,
                     decoration: const InputDecoration(labelText: '市'),
                     items: cities
-                        .map((item) => DropdownMenuItem(value: item, child: Text(item, overflow: TextOverflow.ellipsis)))
+                        .map(
+                          (item) => DropdownMenuItem(
+                            value: item,
+                            child: Text(item, overflow: TextOverflow.ellipsis),
+                          ),
+                        )
                         .toList(),
                     onChanged: (value) {
                       if (value == null) return;
@@ -741,7 +807,9 @@ Future<String?> _showCityPicker(BuildContext context, {String initialValue = ''}
                         child: FilledButton(
                           onPressed: selectedCity.isEmpty
                               ? null
-                              : () => Navigator.of(sheetContext).pop('$selectedProvince-$selectedCity'),
+                              : () => Navigator.of(
+                                  sheetContext,
+                                ).pop('$selectedProvince-$selectedCity'),
                           child: const Text('确定'),
                         ),
                       ),

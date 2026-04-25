@@ -8,6 +8,7 @@ import 'package:video_player/video_player.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/providers/moment_provider.dart';
+import '../../core/media/video_upload_preprocessor.dart';
 import '../../core/utils/app_toast.dart';
 import 'moment_video_preview_page.dart';
 import '../../services/moment_service.dart';
@@ -28,6 +29,7 @@ class _PublishMomentPageState extends ConsumerState<PublishMomentPage> {
   final List<int> _uploadedMediaIds = []; // 已上传成功的 media_id
   final bool _isUploading = false;
   bool _isPublishing = false;
+  bool _isPreparingVideo = false;
 
   void _showToast(String message) {
     if (!mounted) return;
@@ -170,7 +172,8 @@ class _PublishMomentPageState extends ConsumerState<PublishMomentPage> {
     return (content.isNotEmpty || _uploadedMediaIds.isNotEmpty) &&
         !hasVideoWithoutCover &&
         !_isPublishing &&
-        !_isUploading;
+        !_isUploading &&
+        !_isPreparingVideo;
   }
 
   Widget _buildMediaSelector() {
@@ -185,25 +188,45 @@ class _PublishMomentPageState extends ConsumerState<PublishMomentPage> {
           Row(
             children: [
               // 添加图片按钮（最多4张，且无视频）
-              if (!hasVideo &&
+              if (!_isPreparingVideo &&
+                  !hasVideo &&
                   _selectedMedias.where((m) => m.mediaType == 1).length < 4)
                 _AddMediaButton(
                   icon: Icons.photo_library_outlined,
                   label: '图片',
                   onTap: () => _pickImage(),
                 ),
-              if (!hasVideo &&
+              if (!_isPreparingVideo &&
+                  !hasVideo &&
                   _selectedMedias.where((m) => m.mediaType == 1).length < 4)
                 const SizedBox(width: 12),
               // 添加视频按钮（最多1个，且无图片）
-              if (!hasImage && !hasVideo)
+              if (!_isPreparingVideo && !hasImage && !hasVideo)
                 _AddMediaButton(
                   icon: Icons.videocam_outlined,
-                  label: '视频（≤30s）',
+                  label: '视频（≤10s）',
                   onTap: () => _pickVideo(),
                 ),
             ],
           ),
+
+          if (_isPreparingVideo) ...[
+            const SizedBox(height: 12),
+            const Row(
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 8),
+                Text(
+                  '视频处理中，请稍候',
+                  style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+                ),
+              ],
+            ),
+          ],
 
           // 已选媒体预览
           if (_selectedMedias.isNotEmpty) ...[
@@ -233,8 +256,9 @@ class _PublishMomentPageState extends ConsumerState<PublishMomentPage> {
   }
 
   Future<void> _pickImage() async {
+    if (_isPreparingVideo) return;
     try {
-      final images = await _picker.pickMultiImage(imageQuality: 80);
+      final images = await _picker.pickMultiImage();
       if (images.isEmpty) return;
       final currentImages = _selectedMedias
           .where((m) => m.mediaType == 1)
@@ -263,22 +287,25 @@ class _PublishMomentPageState extends ConsumerState<PublishMomentPage> {
   }
 
   Future<void> _pickVideo() async {
+    if (_isPreparingVideo) return;
+
     try {
       final video = await _picker.pickVideo(
         source: ImageSource.gallery,
-        maxDuration: const Duration(seconds: 30),
+        maxDuration: const Duration(seconds: 10),
       );
       if (video == null) return;
 
-      final videoFile = File(video.path);
-      final controller = VideoPlayerController.file(videoFile);
-      Duration duration;
-      try {
-        await controller.initialize();
-        duration = controller.value.duration;
-      } finally {
-        await controller.dispose();
-      }
+      setState(() {
+        _isPreparingVideo = true;
+      });
+
+      final preparedVideo = await VideoUploadPreprocessor.instance.prepareVideo(
+        path: video.path,
+        filename: video.name,
+      );
+
+      final duration = Duration(milliseconds: preparedVideo.durationMs);
 
       final cover = await _selectVideoCover(
         videoPath: video.path,
@@ -289,23 +316,33 @@ class _PublishMomentPageState extends ConsumerState<PublishMomentPage> {
         return;
       }
 
-      final bytes = await video.readAsBytes();
+      if (!mounted) return;
       setState(() {
         _selectedMedias.add(
           _MediaItem(
             path: video.path,
-            bytes: bytes,
+            bytes: preparedVideo.bytes,
             mediaType: 2,
-            name: video.name,
-            durationSeconds: duration.inSeconds > 0 ? duration.inSeconds : null,
+            name: preparedVideo.filename,
+            durationSeconds: preparedVideo.durationMs > 0
+                ? (preparedVideo.durationMs / 1000).ceil()
+                : null,
             coverBytes: cover.bytes,
             coverName: 'cover_${DateTime.now().millisecondsSinceEpoch}.jpg',
             coverTimeMs: cover.timeMs,
           ),
         );
       });
+    } on VideoUploadPreprocessException catch (e) {
+      _showToast(e.message);
     } catch (e) {
       _showToast('选择视频失败');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isPreparingVideo = false;
+        });
+      }
     }
   }
 

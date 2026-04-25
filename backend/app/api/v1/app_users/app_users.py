@@ -1,8 +1,7 @@
 from datetime import date, datetime
 from pathlib import Path
-from uuid import uuid4
 
-from fastapi import APIRouter, File, Query, Request, UploadFile
+from fastapi import APIRouter, File, Query, UploadFile
 from tortoise.expressions import Q
 
 from app.models import AppUser
@@ -10,10 +9,14 @@ from app.schemas.app_user import AppUserAdminUpdateIn
 from app.schemas.base import Fail, Success, SuccessExtra
 from app.settings.config import settings
 from app.utils.media_url import normalize_media_list, to_relative_media_url
+from app.utils.upload_files import (
+    UploadValidationError,
+    read_validated_image_upload,
+    save_upload_content,
+)
 
 router = APIRouter()
 _ALLOWED_IMAGE_SUFFIX = {".jpg", ".jpeg", ".png", ".webp"}
-_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
 def _json_safe(value):
@@ -56,12 +59,7 @@ async def list_app_user(
         q &= Q(location_city__contains=location_city)
 
     total = await AppUser.filter(q).count()
-    records = (
-        await AppUser.filter(q)
-        .order_by("-created_at")
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    )
+    records = await AppUser.filter(q).order_by("-created_at").offset((page - 1) * page_size).limit(page_size)
 
     data = [_json_safe(await row.to_dict(exclude_fields=["password"])) for row in records]
     for row in data:
@@ -174,27 +172,21 @@ async def update_app_user(req_in: AppUserAdminUpdateIn):
 
 
 @router.post("/upload-image", summary="后台上传App用户图片")
-async def upload_app_user_image(request: Request, file: UploadFile = File(...)):
-    if not file.filename:
-        return Fail(code=400, msg="文件名无效")
-
-    suffix = Path(file.filename).suffix.lower()
-    if suffix not in _ALLOWED_IMAGE_SUFFIX:
-        return Fail(code=400, msg="仅支持 jpg/jpeg/png/webp")
-
-    content = await file.read()
-    if not content:
-        return Fail(code=400, msg="文件为空")
-    if len(content) > _MAX_UPLOAD_BYTES:
-        return Fail(code=400, msg="图片不能超过10MB")
+async def upload_app_user_image(file: UploadFile = File(...)):
+    try:
+        suffix, content = await read_validated_image_upload(
+            file,
+            allowed_suffixes=_ALLOWED_IMAGE_SUFFIX,
+            invalid_suffix_message="仅支持 jpg/jpeg/png/webp",
+        )
+    except UploadValidationError as exc:
+        return Fail(code=exc.code, msg=exc.message)
 
     relative_dir = Path("profile") / "admin"
-    abs_dir = Path(settings.BASE_DIR) / "uploads" / relative_dir
-    abs_dir.mkdir(parents=True, exist_ok=True)
-
-    filename = f"{uuid4().hex}{suffix}"
-    abs_file = abs_dir / filename
-    abs_file.write_bytes(content)
-
-    relative_url = f"/uploads/{relative_dir.as_posix()}/{filename}"
+    relative_url = save_upload_content(
+        base_dir=settings.BASE_DIR,
+        relative_dir=relative_dir,
+        suffix=suffix,
+        content=content,
+    )
     return Success(data={"url": relative_url})

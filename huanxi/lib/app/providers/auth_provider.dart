@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/constants/api_endpoints.dart';
+import '../../core/media/image_upload_preprocessor.dart';
 import '../../core/storage/storage.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/network/media_payload_normalizer.dart';
@@ -366,11 +367,21 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required String filename,
   }) async {
     try {
+      final prepared = await ImageUploadPreprocessor.instance.prepareImage(
+        bytes: bytes,
+        filename: filename,
+        scene: ImageUploadScene.avatar,
+      );
       AppLogger.debug(
-        'auth.uploadProfileImage start: filename=$filename, bytes=${bytes.length}',
+        'auth.uploadProfileImage start: filename=$filename, '
+        'bytes=${bytes.length}, uploadBytes=${prepared.bytes.length}, '
+        'compressed=${prepared.compressed}',
       );
       final formData = FormData.fromMap({
-        'file': MultipartFile.fromBytes(bytes, filename: filename),
+        'file': MultipartFile.fromBytes(
+          prepared.bytes,
+          filename: prepared.filename,
+        ),
       });
       final resp = await _dio.post<Map<String, dynamic>>(
         ApiEndpoints.userUploadImage,
@@ -388,6 +399,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final url = (data['data'] as Map<String, dynamic>?)?['url'] as String?;
       AppLogger.debug('auth.uploadProfileImage success: url=$url');
       return (url == null || url.trim().isEmpty) ? null : url.trim();
+    } on ImageUploadPreprocessException catch (e) {
+      state = state.copyWith(error: e.message);
+      AppLogger.debug('auth.uploadProfileImage preprocess error: ${e.message}');
+      return null;
     } on ApiException catch (e) {
       state = state.copyWith(error: e.message);
       AppLogger.debug('auth.uploadProfileImage ApiException: ${e.message}');

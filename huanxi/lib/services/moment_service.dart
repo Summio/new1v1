@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import '../core/network/dio_client.dart';
 import '../core/constants/api_endpoints.dart';
+import '../core/media/image_upload_preprocessor.dart';
 import '../core/network/api_exception.dart';
 import '../core/utils/app_logger.dart';
 
@@ -118,19 +119,41 @@ class MomentService {
     int? duration,
   }) async {
     try {
+      final preparedFile = mediaType == 1
+          ? await ImageUploadPreprocessor.instance.prepareImage(
+              bytes: bytes,
+              filename: filename,
+              scene: ImageUploadScene.momentImage,
+            )
+          : null;
+      final preparedCover = coverBytes != null && coverBytes.isNotEmpty
+          ? await ImageUploadPreprocessor.instance.prepareImage(
+              bytes: coverBytes,
+              filename: (coverFilename?.trim().isNotEmpty ?? false)
+                  ? coverFilename!.trim()
+                  : 'cover.jpg',
+              scene: ImageUploadScene.momentCover,
+            )
+          : null;
       AppLogger.debug(
-        'MomentService.uploadMedia: $filename, mediaType=$mediaType',
+        'MomentService.uploadMedia: $filename, mediaType=$mediaType, '
+        'bytes=${bytes.length}, uploadBytes=${preparedFile?.bytes.length ?? bytes.length}, '
+        'coverBytes=${coverBytes?.length ?? 0}, '
+        'uploadCoverBytes=${preparedCover?.bytes.length ?? coverBytes?.length ?? 0}',
       );
       final formMap = <String, dynamic>{
-        'file': MultipartFile.fromBytes(bytes, filename: filename),
+        'file': MultipartFile.fromBytes(
+          preparedFile?.bytes ?? bytes,
+          filename: preparedFile?.filename ?? filename,
+        ),
         'media_type': mediaType,
       };
-      if (mediaType == 2 && coverBytes != null && coverBytes.isNotEmpty) {
+      if (mediaType == 2 &&
+          preparedCover != null &&
+          preparedCover.bytes.isNotEmpty) {
         formMap['cover_file'] = MultipartFile.fromBytes(
-          coverBytes,
-          filename: (coverFilename?.trim().isNotEmpty ?? false)
-              ? coverFilename!.trim()
-              : 'cover.jpg',
+          preparedCover.bytes,
+          filename: preparedCover.filename,
         );
       }
       if (mediaType == 2 && duration != null && duration > 0) {
@@ -155,6 +178,11 @@ class MomentService {
       AppLogger.debug('MomentService.uploadMedia success: id=$id, url=$url');
       if (id == null || url == null) return null;
       return {'id': id, 'url': url.trim()};
+    } on ImageUploadPreprocessException catch (e) {
+      AppLogger.debug(
+        'MomentService.uploadMedia preprocess error: ${e.message}',
+      );
+      throw ApiException(code: 500, message: e.message);
     } on ApiException {
       rethrow;
     } on NetworkException {

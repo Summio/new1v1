@@ -1,22 +1,26 @@
 from pathlib import Path
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile, Form
 
 from app.core.app_auth import DependAppAuth
-from app.core.ctx import CTX_APP_USER_OBJ, CTX_APP_USER_ID
+from app.core.ctx import CTX_APP_USER_OBJ
 from app.models import Moment, MomentMedia, AppUser
 from app.schemas.base import Fail, Success, SuccessExtra
 from app.schemas.moments import MomentCreateIn
 from app.settings.config import settings
 from app.utils.media_url import to_relative_media_url
+from app.utils.upload_files import (
+    MOMENT_IMAGE_MAX_BYTES,
+    UploadValidationError,
+    read_validated_image_upload,
+    read_validated_video_upload,
+    save_upload_content,
+)
 
 router = APIRouter()
 
 _ALLOWED_IMAGE_SUFFIX = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 _ALLOWED_VIDEO_SUFFIX = {".mp4", ".mov"}
-_MAX_IMAGE_BYTES = 10 * 1024 * 1024  # 10MB
-_MAX_VIDEO_BYTES = 100 * 1024 * 1024  # 100MB
 
 
 @router.post("/moment/upload", summary="上传动态媒体", dependencies=[Depends(DependAppAuth)])
@@ -34,54 +38,63 @@ async def upload_moment_media(
     if not file.filename:
         return Fail(code=400, msg="文件名无效")
 
-    suffix = Path(file.filename).suffix.lower()
-
     if media_type == 1:
-        if suffix not in _ALLOWED_IMAGE_SUFFIX:
-            return Fail(code=400, msg="仅支持 jpg/jpeg/png/gif/webp")
-        max_bytes = _MAX_IMAGE_BYTES
+        try:
+            suffix, content = await read_validated_image_upload(
+                file,
+                allowed_suffixes=_ALLOWED_IMAGE_SUFFIX,
+                invalid_suffix_message="仅支持 jpg/jpeg/png/gif/webp",
+                max_bytes=MOMENT_IMAGE_MAX_BYTES,
+                too_large_message="图片不能超过1MB",
+            )
+        except UploadValidationError as exc:
+            return Fail(code=exc.code, msg=exc.message)
     elif media_type == 2:
-        if suffix not in _ALLOWED_VIDEO_SUFFIX:
-            return Fail(code=400, msg="仅支持 mp4/mov")
-        max_bytes = _MAX_VIDEO_BYTES
         if cover_file is None or not cover_file.filename:
             return Fail(code=400, msg="视频必须选择封面")
+        try:
+            suffix, content = await read_validated_video_upload(
+                file,
+                allowed_suffixes=_ALLOWED_VIDEO_SUFFIX,
+                invalid_suffix_message="仅支持 mp4/mov",
+            )
+        except UploadValidationError as exc:
+            return Fail(code=exc.code, msg=exc.message)
     else:
         return Fail(code=400, msg="media_type 必须为 1(图片) 或 2(视频)")
 
-    content = await file.read()
-    if not content:
-        return Fail(code=400, msg="文件为空")
-    if len(content) > max_bytes:
-        size_mb = max_bytes // (1024 * 1024)
-        return Fail(code=400, msg=f"文件不能超过 {size_mb}MB")
-
     relative_dir = Path("moments") / str(app_user.id)
-    abs_dir = Path(settings.BASE_DIR) / "uploads" / relative_dir
-    abs_dir.mkdir(parents=True, exist_ok=True)
-
-    filename = f"{uuid4().hex}{suffix}"
-    abs_file = abs_dir / filename
-    abs_file.write_bytes(content)
+    relative_url = save_upload_content(
+        base_dir=settings.BASE_DIR,
+        relative_dir=relative_dir,
+        suffix=suffix,
+        content=content,
+    )
 
     cover_url: str | None = None
     duration_value: int | None = duration if duration is not None and duration > 0 else None
 
     if media_type == 2 and cover_file is not None:
-        cover_suffix = Path(cover_file.filename).suffix.lower()
-        if cover_suffix not in _ALLOWED_IMAGE_SUFFIX:
-            return Fail(code=400, msg="封面仅支持 jpg/jpeg/png/gif/webp")
-        cover_content = await cover_file.read()
-        if not cover_content:
-            return Fail(code=400, msg="封面文件为空")
-        if len(cover_content) > _MAX_IMAGE_BYTES:
-            return Fail(code=400, msg="封面不能超过 10MB")
-        cover_filename = f"{uuid4().hex}{cover_suffix}"
-        cover_abs_file = abs_dir / cover_filename
-        cover_abs_file.write_bytes(cover_content)
-        cover_url = f"/uploads/{relative_dir.as_posix()}/{cover_filename}"
-
-    relative_url = f"/uploads/{relative_dir.as_posix()}/{filename}"
+        try:
+            cover_suffix, cover_content = await read_validated_image_upload(
+                cover_file,
+                allowed_suffixes=_ALLOWED_IMAGE_SUFFIX,
+                invalid_suffix_message="封面仅支持 jpg/jpeg/png/gif/webp",
+                max_bytes=MOMENT_IMAGE_MAX_BYTES,
+                too_large_message="图片不能超过1MB",
+            )
+        except UploadValidationError as exc:
+            if exc.message == "图片不能超过1MB":
+                return Fail(code=exc.code, msg="封面不能超过1MB")
+            if exc.message == "文件为空":
+                return Fail(code=exc.code, msg="封面文件为空")
+            return Fail(code=exc.code, msg=exc.message)
+        cover_url = save_upload_content(
+            base_dir=settings.BASE_DIR,
+            relative_dir=relative_dir,
+            suffix=cover_suffix,
+            content=cover_content,
+        )
 
     # 创建媒体记录（moment_id 暂时为空，发布动态时再绑定）
     media_record = await MomentMedia.create(
@@ -185,28 +198,30 @@ async def get_moment_feed(
         user = await AppUser.filter(id=moment.user_id).first()
         media_list = await MomentMedia.filter(moment_id=moment.id).order_by("sort_order").all()
 
-        rows.append({
-            "id": moment.id,
-            "user_id": moment.user_id,
-            "content": moment.content or "",
-            "created_at": moment.created_at.isoformat() if moment.created_at else None,
-            "media_list": [
-                {
-                    "id": m.id,
-                    "url": to_relative_media_url(m.url),
-                    "media_type": m.media_type,
-                    "sort_order": m.sort_order,
-                    "cover_url": to_relative_media_url(m.cover_url) if m.cover_url else None,
-                    "duration": m.duration,
-                }
-                for m in media_list
-            ],
-            "user": {
-                "id": user.id if user else moment.user_id,
-                "nickname": (user.nickname or f"用户{user.id}") if user else f"用户{moment.user_id}",
-                "avatar": to_relative_media_url(user.avatar) if user else "",
-            },
-        })
+        rows.append(
+            {
+                "id": moment.id,
+                "user_id": moment.user_id,
+                "content": moment.content or "",
+                "created_at": moment.created_at.isoformat() if moment.created_at else None,
+                "media_list": [
+                    {
+                        "id": m.id,
+                        "url": to_relative_media_url(m.url),
+                        "media_type": m.media_type,
+                        "sort_order": m.sort_order,
+                        "cover_url": to_relative_media_url(m.cover_url) if m.cover_url else None,
+                        "duration": m.duration,
+                    }
+                    for m in media_list
+                ],
+                "user": {
+                    "id": user.id if user else moment.user_id,
+                    "nickname": (user.nickname or f"用户{user.id}") if user else f"用户{moment.user_id}",
+                    "avatar": to_relative_media_url(user.avatar) if user else "",
+                },
+            }
+        )
 
     return SuccessExtra(
         rows=rows,
@@ -233,28 +248,30 @@ async def get_my_moments(
     for moment in moments:
         media_list = await MomentMedia.filter(moment_id=moment.id).order_by("sort_order").all()
 
-        rows.append({
-            "id": moment.id,
-            "user_id": moment.user_id,
-            "content": moment.content or "",
-            "created_at": moment.created_at.isoformat() if moment.created_at else None,
-            "media_list": [
-                {
-                    "id": m.id,
-                    "url": to_relative_media_url(m.url),
-                    "media_type": m.media_type,
-                    "sort_order": m.sort_order,
-                    "cover_url": to_relative_media_url(m.cover_url) if m.cover_url else None,
-                    "duration": m.duration,
-                }
-                for m in media_list
-            ],
-            "user": {
-                "id": app_user.id,
-                "nickname": app_user.nickname or app_user.phone,
-                "avatar": to_relative_media_url(app_user.avatar),
-            },
-        })
+        rows.append(
+            {
+                "id": moment.id,
+                "user_id": moment.user_id,
+                "content": moment.content or "",
+                "created_at": moment.created_at.isoformat() if moment.created_at else None,
+                "media_list": [
+                    {
+                        "id": m.id,
+                        "url": to_relative_media_url(m.url),
+                        "media_type": m.media_type,
+                        "sort_order": m.sort_order,
+                        "cover_url": to_relative_media_url(m.cover_url) if m.cover_url else None,
+                        "duration": m.duration,
+                    }
+                    for m in media_list
+                ],
+                "user": {
+                    "id": app_user.id,
+                    "nickname": app_user.nickname or app_user.phone,
+                    "avatar": to_relative_media_url(app_user.avatar),
+                },
+            }
+        )
 
     return SuccessExtra(
         rows=rows,

@@ -59,6 +59,8 @@ dependencies:
   agora_rtc_engine: ^6.5.2
   permission_handler: ^11.4.0
   image_picker: ^1.1.2
+  flutter_image_compress: ^2.4.0
+  video_compress: ^3.1.4
   mt_plugin:
     path: lib/packages/mt_plugin
 

@@ -1,8 +1,7 @@
 from datetime import date
 from pathlib import Path
-from uuid import uuid4
 
-from fastapi import APIRouter, Depends, File, UploadFile, Request
+from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi import Header, HTTPException, Query
 
 from app.core.app_auth import DependAppAuth, logout_app_user
@@ -12,10 +11,14 @@ from app.schemas.app_user import AppUserProfileUpdateIn
 from app.schemas.base import Fail, Success
 from app.settings.config import settings
 from app.utils.media_url import normalize_media_list, to_relative_media_url
+from app.utils.upload_files import (
+    UploadValidationError,
+    read_validated_image_upload,
+    save_upload_content,
+)
 
 router = APIRouter()
 _ALLOWED_IMAGE_SUFFIX = {".jpg", ".jpeg", ".png", ".webp"}
-_MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 
 def _mask_phone(phone: str | None) -> str:
@@ -157,33 +160,27 @@ async def update_user_profile(req_in: AppUserProfileUpdateIn):
 
 
 @router.post("/user/upload-image", summary="上传资料图片", dependencies=[Depends(DependAppAuth)])
-async def upload_user_image(request: Request, file: UploadFile = File(...)):
+async def upload_user_image(file: UploadFile = File(...)):
     app_user = CTX_APP_USER_OBJ.get()
     if not app_user:
         return Fail(code=401, msg="用户不存在")
 
-    if not file.filename:
-        return Fail(code=400, msg="文件名无效")
-
-    suffix = Path(file.filename).suffix.lower()
-    if suffix not in _ALLOWED_IMAGE_SUFFIX:
-        return Fail(code=400, msg="仅支持 jpg/jpeg/png/webp")
-
-    content = await file.read()
-    if not content:
-        return Fail(code=400, msg="文件为空")
-    if len(content) > _MAX_UPLOAD_BYTES:
-        return Fail(code=400, msg="图片不能超过10MB")
+    try:
+        suffix, content = await read_validated_image_upload(
+            file,
+            allowed_suffixes=_ALLOWED_IMAGE_SUFFIX,
+            invalid_suffix_message="仅支持 jpg/jpeg/png/webp",
+        )
+    except UploadValidationError as exc:
+        return Fail(code=exc.code, msg=exc.message)
 
     relative_dir = Path("profile") / str(app_user.id)
-    abs_dir = Path(settings.BASE_DIR) / "uploads" / relative_dir
-    abs_dir.mkdir(parents=True, exist_ok=True)
-
-    filename = f"{uuid4().hex}{suffix}"
-    abs_file = abs_dir / filename
-    abs_file.write_bytes(content)
-
-    relative_url = f"/uploads/{relative_dir.as_posix()}/{filename}"
+    relative_url = save_upload_content(
+        base_dir=settings.BASE_DIR,
+        relative_dir=relative_dir,
+        suffix=suffix,
+        content=content,
+    )
     return Success(data={"url": relative_url})
 
 
