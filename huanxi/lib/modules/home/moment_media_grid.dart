@@ -28,6 +28,7 @@ class MomentMediaGrid extends StatelessWidget {
 
     // 混合：图片 + 视频
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildImageGrid(mediaList.where((m) => m.mediaType == 1).toList()),
         if (videoList.isNotEmpty) ...[
@@ -40,26 +41,23 @@ class MomentMediaGrid extends StatelessWidget {
 
   Widget _buildSingleVideo(MomentMedia media) {
     final coverUrl = (media.coverUrl ?? '').trim();
+    const displayHeight = 220.0;
     return LayoutBuilder(
       builder: (context, constraints) {
         return GestureDetector(
           onTap: onTap != null ? () => onTap!(0, media) : null,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(
-              maxHeight: 300,
-              maxWidth: constraints.maxWidth,
-            ),
+          child: SizedBox(
+            width: constraints.maxWidth,
+            height: displayHeight,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: Stack(
+                fit: StackFit.expand,
                 children: [
                   if (coverUrl.isNotEmpty)
                     _MediaImage(url: coverUrl, fit: BoxFit.cover)
                   else
-                    const SizedBox(
-                      height: 220,
-                      child: _VideoCoverPlaceholder(),
-                    ),
+                    const _VideoCoverPlaceholder(),
                   if (media.duration != null)
                     Positioned(
                       right: 6,
