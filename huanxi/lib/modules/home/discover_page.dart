@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme/app_theme.dart';
+import '../../app/providers/moment_provider.dart';
+import 'moment_list_view.dart';
 
 /// 发现页 - 动态 / 排行榜
 class DiscoverPage extends StatefulWidget {
@@ -94,39 +97,38 @@ class _DiscoverPageState extends State<DiscoverPage> with SingleTickerProviderSt
 }
 
 /// 动态 Tab
-class _FeedTab extends StatelessWidget {
+class _FeedTab extends ConsumerStatefulWidget {
   const _FeedTab();
 
   @override
+  ConsumerState<_FeedTab> createState() => _FeedTabState();
+}
+
+class _FeedTabState extends ConsumerState<_FeedTab> {
+  @override
+  void initState() {
+    super.initState();
+    // 首次加载
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final state = ref.read(momentFeedProvider);
+      if (state.moments.isEmpty && !state.isLoading) {
+        ref.read(momentFeedProvider.notifier).load();
+      }
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.dynamic_feed_outlined,
-            size: 64,
-            color: AppTheme.textHint,
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            '暂无动态',
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w600,
-              color: AppTheme.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            '快去发布第一条动态吧',
-            style: TextStyle(
-              fontSize: 14,
-              color: AppTheme.textSecondary,
-            ),
-          ),
-        ],
-      ),
+    final state = ref.watch(momentFeedProvider);
+
+    return MomentListView(
+      moments: state.moments,
+      isLoading: state.isLoading,
+      isLoadingMore: state.isLoadingMore,
+      hasMore: state.hasMore,
+      error: state.error,
+      onRefresh: () => ref.read(momentFeedProvider.notifier).load(),
+      onLoadMore: () => ref.read(momentFeedProvider.notifier).loadMore(),
     );
   }
 }

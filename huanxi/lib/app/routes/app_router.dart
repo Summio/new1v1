@@ -20,6 +20,8 @@ import '../../modules/settings/privacy_page.dart';
 import '../../modules/settings/change_password_page.dart';
 import '../../modules/im/im_page.dart';
 import '../../modules/gift/gift_panel.dart';
+import '../../modules/home/my_moments_page.dart';
+import '../../modules/home/publish_moment_page.dart';
 import '../../modules/home/anchor_detail_page.dart';
 import '../../modules/home/user_search_page.dart';
 import '../../modules/home/wallet_page.dart';
@@ -49,6 +51,8 @@ class AppRoutes {
   static const String anchorApply = '/anchor/apply';
   static const String im = '/im';
   static const String giftPanel = '/gift';
+  static const String myMoments = '/profile/moments';
+  static const String publishMoment = '/moment/publish';
   static const String callRoom = '/call/room';
   static const String callOutgoing = '/call/outgoing';
   static const String callIncoming = '/call/incoming';
@@ -235,6 +239,14 @@ final appRouter = GoRouter(
           initialPeerAvatarUrl: extra?['peerAvatarUrl'] as String?,
         );
       },
+    ),
+    GoRoute(
+      path: AppRoutes.myMoments,
+      builder: (context, state) => const MyMomentsPage(),
+    ),
+    GoRoute(
+      path: AppRoutes.publishMoment,
+      builder: (context, state) => const PublishMomentPage(),
     ),
     GoRoute(
       path: AppRoutes.giftPanel,

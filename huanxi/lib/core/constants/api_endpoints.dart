@@ -86,4 +86,16 @@ class ApiEndpoints {
   // ========== IM 模块 ==========
   /// 获取 IM UserSig
   static const String imUserSig = 'app/im/usersig';
+
+  // ========== 动态模块 ==========
+  /// 上传动态媒体（图片/视频）
+  static const String momentUpload = 'app/moment/upload';
+  /// 发布动态
+  static const String momentCreate = 'app/moment/create';
+  /// 全局动态列表
+  static const String momentFeed = 'app/moment/feed';
+  /// 我的动态列表
+  static const String momentMine = 'app/moment/mine';
+  /// 删除动态
+  static const String momentDelete = 'app/moment';  // DELETE /app/moment/{id}
 }

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- debug 环境允许 HTTP，便于连接任意内网开发机 -->
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>
+

@@ -8,6 +8,7 @@ from .anchor_apply import router as anchor_apply_router
 from .call import router as call_router
 from .gift import router as gift_router
 from .im import router as im_router
+from .moment import router as moment_router
 from .register import router as register_router
 from .rtc import router as rtc_router
 from .user import router as user_router
@@ -33,3 +34,4 @@ app_router.include_router(rtc_router, prefix="", dependencies=[Depends(DependApp
 app_router.include_router(agreement_router, prefix="", dependencies=[Depends(DependAppAuth)])
 app_router.include_router(privacy_router, prefix="", dependencies=[Depends(DependAppAuth)])
 app_router.include_router(password_router, prefix="", dependencies=[Depends(DependAppAuth)])
+app_router.include_router(moment_router, prefix="", dependencies=[Depends(DependAppAuth)])

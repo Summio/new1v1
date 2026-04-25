@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../services/moment_service.dart';
 import '../../app/theme/app_theme.dart';
 import 'moment_image_preview_page.dart';
+import 'moment_video_preview_page.dart';
 import 'moment_media_grid.dart';
 
 /// 单条动态卡片
@@ -37,10 +38,7 @@ class MomentCard extends StatelessWidget {
             Row(
               children: [
                 // 头像
-                _UserAvatar(
-                  avatar: moment.user?.avatar ?? '',
-                  size: 44,
-                ),
+                _UserAvatar(avatar: moment.user?.avatar ?? '', size: 44),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -98,9 +96,11 @@ class MomentCard extends StatelessWidget {
               MomentMediaGrid(
                 mediaList: moment.mediaList,
                 onTap: (index, media) {
-                  Navigator.of(context).push(
+                  Navigator.of(context, rootNavigator: true).push(
                     MaterialPageRoute(
-                      builder: (_) => MomentImagePreviewPage(imageUrl: media.url),
+                      builder: (_) => media.mediaType == 2
+                          ? MomentVideoPreviewPage(videoUrl: media.url)
+                          : MomentImagePreviewPage(imageUrl: media.url),
                     ),
                   );
                 },
@@ -113,10 +113,7 @@ class MomentCard extends StatelessWidget {
               alignment: Alignment.centerRight,
               child: Text(
                 _formatDate(moment.createdAt),
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: AppTheme.textHint,
-                ),
+                style: const TextStyle(fontSize: 11, color: AppTheme.textHint),
               ),
             ),
           ],
@@ -176,8 +173,8 @@ class _UserAvatar extends StatelessWidget {
                 height: size,
                 fit: BoxFit.cover,
                 memCacheWidth: (size * 2).toInt(),
-                placeholder: (_, __) => _defaultAvatar(),
-                errorWidget: (_, __, ___) => _defaultAvatar(),
+                placeholder: (context, url) => _defaultAvatar(),
+                errorWidget: (context, url, error) => _defaultAvatar(),
               )
             : _defaultAvatar(),
       ),
@@ -189,11 +186,7 @@ class _UserAvatar extends StatelessWidget {
       width: size,
       height: size,
       color: AppTheme.surfaceColor,
-      child: Icon(
-        Icons.person,
-        size: size * 0.5,
-        color: AppTheme.textHint,
-      ),
+      child: Icon(Icons.person, size: size * 0.5, color: AppTheme.textHint),
     );
   }
 }
