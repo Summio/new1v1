@@ -188,8 +188,6 @@ class _CallPageState extends ConsumerState<CallPage> {
       records.add(
         _CallRecordItem(
           trace: trace,
-          message: message,
-          peerImUserId: peerImUserId,
           peerName: peer.displayName,
           peerAvatarUrl: peer.avatarUrl,
           timestamp: _resolveMessageTime(trace: trace, message: message),
@@ -318,17 +316,6 @@ class _CallPageState extends ConsumerState<CallPage> {
     return (Icons.call_received_rounded, const Color(0xFF007AFF));
   }
 
-  Future<void> _openImChat(_CallRecordItem item) async {
-    if (!mounted || item.peerImUserId.isEmpty) return;
-    await context.push(
-      '${AppRoutes.im}/${item.peerImUserId}',
-      extra: {
-        'peerNickname': item.peerName,
-        'peerAvatarUrl': item.peerAvatarUrl,
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -417,109 +404,111 @@ class _CallPageState extends ConsumerState<CallPage> {
                           final trace = item.trace;
                           final (icon, iconColor) = _phaseIcon(trace);
                           final detail = trace.detailText();
-                          return Material(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            child: InkWell(
+                          return Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
                               borderRadius: BorderRadius.circular(16),
-                              onTap: () => _openImChat(item),
-                              child: Padding(
-                                padding: const EdgeInsets.all(12),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 22,
-                                      backgroundColor: iconColor.withValues(
-                                        alpha: 0.12,
-                                      ),
-                                      backgroundImage: (item.peerAvatarUrl != null &&
-                                              item.peerAvatarUrl!.isNotEmpty)
-                                          ? NetworkImage(item.peerAvatarUrl!)
-                                          : null,
-                                      child: (item.peerAvatarUrl == null ||
-                                              item.peerAvatarUrl!.isEmpty)
-                                          ? Icon(icon, size: 20, color: iconColor)
-                                          : null,
+                              boxShadow: AppTheme.cardShadow,
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 12,
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  CircleAvatar(
+                                    radius: 22,
+                                    backgroundColor: iconColor.withValues(
+                                      alpha: 0.12,
                                     ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              Expanded(
-                                                child: Text(
-                                                  item.peerName,
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                  style: const TextStyle(
-                                                    fontSize: 15,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: AppTheme.textPrimary,
-                                                  ),
+                                    backgroundImage: (item.peerAvatarUrl != null &&
+                                            item.peerAvatarUrl!.isNotEmpty)
+                                        ? NetworkImage(item.peerAvatarUrl!)
+                                        : null,
+                                    child: (item.peerAvatarUrl == null ||
+                                            item.peerAvatarUrl!.isEmpty)
+                                        ? Icon(icon, size: 20, color: iconColor)
+                                        : null,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                item.peerName,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: const TextStyle(
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: AppTheme.textPrimary,
                                                 ),
                                               ),
-                                              const SizedBox(width: 8),
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 8,
-                                                  vertical: 2,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: iconColor.withValues(
-                                                    alpha: 0.1,
-                                                  ),
-                                                  borderRadius:
-                                                      BorderRadius.circular(10),
-                                                ),
-                                                child: Text(
-                                                  _phaseTagText(trace.phase),
-                                                  style: TextStyle(
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.w600,
-                                                    color: iconColor,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            trace.toDisplayText(
-                                              currentUserId: _myAppUserId,
                                             ),
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              color: AppTheme.textSecondary,
-                                            ),
-                                          ),
-                                          if (detail.isNotEmpty) ...[
-                                            const SizedBox(height: 2),
+                                            const SizedBox(width: 8),
                                             Text(
-                                              detail,
+                                              _formatRecordTime(item.timestamp),
                                               style: const TextStyle(
-                                                fontSize: 12,
+                                                fontSize: 11,
                                                 color: AppTheme.textHint,
                                               ),
                                             ),
                                           ],
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Row(
+                                          children: [
+                                            Icon(
+                                              icon,
+                                              size: 14,
+                                              color: iconColor,
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              _phaseTagText(trace.phase),
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                                color: iconColor,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          trace.toDisplayText(
+                                            currentUserId: _myAppUserId,
+                                          ),
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            color: AppTheme.textSecondary,
+                                            height: 1.25,
+                                          ),
+                                        ),
+                                        if (detail.isNotEmpty) ...[
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            detail,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: AppTheme.textHint,
+                                              height: 1.2,
+                                            ),
+                                          ),
                                         ],
-                                      ),
+                                      ],
                                     ),
-                                    const SizedBox(width: 8),
-                                    Text(
-                                      _formatRecordTime(item.timestamp),
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: AppTheme.textHint,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                  ),
+                                ],
                               ),
                             ),
                           );
@@ -532,16 +521,12 @@ class _CallPageState extends ConsumerState<CallPage> {
 
 class _CallRecordItem {
   final CallTraceMessage trace;
-  final V2TimMessage message;
-  final String peerImUserId;
   final String peerName;
   final String? peerAvatarUrl;
   final DateTime timestamp;
 
   const _CallRecordItem({
     required this.trace,
-    required this.message,
-    required this.peerImUserId,
     required this.peerName,
     required this.peerAvatarUrl,
     required this.timestamp,
