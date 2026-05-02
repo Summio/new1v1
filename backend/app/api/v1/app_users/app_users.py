@@ -5,7 +5,7 @@ from fastapi import APIRouter, File, Query, UploadFile
 from tortoise.expressions import Q
 
 from app.models import AppUser
-from app.schemas.app_user import AppUserAdminUpdateIn
+from app.schemas.app_user import AnchorApplyReviewIn, AppUserAdminUpdateIn
 from app.schemas.base import Fail, Success, SuccessExtra
 from app.settings.config import settings
 from app.utils.media_url import normalize_media_list, to_relative_media_url
@@ -41,6 +41,7 @@ async def list_app_user(
     nickname: str = Query("", description="昵称"),
     status: str = Query("", description="状态 normal/banned"),
     is_anchor: bool | None = Query(None, description="是否主播"),
+    anchor_apply_status: str = Query("", description="主播申请状态 none/pending/approved/rejected"),
     gender: str = Query("", description="性别 male/female/secret"),
     location_city: str = Query("", description="所在地(省-市)"),
 ):
@@ -53,6 +54,8 @@ async def list_app_user(
         q &= Q(status=status)
     if is_anchor is not None:
         q &= Q(is_anchor=is_anchor)
+    if anchor_apply_status:
+        q &= Q(anchor_apply_status=anchor_apply_status)
     if gender:
         q &= Q(gender=gender)
     if location_city:
@@ -65,6 +68,7 @@ async def list_app_user(
     for row in data:
         row["avatar"] = to_relative_media_url(row.get("avatar"))
         row["cover_url"] = to_relative_media_url(row.get("cover_url"))
+        row["anchor_apply_face_image"] = to_relative_media_url(row.get("anchor_apply_face_image"))
         row["album_photos"] = _normalize_album(row.get("album_photos"))
         album = row.get("album_photos")
         row["album_count"] = len(album) if isinstance(album, list) else 0
@@ -79,6 +83,7 @@ async def get_app_user(id: int = Query(..., ge=1, description="用户ID")):
     data = _json_safe(await app_user.to_dict(exclude_fields=["password"]))
     data["avatar"] = to_relative_media_url(data.get("avatar"))
     data["cover_url"] = to_relative_media_url(data.get("cover_url"))
+    data["anchor_apply_face_image"] = to_relative_media_url(data.get("anchor_apply_face_image"))
     data["album_photos"] = _normalize_album(data.get("album_photos"))
     album = data.get("album_photos")
     data["album_count"] = len(album) if isinstance(album, list) else 0
@@ -142,16 +147,33 @@ async def update_app_user(req_in: AppUserAdminUpdateIn):
     if req_in.anchor_reject_reason is not None:
         v = req_in.anchor_reject_reason.strip()
         update_data["anchor_reject_reason"] = v or None
+    if req_in.anchor_apply_face_image is not None:
+        v = to_relative_media_url(req_in.anchor_apply_face_image)
+        update_data["anchor_apply_face_image"] = v or None
     if req_in.anchor_apply_status is not None:
+        reject_reason = (req_in.anchor_reject_reason or "").strip()
+        target_face_image = to_relative_media_url(
+            req_in.anchor_apply_face_image
+            if req_in.anchor_apply_face_image is not None
+            else app_user.anchor_apply_face_image
+        )
         update_data["anchor_apply_status"] = req_in.anchor_apply_status
         update_data["anchor_reviewed_at"] = datetime.now()
         if req_in.anchor_apply_status == "approved":
+            if not target_face_image:
+                return Fail(code=400, msg="申请正面照缺失，无法通过审核")
             update_data["is_anchor"] = True
             update_data["anchor_reject_reason"] = None
         elif req_in.anchor_apply_status in {"none", "rejected"}:
             update_data["is_anchor"] = False
+        if req_in.anchor_apply_status == "rejected":
+            if not reject_reason:
+                return Fail(code=400, msg="驳回时必须填写驳回原因")
+            update_data["anchor_reject_reason"] = reject_reason
         if req_in.anchor_apply_status == "pending":
             update_data["anchor_apply_at"] = datetime.now()
+            update_data["anchor_reviewed_at"] = None
+            update_data["anchor_reject_reason"] = None
     if req_in.album_photos is not None:
         update_data["album_photos"] = target_album
     if req_in.cover_url is not None:
@@ -169,6 +191,35 @@ async def update_app_user(req_in: AppUserAdminUpdateIn):
     if update_data:
         await AppUser.filter(id=req_in.id).update(**update_data)
     return Success(msg="更新成功")
+
+
+@router.post("/anchor-apply/review", summary="审核主播申请")
+async def review_anchor_apply(req_in: AnchorApplyReviewIn):
+    app_user = await AppUser.filter(id=req_in.id).first()
+    if not app_user:
+        return Fail(code=404, msg="用户不存在")
+
+    if req_in.status == "approved":
+        if not to_relative_media_url(app_user.anchor_apply_face_image):
+            return Fail(code=400, msg="申请正面照缺失，无法通过审核")
+        await AppUser.filter(id=app_user.id).update(
+            is_anchor=True,
+            anchor_apply_status="approved",
+            anchor_reject_reason=None,
+            anchor_reviewed_at=datetime.now(),
+        )
+        return Success(msg="审核通过")
+
+    reject_reason = (req_in.reject_reason or "").strip()
+    if not reject_reason:
+        return Fail(code=400, msg="驳回时必须填写驳回原因")
+    await AppUser.filter(id=app_user.id).update(
+        is_anchor=False,
+        anchor_apply_status="rejected",
+        anchor_reject_reason=reject_reason,
+        anchor_reviewed_at=datetime.now(),
+    )
+    return Success(msg="已驳回申请")
 
 
 @router.post("/upload-image", summary="后台上传App用户图片")

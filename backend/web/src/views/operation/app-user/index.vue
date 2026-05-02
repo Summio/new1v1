@@ -41,6 +41,9 @@ const modalForm = ref({
   location_city: '',
   status: 'normal',
   is_anchor: false,
+  anchor_apply_status: 'none',
+  anchor_reject_reason: '',
+  anchor_apply_face_image: '',
   cover_url: '',
   album_photos: [],
   coins: 0,
@@ -95,6 +98,18 @@ const anchorOptions = [
   { label: '主播', value: true },
   { label: '普通用户', value: false },
 ]
+const anchorApplyStatusOptions = [
+  { label: '未申请', value: 'none' },
+  { label: '待审核', value: 'pending' },
+  { label: '已通过', value: 'approved' },
+  { label: '已驳回', value: 'rejected' },
+]
+const anchorApplyStatusMap = {
+  none: { type: 'default', text: '未申请' },
+  pending: { type: 'warning', text: '待审核' },
+  approved: { type: 'success', text: '已通过' },
+  rejected: { type: 'error', text: '已驳回' },
+}
 const callRecordStatusOptions = [
   { label: '待接听', value: 'pending' },
   { label: '通话中', value: 'ongoing' },
@@ -178,6 +193,9 @@ function openEditModal(row) {
     location_city: row.location_city || '',
     status: row.status || 'normal',
     is_anchor: !!row.is_anchor,
+    anchor_apply_status: row.anchor_apply_status || 'none',
+    anchor_reject_reason: row.anchor_reject_reason || '',
+    anchor_apply_face_image: row.anchor_apply_face_image || '',
     cover_url: row.cover_url || '',
     album_photos: album,
     coins: row.coins ?? 0,
@@ -349,6 +367,9 @@ async function handleSave() {
       location_city: (modalForm.value.location_city || '').trim(),
       status: modalForm.value.status || 'normal',
       is_anchor: !!modalForm.value.is_anchor,
+      anchor_apply_status: modalForm.value.anchor_apply_status || 'none',
+      anchor_reject_reason: (modalForm.value.anchor_reject_reason || '').trim() || null,
+      anchor_apply_face_image: (modalForm.value.anchor_apply_face_image || '').trim(),
       album_photos: album,
       cover_url: (modalForm.value.cover_url || '').trim(),
     }
@@ -559,6 +580,37 @@ const columns = [
       )
     },
   },
+  {
+    title: '申请状态',
+    key: 'anchor_apply_status',
+    width: 100,
+    align: 'center',
+    render(row) {
+      const item = anchorApplyStatusMap[row.anchor_apply_status] || { type: 'default', text: row.anchor_apply_status || '-' }
+      return h(NTag, { type: item.type }, { default: () => item.text })
+    },
+  },
+  {
+    title: '申请正面照',
+    key: 'anchor_apply_face_image',
+    width: 100,
+    align: 'center',
+    render(row) {
+      if (!row.anchor_apply_face_image) return '-'
+      return h(NImage, {
+        src: row.anchor_apply_face_image,
+        width: 44,
+        height: 44,
+        objectFit: 'cover',
+        previewDisabled: false,
+        imgProps: {
+          class: 'avatar-thumb',
+          style: avatarImgStyle,
+          alt: 'anchor-apply-face',
+        },
+      })
+    },
+  },
   { title: '金币', key: 'coins', width: 90, align: 'center' },
   { title: '钻石', key: 'diamonds', width: 90, align: 'center' },
   { title: '冻结钻石', key: 'frozen_diamonds', width: 100, align: 'center' },
@@ -664,6 +716,15 @@ const columns = [
             placeholder="请选择类型"
           />
         </QueryBarItem>
+        <QueryBarItem label="申请状态" :label-width="70">
+          <NSelect
+            v-model:value="queryItems.anchor_apply_status"
+            clearable
+            style="width: 160px"
+            :options="anchorApplyStatusOptions"
+            placeholder="请选择状态"
+          />
+        </QueryBarItem>
       </template>
     </CrudTable>
 
@@ -700,6 +761,17 @@ const columns = [
             </NFormItem>
             <NFormItem label="主播">
               <NSwitch v-model:value="modalForm.is_anchor" />
+            </NFormItem>
+            <NFormItem label="申请状态">
+              <NSelect v-model:value="modalForm.anchor_apply_status" :options="anchorApplyStatusOptions" />
+            </NFormItem>
+            <NFormItem label="驳回原因" class="full-span">
+              <NInput
+                v-model:value="modalForm.anchor_reject_reason"
+                type="textarea"
+                :autosize="{ minRows: 2, maxRows: 4 }"
+                placeholder="驳回申请时请填写原因"
+              />
             </NFormItem>
           </NForm>
         </NTabPane>
@@ -763,6 +835,25 @@ const columns = [
                   </div>
                 </div>
                 <div v-else class="hint">暂无相册图片</div>
+              </div>
+            </NFormItem>
+            <NFormItem label="申请正面照" class="full-span">
+              <div class="media-row">
+                <div class="media-thumb-lg">
+                  <NImage
+                    v-if="modalForm.anchor_apply_face_image"
+                    :src="modalForm.anchor_apply_face_image"
+                    width="92"
+                    height="92"
+                    object-fit="cover"
+                  />
+                  <span v-else>未上传</span>
+                </div>
+                <NInput
+                  v-model:value="modalForm.anchor_apply_face_image"
+                  placeholder="申请正面照URL（通常由App端上传）"
+                  style="width: 420px"
+                />
               </div>
             </NFormItem>
           </NForm>

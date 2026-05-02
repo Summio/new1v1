@@ -125,19 +125,25 @@ class AppUserAdminUpdateIn(BaseModel):
         description="主播申请状态",
     )
     anchor_reject_reason: Optional[str] = Field(default=None, max_length=500, description="主播申请拒绝原因")
+    anchor_apply_face_image: Optional[str] = Field(default=None, max_length=500, description="主播申请正面照URL")
 
 
 # ===== 主播申请 =====
 
 class AnchorApplyIn(BaseModel):
-    intro: str = Field(..., max_length=500, description="申请简介")
-    tags: Optional[List[str]] = Field(default_factory=list, description="擅长领域标签")
-    call_price: int = Field(default=60, ge=10, le=1000, description="期望通话价格(分/分钟)")
+    face_photo_url: str = Field(..., max_length=500, description="正面照URL")
 
 
 class AnchorApplyStatusOut(BaseModel):
     status: str  # "none" / "pending" / "approved" / "rejected"
     apply_at: Optional[datetime] = None
     reject_reason: Optional[str] = None
+    face_photo_url: Optional[str] = None
     anchor_id: Optional[int] = None  # 审批通过后返回主播ID
     anchor_user_id: Optional[int] = None
+
+
+class AnchorApplyReviewIn(BaseModel):
+    id: int = Field(..., ge=1, description="用户ID")
+    status: Literal["approved", "rejected"] = Field(..., description="审核结果")
+    reject_reason: Optional[str] = Field(default=None, max_length=500, description="驳回原因")

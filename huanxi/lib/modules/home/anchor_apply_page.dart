@@ -1,10 +1,18 @@
+import 'dart:typed_data';
+
+import 'package:camera/camera.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:permission_handler/permission_handler.dart';
+
 import '../../app/theme/app_theme.dart';
 import '../../core/constants/api_endpoints.dart';
+import '../../core/media/image_upload_preprocessor.dart';
+import '../../core/network/api_exception.dart';
 import '../../core/network/dio_client.dart';
-import 'package:huanxi/core/utils/app_toast.dart';
+import '../../core/utils/app_toast.dart';
 
 /// 主播申请状态
 enum AnchorApplyStatus { none, pending, approved, rejected }
@@ -13,22 +21,26 @@ enum AnchorApplyStatus { none, pending, approved, rejected }
 class AnchorApplyState {
   final AnchorApplyStatus status;
   final String? rejectReason;
+  final String? facePhotoUrl;
   final bool isLoading;
 
   const AnchorApplyState({
     this.status = AnchorApplyStatus.none,
     this.rejectReason,
+    this.facePhotoUrl,
     this.isLoading = false,
   });
 
   AnchorApplyState copyWith({
     AnchorApplyStatus? status,
     String? rejectReason,
+    String? facePhotoUrl,
     bool? isLoading,
   }) {
     return AnchorApplyState(
       status: status ?? this.status,
       rejectReason: rejectReason ?? this.rejectReason,
+      facePhotoUrl: facePhotoUrl ?? this.facePhotoUrl,
       isLoading: isLoading ?? this.isLoading,
     );
   }
@@ -47,49 +59,73 @@ class AnchorApplyNotifier extends StateNotifier<AnchorApplyState> {
       final data = await _dio.apiGet(ApiEndpoints.anchorApplyStatus);
       final respData = data['data'] as Map<String, dynamic>?;
       if (respData == null) {
-        state = state.copyWith(
-          isLoading: false,
-          status: AnchorApplyStatus.none,
-        );
+        state = const AnchorApplyState();
         return;
       }
 
       final statusStr = respData['status'] as String? ?? 'none';
-      state = state.copyWith(
-        isLoading: false,
+      state = AnchorApplyState(
         status: _parseStatus(statusStr),
         rejectReason: respData['reject_reason'] as String?,
+        facePhotoUrl: (respData['face_photo_url'] as String?)?.trim(),
+        isLoading: false,
       );
-    } catch (e) {
-      state = state.copyWith(isLoading: false, status: AnchorApplyStatus.none);
+    } catch (_) {
+      state = const AnchorApplyState();
+    }
+  }
+
+  /// 上传正面照
+  Future<String?> uploadFacePhoto({
+    required List<int> bytes,
+    required String filename,
+  }) async {
+    try {
+      final prepared = await ImageUploadPreprocessor.instance.prepareImage(
+        bytes: bytes,
+        filename: filename,
+        scene: ImageUploadScene.avatar,
+      );
+      final formData = FormData.fromMap({
+        'file': MultipartFile.fromBytes(
+          prepared.bytes,
+          filename: prepared.filename,
+        ),
+      });
+      final resp = await _dio.post<Map<String, dynamic>>(
+        ApiEndpoints.anchorApplyUploadFacePhoto,
+        data: formData,
+      );
+      final body = resp.data ?? {};
+      if ((body['code'] as int?) != 200) return null;
+      final url = (body['data'] as Map<String, dynamic>?)?['url'] as String?;
+      return (url == null || url.trim().isEmpty) ? null : url.trim();
+    } catch (_) {
+      return null;
     }
   }
 
   /// 提交申请
-  Future<bool> apply({
-    required String intro,
-    required List<String> tags,
-    required int callPrice,
-  }) async {
+  Future<bool> apply({required String facePhotoUrl}) async {
     state = state.copyWith(isLoading: true);
     try {
       final data = await _dio.apiPost(
         ApiEndpoints.anchorApply,
-        data: {'intro': intro, 'tags': tags, 'call_price': callPrice},
+        data: {'face_photo_url': facePhotoUrl},
       );
-
       final code = data['code'] as int?;
       if (code == 200) {
-        state = state.copyWith(
-          isLoading: false,
+        state = AnchorApplyState(
           status: AnchorApplyStatus.pending,
+          rejectReason: null,
+          facePhotoUrl: facePhotoUrl,
+          isLoading: false,
         );
         return true;
-      } else {
-        state = state.copyWith(isLoading: false);
-        return false;
       }
-    } catch (e) {
+      state = state.copyWith(isLoading: false);
+      return false;
+    } catch (_) {
       state = state.copyWith(isLoading: false);
       return false;
     }
@@ -110,7 +146,7 @@ class AnchorApplyNotifier extends StateNotifier<AnchorApplyState> {
 
   /// 重置为可申请状态（驳回后点击"重新申请"）
   void resetToForm() {
-    state = state.copyWith(status: AnchorApplyStatus.none, rejectReason: null);
+    state = const AnchorApplyState();
   }
 }
 
@@ -129,34 +165,18 @@ class AnchorApplyPage extends ConsumerStatefulWidget {
 }
 
 class _AnchorApplyPageState extends ConsumerState<AnchorApplyPage> {
-  final _introController = TextEditingController();
-  final _priceController = TextEditingController(text: '60');
-  final _formKey = GlobalKey<FormState>();
+  static const String _exampleImageAsset =
+      'assets/images/anchor_apply_example.jpg';
 
-  final List<String> _availableTags = [
-    '情感咨询',
-    '聊天陪伴',
-    '游戏陪玩',
-    '知识分享',
-    '才艺展示',
-    '心理咨询',
-  ];
-  final List<String> _selectedTags = [];
+  String? _localFacePhotoUrl;
+  bool _uploading = false;
 
   @override
   void initState() {
     super.initState();
-    // 查询当前申请状态
     Future.microtask(
       () => ref.read(anchorApplyProvider.notifier).fetchStatus(),
     );
-  }
-
-  @override
-  void dispose() {
-    _introController.dispose();
-    _priceController.dispose();
-    super.dispose();
   }
 
   @override
@@ -180,17 +200,17 @@ class _AnchorApplyPageState extends ConsumerState<AnchorApplyPage> {
   Widget _buildContent(AnchorApplyState state) {
     switch (state.status) {
       case AnchorApplyStatus.pending:
-        return _buildPendingView();
+        return _buildPendingView(state);
       case AnchorApplyStatus.approved:
         return _buildApprovedView();
       case AnchorApplyStatus.rejected:
-        return _buildRejectedView(state.rejectReason);
+        return _buildRejectedView(state);
       case AnchorApplyStatus.none:
-        return _buildApplyForm();
+        return _buildApplyForm(state);
     }
   }
 
-  Widget _buildPendingView() {
+  Widget _buildPendingView(AnchorApplyState state) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -216,6 +236,10 @@ class _AnchorApplyPageState extends ConsumerState<AnchorApplyPage> {
               '请耐心等待审核，预计1-3个工作日',
               style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
             ),
+            if ((state.facePhotoUrl ?? '').isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _buildNetworkPhotoBox(state.facePhotoUrl!),
+            ],
             const SizedBox(height: 40),
             ElevatedButton(
               onPressed: () => context.pop(),
@@ -276,7 +300,7 @@ class _AnchorApplyPageState extends ConsumerState<AnchorApplyPage> {
     );
   }
 
-  Widget _buildRejectedView(String? reason) {
+  Widget _buildRejectedView(AnchorApplyState state) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -293,10 +317,10 @@ class _AnchorApplyPageState extends ConsumerState<AnchorApplyPage> {
                 color: AppTheme.textPrimary,
               ),
             ),
-            if (reason != null) ...[
+            if ((state.rejectReason ?? '').trim().isNotEmpty) ...[
               const SizedBox(height: 12),
               Text(
-                reason,
+                state.rejectReason!.trim(),
                 style: const TextStyle(
                   fontSize: 14,
                   color: AppTheme.textSecondary,
@@ -304,9 +328,16 @@ class _AnchorApplyPageState extends ConsumerState<AnchorApplyPage> {
                 textAlign: TextAlign.center,
               ),
             ],
+            if ((state.facePhotoUrl ?? '').isNotEmpty) ...[
+              const SizedBox(height: 16),
+              _buildNetworkPhotoBox(state.facePhotoUrl!),
+            ],
             const SizedBox(height: 40),
             ElevatedButton(
               onPressed: () {
+                setState(() {
+                  _localFacePhotoUrl = null;
+                });
                 ref.read(anchorApplyProvider.notifier).resetToForm();
               },
               style: ElevatedButton.styleFrom(
@@ -325,147 +356,259 @@ class _AnchorApplyPageState extends ConsumerState<AnchorApplyPage> {
     );
   }
 
-  Widget _buildApplyForm() {
-    return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(),
-      child: SingleChildScrollView(
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: const EdgeInsets.all(20),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                '申请简介',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textPrimary,
+  Widget _buildApplyForm(AnchorApplyState state) {
+    final facePhotoUrl = (_localFacePhotoUrl ?? state.facePhotoUrl ?? '').trim();
+    final canSubmit = facePhotoUrl.isNotEmpty && !_uploading && !state.isLoading;
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildCompactPhotoSection(facePhotoUrl: facePhotoUrl),
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: ElevatedButton(
+              onPressed: canSubmit ? _handleSubmit : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: const Color(0xFFD2D7DF),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(25),
                 ),
               ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _introController,
-                maxLines: 4,
-                maxLength: 500,
-                decoration: InputDecoration(
-                  hintText: '介绍一下自己的擅长领域和优势...',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
-                ),
-                validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return '请输入申请简介';
-                  }
-                  return null;
-                },
+              child: const Text(
+                '提交审核',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
               ),
-              const SizedBox(height: 20),
-              const Text(
-                '擅长领域',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: _availableTags.map((tag) {
-                  final isSelected = _selectedTags.contains(tag);
-                  return FilterChip(
-                    label: Text(tag),
-                    selected: isSelected,
-                    onSelected: (selected) {
-                      setState(() {
-                        if (selected) {
-                          _selectedTags.add(tag);
-                        } else {
-                          _selectedTags.remove(tag);
-                        }
-                      });
-                    },
-                    selectedColor: AppTheme.primaryColor.withValues(alpha: 0.2),
-                    checkmarkColor: AppTheme.primaryColor,
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                '通话价格 (分/分钟)',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _priceController,
-                keyboardType: TextInputType.number,
-                decoration: InputDecoration(
-                  hintText: '10-1000',
-                  suffixText: '分/分钟',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return '请输入通话价格';
-                  }
-                  final price = int.tryParse(value);
-                  if (price == null || price < 10 || price > 1000) {
-                    return '价格范围: 10-1000 分/分钟';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 40),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _handleSubmit,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.primaryColor,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(25),
-                    ),
-                  ),
-                  child: const Text(
-                    '提交申请',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
 
-  Future<void> _handleSubmit() async {
-    if (!_formKey.currentState!.validate()) return;
+  Widget _buildCompactPhotoSection({required String facePhotoUrl}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE7EBF2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            '正面照上传',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            '仅支持调用摄像头自拍，不支持相册上传。',
+            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '示例',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    AspectRatio(
+                      aspectRatio: 3 / 4,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF6F8FC),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFE4E9F2)),
+                        ),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.asset(
+                            _exampleImageAsset,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, error, stackTrace) {
+                              return const Center(
+                                child: Text(
+                                  '示例图生成中',
+                                  style: TextStyle(
+                                    color: Color(0xFF6B7380),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '你的照片',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppTheme.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    AspectRatio(
+                      aspectRatio: 3 / 4,
+                      child: facePhotoUrl.isEmpty
+                          ? Container(
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF4F7FB),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: const Color(0xFFE4E9F2),
+                                ),
+                              ),
+                              child: const Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.camera_alt_outlined,
+                                    size: 34,
+                                    color: Color(0xFF8F98AA),
+                                  ),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    '尚未拍摄',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: AppTheme.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ClipRRect(
+                              borderRadius: BorderRadius.circular(10),
+                              child: Image.network(
+                                facePhotoUrl,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _uploading ? null : _handleCapture,
+              icon: _uploading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.camera_alt),
+              label: Text(_uploading ? '上传中...' : '拍摄正面照'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-    final price = int.tryParse(_priceController.text) ?? 60;
+  Widget _buildNetworkPhotoBox(String url) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Image.network(
+        url,
+        width: 180,
+        height: 220,
+        fit: BoxFit.cover,
+      ),
+    );
+  }
+
+  Future<void> _handleCapture() async {
+    try {
+      final captured = await Navigator.of(context).push<_CapturedPhoto>(
+        MaterialPageRoute(
+          builder: (_) => const _FrontCameraCapturePage(),
+          fullscreenDialog: true,
+        ),
+      );
+      if (captured == null) return;
+
+      if (!mounted) return;
+      setState(() {
+        _uploading = true;
+      });
+
+      final url = await ref.read(anchorApplyProvider.notifier).uploadFacePhoto(
+        bytes: captured.bytes,
+        filename: captured.filename,
+      );
+      if (url == null || url.isEmpty) {
+        throw const ApiException(code: -1, message: '上传失败，请重试');
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _localFacePhotoUrl = url;
+      });
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(
+          content: Text('正面照上传成功'),
+          backgroundColor: Color(0xFF34C759),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      AppToast.error(context, e.message);
+    } catch (_) {
+      if (!mounted) return;
+      AppToast.error(context, '拍照或上传失败，请重试');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _uploading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _handleSubmit() async {
+    final facePhotoUrl = (_localFacePhotoUrl ?? '').trim();
+    if (facePhotoUrl.isEmpty) {
+      AppToast.error(context, '请先拍摄并上传正面照');
+      return;
+    }
+
     final success = await ref
         .read(anchorApplyProvider.notifier)
-        .apply(
-          intro: _introController.text.trim(),
-          tags: _selectedTags,
-          callPrice: price,
-        );
+        .apply(facePhotoUrl: facePhotoUrl);
 
     if (success && mounted) {
       AppToast.showSnackBar(
@@ -476,5 +619,305 @@ class _AnchorApplyPageState extends ConsumerState<AnchorApplyPage> {
         ),
       );
     }
+  }
+}
+
+class _CapturedPhoto {
+  final Uint8List bytes;
+  final String filename;
+
+  const _CapturedPhoto({
+    required this.bytes,
+    required this.filename,
+  });
+}
+
+class _CameraInitException implements Exception {
+  final String message;
+  final bool openSettings;
+
+  const _CameraInitException(this.message, {this.openSettings = false});
+}
+
+class _FrontCameraCapturePage extends StatefulWidget {
+  const _FrontCameraCapturePage();
+
+  @override
+  State<_FrontCameraCapturePage> createState() => _FrontCameraCapturePageState();
+}
+
+class _FrontCameraCapturePageState extends State<_FrontCameraCapturePage> {
+  CameraController? _controller;
+  bool _capturing = false;
+  bool _initializing = true;
+  String? _errorText;
+  bool _shouldOpenSettings = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initFrontCamera();
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _initFrontCamera() async {
+    try {
+      await _controller?.dispose();
+      _controller = null;
+
+      final permission = await Permission.camera.request();
+      if (!permission.isGranted) {
+        if (permission.isPermanentlyDenied || permission.isRestricted) {
+          throw const _CameraInitException(
+            '相机权限被禁用，请到系统设置中开启后重试',
+            openSettings: true,
+          );
+        }
+        throw const _CameraInitException('未获取相机权限，请允许后重试');
+      }
+
+      final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        throw const _CameraInitException('当前设备未检测到可用摄像头');
+      }
+
+      CameraDescription? frontCamera;
+      for (final camera in cameras) {
+        if (camera.lensDirection == CameraLensDirection.front) {
+          frontCamera = camera;
+          break;
+        }
+      }
+      if (frontCamera == null) {
+        throw const _CameraInitException('当前设备不支持前置摄像头自拍');
+      }
+
+      final controller = await _buildControllerWithFallback(frontCamera);
+      if (!mounted) {
+        await controller.dispose();
+        return;
+      }
+
+      setState(() {
+        _controller = controller;
+        _initializing = false;
+        _errorText = null;
+        _shouldOpenSettings = false;
+      });
+    } on _CameraInitException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _initializing = false;
+        _errorText = e.message;
+        _shouldOpenSettings = e.openSettings;
+      });
+    } on CameraException catch (e) {
+      final normalized = _normalizeCameraException(e);
+      if (!mounted) return;
+      setState(() {
+        _initializing = false;
+        _shouldOpenSettings = normalized.openSettings;
+        _errorText = normalized.message;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _initializing = false;
+        _errorText = '前置摄像头启动失败：${e.runtimeType}';
+        _shouldOpenSettings = false;
+      });
+    }
+  }
+
+  Future<CameraController> _buildControllerWithFallback(
+    CameraDescription camera,
+  ) async {
+    final presets = <ResolutionPreset>[
+      ResolutionPreset.high,
+      ResolutionPreset.medium,
+      ResolutionPreset.low,
+    ];
+    CameraException? lastError;
+
+    for (final preset in presets) {
+      final controller = CameraController(
+        camera,
+        preset,
+        enableAudio: false,
+        imageFormatGroup: ImageFormatGroup.jpeg,
+      );
+      try {
+        await controller.initialize();
+        return controller;
+      } on CameraException catch (e) {
+        lastError = e;
+        await controller.dispose();
+      }
+    }
+
+    if (lastError != null) {
+      throw lastError;
+    }
+    throw const _CameraInitException('前置摄像头初始化失败');
+  }
+
+  _CameraInitException _normalizeCameraException(CameraException e) {
+    final code = e.code.toLowerCase();
+    final desc = (e.description ?? '').trim();
+
+    if (code.contains('accessdenied') || code.contains('permission')) {
+      return const _CameraInitException(
+        '相机权限不足，请在系统设置中开启后重试',
+        openSettings: true,
+      );
+    }
+    if (code.contains('already') || code.contains('inuse')) {
+      return const _CameraInitException('摄像头正在被占用，请关闭其他相机应用后重试');
+    }
+    if (desc.isNotEmpty) {
+      return _CameraInitException(desc);
+    }
+    return _CameraInitException('前置摄像头启动失败（${e.code}）');
+  }
+
+  Future<void> _capture() async {
+    if (_capturing || _controller == null) return;
+    try {
+      setState(() {
+        _capturing = true;
+      });
+      final picture = await _controller!.takePicture();
+      final bytes = await picture.readAsBytes();
+      if (!mounted) return;
+      Navigator.of(context).pop(
+        _CapturedPhoto(
+          bytes: bytes,
+          filename: 'anchor_face_${DateTime.now().millisecondsSinceEpoch}.jpg',
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _capturing = false;
+      });
+      AppToast.error(context, '拍照失败，请重试');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        title: const Text('前置摄像头自拍'),
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+      ),
+      body: _initializing
+          ? const Center(child: CircularProgressIndicator())
+          : _errorText != null
+          ? _buildErrorView()
+          : controller == null
+          ? _buildErrorView()
+          : _buildCameraView(controller),
+    );
+  }
+
+  Widget _buildErrorView() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              _errorText ?? '摄像头暂不可用',
+              style: const TextStyle(color: Colors.white70, fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton(
+              onPressed: () {
+                setState(() {
+                  _initializing = true;
+                  _errorText = null;
+                  _shouldOpenSettings = false;
+                });
+                _initFrontCamera();
+              },
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.white,
+                side: const BorderSide(color: Colors.white54),
+              ),
+              child: const Text('重试'),
+            ),
+            if (_shouldOpenSettings) ...[
+              const SizedBox(height: 10),
+              OutlinedButton(
+                onPressed: openAppSettings,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.white,
+                  side: const BorderSide(color: Colors.white54),
+                ),
+                child: const Text('去设置开启权限'),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCameraView(CameraController controller) {
+    final previewSize = controller.value.previewSize;
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: previewSize == null
+              ? CameraPreview(controller)
+              : FittedBox(
+                  fit: BoxFit.cover,
+                  child: SizedBox(
+                    // Camera plugin returns preview size in landscape space.
+                    width: previewSize.height,
+                    height: previewSize.width,
+                    child: CameraPreview(controller),
+                  ),
+                ),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 24,
+          child: Center(
+            child: GestureDetector(
+              onTap: _capturing ? null : _capture,
+              child: Container(
+                width: 78,
+                height: 78,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: Colors.white,
+                  border: Border.all(color: Colors.white70, width: 3),
+                ),
+                child: _capturing
+                    ? const Padding(
+                        padding: EdgeInsets.all(22),
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const SizedBox.shrink(),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }

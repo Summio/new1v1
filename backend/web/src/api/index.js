@@ -18,6 +18,7 @@ export default {
   getAppUserList: (params = {}) => request.get('/app_user/list', { params }),
   getAppUserById: (params = {}) => request.get('/app_user/get', { params }),
   updateAppUser: (data = {}) => request.post('/app_user/update', data),
+  reviewAnchorApply: (data = {}) => request.post('/app_user/anchor-apply/review', data),
   uploadAppUserImage: (data) =>
     request.post('/app_user/upload-image', data, {
       headers: { 'Content-Type': 'multipart/form-data' },

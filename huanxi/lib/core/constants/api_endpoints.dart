@@ -27,6 +27,9 @@ class ApiEndpoints {
   /// 申请成为主播
   static const String anchorApply = 'app/anchor/apply';
 
+  /// 上传主播申请正面照
+  static const String anchorApplyUploadFacePhoto = 'app/anchor/apply/upload-face-photo';
+
   /// 查询主播申请状态
   static const String anchorApplyStatus = 'app/anchor/apply/status';
 
