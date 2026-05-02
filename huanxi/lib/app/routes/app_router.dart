@@ -25,6 +25,7 @@ import '../../modules/home/publish_moment_page.dart';
 import '../../modules/home/anchor_detail_page.dart';
 import '../../modules/home/user_search_page.dart';
 import '../../modules/home/wallet_page.dart';
+import '../../modules/home/call_page.dart';
 import '../../modules/beauty/beauty_settings_page.dart';
 import '../../app/providers/anchor_provider.dart';
 import '../../core/storage/storage.dart';
@@ -42,6 +43,7 @@ class AppRoutes {
   static const String profile = '/profile';
   static const String recharge = '/profile/recharge';
   static const String beautySettings = '/profile/beauty';
+  static const String callHistory = '/profile/call-history';
   static const String wallet = '/wallet';
   static const String editProfile = '/profile/edit';
   static const String settings = '/settings';
@@ -189,6 +191,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.userSearch,
       builder: (context, state) => const UserSearchPage(),
+    ),
+    GoRoute(
+      path: AppRoutes.callHistory,
+      builder: (context, state) => const CallPage(),
     ),
     GoRoute(
       path: AppRoutes.recharge,

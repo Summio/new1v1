@@ -154,7 +154,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               child: Column(
                 children: [
                   _buildMenuTile(icon: Icons.currency_exchange_rounded, title: '充值', iconColor: const Color(0xFFFF9500), onTap: () => context.push(AppRoutes.recharge)),
-                  _buildMenuTile(icon: Icons.history_rounded, title: '通话记录', iconColor: const Color(0xFF5856D6), onTap: () {}),
+                  _buildMenuTile(icon: Icons.history_rounded, title: '通话记录', iconColor: const Color(0xFF5856D6), onTap: () => context.push(AppRoutes.callHistory)),
                   _buildMenuTile(icon: Icons.favorite_rounded, title: '我的关注', iconColor: const Color(0xFFFF2D55), onTap: () {}),
                   if (!isAnchor)
                     _buildMenuTile(icon: Icons.live_tv_rounded, title: '申请成为主播', iconColor: AppTheme.secondaryColor, onTap: () => context.push(AppRoutes.anchorApply)),
@@ -173,8 +173,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     ),
                   _buildMenuTile(icon: Icons.account_balance_wallet_rounded, title: '我的钱包', iconColor: const Color(0xFFFF9500), onTap: () => context.push(AppRoutes.wallet)),
                   _buildMenuTile(icon: Icons.auto_awesome, title: '美颜设置', iconColor: const Color(0xFFFF6B9D), onTap: () => context.push(AppRoutes.beautySettings)),
-                  _buildMenuTile(icon: Icons.dynamic_feed_rounded, title: '我的动态', iconColor: const Color(0xFF5856D6), onTap: () => context.push(AppRoutes.myMoments)),
-                  _buildMenuTile(icon: Icons.shield_rounded, title: '安全中心', iconColor: const Color(0xFF34C759), onTap: () => context.push(AppRoutes.settingsPassword), isLast: true),
+                  _buildMenuTile(icon: Icons.dynamic_feed_rounded, title: '我的动态', iconColor: const Color(0xFF5856D6), onTap: () => context.push(AppRoutes.myMoments), isLast: true),
                 ],
               ),
             ),
