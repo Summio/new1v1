@@ -11,13 +11,18 @@ import '../../app/providers/auth_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/constants/api_endpoints.dart';
+import '../../core/network/api_exception.dart';
 import '../../core/network/dio_client.dart';
+import '../../core/network/response_parsers.dart';
+import '../../core/storage/storage.dart';
 import '../../core/utils/app_toast.dart';
 import '../../core/utils/app_logger.dart';
+import '../../services/im_service.dart';
 import '../beauty/beauty_camera_view.dart';
 import '../beauty/beauty_panel.dart';
 import '../gift/gift_panel.dart';
 import 'call_end_reason.dart';
+import 'call_overlay_chat_store.dart';
 import 'controllers/call_gift_controller.dart';
 import 'controllers/call_rtc_controller.dart';
 import 'controllers/call_session_controller.dart';
@@ -47,13 +52,31 @@ class CallRoomPage extends ConsumerStatefulWidget {
   ConsumerState<CallRoomPage> createState() => _CallRoomPageState();
 }
 
-class _CallRoomPageState extends ConsumerState<CallRoomPage> {
+class _CallRoomPageState extends ConsumerState<CallRoomPage>
+    with WidgetsBindingObserver {
   static const double _beautyPanelInitialFactor = 0.42;
+  static const int _callChatHistoryCount = 30;
+  static const Duration _keyboardInsetSettleDelay = Duration(milliseconds: 120);
   bool _endingConsuming = false;
   bool _disposed = false;
   bool _isRemoteInMainView = true;
   bool _isBeautyPanelVisible = false;
+  bool _isChatInputVisible = false;
+  bool _isImChatReady = false;
+  bool _isImChatAvailable = true;
+  bool _isImChatLoading = false;
   double _beautyPanelHeightFactor = _beautyPanelInitialFactor;
+  double _settledKeyboardInset = 0;
+  int? _myAppUserId;
+  String? _myChatUserId;
+  String? _peerChatUserId;
+  String _myDisplayName = '我';
+  final IMService _imService = IMService();
+  final TextEditingController _chatController = TextEditingController();
+  final FocusNode _chatFocusNode = FocusNode();
+  final CallOverlayChatStore _chatStore = CallOverlayChatStore(maxMessages: 20);
+  Timer? _keyboardInsetSettleTimer;
+  late final DateTime _chatSessionStartedAt;
 
   void _log(String message) {
     AppLogger.debug('[CALL_FLOW][callId=${widget.callId}] $message');
@@ -62,6 +85,8 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
   @override
   void initState() {
     super.initState();
+    _chatSessionStartedAt = DateTime.now();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(
       SystemChrome.setPreferredOrientations(const [
         DeviceOrientation.portraitUp,
@@ -98,7 +123,38 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
               faceBeautyKey: ref.read(faceBeautyKeyProvider),
             ),
       );
+      unawaited(_initImCallChat());
     });
+  }
+
+  @override
+  void didChangeMetrics() {
+    _scheduleKeyboardInsetSettleUpdate();
+  }
+
+  void _scheduleKeyboardInsetSettleUpdate() {
+    _keyboardInsetSettleTimer?.cancel();
+    _keyboardInsetSettleTimer = Timer(_keyboardInsetSettleDelay, () {
+      if (!mounted) {
+        return;
+      }
+      final nextInset = _readKeyboardInset();
+      if ((_settledKeyboardInset - nextInset).abs() < 0.5) {
+        return;
+      }
+      setState(() {
+        _settledKeyboardInset = nextInset;
+      });
+    });
+  }
+
+  double _readKeyboardInset() {
+    final views = WidgetsBinding.instance.platformDispatcher.views;
+    if (views.isEmpty) {
+      return 0;
+    }
+    final view = views.first;
+    return view.viewInsets.bottom / view.devicePixelRatio;
   }
 
   Future<void> _consumeEnding(CallSessionState sessionState) async {
@@ -246,6 +302,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
   }
 
   void _toggleBeautyPanel() {
+    _chatFocusNode.unfocus();
     setState(() {
       if (_isBeautyPanelVisible) {
         _isBeautyPanelVisible = false;
@@ -255,7 +312,10 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       _isRemoteInMainView = false;
       _beautyPanelHeightFactor = _beautyPanelInitialFactor;
       _isBeautyPanelVisible = true;
+      _isChatInputVisible = false;
+      _settledKeyboardInset = 0;
     });
+    _keyboardInsetSettleTimer?.cancel();
   }
 
   void _closeBeautyPanel() {
@@ -265,8 +325,328 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     });
   }
 
+  int? _extractAppUserId(String value) {
+    final raw = value.trim();
+    if (raw.isEmpty) return null;
+    if (raw.startsWith('chat_')) {
+      return int.tryParse(raw.substring('chat_'.length));
+    }
+    return int.tryParse(raw);
+  }
+
+  String _toImUserId(int appUserId) => 'chat_$appUserId';
+
+  Future<UserSigPayload> _requestUserSig({int? peerUserId}) async {
+    final response = await DioClient.instance.get(
+      ApiEndpoints.imUserSig,
+      queryParameters: peerUserId != null
+          ? <String, dynamic>{'peer_user_id': peerUserId}
+          : null,
+    );
+    return ResponseParsers.parseUserSigPayload(response.data);
+  }
+
+  Future<void> _initImCallChat() async {
+    if (_isImChatLoading) {
+      return;
+    }
+    setState(() {
+      _isImChatLoading = true;
+      _isImChatAvailable = true;
+    });
+
+    try {
+      await ref.read(appInitProvider.notifier).init();
+      final authState = ref.read(authProvider);
+      final myAppUserId = authState.userId ?? StorageService.getUserId();
+      final peerAppUserId = _extractAppUserId(widget.peerUserId);
+      if (myAppUserId == null || myAppUserId <= 0 || peerAppUserId == null) {
+        throw Exception('用户信息异常，无法初始化聊天');
+      }
+
+      final userSigPayload = await _requestUserSig(peerUserId: peerAppUserId);
+      final appInitState = ref.read(appInitProvider);
+      final sdkAppId = appInitState.imConfigured
+          ? (appInitState.imSdkAppId ?? userSigPayload.sdkAppId)
+          : userSigPayload.sdkAppId;
+
+      _myAppUserId = myAppUserId;
+      _myChatUserId = _toImUserId(myAppUserId);
+      _peerChatUserId = _toImUserId(peerAppUserId);
+
+      final nickname = (authState.username ?? '').trim();
+      _myDisplayName = nickname.isEmpty ? '我' : nickname;
+
+      await _imService.ensureReady(
+        sdkAppId: sdkAppId,
+        userId: _myChatUserId!,
+        userSig: userSigPayload.userSig,
+      );
+      _imService.removeMessageListener(_onImMessageReceived);
+      _imService.addMessageListener(_onImMessageReceived);
+      await _loadImHistoryForOverlay();
+
+      if (!mounted) return;
+      setState(() {
+        _isImChatReady = true;
+        _isImChatAvailable = true;
+      });
+    } on ApiException catch (e) {
+      _log('init IM chat api error: ${e.message}');
+      if (!mounted) return;
+      setState(() {
+        _isImChatReady = false;
+        _isImChatAvailable = false;
+      });
+      AppToast.showSnackBar(
+        context,
+        SnackBar(content: Text('聊天暂不可用：${e.message}')),
+      );
+    } catch (e) {
+      _log('init IM chat failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _isImChatReady = false;
+        _isImChatAvailable = false;
+      });
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('聊天初始化失败，稍后可重试')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isImChatLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadImHistoryForOverlay() async {
+    final peerUserId = _peerChatUserId;
+    final myAppUserId = _myAppUserId;
+    if (peerUserId == null || myAppUserId == null) {
+      return;
+    }
+    final history = await _imService.getC2CHistoryMessage(
+      userId: peerUserId,
+      count: _callChatHistoryCount,
+    );
+    if (history.isEmpty) {
+      _chatStore.clear();
+      if (mounted) {
+        setState(() {});
+      }
+      return;
+    }
+
+    final items = <CallOverlayMessage>[];
+    for (final msg in history.reversed) {
+      final text = msg.textElem?.text?.trim() ?? '';
+      if (text.isEmpty) {
+        continue;
+      }
+      final msgId = (msg.msgID ?? '').trim();
+      if (msgId.isEmpty) {
+        continue;
+      }
+      final senderChatUserId = (msg.sender ?? '').trim();
+      final senderId = _extractAppUserId(senderChatUserId);
+      if (senderId == null) {
+        continue;
+      }
+      final sentAt = msg.timestamp != null
+          ? DateTime.fromMillisecondsSinceEpoch(msg.timestamp! * 1000)
+          : DateTime.now();
+      if (sentAt.isBefore(_chatSessionStartedAt)) {
+        continue;
+      }
+      final isMe = senderId == myAppUserId;
+      items.add(
+        CallOverlayMessage(
+          msgId: msgId,
+          text: text,
+          senderId: senderId,
+          senderName: isMe ? _myDisplayName : '对方',
+          sentAt: sentAt,
+          isMe: isMe,
+          status: CallOverlayMessageStatus.sent,
+        ),
+      );
+    }
+
+    _chatStore.setInitialMessages(items);
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _onImMessageReceived(dynamic message) {
+    final peerChatUserId = _peerChatUserId;
+    final myAppUserId = _myAppUserId;
+    if (peerChatUserId == null || myAppUserId == null) {
+      return;
+    }
+
+    final messagePeerUserId = (message?.userID as String?)?.trim() ?? '';
+    if (messagePeerUserId != peerChatUserId) {
+      return;
+    }
+
+    final text = (message?.textElem?.text as String?)?.trim() ?? '';
+    if (text.isEmpty) {
+      return;
+    }
+
+    final msgId = (message?.msgID as String?)?.trim() ?? '';
+    if (msgId.isEmpty) {
+      return;
+    }
+
+    final senderChatUserId = (message?.sender as String?)?.trim() ?? '';
+    final senderId = _extractAppUserId(senderChatUserId);
+    if (senderId == null) {
+      return;
+    }
+
+    final timestamp = message?.timestamp as int?;
+    final sentAt = timestamp != null
+        ? DateTime.fromMillisecondsSinceEpoch(timestamp * 1000)
+        : DateTime.now();
+    if (sentAt.isBefore(_chatSessionStartedAt)) {
+      return;
+    }
+    final isMe = senderId == myAppUserId;
+
+    _chatStore.addIncoming(
+      msgId: msgId,
+      text: text,
+      senderId: senderId,
+      senderName: isMe ? _myDisplayName : '对方',
+      sentAt: sentAt,
+      isMe: isMe,
+    );
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _toggleChatInput() {
+    if (!_isImChatAvailable) {
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('聊天暂不可用，请稍后再试')),
+      );
+      return;
+    }
+    if (!_isImChatReady) {
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('聊天初始化中，请稍候')),
+      );
+      return;
+    }
+
+    final willShowInput = !_isChatInputVisible;
+    setState(() {
+      _isChatInputVisible = willShowInput;
+      if (willShowInput) {
+        _isBeautyPanelVisible = false;
+      } else {
+        _settledKeyboardInset = 0;
+      }
+    });
+    if (willShowInput) {
+      _chatFocusNode.requestFocus();
+      _scheduleKeyboardInsetSettleUpdate();
+    } else {
+      _keyboardInsetSettleTimer?.cancel();
+      _chatFocusNode.unfocus();
+    }
+  }
+
+  void _closeChatInput() {
+    if (!_isChatInputVisible) {
+      return;
+    }
+    setState(() {
+      _isChatInputVisible = false;
+      _settledKeyboardInset = 0;
+    });
+    _keyboardInsetSettleTimer?.cancel();
+    _chatFocusNode.unfocus();
+  }
+
+  Future<void> _sendChatMessage() async {
+    final peerChatUserId = _peerChatUserId;
+    final myAppUserId = _myAppUserId;
+    final text = _chatController.text.trim();
+    if (text.isEmpty || peerChatUserId == null || myAppUserId == null) {
+      return;
+    }
+    if (!_isImChatReady) {
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('聊天暂不可用，请稍后再试')),
+      );
+      return;
+    }
+
+    final now = DateTime.now();
+    final clientMsgId = '${widget.callId}_${now.microsecondsSinceEpoch}';
+    _chatStore.addLocalSending(
+      clientMsgId: clientMsgId,
+      text: text,
+      senderId: myAppUserId,
+      senderName: _myDisplayName,
+      sentAt: now,
+    );
+    setState(() {});
+    _chatController.clear();
+
+    try {
+      final sentMsg = await _imService.sendTextMessage(
+        receiver: peerChatUserId,
+        text: text,
+      );
+      final serverMsgId = (sentMsg.msgID ?? '').trim();
+      if (serverMsgId.isEmpty) {
+        _chatStore.markSendFailed(clientMsgId: clientMsgId);
+      } else {
+        final sentAt = sentMsg.timestamp != null
+            ? DateTime.fromMillisecondsSinceEpoch(sentMsg.timestamp! * 1000)
+            : DateTime.now();
+        _chatStore.markSendSuccess(
+          clientMsgId: clientMsgId,
+          serverMsgId: serverMsgId,
+          sentAt: sentAt,
+        );
+      }
+      if (mounted) {
+        setState(() {});
+      }
+    } catch (e) {
+      _chatStore.markSendFailed(clientMsgId: clientMsgId);
+      if (mounted) {
+        setState(() {});
+        AppToast.showSnackBar(context, SnackBar(content: Text('消息发送失败: $e')));
+      }
+    }
+  }
+
+  Future<void> _retryFailedMessage(CallOverlayMessage message) async {
+    if (message.status != CallOverlayMessageStatus.failed) {
+      return;
+    }
+    _chatController.text = message.text;
+    _chatController.selection = TextSelection.fromPosition(
+      TextPosition(offset: _chatController.text.length),
+    );
+    await _sendChatMessage();
+  }
+
   Widget _buildInlineBeautyPanel(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
+    final screenHeight = MediaQuery.sizeOf(context).height;
     final minHeight = computeCallBeautySheetMinHeight(screenHeight);
     final maxHeight = computeCallBeautySheetMaxHeight(screenHeight);
     final panelHeight = (_beautyPanelHeightFactor * screenHeight)
@@ -347,6 +727,11 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
   @override
   void dispose() {
     _disposed = true;
+    WidgetsBinding.instance.removeObserver(this);
+    _keyboardInsetSettleTimer?.cancel();
+    _imService.removeMessageListener(_onImMessageReceived);
+    _chatController.dispose();
+    _chatFocusNode.dispose();
     unawaited(
       SystemChrome.setPreferredOrientations(const [
         DeviceOrientation.portraitUp,
@@ -409,6 +794,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
         }
       },
       child: Scaffold(
+        resizeToAvoidBottomInset: false,
         body: Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
@@ -432,8 +818,10 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
               ),
               if (giftState.isShowing)
                 _buildGiftAnimationOverlay(giftState: giftState),
+              if (!_isBeautyPanelVisible && _chatStore.messages.isNotEmpty)
+                _buildChatMessageOverlay(context),
               Positioned(
-                top: MediaQuery.of(context).padding.top + 16,
+                top: MediaQuery.paddingOf(context).top + 16,
                 right: 16,
                 child: GestureDetector(
                   onTap: () {
@@ -473,7 +861,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
                 right: 0,
                 child: Container(
                   padding: EdgeInsets.only(
-                    top: MediaQuery.of(context).padding.top + 12,
+                    top: MediaQuery.paddingOf(context).top + 12,
                     left: 16,
                     right: 16,
                     bottom: 12,
@@ -545,7 +933,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
                     padding: EdgeInsets.only(
                       left: 24,
                       right: 24,
-                      bottom: MediaQuery.of(context).padding.bottom + 24,
+                      bottom: MediaQuery.paddingOf(context).bottom + 24,
                       top: 20,
                     ),
                     decoration: const BoxDecoration(
@@ -555,49 +943,66 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
                         colors: [Colors.black54, Colors.transparent],
                       ),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        _ControlButton(
-                          icon: rtcState.isMicOn ? Icons.mic : Icons.mic_off,
-                          label: rtcState.isMicOn ? '麦克风' : '静音',
-                          isActive: !rtcState.isMicOn,
-                          onTap: () => unawaited(rtcController.toggleMic()),
-                        ),
-                        _ControlButton(
-                          icon: rtcState.isSpeakerOn
-                              ? Icons.volume_up
-                              : Icons.volume_off,
-                          label: '扬声器',
-                          isActive: !rtcState.isSpeakerOn,
-                          onTap: () => unawaited(rtcController.toggleSpeaker()),
-                        ),
-                        _ControlButton(
-                          icon: rtcState.isCameraOn
-                              ? Icons.videocam
-                              : Icons.videocam_off,
-                          label: '摄像头',
-                          isActive: !rtcState.isCameraOn,
-                          onTap: () => unawaited(rtcController.toggleCamera()),
-                        ),
-                        _ControlButton(
-                          icon: Icons.card_giftcard,
-                          label: '礼物',
-                          onTap: () => _showGiftPanel(anchor),
-                        ),
-                        _ControlButton(
-                          icon: Icons.auto_awesome,
-                          label: '美颜',
-                          isActive: _isBeautyPanelVisible,
-                          onTap: _toggleBeautyPanel,
-                        ),
-                        _ControlButton(
-                          icon: Icons.flip_camera_ios,
-                          label: '翻转',
-                          isSpinning: rtcState.isFlipping,
-                          onTap: () => unawaited(rtcController.flipCamera()),
-                        ),
-                      ],
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      physics: const BouncingScrollPhysics(),
+                      child: Row(
+                        children: [
+                          _ControlButton(
+                            icon: rtcState.isMicOn ? Icons.mic : Icons.mic_off,
+                            label: rtcState.isMicOn ? '麦克风' : '静音',
+                            isActive: !rtcState.isMicOn,
+                            onTap: () => unawaited(rtcController.toggleMic()),
+                          ),
+                          const SizedBox(width: 10),
+                          _ControlButton(
+                            icon: rtcState.isSpeakerOn
+                                ? Icons.volume_up
+                                : Icons.volume_off,
+                            label: '扬声器',
+                            isActive: !rtcState.isSpeakerOn,
+                            onTap: () =>
+                                unawaited(rtcController.toggleSpeaker()),
+                          ),
+                          const SizedBox(width: 10),
+                          _ControlButton(
+                            icon: rtcState.isCameraOn
+                                ? Icons.videocam
+                                : Icons.videocam_off,
+                            label: '摄像头',
+                            isActive: !rtcState.isCameraOn,
+                            onTap: () =>
+                                unawaited(rtcController.toggleCamera()),
+                          ),
+                          const SizedBox(width: 10),
+                          _ControlButton(
+                            icon: Icons.card_giftcard,
+                            label: '礼物',
+                            onTap: () => _showGiftPanel(anchor),
+                          ),
+                          const SizedBox(width: 10),
+                          _ControlButton(
+                            icon: Icons.chat_bubble_outline,
+                            label: _isImChatLoading ? '聊天中' : '聊天',
+                            isActive: _isChatInputVisible,
+                            onTap: _toggleChatInput,
+                          ),
+                          const SizedBox(width: 10),
+                          _ControlButton(
+                            icon: Icons.auto_awesome,
+                            label: '美颜',
+                            isActive: _isBeautyPanelVisible,
+                            onTap: _toggleBeautyPanel,
+                          ),
+                          const SizedBox(width: 10),
+                          _ControlButton(
+                            icon: Icons.flip_camera_ios,
+                            label: '翻转',
+                            isSpinning: rtcState.isFlipping,
+                            onTap: () => unawaited(rtcController.flipCamera()),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
@@ -605,7 +1010,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
                 Positioned(
                   left: 0,
                   right: 0,
-                  bottom: MediaQuery.of(context).padding.bottom + 116,
+                  bottom: MediaQuery.paddingOf(context).bottom + 116,
                   child: Center(
                     child: GestureDetector(
                       onTap: _endCall,
@@ -625,6 +1030,8 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
                     ),
                   ),
                 ),
+              if (!_isBeautyPanelVisible && _isChatInputVisible)
+                _buildChatInputBar(context),
               if (_isBeautyPanelVisible)
                 Positioned.fill(
                   child: GestureDetector(
@@ -893,6 +1300,213 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChatMessageOverlay(BuildContext context) {
+    final visibleMessages = _chatStore.messages.length > 6
+        ? _chatStore.messages.sublist(_chatStore.messages.length - 6)
+        : _chatStore.messages;
+
+    return _KeyboardAwareChatMessageOverlay(
+      messages: visibleMessages,
+      isInputVisible: _isChatInputVisible,
+      keyboardInset: _settledKeyboardInset,
+      onRetry: _retryFailedMessage,
+      formatChatTime: _formatChatTime,
+      statusSuffix: _statusSuffix,
+    );
+  }
+
+  Widget _buildChatInputBar(BuildContext context) {
+    return _KeyboardAwareChatInputBar(
+      controller: _chatController,
+      focusNode: _chatFocusNode,
+      keyboardInset: _settledKeyboardInset,
+      onSend: _sendChatMessage,
+      onClose: _closeChatInput,
+    );
+  }
+
+  String _formatChatTime(DateTime time) {
+    final hour = time.hour.toString().padLeft(2, '0');
+    final minute = time.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
+  }
+
+  String _statusSuffix(CallOverlayMessage message) {
+    if (!message.isMe) {
+      return '';
+    }
+    switch (message.status) {
+      case CallOverlayMessageStatus.sending:
+        return ' 发送中';
+      case CallOverlayMessageStatus.failed:
+        return ' 失败(点此重发)';
+      case CallOverlayMessageStatus.sent:
+        return '';
+    }
+  }
+}
+
+class _KeyboardAwareChatMessageOverlay extends StatelessWidget {
+  final List<CallOverlayMessage> messages;
+  final bool isInputVisible;
+  final double keyboardInset;
+  final Future<void> Function(CallOverlayMessage message) onRetry;
+  final String Function(DateTime time) formatChatTime;
+  final String Function(CallOverlayMessage message) statusSuffix;
+
+  const _KeyboardAwareChatMessageOverlay({
+    required this.messages,
+    required this.isInputVisible,
+    required this.keyboardInset,
+    required this.onRetry,
+    required this.formatChatTime,
+    required this.statusSuffix,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final paddingBottom = MediaQuery.paddingOf(context).bottom;
+    final bottomOffset = paddingBottom + (isInputVisible ? 176 : 188);
+    final adjustedBottomOffset = isInputVisible
+        ? bottomOffset + keyboardInset
+        : bottomOffset;
+
+    return Positioned(
+      left: 12,
+      right: 12,
+      bottom: adjustedBottomOffset,
+      child: IgnorePointer(
+        ignoring: false,
+        child: Align(
+          alignment: Alignment.bottomLeft,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 280),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (final message in messages)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: GestureDetector(
+                      onTap: () => unawaited(onRetry(message)),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.55),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: RichText(
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          text: TextSpan(
+                            children: [
+                              TextSpan(
+                                text: '${message.senderName}: ',
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              TextSpan(
+                                text: message.text,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              TextSpan(
+                                text:
+                                    '  ${formatChatTime(message.sentAt)}${statusSuffix(message)}',
+                                style: const TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _KeyboardAwareChatInputBar extends StatelessWidget {
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final double keyboardInset;
+  final Future<void> Function() onSend;
+  final VoidCallback onClose;
+
+  const _KeyboardAwareChatInputBar({
+    required this.controller,
+    required this.focusNode,
+    required this.keyboardInset,
+    required this.onSend,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final paddingBottom = MediaQuery.paddingOf(context).bottom;
+
+    return Positioned(
+      left: 12,
+      right: 12,
+      bottom: paddingBottom + 12 + keyboardInset,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.72),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.white24),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: controller,
+                focusNode: focusNode,
+                style: const TextStyle(color: Colors.white),
+                minLines: 1,
+                maxLines: 2,
+                textInputAction: TextInputAction.send,
+                decoration: const InputDecoration(
+                  isDense: true,
+                  hintText: '输入聊天内容',
+                  hintStyle: TextStyle(color: Colors.white60),
+                  border: InputBorder.none,
+                ),
+                onSubmitted: (_) => unawaited(onSend()),
+              ),
+            ),
+            IconButton(
+              onPressed: () => unawaited(onSend()),
+              icon: const Icon(Icons.send, color: Colors.white),
+              tooltip: '发送消息',
+            ),
+            IconButton(
+              onPressed: onClose,
+              icon: const Icon(Icons.close, color: Colors.white70),
+              tooltip: '关闭聊天输入',
+            ),
+          ],
         ),
       ),
     );

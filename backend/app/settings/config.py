@@ -91,6 +91,8 @@ class Settings(BaseSettings):
                     "user": DB_USER,
                     "password": DB_PASSWORD,
                     "database": DB_DATABASE,
+                    "storage_engine": "InnoDB",
+                    "init_command": "SET default_storage_engine=InnoDB",
                     "minsize": DB_POOL_MIN,
                     "maxsize": DB_POOL_MAX,
                 },
