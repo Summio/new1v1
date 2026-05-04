@@ -14,7 +14,8 @@ class HomePage extends ConsumerStatefulWidget {
   ConsumerState<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends ConsumerState<HomePage> with SingleTickerProviderStateMixin {
+class _HomePageState extends ConsumerState<HomePage>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final PageController _pageController = PageController();
 
@@ -91,7 +92,11 @@ class _HomePageState extends ConsumerState<HomePage> with SingleTickerProviderSt
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.search_rounded, color: Colors.black, size: 28),
+            icon: const Icon(
+              Icons.search_rounded,
+              color: Colors.black,
+              size: 28,
+            ),
             onPressed: () => context.push(AppRoutes.userSearch),
           ),
           const SizedBox(width: 8),
@@ -122,8 +127,12 @@ class _HomePageState extends ConsumerState<HomePage> with SingleTickerProviderSt
                       _categories[index],
                       style: TextStyle(
                         fontSize: 14,
-                        fontWeight: isActive ? FontWeight.bold : FontWeight.w600,
-                        color: isActive ? Colors.white : const Color(0xFF8E8E93),
+                        fontWeight: isActive
+                            ? FontWeight.bold
+                            : FontWeight.w600,
+                        color: isActive
+                            ? Colors.white
+                            : const Color(0xFF8E8E93),
                       ),
                     ),
                   ),
@@ -137,18 +146,22 @@ class _HomePageState extends ConsumerState<HomePage> with SingleTickerProviderSt
             child: anchorState.isLoading && anchorState.anchors.isEmpty
                 ? StatusView.loading(message: '加载中...')
                 : anchorState.error != null && anchorState.anchors.isEmpty
-                    ? StatusView.error(
-                        message: anchorState.error!,
-                        onRetry: () => ref.read(anchorListProvider.notifier).refresh(),
-                      )
-                    : PageView.builder(
-                        controller: _pageController,
-                        onPageChanged: _onPageChanged,
-                        itemCount: _categories.length,
-                        itemBuilder: (context, index) {
-                          return _AnchorListPage(pageIndex: index, pageController: _pageController);
-                        },
-                      ),
+                ? StatusView.error(
+                    message: anchorState.error!,
+                    onRetry: () =>
+                        ref.read(anchorListProvider.notifier).refresh(),
+                  )
+                : PageView.builder(
+                    controller: _pageController,
+                    onPageChanged: _onPageChanged,
+                    itemCount: _categories.length,
+                    itemBuilder: (context, index) {
+                      return _AnchorListPage(
+                        pageIndex: index,
+                        pageController: _pageController,
+                      );
+                    },
+                  ),
           ),
         ],
       ),
@@ -161,7 +174,10 @@ class _AnchorListPage extends ConsumerStatefulWidget {
   final int pageIndex;
   final PageController pageController;
 
-  const _AnchorListPage({required this.pageIndex, required this.pageController});
+  const _AnchorListPage({
+    required this.pageIndex,
+    required this.pageController,
+  });
 
   @override
   ConsumerState<_AnchorListPage> createState() => _AnchorListPageState();
@@ -186,7 +202,8 @@ class _AnchorListPageState extends ConsumerState<_AnchorListPage> {
 
   void _onScroll() {
     if (!_scrollController.hasClients) return;
-    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
       ref.read(anchorListProvider.notifier).loadMore();
     }
   }
@@ -210,7 +227,8 @@ class _AnchorListPageState extends ConsumerState<_AnchorListPage> {
       onRefresh: () => ref.read(anchorListProvider.notifier).refresh(),
       child: GridView.builder(
         controller: _scrollController,
-        physics: const AlwaysScrollableScrollPhysics(), // 确保可以 overscroll 触发下拉刷新
+        physics:
+            const AlwaysScrollableScrollPhysics(), // 确保可以 overscroll 触发下拉刷新
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
           crossAxisCount: 2,
@@ -262,131 +280,158 @@ class _AnchorCardState extends State<_AnchorCard> {
       child: LayoutBuilder(
         builder: (context, constraints) {
           final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
-          final rawCacheWidth = (constraints.maxWidth * devicePixelRatio).round();
-          final rawCacheHeight = (constraints.maxHeight * devicePixelRatio).round();
+          final rawCacheWidth = (constraints.maxWidth * devicePixelRatio)
+              .round();
+          final rawCacheHeight = (constraints.maxHeight * devicePixelRatio)
+              .round();
           final cacheWidth = rawCacheWidth > 720 ? 720 : rawCacheWidth;
           final cacheHeight = rawCacheHeight > 960 ? 960 : rawCacheHeight;
           return Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(24),
-          color: AppTheme.cardBackground,
-        ),
-        clipBehavior: Clip.hardEdge,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            // 照片
-            Hero(
-              tag: 'anchor_avatar_${anchor.userId}',
-              child: anchor.avatar != null && anchor.avatar!.isNotEmpty
-                  ? Image.network(
-                      anchor.avatar!,
-                      fit: BoxFit.cover,
-                      filterQuality: FilterQuality.low,
-                      cacheWidth: cacheWidth,
-                      cacheHeight: cacheHeight,
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return Container(color: AppTheme.placeholderColor);
-                      },
-                      errorBuilder: (context, error, stackTrace) {
-                        return const Center(
-                          child: Icon(Icons.person, size: 40, color: Colors.grey),
-                        );
-                      },
-                    )
-                  : const Center(child: Icon(Icons.person, size: 40, color: Colors.grey)),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(24),
+              color: AppTheme.cardBackground,
             ),
-
-            // 蒙层
-            Positioned.fill(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      AppTheme.overlayMedium,
-                    ],
-                    stops: const [0.7, 1.0],
-                  ),
+            clipBehavior: Clip.hardEdge,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // 照片
+                Hero(
+                  tag: 'anchor_avatar_${anchor.userId}',
+                  child: anchor.avatar != null && anchor.avatar!.isNotEmpty
+                      ? Image.network(
+                          anchor.avatar!,
+                          fit: BoxFit.cover,
+                          filterQuality: FilterQuality.low,
+                          cacheWidth: cacheWidth,
+                          cacheHeight: cacheHeight,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return Container(color: AppTheme.placeholderColor);
+                          },
+                          errorBuilder: (context, error, stackTrace) {
+                            return const Center(
+                              child: Icon(
+                                Icons.person,
+                                size: 40,
+                                color: Colors.grey,
+                              ),
+                            );
+                          },
+                        )
+                      : const Center(
+                          child: Icon(
+                            Icons.person,
+                            size: 40,
+                            color: Colors.grey,
+                          ),
+                        ),
                 ),
-              ),
-            ),
 
-            // 在线标识
-            Positioned(
-              top: 12,
-              left: 12,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: AppTheme.badgeBackground,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(
-                        color: isOnline ? AppTheme.onlineGreen : Colors.grey,
-                        shape: BoxShape.circle,
+                // 蒙层
+                Positioned.fill(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.transparent, AppTheme.overlayMedium],
+                        stops: const [0.7, 1.0],
                       ),
                     ),
-                    const SizedBox(width: 4),
-                    Text(
-                      isOnline ? '在线' : '离线',
-                      style: const TextStyle(
-                        color: Colors.black,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
 
-            // 底部文字
-            Positioned(
-              bottom: 12,
-              left: 12,
-              right: 12,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    anchor.username ?? '匿名用户',
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: Colors.white,
+                // 在线标识
+                Positioned(
+                  top: 12,
+                  left: 12,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppTheme.badgeBackground,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: isOnline
+                                ? AppTheme.onlineGreen
+                                : Colors.grey,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          isOnline ? '在线' : '离线',
+                          style: const TextStyle(
+                            color: Colors.black,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Row(
+                ),
+
+                // 底部文字
+                Positioned(
+                  bottom: 12,
+                  left: 12,
+                  right: 12,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.diamond_outlined, size: 10, color: AppTheme.diamondGold),
-                      const SizedBox(width: 2),
                       Text(
-                        '${anchor.callPrice?.toStringAsFixed(0) ?? '0'}/分',
+                        anchor.username ?? '匿名用户',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.diamond_outlined,
+                            size: 10,
+                            color: AppTheme.diamondGold,
+                          ),
+                          const SizedBox(width: 2),
+                          Text(
+                            '${anchor.callPrice?.toStringAsFixed(0) ?? '0'}/分',
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: AppTheme.textSecondaryFaint,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${anchor.diamonds ?? 0} 钻石',
                         style: TextStyle(
                           fontSize: 10,
-                          color: AppTheme.textSecondaryFaint,
+                          color: Colors.white.withValues(alpha: 0.8),
                           fontWeight: FontWeight.w500,
                         ),
                       ),
                     ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
           );
         },
       ),

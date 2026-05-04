@@ -26,15 +26,25 @@ void main() {
 
       expect(anchor.isAnchor, isTrue);
     });
+
+    test('parses diamonds balance from anchor list row', () {
+      final anchor = AnchorInfo.fromJson({
+        'id': 8,
+        'user_id': 8,
+        'nickname': '主播A',
+        'diamonds': 3600,
+      });
+
+      expect(anchor.diamonds, 3600);
+    });
   });
 
   group('user search query params', () {
     test('trims keyword and omits empty keyword', () {
-      expect(buildUserSearchQueryParams(page: 2, pageSize: 20, keyword: '  小喜  '), {
-        'page': 2,
-        'page_size': 20,
-        'keyword': '小喜',
-      });
+      expect(
+        buildUserSearchQueryParams(page: 2, pageSize: 20, keyword: '  小喜  '),
+        {'page': 2, 'page_size': 20, 'keyword': '小喜'},
+      );
     });
   });
 }

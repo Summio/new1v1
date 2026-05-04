@@ -101,6 +101,44 @@ const columns = [
     },
   },
   {
+    title: '收益主播',
+    key: 'income_anchor_user_id',
+    width: 100,
+    align: 'center',
+    render(row) {
+      return row.income_anchor_user_id || '-'
+    },
+  },
+  {
+    title: '主播收益(钻石)',
+    key: 'anchor_income_diamonds',
+    width: 130,
+    align: 'center',
+    render(row) {
+      return toCoins(row.anchor_income_diamonds)
+    },
+  },
+  {
+    title: '分成比例',
+    key: 'anchor_share_bps',
+    width: 100,
+    align: 'center',
+    render(row) {
+      const bps = Number(row.anchor_share_bps || 0)
+      if (!Number.isFinite(bps) || bps <= 0) return '-'
+      return `${(bps / 100).toFixed(2)}%`
+    },
+  },
+  {
+    title: '收益结算时间',
+    key: 'income_settled_at',
+    width: 160,
+    align: 'center',
+    render(row) {
+      return row.income_settled_at ? formatDate(row.income_settled_at, 'YYYY-MM-DD HH:mm:ss') : '-'
+    },
+  },
+  {
     title: '状态',
     key: 'status',
     width: 90,
@@ -164,7 +202,7 @@ const columns = [
       v-model:query-items="queryItems"
       :columns="columns"
       :get-data="api.getCallRecordList"
-      :scroll-x="1550"
+      :scroll-x="2010"
     >
       <template #queryBar>
         <QueryBarItem label="通话ID" :label-width="60">

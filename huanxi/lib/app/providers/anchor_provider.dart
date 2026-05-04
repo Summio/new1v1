@@ -16,6 +16,7 @@ class AnchorInfo {
   final bool? isOnline;
   final String? lastActive;
   final bool isAnchor;
+  final int? diamonds;
 
   const AnchorInfo({
     required this.id,
@@ -28,6 +29,7 @@ class AnchorInfo {
     this.isOnline,
     this.lastActive,
     this.isAnchor = true,
+    this.diamonds,
   });
 
   factory AnchorInfo.fromJson(Map<String, dynamic> json) {
@@ -42,6 +44,7 @@ class AnchorInfo {
       isOnline: json['is_online'] as bool?,
       lastActive: json['last_active'] as String?,
       isAnchor: json['is_anchor'] as bool? ?? true,
+      diamonds: (json['diamonds'] as num?)?.toInt(),
     );
   }
 }

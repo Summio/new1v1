@@ -128,6 +128,8 @@ class BalanceOut(BaseModel):
     coins: int
     diamonds: int
     frozen_diamonds: int = 0
+    coin_name: str = "金币"
+    diamond_name: str = "钻石"
 
 
 class RechargeCreateIn(BaseModel):

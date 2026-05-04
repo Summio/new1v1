@@ -72,9 +72,7 @@ class _CallPageState extends ConsumerState<CallPage> {
       final grouped = await Future.wait(
         c2cConversations.map(_buildCallRecordsForConversation),
       );
-      final merged = <_CallRecordItem>[
-        for (final list in grouped) ...list,
-      ];
+      final merged = <_CallRecordItem>[for (final list in grouped) ...list];
       merged.sort((a, b) => b.timestamp.compareTo(a.timestamp));
 
       if (!mounted) return;
@@ -88,10 +86,11 @@ class _CallPageState extends ConsumerState<CallPage> {
         _errorMessage = '加载通话记录失败：$e';
       });
     } finally {
-      if (!mounted) return;
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -140,7 +139,8 @@ class _CallPageState extends ConsumerState<CallPage> {
             params: {'user_id': item.appUserId},
           );
           final data =
-              (res['data'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
+              (res['data'] as Map<String, dynamic>?) ??
+              const <String, dynamic>{};
           final nickname = (data['nickname'] as String?)?.trim();
           final avatar = _imService.normalizeMediaUrl(
             (data['avatar'] as String?)?.trim(),
@@ -176,7 +176,10 @@ class _CallPageState extends ConsumerState<CallPage> {
     );
     if (messages.isEmpty) return <_CallRecordItem>[];
 
-    final peer = _resolvePeerInfo(conversation: conversation, imUserId: peerImUserId);
+    final peer = _resolvePeerInfo(
+      conversation: conversation,
+      imUserId: peerImUserId,
+    );
     final seenEventIds = <String>{};
     final records = <_CallRecordItem>[];
 
@@ -299,6 +302,8 @@ class _CallPageState extends ConsumerState<CallPage> {
         return '未接听';
       case 'balance_empty':
         return '余额不足';
+      case 'force_exit':
+        return '已离场';
       default:
         return '通话';
     }
@@ -307,7 +312,8 @@ class _CallPageState extends ConsumerState<CallPage> {
   (IconData, Color) _phaseIcon(CallTraceMessage trace) {
     if (trace.phase == 'timeout' ||
         trace.phase == 'rejected' ||
-        trace.phase == 'balance_empty') {
+        trace.phase == 'balance_empty' ||
+        trace.phase == 'force_exit') {
       return (Icons.call_missed_rounded, const Color(0xFFFF3B30));
     }
     if (trace.actorUserId == _myAppUserId) {
@@ -318,203 +324,201 @@ class _CallPageState extends ConsumerState<CallPage> {
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authProvider);
+    final tokenNames = ref.watch(tokenNamesProvider);
+    final isCurrentUserAnchor = authState.appRole == 'anchor';
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        title: const Text('通话记录'),
-      ),
+      appBar: AppBar(backgroundColor: Colors.white, title: const Text('通话记录')),
       body: _isLoading
           ? StatusView.loading(message: '正在加载通话记录...')
           : (_errorMessage != null && _records.isEmpty)
-              ? StatusView.error(
-                  message: _errorMessage!,
-                  onRetry: () => _loadCallRecords(showLoading: true),
-                )
-              : _records.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+          ? StatusView.error(
+              message: _errorMessage!,
+              onRetry: () => _loadCallRecords(showLoading: true),
+            )
+          : _records.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [
+                          AppTheme.primaryColor.withValues(alpha: 0.1),
+                          AppTheme.accentColor.withValues(alpha: 0.1),
+                        ],
+                      ),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.call,
+                      size: 56,
+                      color: AppTheme.primaryColor.withValues(alpha: 0.6),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  const Text(
+                    '暂无通话记录',
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    '去首页找一个主播开始通话吧',
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  OutlinedButton.icon(
+                    onPressed: () => context.go(AppRoutes.index),
+                    icon: const Icon(Icons.explore),
+                    label: const Text('去首页找主播'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.primaryColor,
+                      side: const BorderSide(color: AppTheme.primaryColor),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 24,
+                        vertical: 14,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: () => _loadCallRecords(showLoading: false),
+              child: ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+                itemCount: _records.length,
+                separatorBuilder: (context, index) =>
+                    const SizedBox(height: 10),
+                itemBuilder: (context, index) {
+                  final item = _records[index];
+                  final trace = item.trace;
+                  final (icon, iconColor) = _phaseIcon(trace);
+                  final detail = trace.detailText(
+                    currentUserId: _myAppUserId,
+                    isCurrentUserAnchor: isCurrentUserAnchor,
+                    coinName: tokenNames.coinName,
+                    diamondName: tokenNames.diamondName,
+                  );
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: AppTheme.cardShadow,
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            width: 120,
-                            height: 120,
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: [
-                                  AppTheme.primaryColor.withValues(alpha: 0.1),
-                                  AppTheme.accentColor.withValues(alpha: 0.1),
+                          CircleAvatar(
+                            radius: 22,
+                            backgroundColor: iconColor.withValues(alpha: 0.12),
+                            backgroundImage:
+                                (item.peerAvatarUrl != null &&
+                                    item.peerAvatarUrl!.isNotEmpty)
+                                ? NetworkImage(item.peerAvatarUrl!)
+                                : null,
+                            child:
+                                (item.peerAvatarUrl == null ||
+                                    item.peerAvatarUrl!.isEmpty)
+                                ? Icon(icon, size: 20, color: iconColor)
+                                : null,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        item.peerName,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppTheme.textPrimary,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      _formatRecordTime(item.timestamp),
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: AppTheme.textHint,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    Icon(icon, size: 14, color: iconColor),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      _phaseTagText(trace.phase),
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                        color: iconColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  trace.toDisplayText(
+                                    currentUserId: _myAppUserId,
+                                  ),
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: AppTheme.textSecondary,
+                                    height: 1.25,
+                                  ),
+                                ),
+                                if (detail.isNotEmpty) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    detail,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppTheme.textHint,
+                                      height: 1.2,
+                                    ),
+                                  ),
                                 ],
-                              ),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              Icons.call,
-                              size: 56,
-                              color: AppTheme.primaryColor.withValues(alpha: 0.6),
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          const Text(
-                            '暂无通话记录',
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w600,
-                              color: AppTheme.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          const Text(
-                            '去首页找一个主播开始通话吧',
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: AppTheme.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(height: 32),
-                          OutlinedButton.icon(
-                            onPressed: () => context.go(AppRoutes.index),
-                            icon: const Icon(Icons.explore),
-                            label: const Text('去首页找主播'),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppTheme.primaryColor,
-                              side: const BorderSide(
-                                color: AppTheme.primaryColor,
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
-                                vertical: 14,
-                              ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(20),
-                              ),
+                              ],
                             ),
                           ),
                         ],
                       ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: () => _loadCallRecords(showLoading: false),
-                      child: ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-                        itemCount: _records.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 10),
-                        itemBuilder: (context, index) {
-                          final item = _records[index];
-                          final trace = item.trace;
-                          final (icon, iconColor) = _phaseIcon(trace);
-                          final detail = trace.detailText();
-                          return Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: AppTheme.cardShadow,
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 12,
-                              ),
-                              child: Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  CircleAvatar(
-                                    radius: 22,
-                                    backgroundColor: iconColor.withValues(
-                                      alpha: 0.12,
-                                    ),
-                                    backgroundImage: (item.peerAvatarUrl != null &&
-                                            item.peerAvatarUrl!.isNotEmpty)
-                                        ? NetworkImage(item.peerAvatarUrl!)
-                                        : null,
-                                    child: (item.peerAvatarUrl == null ||
-                                            item.peerAvatarUrl!.isEmpty)
-                                        ? Icon(icon, size: 20, color: iconColor)
-                                        : null,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Expanded(
-                                              child: Text(
-                                                item.peerName,
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                  fontSize: 15,
-                                                  fontWeight: FontWeight.w600,
-                                                  color: AppTheme.textPrimary,
-                                                ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              _formatRecordTime(item.timestamp),
-                                              style: const TextStyle(
-                                                fontSize: 11,
-                                                color: AppTheme.textHint,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 6),
-                                        Row(
-                                          children: [
-                                            Icon(
-                                              icon,
-                                              size: 14,
-                                              color: iconColor,
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              _phaseTagText(trace.phase),
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w600,
-                                                color: iconColor,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          trace.toDisplayText(
-                                            currentUserId: _myAppUserId,
-                                          ),
-                                          style: const TextStyle(
-                                            fontSize: 13,
-                                            color: AppTheme.textSecondary,
-                                            height: 1.25,
-                                          ),
-                                        ),
-                                        if (detail.isNotEmpty) ...[
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            detail,
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              color: AppTheme.textHint,
-                                              height: 1.2,
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
                     ),
+                  );
+                },
+              ),
+            ),
     );
   }
 }
@@ -544,8 +548,5 @@ class _PeerResolvedInfo {
   final String displayName;
   final String? avatarUrl;
 
-  const _PeerResolvedInfo({
-    required this.displayName,
-    required this.avatarUrl,
-  });
+  const _PeerResolvedInfo({required this.displayName, required this.avatarUrl});
 }

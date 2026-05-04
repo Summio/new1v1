@@ -127,6 +127,10 @@ class CallRecord(BaseModel, TimestampMixin):
     last_renew_at = fields.DatetimeField(null=True, description="最后一次续租时间")
     billing_free_seconds = fields.BigIntField(default=10, description="本次通话免费秒数快照")
     payer_user_id = fields.BigIntField(null=True, description="本次通话付费用户ID快照")
+    income_anchor_user_id = fields.BigIntField(null=True, description="本次通话收益主播ID快照")
+    anchor_share_bps = fields.IntField(default=5000, description="本次通话主播分成比例快照（万分比）")
+    anchor_income_diamonds = fields.BigIntField(default=0, description="本次通话主播收益钻石(分)")
+    income_settled_at = fields.DatetimeField(null=True, description="主播收益结算时间")
 
     class Meta:
         table = "call_record"

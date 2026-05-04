@@ -1,8 +1,18 @@
 import asyncio
 import importlib.util
+import sys
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+
+if "loguru" not in sys.modules:
+    sys.modules["loguru"] = SimpleNamespace(
+        logger=SimpleNamespace(
+            warning=lambda *args, **kwargs: None,
+            error=lambda *args, **kwargs: None,
+            info=lambda *args, **kwargs: None,
+        )
+    )
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "app" / "services" / "call_trace_service.py"
 SPEC = importlib.util.spec_from_file_location("call_trace_service_under_test", MODULE_PATH)
@@ -25,6 +35,8 @@ def _make_call_record() -> SimpleNamespace:
         callee_id=2002,
         duration=35,
         total_fee=120,
+        income_anchor_user_id=2002,
+        anchor_income_diamonds=60,
         end_reason=None,
     )
 
@@ -53,6 +65,8 @@ class CallTraceServiceTests(unittest.TestCase):
         self.assertEqual(event["ts"], 1_720_000_000)
         self.assertEqual(event["duration_seconds"], 35)
         self.assertEqual(event["total_fee_coins"], 120)
+        self.assertEqual(event["income_anchor_user_id"], 2002)
+        self.assertEqual(event["anchor_income_diamonds"], 60)
         self.assertIsNone(event["reason"])
 
     def test_valid_call_trace_phases_cover_required_phases(self) -> None:
@@ -66,6 +80,7 @@ class CallTraceServiceTests(unittest.TestCase):
                 "ended",
                 "timeout",
                 "balance_empty",
+                "force_exit",
             },
         )
 

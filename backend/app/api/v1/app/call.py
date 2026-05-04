@@ -10,6 +10,11 @@ from app.core.call_reject_protect import calc_left_seconds, should_block_rejecte
 from app.core.time_utils import now_local_naive, to_utc_aware
 from app.models import AppUser, CallRecord
 from app.services.call_trace_service import CallTraceService
+from app.services.call_income_service import (
+    get_anchor_share_bps,
+    resolve_income_anchor_id,
+    settle_call_anchor_income_once,
+)
 from app.schemas.app_api import (
     CallActionOut,
     CallActionIn,
@@ -34,6 +39,7 @@ DEFAULT_REJECT_INBOUND_PROTECT_SECONDS = 5
 DEFAULT_REJECT_PAIR_PROTECT_SECONDS = 5
 MAX_REJECT_PROTECT_SECONDS = 600
 MAX_FREE_SECONDS_BEFORE_BILLING = 600
+DEFAULT_ANCHOR_SHARE_BPS = 5000
 
 _call_trace_service = CallTraceService()
 
@@ -271,11 +277,15 @@ async def dialing(req_in: DialingIn):
                     return Fail(code=429, msg=f"你刚被对方拒绝，请{left}秒后再呼叫")
 
         # 创建通话记录（同一事务内，锁已持有，无竞争）
+        anchor_share_bps = await get_anchor_share_bps()
+        income_anchor_user_id = int(anchor_user.id) if not bool(app_user.is_anchor) else None
         call_record = await CallRecord.create(
             caller_id=caller_id,
             callee_id=anchor_user.id,
             call_price=call_price,
             status="pending",
+            income_anchor_user_id=income_anchor_user_id,
+            anchor_share_bps=anchor_share_bps,
             using_db=conn,
         )
 
@@ -492,6 +502,7 @@ async def call_end(req_in: CallEndIn):
 
     # 用于事务结束后推送余额更新
     _payer_id_for_balance_push: int | None = None
+    _anchor_id_for_balance_push: int | None = None
     _balance_changed_for_push = False
 
     async with in_transaction() as conn:
@@ -539,6 +550,13 @@ async def call_end(req_in: CallEndIn):
                 charged_amount = 0
 
             payer_id = await _resolve_payer_id_with_snapshot(call_record)
+            participants = await AppUser.filter(
+                id__in=[int(call_record.caller_id), int(call_record.callee_id)]
+            ).using_db(conn).all()
+            if not getattr(call_record, "income_anchor_user_id", None):
+                call_record.income_anchor_user_id = (
+                    resolve_income_anchor_id(participants, payer_id) or None
+                )
 
             if actual_fee > deducted_amount and payer_id > 0:
                 top_up_amount = actual_fee - deducted_amount
@@ -584,7 +602,17 @@ async def call_end(req_in: CallEndIn):
             call_record.effective_ended_at = call_record.ended_at
             call_record.end_basis = "manual_end"
             call_record.force_exit_user_id = None
+            settlement = await settle_call_anchor_income_once(
+                call_record=call_record,
+                conn=conn,
+                total_fee=charged_amount,
+                payer_id=payer_id,
+                participants=participants,
+            )
+            if settlement.settled and settlement.anchor_user_id > 0:
+                _anchor_id_for_balance_push = settlement.anchor_user_id
             await call_record.save(using_db=conn)
+
             await _append_call_trace(
                 call_record,
                 phase="ended",
@@ -610,8 +638,12 @@ async def call_end(req_in: CallEndIn):
 
     # 事务结束后，如余额发生变化则推送余额更新给付费方
     if _payer_id_for_balance_push is not None and _balance_changed_for_push:
-        asyncio.create_task(_ws_push_balance_updated_for_refund(
+        asyncio.create_task(_ws_push_balance_updated(
             payer_id=_payer_id_for_balance_push,
+        ))
+    if _anchor_id_for_balance_push is not None:
+        asyncio.create_task(_ws_push_balance_updated(
+            payer_id=_anchor_id_for_balance_push,
         ))
 
     return Success(
@@ -714,7 +746,7 @@ async def _ws_push_call_ended_to_peer(
         pass
 
 
-async def _ws_push_balance_updated_for_refund(payer_id: int) -> None:
+async def _ws_push_balance_updated(payer_id: int) -> None:
     """通话结束后推送退款后的余额给付费方（fire-and-forget）。"""
     try:
         from app.models import AppUser
