@@ -1,26 +1,9 @@
-import 'dart:convert';
-
 import 'package:flutter_test/flutter_test.dart';
 import 'package:huanxi/core/im/call_trace_message.dart';
-import 'package:huanxi/services/im_service.dart';
-import 'package:tencent_cloud_chat_sdk/enum/message_elem_type.dart';
-import 'package:tencent_cloud_chat_sdk/models/v2_tim_custom_elem.dart';
-import 'package:tencent_cloud_chat_sdk/models/v2_tim_message.dart';
-
-V2TimMessage _buildCallTraceMessage(Map<String, dynamic> payload) {
-  return V2TimMessage(
-    elemType: MessageElemType.V2TIM_ELEM_TYPE_CUSTOM,
-    customElem: V2TimCustomElem(
-      data: jsonEncode(payload),
-      desc: CallTraceMessage.protocol,
-      extension: 'call_trace',
-    ),
-  );
-}
 
 void main() {
-  test('CallTraceMessage.fromTimMessage parses valid payload', () {
-    final msg = _buildCallTraceMessage({
+  test('CallTraceMessage.fromJsonMap parses valid payload', () {
+    final trace = CallTraceMessage.fromJsonMap({
       'protocol': 'call_trace.v1',
       'event_id': 'call:trace:101:dialing',
       'call_id': 101,
@@ -30,10 +13,11 @@ void main() {
       'ts': 1720000000,
       'duration_seconds': 0,
       'total_fee_coins': 0,
+      'income_anchor_user_id': 2002,
+      'anchor_income_diamonds': 50,
       'reason': null,
     });
 
-    final trace = CallTraceMessage.fromTimMessage(msg);
     expect(trace, isNotNull);
     expect(trace!.callId, 101);
     expect(trace.phase, 'dialing');
@@ -41,8 +25,8 @@ void main() {
     expect(trace.toDisplayText(currentUserId: 2002), '对方发起了视频通话');
   });
 
-  test('CallTraceMessage.fromTimMessage returns null for invalid protocol', () {
-    final msg = _buildCallTraceMessage({
+  test('CallTraceMessage.fromJsonMap returns null for invalid protocol', () {
+    final trace = CallTraceMessage.fromJsonMap({
       'protocol': 'unknown.v1',
       'event_id': 'call:trace:101:dialing',
       'call_id': 101,
@@ -52,15 +36,16 @@ void main() {
       'ts': 1720000000,
       'duration_seconds': 0,
       'total_fee_coins': 0,
+      'income_anchor_user_id': 2002,
+      'anchor_income_diamonds': 50,
       'reason': null,
     });
 
-    expect(CallTraceMessage.fromTimMessage(msg), isNull);
+    expect(trace, isNull);
   });
 
-  test('IMService.buildConversationPreview maps call trace message', () {
-    final service = IMService();
-    final msg = _buildCallTraceMessage({
+  test('CallTraceMessage maps rejected preview text', () {
+    final trace = CallTraceMessage.fromJsonMap({
       'protocol': 'call_trace.v1',
       'event_id': 'call:trace:101:rejected',
       'call_id': 101,
@@ -70,13 +55,107 @@ void main() {
       'ts': 1720000000,
       'duration_seconds': 0,
       'total_fee_coins': 0,
+      'income_anchor_user_id': 2002,
+      'anchor_income_diamonds': 50,
       'reason': 'rejected',
     });
 
-    final preview = service.buildConversationPreview(
-      message: msg,
-      currentUserId: 1001,
+    expect(trace, isNotNull);
+    expect(trace!.toDisplayText(currentUserId: 1001), '对方已拒绝视频通话');
+  });
+
+  test('detailText shows income for anchor view', () {
+    final trace = CallTraceMessage.fromJsonMap({
+      'protocol': 'call_trace.v1',
+      'event_id': 'call:trace:101:ended',
+      'call_id': 101,
+      'phase': 'ended',
+      'actor_user_id': 1001,
+      'peer_user_id': 2002,
+      'ts': 1720000000,
+      'duration_seconds': 90,
+      'total_fee_coins': 120,
+      'income_anchor_user_id': 2002,
+      'anchor_income_diamonds': 60,
+      'reason': 'ended',
+    });
+
+    final text = trace!.detailText(
+      currentUserId: 2002,
+      isCurrentUserAnchor: true,
+      coinName: '金币',
+      diamondName: '钻石',
     );
-    expect(preview, '对方已拒绝视频通话');
+    expect(text, '时长 01:30 · 收入 60 钻石');
+  });
+
+  test('detailText shows expense for user view', () {
+    final trace = CallTraceMessage.fromJsonMap({
+      'protocol': 'call_trace.v1',
+      'event_id': 'call:trace:101:ended',
+      'call_id': 101,
+      'phase': 'ended',
+      'actor_user_id': 1001,
+      'peer_user_id': 2002,
+      'ts': 1720000000,
+      'duration_seconds': 90,
+      'total_fee_coins': 120,
+      'income_anchor_user_id': 2002,
+      'anchor_income_diamonds': 60,
+      'reason': 'ended',
+    });
+
+    final text = trace!.detailText(
+      currentUserId: 1001,
+      isCurrentUserAnchor: false,
+      coinName: '金币',
+      diamondName: '钻石',
+    );
+    expect(text, '时长 01:30 · 消费 120 金币');
+  });
+
+  test('detailText does not fallback to income when anchor income is absent', () {
+    final trace = CallTraceMessage.fromJsonMap({
+      'protocol': 'call_trace.v1',
+      'event_id': 'call:trace:101:ended',
+      'call_id': 101,
+      'phase': 'ended',
+      'actor_user_id': 1001,
+      'peer_user_id': 2002,
+      'ts': 1720000000,
+      'duration_seconds': 90,
+      'total_fee_coins': 120,
+      'income_anchor_user_id': 0,
+      'anchor_income_diamonds': 0,
+      'reason': 'ended',
+    });
+
+    final text = trace!.detailText(
+      currentUserId: 2002,
+      isCurrentUserAnchor: true,
+      coinName: '金币',
+      diamondName: '钻石',
+    );
+    expect(text, '时长 01:30');
+  });
+
+  test('CallTraceMessage accepts force exit phase', () {
+    final trace = CallTraceMessage.fromJsonMap({
+      'protocol': 'call_trace.v1',
+      'event_id': 'call:trace:101:force_exit',
+      'call_id': 101,
+      'phase': 'force_exit',
+      'actor_user_id': 1001,
+      'peer_user_id': 2002,
+      'ts': 1720000000,
+      'duration_seconds': 90,
+      'total_fee_coins': 120,
+      'income_anchor_user_id': 2002,
+      'anchor_income_diamonds': 60,
+      'reason': 'force_exit',
+    });
+
+    expect(trace, isNotNull);
+    expect(trace!.toDisplayText(currentUserId: 1001), '你已离开，通话已结束');
   });
 }

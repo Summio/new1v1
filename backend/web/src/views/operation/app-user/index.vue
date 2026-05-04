@@ -169,7 +169,7 @@ const coverImgStyle = {
 
 function normalizeAlbum(v) {
   if (!Array.isArray(v)) return []
-  return v.filter(item => typeof item === 'string' && item.trim()).map(item => item.trim())
+  return v.filter((item) => typeof item === 'string' && item.trim()).map((item) => item.trim())
 }
 
 function infoLine(label, value) {
@@ -225,6 +225,12 @@ function formatDuration(seconds) {
   if (hVal > 0) return `${hVal}小时 ${mVal}分 ${sVal}秒`
   if (mVal > 0) return `${mVal}分 ${sVal}秒`
   return `${sVal}秒`
+}
+
+function formatSharePercent(bps) {
+  const value = Number(bps || 0)
+  if (!Number.isFinite(value) || value <= 0) return '-'
+  return `${(value / 100).toFixed(2)}%`
 }
 
 function resolvePeerInfo(row) {
@@ -298,8 +304,50 @@ const callRecordColumns = [
       return callRecordEndReasonMap[row.end_reason] || row.end_reason
     },
   },
-  { title: '时长', key: 'duration', width: 90, align: 'center', render: row => formatDuration(row.duration) },
+  {
+    title: '时长',
+    key: 'duration',
+    width: 90,
+    align: 'center',
+    render: (row) => formatDuration(row.duration),
+  },
   { title: '总费用(金币)', key: 'total_fee', width: 100, align: 'center' },
+  {
+    title: '收益主播',
+    key: 'income_anchor_user_id',
+    width: 100,
+    align: 'center',
+    render(row) {
+      return row.income_anchor_user_id || '-'
+    },
+  },
+  {
+    title: '主播收益(钻石)',
+    key: 'anchor_income_diamonds',
+    width: 130,
+    align: 'center',
+    render(row) {
+      return Number(row.anchor_income_diamonds || 0)
+    },
+  },
+  {
+    title: '分成比例',
+    key: 'anchor_share_bps',
+    width: 100,
+    align: 'center',
+    render(row) {
+      return formatSharePercent(row.anchor_share_bps)
+    },
+  },
+  {
+    title: '收益结算时间',
+    key: 'income_settled_at',
+    width: 160,
+    align: 'center',
+    render(row) {
+      return row.income_settled_at ? formatDate(row.income_settled_at, 'YYYY-MM-DD HH:mm:ss') : '-'
+    },
+  },
   {
     title: '创建时间',
     key: 'created_at',
@@ -385,7 +433,7 @@ async function handleSave() {
 }
 
 function chooseImageFile() {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     const input = document.createElement('input')
     input.type = 'file'
     input.accept = 'image/png,image/jpeg,image/webp'
@@ -511,7 +559,10 @@ const columns = [
     width: 260,
     render(row) {
       const genderMap = { male: '男', female: '女', secret: '保密' }
-      const hw = [row.height_cm ? `${row.height_cm}cm` : '', row.weight_kg ? `${row.weight_kg}kg` : '']
+      const hw = [
+        row.height_cm ? `${row.height_cm}cm` : '',
+        row.weight_kg ? `${row.weight_kg}kg` : '',
+      ]
         .filter(Boolean)
         .join(' / ')
       return h('div', { class: 'meta-wrap' }, [
@@ -586,7 +637,10 @@ const columns = [
     width: 100,
     align: 'center',
     render(row) {
-      const item = anchorApplyStatusMap[row.anchor_apply_status] || { type: 'default', text: row.anchor_apply_status || '-' }
+      const item = anchorApplyStatusMap[row.anchor_apply_status] || {
+        type: 'default',
+        text: row.anchor_apply_status || '-',
+      }
       return h(NTag, { type: item.type }, { default: () => item.text })
     },
   },
@@ -728,7 +782,12 @@ const columns = [
       </template>
     </CrudTable>
 
-    <NModal v-model:show="editModalVisible" preset="card" title="查看/编辑 App用户" style="width: 1120px">
+    <NModal
+      v-model:show="editModalVisible"
+      preset="card"
+      title="查看/编辑 App用户"
+      style="width: 1120px"
+    >
       <NTabs :value="activeEditTab" type="line" animated @update:value="handleEditTabChange">
         <NTabPane name="basic" tab="基础信息">
           <NForm label-placement="left" label-width="90" class="edit-form-grid">
@@ -763,7 +822,10 @@ const columns = [
               <NSwitch v-model:value="modalForm.is_anchor" />
             </NFormItem>
             <NFormItem label="申请状态">
-              <NSelect v-model:value="modalForm.anchor_apply_status" :options="anchorApplyStatusOptions" />
+              <NSelect
+                v-model:value="modalForm.anchor_apply_status"
+                :options="anchorApplyStatusOptions"
+              />
             </NFormItem>
             <NFormItem label="驳回原因" class="full-span">
               <NInput
@@ -807,7 +869,12 @@ const columns = [
                 </div>
                 <NSelect
                   v-model:value="modalForm.cover_url"
-                  :options="(modalForm.album_photos || []).map((item, idx) => ({ label: `相册图 ${idx + 1}`, value: item }))"
+                  :options="
+                    (modalForm.album_photos || []).map((item, idx) => ({
+                      label: `相册图 ${idx + 1}`,
+                      value: item,
+                    }))
+                  "
                   placeholder="从相册中选择封面"
                   clearable
                   style="width: 220px"
@@ -821,7 +888,11 @@ const columns = [
                   <span class="hint">最多6张，点击“设为封面”即可切换封面</span>
                 </div>
                 <div v-if="(modalForm.album_photos || []).length" class="album-grid">
-                  <div v-for="(url, idx) in modalForm.album_photos" :key="`${url}-${idx}`" class="album-card">
+                  <div
+                    v-for="(url, idx) in modalForm.album_photos"
+                    :key="`${url}-${idx}`"
+                    class="album-card"
+                  >
                     <div class="media-thumb-md">
                       <NImage :src="url" width="100%" height="120" object-fit="cover" />
                     </div>
@@ -830,7 +901,9 @@ const columns = [
                       <NButton size="tiny" type="info" @click="handleSetCover(url)">
                         {{ modalForm.cover_url === url ? '当前封面' : '设为封面' }}
                       </NButton>
-                      <NButton size="tiny" type="error" @click="handleRemoveAlbumPhoto(idx)">删除</NButton>
+                      <NButton size="tiny" type="error" @click="handleRemoveAlbumPhoto(idx)"
+                        >删除</NButton
+                      >
                     </div>
                   </div>
                 </div>
@@ -871,10 +944,24 @@ const columns = [
               <NInput :value="String(modalForm.frozen_diamonds ?? 0)" readonly />
             </NFormItem>
             <NFormItem label="创建时间">
-              <NInput :value="modalForm.created_at ? formatDate(modalForm.created_at, 'YYYY-MM-DD HH:mm:ss') : '-'" readonly />
+              <NInput
+                :value="
+                  modalForm.created_at
+                    ? formatDate(modalForm.created_at, 'YYYY-MM-DD HH:mm:ss')
+                    : '-'
+                "
+                readonly
+              />
             </NFormItem>
             <NFormItem label="最后登录">
-              <NInput :value="modalForm.last_login ? formatDate(modalForm.last_login, 'YYYY-MM-DD HH:mm:ss') : '-'" readonly />
+              <NInput
+                :value="
+                  modalForm.last_login
+                    ? formatDate(modalForm.last_login, 'YYYY-MM-DD HH:mm:ss')
+                    : '-'
+                "
+                readonly
+              />
             </NFormItem>
           </NForm>
         </NTabPane>
@@ -903,7 +990,7 @@ const columns = [
             :columns="callRecordColumns"
             :data="callRecordRows"
             :pagination="callRecordPagination"
-            :scroll-x="900"
+            :scroll-x="1390"
             :bordered="false"
             :single-line="false"
           />
@@ -1100,5 +1187,4 @@ const columns = [
   gap: 10px;
   margin-bottom: 12px;
 }
-
 </style>

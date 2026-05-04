@@ -91,7 +91,9 @@ class _ImPageState extends ConsumerState<ImPage> {
       _myAvatarUrl = authState.avatar;
       _peerUserId = _normalizeIMUserId(widget.userId);
       _peerNickname = widget.initialPeerNickname;
-      _peerAvatarUrl = _imService.normalizeMediaUrl(widget.initialPeerAvatarUrl);
+      _peerAvatarUrl = _imService.normalizeMediaUrl(
+        widget.initialPeerAvatarUrl,
+      );
 
       // 4. 初始化并登录 IM（全局会话）
       await _imService.ensureReady(
@@ -213,10 +215,7 @@ class _ImPageState extends ConsumerState<ImPage> {
     try {
       final data = await DioClient.instance.apiGet(
         ApiEndpoints.userPublic,
-        params: {
-          'user_id': peerNumId,
-          'scene': 'chat',
-        },
+        params: {'user_id': peerNumId, 'scene': 'chat'},
       );
       final payload =
           (data['data'] as Map<String, dynamic>?) ?? const <String, dynamic>{};
@@ -226,7 +225,8 @@ class _ImPageState extends ConsumerState<ImPage> {
         final appAvatar = _imService.normalizeMediaUrl(
           (payload['avatar'] as String?)?.trim(),
         );
-        final appAnchorId = (payload['anchor_user_id'] as num?)?.toInt() ??
+        final appAnchorId =
+            (payload['anchor_user_id'] as num?)?.toInt() ??
             (payload['anchor_id'] as num?)?.toInt();
         if (appNick != null && appNick.isNotEmpty) {
           _peerNickname = appNick;
@@ -411,24 +411,27 @@ class _ImPageState extends ConsumerState<ImPage> {
     setState(() => _isStartingCall = true);
     try {
       unawaited(
-        context.push(
-          Uri(
-            path: AppRoutes.callOutgoing,
-            queryParameters: {
-              'peerUserId': peerNumId.toString(),
-              'anchorId': anchorId.toString(),
-              'peerName': _peerDisplayName(),
-              'peerAvatar': _peerAvatarUrl ?? '',
-              'callPrice': '0',
-            },
-          ).toString(),
-        ).then(_handleCallPageResult).catchError((_) {
-          if (!mounted) return;
-          AppToast.showSnackBar(
-            context,
-            const SnackBar(content: Text('通话启动失败，请稍后重试')),
-          );
-        }),
+        context
+            .push(
+              Uri(
+                path: AppRoutes.callOutgoing,
+                queryParameters: {
+                  'peerUserId': peerNumId.toString(),
+                  'anchorId': anchorId.toString(),
+                  'peerName': _peerDisplayName(),
+                  'peerAvatar': _peerAvatarUrl ?? '',
+                  'callPrice': '0',
+                },
+              ).toString(),
+            )
+            .then(_handleCallPageResult)
+            .catchError((_) {
+              if (!mounted) return;
+              AppToast.showSnackBar(
+                context,
+                const SnackBar(content: Text('通话启动失败，请稍后重试')),
+              );
+            }),
       );
     } catch (_) {
       if (!mounted) return;
@@ -453,6 +456,10 @@ class _ImPageState extends ConsumerState<ImPage> {
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authProvider);
+    final tokenNames = ref.watch(tokenNamesProvider);
+    final currentUserId = authState.userId ?? StorageService.getUserId() ?? 0;
+    final isCurrentUserAnchor = authState.appRole == 'anchor';
     final size = MediaQuery.sizeOf(context);
     final maxBubbleWidth = size.width * 0.75;
 
@@ -526,6 +533,10 @@ class _ImPageState extends ConsumerState<ImPage> {
                               return _MessageBubble(
                                 message: msg,
                                 maxBubbleWidth: maxBubbleWidth,
+                                currentUserId: currentUserId,
+                                isCurrentUserAnchor: isCurrentUserAnchor,
+                                coinName: tokenNames.coinName,
+                                diamondName: tokenNames.diamondName,
                                 avatarUrl: msg.isMe
                                     ? _myAvatarUrl
                                     : _peerAvatarUrl,
@@ -612,18 +623,33 @@ class _ChatMessage {
 class _MessageBubble extends StatelessWidget {
   final _ChatMessage message;
   final double maxBubbleWidth;
+  final int currentUserId;
+  final bool isCurrentUserAnchor;
+  final String coinName;
+  final String diamondName;
   final String? avatarUrl;
 
   const _MessageBubble({
     required this.message,
     required this.maxBubbleWidth,
+    required this.currentUserId,
+    required this.isCurrentUserAnchor,
+    required this.coinName,
+    required this.diamondName,
     required this.avatarUrl,
   });
 
   @override
   Widget build(BuildContext context) {
     if (message.isCallTrace) {
-      return _CallTraceCard(message: message, maxBubbleWidth: maxBubbleWidth);
+      return _CallTraceCard(
+        message: message,
+        maxBubbleWidth: maxBubbleWidth,
+        currentUserId: currentUserId,
+        isCurrentUserAnchor: isCurrentUserAnchor,
+        coinName: coinName,
+        diamondName: diamondName,
+      );
     }
 
     return Padding(
@@ -687,12 +713,30 @@ class _MessageBubble extends StatelessWidget {
 class _CallTraceCard extends StatelessWidget {
   final _ChatMessage message;
   final double maxBubbleWidth;
+  final int currentUserId;
+  final bool isCurrentUserAnchor;
+  final String coinName;
+  final String diamondName;
 
-  const _CallTraceCard({required this.message, required this.maxBubbleWidth});
+  const _CallTraceCard({
+    required this.message,
+    required this.maxBubbleWidth,
+    required this.currentUserId,
+    required this.isCurrentUserAnchor,
+    required this.coinName,
+    required this.diamondName,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final detail = message.callTrace?.detailText() ?? '';
+    final detail =
+        message.callTrace?.detailText(
+          currentUserId: currentUserId,
+          isCurrentUserAnchor: isCurrentUserAnchor,
+          coinName: coinName,
+          diamondName: diamondName,
+        ) ??
+        '';
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Center(
@@ -757,4 +801,3 @@ class _BubbleAvatar extends StatelessWidget {
     );
   }
 }
-

@@ -1,11 +1,42 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Body, Query
 from tortoise.expressions import Q
 
 from app.controllers.system_config import system_config_controller
+from app.core.redis import get_redis
+from app.models.system_config import SYSTEM_CONFIG_CACHE_KEY
 from app.schemas.base import Fail, Success, SuccessExtra
 from app.schemas.system_config import SystemConfigCreate, SystemConfigUpdate
 
 router = APIRouter()
+spec_router = APIRouter()
+
+
+async def _clear_system_config_cache() -> None:
+    try:
+        redis = await get_redis()
+        await redis.delete(SYSTEM_CONFIG_CACHE_KEY)
+    except Exception:  # noqa: BLE001
+        pass
+
+
+@spec_router.get("/system-config", summary="查询所有系统配置")
+async def get_system_config_map():
+    configs = await system_config_controller.model.all()
+    return Success(data={c.cfg_key: c.cfg_value for c in configs})
+
+
+@spec_router.put("/system-config/{cfg_key}", summary="更新指定系统配置")
+async def update_system_config_value(
+    cfg_key: str,
+    value: str = Body(..., embed=True, description="配置值"),
+):
+    obj = await system_config_controller.get_by_key(cfg_key)
+    if not obj:
+        return Fail(code=404, msg="配置不存在")
+    obj.cfg_value = value
+    await obj.save(update_fields=["cfg_value", "updated_at"])
+    await _clear_system_config_cache()
+    return Success(msg="Updated Successfully")
 
 
 @router.get("/list", summary="系统配置列表")
@@ -55,6 +86,7 @@ async def update_config(
     if conflict and conflict.id != config_in.id:
         return Fail(code=400, msg="配置键已存在")
     await system_config_controller.update(id=config_in.id, obj_in=config_in)
+    await _clear_system_config_cache()
     return Success(msg="Updated Successfully")
 
 

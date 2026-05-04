@@ -18,6 +18,7 @@ VALID_CALL_TRACE_PHASES = {
     "ended",
     "timeout",
     "balance_empty",
+    "force_exit",
 }
 
 DEFAULT_CALL_TRACE_DEDUPE_TTL_SECONDS = 7 * 24 * 60 * 60
@@ -91,6 +92,8 @@ def build_call_trace_event(
         "ts": ts or _now_ts_seconds(),
         "duration_seconds": _safe_int(getattr(call_record, "duration", 0)),
         "total_fee_coins": _safe_int(getattr(call_record, "total_fee", 0)),
+        "income_anchor_user_id": _safe_int(getattr(call_record, "income_anchor_user_id", 0)),
+        "anchor_income_diamonds": _safe_int(getattr(call_record, "anchor_income_diamonds", 0)),
         "reason": reason,
     }
 

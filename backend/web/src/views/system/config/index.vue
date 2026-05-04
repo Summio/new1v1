@@ -1,6 +1,6 @@
 <script setup>
-import { onMounted, ref } from 'vue'
-import { NButton, NCard, NForm, NFormItem, NInput, NInputNumber, NSpace } from 'naive-ui'
+import { computed, onMounted, ref } from 'vue'
+import { NButton, NCard, NForm, NFormItem, NInput, NInputNumber, NSpace, NSwitch } from 'naive-ui'
 
 import CommonPage from '@/components/page/CommonPage.vue'
 import api from '@/api'
@@ -25,6 +25,8 @@ const tokenForm = ref({
 const imForm = ref({
   im_sdk_app_id: null,
   im_secret_key: '',
+  im_call_trace_enabled: true,
+  im_admin_identifier: 'trace_bot',
 })
 
 const rtcForm = ref({
@@ -38,6 +40,21 @@ const faceBeautyForm = ref({
 
 const billingForm = ref({
   call_billing_free_seconds: 10,
+  call_anchor_share_bps: 5000,
+})
+
+const anchorSharePercent = computed({
+  get() {
+    return Number((Number(billingForm.value.call_anchor_share_bps || 0) / 100).toFixed(2))
+  },
+  set(value) {
+    const percent = Number(value)
+    if (!Number.isFinite(percent)) {
+      billingForm.value.call_anchor_share_bps = 5000
+      return
+    }
+    billingForm.value.call_anchor_share_bps = normalizeSeconds(percent * 100, 5000, 0, 10000)
+  },
 })
 
 const protectForm = ref({
@@ -68,6 +85,11 @@ async function loadAllConfigs() {
 
     imForm.value.im_sdk_app_id = normalizeNullablePositiveInt(findValue('im_sdk_app_id', ''))
     imForm.value.im_secret_key = findValue('im_secret_key', '')
+    imForm.value.im_call_trace_enabled = normalizeBool(
+      findValue('im_call_trace_enabled', '1'),
+      true
+    )
+    imForm.value.im_admin_identifier = findValue('im_admin_identifier', 'trace_bot')
 
     rtcForm.value.rtc_app_id = findValue('rtc_app_id', '')
     rtcForm.value.rtc_app_certificate = findValue('rtc_app_certificate', '')
@@ -79,6 +101,12 @@ async function loadAllConfigs() {
       10,
       0,
       600
+    )
+    billingForm.value.call_anchor_share_bps = normalizeSeconds(
+      findValue('call_anchor_share_bps', '5000'),
+      5000,
+      0,
+      10000
     )
 
     protectForm.value.reject_inbound_protect_seconds = normalizeSeconds(
@@ -124,7 +152,9 @@ async function loadAllConfigs() {
       0,
       30
     )
-  } catch (_) {}
+  } catch (_) {
+    allConfigRows.value = []
+  }
 }
 
 function findRow(cfgKey) {
@@ -151,6 +181,15 @@ function normalizeNullablePositiveInt(raw) {
   return Math.floor(n)
 }
 
+function normalizeBool(raw, fallback = false) {
+  const value = String(raw ?? '')
+    .trim()
+    .toLowerCase()
+  if (['1', 'true', 'yes', 'on'].includes(value)) return true
+  if (['0', 'false', 'no', 'off'].includes(value)) return false
+  return fallback
+}
+
 async function upsertConfig(cfgKey, cfgValue, description) {
   const existing = findRow(cfgKey)
   if (existing) {
@@ -173,7 +212,11 @@ async function saveTokenConfigs() {
   tokenLoading.value = true
   try {
     await upsertConfig('coin_name', tokenForm.value.coin_name.trim() || '金币', '代币名称：金币')
-    await upsertConfig('diamond_name', tokenForm.value.diamond_name.trim() || '钻石', '代币名称：钻石')
+    await upsertConfig(
+      'diamond_name',
+      tokenForm.value.diamond_name.trim() || '钻石',
+      '代币名称：钻石'
+    )
     await loadAllConfigs()
     $message.success('基础代币配置已保存')
   } catch (_) {
@@ -189,6 +232,16 @@ async function saveImConfigs() {
     const sdkId = imForm.value.im_sdk_app_id ? String(imForm.value.im_sdk_app_id) : ''
     await upsertConfig('im_sdk_app_id', sdkId, '腾讯IM SDK AppID')
     await upsertConfig('im_secret_key', imForm.value.im_secret_key.trim(), '腾讯IM SecretKey')
+    await upsertConfig(
+      'im_call_trace_enabled',
+      imForm.value.im_call_trace_enabled ? '1' : '0',
+      '是否启用通话 IM 留痕'
+    )
+    await upsertConfig(
+      'im_admin_identifier',
+      imForm.value.im_admin_identifier.trim() || 'trace_bot',
+      '腾讯 IM 通话留痕管理员账号'
+    )
     await loadAllConfigs()
     $message.success('IM 配置已保存')
   } catch (_) {
@@ -237,7 +290,13 @@ async function saveBillingConfigs() {
   billingLoading.value = true
   try {
     const freeSeconds = normalizeSeconds(billingForm.value.call_billing_free_seconds, 10, 0, 600)
+    const anchorShareBps = normalizeSeconds(billingForm.value.call_anchor_share_bps, 5000, 0, 10000)
     await upsertConfig('call_billing_free_seconds', String(freeSeconds), '通话免费时长（秒）')
+    await upsertConfig(
+      'call_anchor_share_bps',
+      String(anchorShareBps),
+      '视频通话主播分成比例（万分比）'
+    )
     await loadAllConfigs()
     $message.success('计费配置已保存')
   } catch (_) {
@@ -346,13 +405,19 @@ async function saveWatchdogConfigs() {
             <NInput v-model:value="tokenForm.diamond_name" placeholder="例如：钻石" />
           </NFormItem>
         </NForm>
-        <NButton type="primary" :loading="tokenLoading" @click="saveTokenConfigs">保存基础配置</NButton>
+        <NButton type="primary" :loading="tokenLoading" @click="saveTokenConfigs"
+          >保存基础配置</NButton
+        >
       </NCard>
 
       <NCard title="IM 配置（腾讯云）">
         <NForm label-placement="left" label-align="left" :label-width="180" :model="imForm">
           <NFormItem label="IM SDK AppID im_sdk_app_id">
-            <NInputNumber v-model:value="imForm.im_sdk_app_id" :min="1" placeholder="请输入数字 AppID" />
+            <NInputNumber
+              v-model:value="imForm.im_sdk_app_id"
+              :min="1"
+              placeholder="请输入数字 AppID"
+            />
           </NFormItem>
           <NFormItem label="IM SecretKey im_secret_key">
             <NInput
@@ -361,6 +426,12 @@ async function saveWatchdogConfigs() {
               show-password-on="mousedown"
               placeholder="请输入 IM SecretKey"
             />
+          </NFormItem>
+          <NFormItem label="通话留痕 im_call_trace_enabled">
+            <NSwitch v-model:value="imForm.im_call_trace_enabled" />
+          </NFormItem>
+          <NFormItem label="留痕管理员 im_admin_identifier">
+            <NInput v-model:value="imForm.im_admin_identifier" placeholder="例如：trace_bot" />
           </NFormItem>
         </NForm>
         <NButton type="primary" :loading="imLoading" @click="saveImConfigs">保存 IM 配置</NButton>
@@ -380,7 +451,9 @@ async function saveWatchdogConfigs() {
             />
           </NFormItem>
         </NForm>
-        <NButton type="primary" :loading="rtcLoading" @click="saveRtcConfigs">保存 RTC 配置</NButton>
+        <NButton type="primary" :loading="rtcLoading" @click="saveRtcConfigs"
+          >保存 RTC 配置</NButton
+        >
       </NCard>
 
       <NCard title="美颜配置">
@@ -409,17 +482,23 @@ async function saveWatchdogConfigs() {
               placeholder="例如 10"
             />
           </NFormItem>
+          <NFormItem label="视频通话主播分成比例（%） call_anchor_share_bps">
+            <NInputNumber
+              v-model:value="anchorSharePercent"
+              :min="0"
+              :max="100"
+              :step="0.01"
+              placeholder="例如 50"
+            />
+          </NFormItem>
         </NForm>
-        <NButton type="primary" :loading="billingLoading" @click="saveBillingConfigs">保存计费配置</NButton>
+        <NButton type="primary" :loading="billingLoading" @click="saveBillingConfigs"
+          >保存计费配置</NButton
+        >
       </NCard>
 
       <NCard title="通话保护配置">
-        <NForm
-          label-placement="left"
-          label-align="left"
-          :label-width="260"
-          :model="protectForm"
-        >
+        <NForm label-placement="left" label-align="left" :label-width="260" :model="protectForm">
           <NFormItem label="拒绝后禁止呼入（秒） call_reject_inbound_protect_seconds">
             <NInputNumber
               v-model:value="protectForm.reject_inbound_protect_seconds"

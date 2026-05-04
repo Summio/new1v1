@@ -115,6 +115,10 @@ async def gift_send(req_in: GiftSendIn):
             if updated == 0:
                 raise ValueError("余额不足，扣款失败")
 
+            await AppUser.filter(id=anchor_user.id).using_db(conn).update(
+                diamonds=F("diamonds") + gift.price
+            )
+
             # 记录礼物（同一事务内）
             await GiftRecord.create(
                 sender_id=sender_id,

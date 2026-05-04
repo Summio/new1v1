@@ -12,6 +12,7 @@ class CallTraceMessage {
     'ended',
     'timeout',
     'balance_empty',
+    'force_exit',
   };
 
   final String eventId;
@@ -22,6 +23,8 @@ class CallTraceMessage {
   final int ts;
   final int durationSeconds;
   final int totalFeeCoins;
+  final int incomeAnchorUserId;
+  final int anchorIncomeDiamonds;
   final String? reason;
 
   const CallTraceMessage({
@@ -33,6 +36,8 @@ class CallTraceMessage {
     required this.ts,
     required this.durationSeconds,
     required this.totalFeeCoins,
+    required this.incomeAnchorUserId,
+    required this.anchorIncomeDiamonds,
     this.reason,
   });
 
@@ -69,6 +74,8 @@ class CallTraceMessage {
     final ts = _asInt(json['ts']);
     final durationSeconds = _asInt(json['duration_seconds']);
     final totalFeeCoins = _asInt(json['total_fee_coins']);
+    final incomeAnchorUserId = _asInt(json['income_anchor_user_id']);
+    final anchorIncomeDiamonds = _asInt(json['anchor_income_diamonds']);
     final reason = (json['reason'] as String?)?.trim();
 
     if (callId <= 0 || actorUserId <= 0 || peerUserId <= 0) {
@@ -84,6 +91,8 @@ class CallTraceMessage {
       ts: ts,
       durationSeconds: durationSeconds,
       totalFeeCoins: totalFeeCoins,
+      incomeAnchorUserId: incomeAnchorUserId,
+      anchorIncomeDiamonds: anchorIncomeDiamonds,
       reason: reason?.isEmpty == true ? null : reason,
     );
   }
@@ -105,18 +114,31 @@ class CallTraceMessage {
         return isActor ? '你发起的视频通话无人接听' : '你有一通视频来电未接听';
       case 'balance_empty':
         return isActor ? '你的余额不足，通话已结束' : '对方余额不足，通话已结束';
+      case 'force_exit':
+        return isActor ? '你已离开，通话已结束' : '对方已离开，通话已结束';
       default:
         return '视频通话状态更新';
     }
   }
 
-  String detailText() {
+  String detailText({
+    required int currentUserId,
+    required bool isCurrentUserAnchor,
+    String coinName = '金币',
+    String diamondName = '钻石',
+  }) {
     final parts = <String>[];
     if (durationSeconds > 0) {
       parts.add('时长 ${_formatDuration(durationSeconds)}');
     }
-    if (totalFeeCoins > 0) {
-      parts.add('消费 $totalFeeCoins 金币');
+    final shouldShowIncome = isCurrentUserAnchor &&
+        incomeAnchorUserId == currentUserId &&
+        anchorIncomeDiamonds > 0;
+    final shouldShowExpense = totalFeeCoins > 0 && !isCurrentUserAnchor;
+    if (shouldShowIncome) {
+      parts.add('收入 $anchorIncomeDiamonds $diamondName');
+    } else if (shouldShowExpense) {
+      parts.add('消费 $totalFeeCoins $coinName');
     }
     return parts.join(' · ');
   }

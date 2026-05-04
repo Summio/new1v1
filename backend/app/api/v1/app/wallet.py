@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends
 from app.core.app_auth import DependAppAuth
 from app.core.dependency import LimitCallback
 from app.core.ctx import CTX_APP_USER_ID, CTX_APP_USER_OBJ
-from app.models import AppUser, RechargeOrder, WithdrawApply
+from app.models import AppUser, RechargeOrder, SystemConfig, WithdrawApply
 from app.schemas.app_api import (
     BalanceOut,
     RechargeCreateIn,
@@ -27,11 +27,14 @@ async def wallet_balance():
     app_user: AppUser = CTX_APP_USER_OBJ.get()
     if not app_user:
         return Fail(code=401, msg="用户不存在")
+    token_names = await SystemConfig.get_all_as_dict()
     return Success(
         data=BalanceOut(
             coins=app_user.coins,
             diamonds=app_user.diamonds,
             frozen_diamonds=app_user.frozen_diamonds,
+            coin_name=token_names.get("coin_name", "金币"),
+            diamond_name=token_names.get("diamond_name", "钻石"),
         ).model_dump()
     )
 
@@ -86,7 +89,7 @@ async def recharge_callback(order_no: str):
     安全注意：
       - 生产环境必须接入微信支付/支付宝真实回调，验证签名
       - 此 Mock 回调仅在 ENABLE_MOCK_CALLBACK=true 且 DEBUG=true 时可用
-      - Mock 模式下：直接给用户加钻石（仅用于本地开发测试）
+      - Mock 模式下：直接给用户加金币（仅用于本地开发测试）
     """
     from app.settings.config import settings
 
@@ -116,9 +119,9 @@ async def recharge_callback(order_no: str):
         if order.user_id != callback_user_id:
             return Fail(code=403, msg="无权操作此订单")
 
-        # 加钻石：同一事务内更新用户余额
+        # 加金币：同一事务内更新用户余额
         await AppUser.filter(id=order.user_id).using_db(conn).update(
-            diamonds=F("diamonds") + order.amount
+            coins=F("coins") + order.amount
         )
         order.status = "paid"
         await order.save(using_db=conn, update_fields=["status"])

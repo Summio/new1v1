@@ -1,4 +1,4 @@
-from .system_config import system_config_router
+from .system_config import system_config_router, system_config_spec_router
 from .withdraw import router as withdraw_router
 from fastapi import APIRouter
 
@@ -28,6 +28,7 @@ v1_router.include_router(apis_router, prefix="/api", dependencies=[DependPermiss
 v1_router.include_router(depts_router, prefix="/dept", dependencies=[DependPermission])
 v1_router.include_router(auditlog_router, prefix="/auditlog", dependencies=[DependPermission])
 v1_router.include_router(system_config_router, prefix="/system_config", dependencies=[DependPermission])
+v1_router.include_router(system_config_spec_router, prefix="/apis", dependencies=[DependPermission])
 v1_router.include_router(withdraw_router, prefix="/withdraw", dependencies=[DependPermission])
 v1_router.include_router(app_users_router, prefix="/app_user", dependencies=[DependPermission])
 v1_router.include_router(call_records_router, prefix="/call_record", dependencies=[DependPermission])

@@ -11,6 +11,7 @@ from app.core.call_presence import (
 from app.log import logger
 from app.models import AppUser, CallRecord
 from app.models.system_config import SystemConfig
+from app.services.call_income_service import settle_call_anchor_income_once
 from app.core.time_utils import now_local_naive, to_utc_aware
 from app.services.call_trace_service import CallTraceService
 from app.utils.parse import safe_parse_int, clamp_int
@@ -28,6 +29,8 @@ MAX_WATCHDOG_BATCH_SIZE = 100
 DEFAULT_PRESENCE_OFFLINE_DETECT_SECONDS = 3
 DEFAULT_PRESENCE_SETTLE_GRACE_SECONDS = 5
 MAX_PRESENCE_SETTLE_GRACE_SECONDS = 30
+DEFAULT_ANCHOR_SHARE_BPS = 5000
+MAX_ANCHOR_SHARE_BPS = 10000
 
 
 @dataclass(frozen=True)
@@ -138,6 +141,22 @@ def _resolve_payer_user_id(raw_snapshot: int | None) -> int | None:
 
 def _build_coins_decrement_expr(amount: int):
     return F("coins") - int(amount)
+
+
+def _resolve_income_anchor_id(
+    *,
+    caller_id: int,
+    callee_id: int,
+    payer_id: int | None,
+    anchor_user_ids: set[int],
+) -> int:
+    if payer_id is None or payer_id <= 0:
+        return 0
+    if caller_id in anchor_user_ids and caller_id != payer_id:
+        return caller_id
+    if callee_id in anchor_user_ids and callee_id != payer_id:
+        return callee_id
+    return 0
 
 
 def _now_ms() -> int:
@@ -294,6 +313,7 @@ async def _close_stale_ongoing(config: WatchdogConfig) -> None:
 
     trace_service = CallTraceService()
     ended_records: list[CallRecord] = []
+    anchor_balance_pushes: list[int] = []
 
     # 预加载主播状态（跨批次复用，避免重复查询）
     raw_records = (
@@ -319,9 +339,14 @@ async def _close_stale_ongoing(config: WatchdogConfig) -> None:
     charged_records: list[tuple[CallRecord, int]] = []  # (call_record, payer_id)
     for batch_start in range(0, len(raw_records), BATCH_SIZE):
         batch = raw_records[batch_start : batch_start + BATCH_SIZE]
-        batch_ended, batch_charged = await _process_stale_batch(config, batch, anchor_user_ids)
+        batch_ended, batch_charged, batch_anchor_pushes = await _process_stale_batch(
+            config,
+            batch,
+            anchor_user_ids,
+        )
         ended_records.extend(batch_ended)
         charged_records.extend(batch_charged)
+        anchor_balance_pushes.extend(batch_anchor_pushes)
 
     # 追踪写入移出事务
     for call_record in ended_records:
@@ -347,16 +372,19 @@ async def _close_stale_ongoing(config: WatchdogConfig) -> None:
     # 推送成功扣费的余额更新（fire-and-forget）
     for call_record, payer_id in charged_records:
         asyncio.create_task(_ws_push_balance_updated_for_charge(payer_id))
+    for anchor_id in anchor_balance_pushes:
+        asyncio.create_task(_ws_push_balance_updated_for_charge(anchor_id))
 
 
 async def _process_stale_batch(
     config: WatchdogConfig,
     batch: list[dict],
     anchor_user_ids: set[int],
-) -> tuple[list[CallRecord], list[tuple[CallRecord, int]]]:
+) -> tuple[list[CallRecord], list[tuple[CallRecord, int]], list[int]]:
     """处理一批通话记录，单独事务，返回(结束的记录列表, 成功扣费的记录列表)"""
     ended_records: list[CallRecord] = []
     charged_records: list[tuple[CallRecord, int]] = []
+    anchor_balance_pushes: list[int] = []
 
     def _resolve_payer_id_from_record(raw: dict, call_record_obj: CallRecord) -> int | None:
         payer_id = _resolve_payer_user_id(getattr(call_record_obj, "payer_user_id", None))
@@ -469,6 +497,24 @@ async def _process_stale_batch(
                 call_record.effective_ended_at = effective_ended_at
                 call_record.end_basis = "force_exit"
                 call_record.force_exit_user_id = force_exit_decision.force_exit_user_id
+                if not getattr(call_record, "income_anchor_user_id", None):
+                    call_record.income_anchor_user_id = (
+                        _resolve_income_anchor_id(
+                            caller_id=int(call_record.caller_id),
+                            callee_id=int(call_record.callee_id),
+                            payer_id=payer_id,
+                            anchor_user_ids=anchor_user_ids,
+                        )
+                        or None
+                    )
+                settlement = await settle_call_anchor_income_once(
+                    call_record=call_record,
+                    conn=conn,
+                    total_fee=charged_amount,
+                    payer_id=payer_id,
+                )
+                if settlement.settled and settlement.anchor_user_id > 0:
+                    anchor_balance_pushes.append(settlement.anchor_user_id)
                 await call_record.save(using_db=conn)
                 ended_records.append(call_record)
                 continue
@@ -517,6 +563,24 @@ async def _process_stale_batch(
                 call_record.effective_ended_at = call_record.ended_at
                 call_record.end_basis = "balance_empty"
                 call_record.force_exit_user_id = None
+                if not getattr(call_record, "income_anchor_user_id", None):
+                    call_record.income_anchor_user_id = (
+                        _resolve_income_anchor_id(
+                            caller_id=int(call_record.caller_id),
+                            callee_id=int(call_record.callee_id),
+                            payer_id=payer_id,
+                            anchor_user_ids=anchor_user_ids,
+                        )
+                        or None
+                    )
+                settlement = await settle_call_anchor_income_once(
+                    call_record=call_record,
+                    conn=conn,
+                    total_fee=int(call_record.deducted_amount or 0),
+                    payer_id=payer_id,
+                )
+                if settlement.settled and settlement.anchor_user_id > 0:
+                    anchor_balance_pushes.append(settlement.anchor_user_id)
                 await call_record.save(using_db=conn)
                 logger.warning(
                     "watchdog closed call_id={} caller_id={} callee_id={} (balance insufficient) duration={}s",
@@ -541,6 +605,24 @@ async def _process_stale_batch(
                 call_record.effective_ended_at = call_record.ended_at
                 call_record.end_basis = "balance_empty"
                 call_record.force_exit_user_id = None
+                if not getattr(call_record, "income_anchor_user_id", None):
+                    call_record.income_anchor_user_id = (
+                        _resolve_income_anchor_id(
+                            caller_id=int(call_record.caller_id),
+                            callee_id=int(call_record.callee_id),
+                            payer_id=payer_id,
+                            anchor_user_ids=anchor_user_ids,
+                        )
+                        or None
+                    )
+                settlement = await settle_call_anchor_income_once(
+                    call_record=call_record,
+                    conn=conn,
+                    total_fee=int(call_record.deducted_amount or 0),
+                    payer_id=payer_id,
+                )
+                if settlement.settled and settlement.anchor_user_id > 0:
+                    anchor_balance_pushes.append(settlement.anchor_user_id)
                 await call_record.save(using_db=conn)
                 logger.warning(
                     "watchdog closed call_id={} caller_id={} callee_id={} (conditional update failed) duration={}s",
@@ -566,7 +648,7 @@ async def _process_stale_batch(
             # 记录成功扣费的记录，用于推送余额更新
             charged_records.append((call_record, payer_id))
 
-    return ended_records, charged_records
+    return ended_records, charged_records, anchor_balance_pushes
 
 
 async def _ws_push_call_timeout(call_record: CallRecord) -> None:
