@@ -1132,7 +1132,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
         rtcEngine: engine,
         canvas: VideoCanvas(
           uid: 0,
-          sourceType: VideoSourceType.videoSourceCustom,
           renderMode: RenderModeType.renderModeHidden,
           mirrorMode: rtcState.isFrontCamera
               ? VideoMirrorModeType.videoMirrorModeDisabled
