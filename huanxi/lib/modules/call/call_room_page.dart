@@ -20,8 +20,6 @@ import '../../core/utils/app_toast.dart';
 import '../../core/utils/app_logger.dart';
 import '../../core/utils/svga_once_player.dart';
 import '../../services/im_service.dart';
-import '../beauty/beauty_camera_view.dart';
-import '../beauty/beauty_panel.dart';
 import '../gift/gift_panel.dart';
 import 'call_end_reason.dart';
 import 'call_overlay_chat_store.dart';
@@ -56,18 +54,15 @@ class CallRoomPage extends ConsumerStatefulWidget {
 
 class _CallRoomPageState extends ConsumerState<CallRoomPage>
     with WidgetsBindingObserver {
-  static const double _beautyPanelInitialFactor = 0.42;
   static const int _callChatHistoryCount = 30;
   static const Duration _keyboardInsetSettleDelay = Duration(milliseconds: 120);
   bool _endingConsuming = false;
   bool _disposed = false;
   bool _isRemoteInMainView = true;
-  bool _isBeautyPanelVisible = false;
   bool _isChatInputVisible = false;
   bool _isImChatReady = false;
   bool _isImChatAvailable = true;
   bool _isImChatLoading = false;
-  double _beautyPanelHeightFactor = _beautyPanelInitialFactor;
   double _settledKeyboardInset = 0;
   int? _myAppUserId;
   String? _myChatUserId;
@@ -122,7 +117,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
                     .beginEnding(endReason: endReason, notifyEndApi: false);
               },
               onLog: _log,
-              faceBeautyKey: ref.read(faceBeautyKeyProvider),
             ),
       );
       unawaited(_initImCallChat());
@@ -334,30 +328,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
     if (mounted) {
       setState(() {});
     }
-  }
-
-  void _toggleBeautyPanel() {
-    _chatFocusNode.unfocus();
-    setState(() {
-      if (_isBeautyPanelVisible) {
-        _isBeautyPanelVisible = false;
-        return;
-      }
-      // 通话中调美颜时，优先让本地画面全屏，符合主流产品交互习惯。
-      _isRemoteInMainView = false;
-      _beautyPanelHeightFactor = _beautyPanelInitialFactor;
-      _isBeautyPanelVisible = true;
-      _isChatInputVisible = false;
-      _settledKeyboardInset = 0;
-    });
-    _keyboardInsetSettleTimer?.cancel();
-  }
-
-  void _closeBeautyPanel() {
-    if (!_isBeautyPanelVisible) return;
-    setState(() {
-      _isBeautyPanelVisible = false;
-    });
   }
 
   int? _extractAppUserId(String value) {
@@ -622,9 +592,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
     final willShowInput = !_isChatInputVisible;
     setState(() {
       _isChatInputVisible = willShowInput;
-      if (willShowInput) {
-        _isBeautyPanelVisible = false;
-      } else {
+      if (!willShowInput) {
         _settledKeyboardInset = 0;
       }
     });
@@ -715,58 +683,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
       TextPosition(offset: _chatController.text.length),
     );
     await _sendChatMessage();
-  }
-
-  Widget _buildInlineBeautyPanel(BuildContext context) {
-    final screenHeight = MediaQuery.sizeOf(context).height;
-    final minHeight = computeCallBeautySheetMinHeight(screenHeight);
-    final maxHeight = computeCallBeautySheetMaxHeight(screenHeight);
-    final panelHeight = (_beautyPanelHeightFactor * screenHeight)
-        .clamp(minHeight, maxHeight)
-        .toDouble();
-
-    void resizeByDeltaY(double deltaY) {
-      final currentHeight = (_beautyPanelHeightFactor * screenHeight)
-          .clamp(minHeight, maxHeight)
-          .toDouble();
-      final nextHeight = (currentHeight - deltaY).clamp(minHeight, maxHeight);
-      setState(() {
-        _beautyPanelHeightFactor = nextHeight / screenHeight;
-      });
-    }
-
-    return Align(
-      alignment: Alignment.bottomCenter,
-      child: SizedBox(
-        height: panelHeight,
-        child: Stack(
-          children: [
-            const BeautyPanel(),
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 44,
-              child: GestureDetector(
-                behavior: HitTestBehavior.translucent,
-                onVerticalDragUpdate: (details) {
-                  resizeByDeltaY(details.delta.dy);
-                },
-                child: const SizedBox(height: 36),
-              ),
-            ),
-            Positioned(
-              top: 4,
-              right: 4,
-              child: IconButton(
-                onPressed: _closeBeautyPanel,
-                icon: const Icon(Icons.close, color: Colors.white70),
-                tooltip: '关闭美颜面板',
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   String _formatDuration(Duration d) {
@@ -879,19 +795,13 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
           child: Stack(
             fit: StackFit.expand,
             children: [
-              if (rtcState.isCameraOn)
-                const Positioned.fill(
-                  child: IgnorePointer(
-                    child: Opacity(opacity: 0.01, child: BeautyCameraView()),
-                  ),
-                ),
               _buildRemoteView(
                 rtcState: rtcState,
                 rtcController: rtcController,
               ),
               if (giftState.isShowing)
                 _buildGiftAnimationOverlay(giftState: giftState),
-              if (!_isBeautyPanelVisible && _chatStore.messages.isNotEmpty)
+              if (_chatStore.messages.isNotEmpty)
                 _buildChatMessageOverlay(context),
               Positioned(
                 top: MediaQuery.paddingOf(context).top + 16,
@@ -900,7 +810,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
                   onTap: () {
                     setState(() {
                       _isRemoteInMainView = !_isRemoteInMainView;
-                      _isBeautyPanelVisible = false;
                     });
                   },
                   child: AnimatedContainer(
@@ -997,8 +906,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
                   ),
                 ),
               ),
-              if (!_isBeautyPanelVisible)
-                Positioned(
+              Positioned(
                   bottom: 0,
                   left: 0,
                   right: 0,
@@ -1062,13 +970,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
                           ),
                           const SizedBox(width: 10),
                           _ControlButton(
-                            icon: Icons.auto_awesome,
-                            label: '美颜',
-                            isActive: _isBeautyPanelVisible,
-                            onTap: _toggleBeautyPanel,
-                          ),
-                          const SizedBox(width: 10),
-                          _ControlButton(
                             icon: Icons.flip_camera_ios,
                             label: '翻转',
                             isSpinning: rtcState.isFlipping,
@@ -1079,8 +980,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
                     ),
                   ),
                 ),
-              if (!_isBeautyPanelVisible)
-                Positioned(
+              Positioned(
                   left: 0,
                   right: 0,
                   bottom: MediaQuery.paddingOf(context).bottom + 116,
@@ -1103,17 +1003,8 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
                     ),
                   ),
                 ),
-              if (!_isBeautyPanelVisible && _isChatInputVisible)
+              if (_isChatInputVisible)
                 _buildChatInputBar(context),
-              if (_isBeautyPanelVisible)
-                Positioned.fill(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _closeBeautyPanel,
-                    child: const SizedBox.expand(),
-                  ),
-                ),
-              if (_isBeautyPanelVisible) _buildInlineBeautyPanel(context),
               if (rtcState.isLoading)
                 Container(
                   color: Colors.black45,
@@ -1188,7 +1079,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
             channelId: rtcState.channelName,
             localUid: rtcState.localUid,
           ),
-          // 与本地 BeautyCameraView(PlatformView) 同屏时优先 Texture，避免 Android 叠层黑屏。
+          // 优先使用 Flutter Texture 以避免 Android 叠层黑屏。
           useFlutterTexture: true,
         ),
       );
@@ -1554,16 +1445,6 @@ class _KeyboardAwareChatInputBar extends StatelessWidget {
       ),
     );
   }
-}
-
-double computeCallBeautySheetMaxHeight(double screenHeight) {
-  final maxByRatio = screenHeight * 0.72;
-  return maxByRatio.clamp(420.0, 680.0).toDouble();
-}
-
-double computeCallBeautySheetMinHeight(double screenHeight) {
-  final minByRatio = screenHeight * 0.32;
-  return minByRatio.clamp(260.0, 420.0).toDouble();
 }
 
 /// 控制按钮组件
