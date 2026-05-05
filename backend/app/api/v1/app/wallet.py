@@ -232,7 +232,7 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
     from tortoise import Tortoise
 
     union_parts = []
-    params: list = [user_id, user_id, user_id, user_id, user_id, user_id, user_id, user_id]
+    base_params: list = []
 
     # recharge
     if type in ("all", "recharge"):
@@ -240,8 +240,7 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
             "SELECT id, 'recharge' AS rec_type, amount, created_at, 1 AS is_income "
             "FROM recharge_orders WHERE user_id = ? AND status = 'paid'"
         )
-        params.append(user_id)
-        params.append("paid")
+        base_params.extend([user_id, "paid"])
 
     # call
     if type in ("all", "call"):
@@ -249,18 +248,21 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
             "SELECT id, 'call' AS rec_type, COALESCE(total_fee, 0) AS amount, created_at, 0 AS is_income "
             "FROM call_records WHERE caller_id = ?"
         )
+        base_params.append(user_id)
 
     # gift sent
     if type in ("all", "gift"):
         union_parts.append(
-            "SELECT id, 'gift' AS rec_type, price AS amount, created_at, 0 AS is_income "
+            "SELECT id, 'gift' AS rec_type, total_price AS amount, created_at, 0 AS is_income "
             "FROM gift_records WHERE sender_id = ?"
         )
+        base_params.append(user_id)
         if type == "all":
             union_parts.append(
-                "SELECT id, 'gift' AS rec_type, price AS amount, created_at, 1 AS is_income "
+                "SELECT id, 'gift' AS rec_type, anchor_income_diamonds AS amount, created_at, 1 AS is_income "
                 "FROM gift_records WHERE receiver_id = ?"
             )
+            base_params.append(user_id)
 
     # withdraw
     if type in ("all", "withdraw"):
@@ -268,6 +270,7 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
             "SELECT id, 'withdraw' AS rec_type, amount, created_at, 0 AS is_income "
             "FROM withdraw_applies WHERE user_id = ?"
         )
+        base_params.append(user_id)
 
     if not union_parts:
         return Success(data=TransactionListOut(records=[], total=0, current=page, has_more=False).model_dump())
@@ -289,22 +292,11 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
             LIMIT ? OFFSET ?
         ) AS t
     """
-    query_params = params + [inner_limit, inner_offset]
+    query_params = base_params + [inner_limit, inner_offset]
 
     # 单独查 total（不含分页）
     count_sql = f"SELECT COUNT(*) AS cnt FROM ({inner_sql}) AS cnt_tbl"
-    # 重新构建 params（UNION 每个子句有独立 WHERE）
-    count_params: list = []
-    if type in ("all", "recharge"):
-        count_params.extend([user_id, "paid"])
-    if type in ("all", "call"):
-        count_params.append(user_id)
-    if type in ("all", "gift"):
-        count_params.append(user_id)
-        if type == "all":
-            count_params.append(user_id)
-    if type in ("all", "withdraw"):
-        count_params.append(user_id)
+    count_params = list(base_params)
 
     conn = Tortoise.get_connection("default")
     count_row = await conn.execute_query(count_sql, count_params)

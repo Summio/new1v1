@@ -29,16 +29,10 @@ class CallEventMapper {
     required Map<String, dynamic> data,
   }) {
     if (event == 'balance_updated') {
-      return const CallMappedEvent(
-        endReason: null,
-        shouldSyncBalance: true,
-      );
+      return const CallMappedEvent(endReason: null, shouldSyncBalance: true);
     }
-    if (event == 'gift_received') {
-      return const CallMappedEvent(
-        endReason: null,
-        shouldShowGift: true,
-      );
+    if (event == 'gift_received' || event == 'gift_sent') {
+      return const CallMappedEvent(endReason: null, shouldShowGift: true);
     }
     if (event == 'call_balance_empty') {
       return const CallMappedEvent(

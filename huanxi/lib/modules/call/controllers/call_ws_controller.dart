@@ -67,10 +67,27 @@ class CallWsController extends StateNotifier<CallWsState> {
       }
 
       if (mapped.shouldShowGift) {
+        final scene = (event.data['scene'] as String?) ?? 'chat';
+        if (scene != 'call') {
+          return;
+        }
+        final eventCallId = _asInt(event.data['call_id']);
+        if (eventCallId != callId) {
+          return;
+        }
+        final quantity = _asInt(event.data['quantity']) ?? 1;
+        final giftPrice = _asInt(event.data['gift_price']) ?? 0;
+        final totalPrice =
+            _asInt(event.data['total_price']) ?? (giftPrice * quantity);
         _ref.read(callGiftControllerProvider(callId).notifier).showGift(
           giftName: event.data['gift_name'] as String? ?? '',
           giftIcon: event.data['gift_icon'] as String? ?? '',
-          giftPrice: event.data['gift_price'] as int? ?? 0,
+          svgaUrl: event.data['svga_url'] as String? ?? '',
+          giftPrice: giftPrice,
+          quantity: quantity,
+          totalPrice: totalPrice,
+          scene: scene,
+          callId: eventCallId,
           senderNickname: event.data['sender_nickname'] as String? ?? '用户',
         );
         return;
@@ -158,6 +175,13 @@ class CallWsController extends StateNotifier<CallWsState> {
   void dispose() {
     unbind();
     super.dispose();
+  }
+
+  int? _asInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
   }
 }
 

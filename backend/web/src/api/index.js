@@ -18,6 +18,7 @@ export default {
   getAppUserList: (params = {}) => request.get('/app_user/list', { params }),
   getAppUserById: (params = {}) => request.get('/app_user/get', { params }),
   updateAppUser: (data = {}) => request.post('/app_user/update', data),
+  getAppUserBillList: (params = {}) => request.get('/app_user/bill/list', { params }),
   reviewAnchorApply: (data = {}) => request.post('/app_user/anchor-apply/review', data),
   uploadAppUserImage: (data) =>
     request.post('/app_user/upload-image', data, {
@@ -25,6 +26,17 @@ export default {
     }),
   // call record
   getCallRecordList: (params = {}) => request.get('/call_record/list', { params }),
+  // gift manage
+  getGiftList: (params = {}) => request.get('/gift/list', { params }),
+  getGiftById: (params = {}) => request.get('/gift/get', { params }),
+  createGift: (data = {}) => request.post('/gift/create', data),
+  updateGift: (data = {}) => request.post('/gift/update', data),
+  deleteGift: (params = {}) => request.delete('/gift/delete', { params }),
+  uploadGiftResource: (data, params = {}) =>
+    request.post('/gift/upload-resource', data, {
+      params,
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
   // role
   getRoleList: (params = {}) => request.get('/role/list', { params }),
   createRole: (data = {}) => request.post('/role/create', data),

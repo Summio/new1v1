@@ -54,7 +54,9 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
   @override
   void initState() {
     super.initState();
-    _callId = widget.callId != null && widget.callId! > 0 ? widget.callId : null;
+    _callId = widget.callId != null && widget.callId! > 0
+        ? widget.callId
+        : null;
     _peerUserId = widget.peerUserId;
     _peerName = widget.peerName;
     _peerAvatar = toAbsoluteMediaUrl(widget.peerAvatar);
@@ -101,7 +103,9 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
         event.state == WsConnectionState.authFailed) {
       _wsDisconnectTimer ??= Timer(_wsGracePeriod, () {
         final current = ref.read(callOutgoingControllerProvider);
-        if (!mounted || current.isPageClosing || WsService.instance.isConnected) {
+        if (!mounted ||
+            current.isPageClosing ||
+            WsService.instance.isConnected) {
           return;
         }
         unawaited(_handleNetworkLost());
@@ -163,7 +167,7 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
       if (!mounted) return;
       AppToast.showSnackBar(
         context,
-        const SnackBar(content: Text('主播参数异常，无法发起通话')),
+        const SnackBar(content: Text('目标用户参数异常，无法发起通话')),
       );
       if (context.canPop()) {
         context.pop();
@@ -192,9 +196,9 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
         _callId = callId;
         final peerUserId = (dialingData?['callee_id'] as num?)?.toInt();
         final peerName = (dialingData?['callee_nickname'] as String?)?.trim();
-      final peerAvatar = toAbsoluteMediaUrl(
-        (dialingData?['callee_avatar'] as String?)?.trim(),
-      );
+        final peerAvatar = toAbsoluteMediaUrl(
+          (dialingData?['callee_avatar'] as String?)?.trim(),
+        );
         final callPrice = (dialingData?['call_price'] as num?)?.toInt();
         if (peerUserId != null && peerUserId > 0) {
           _peerUserId = peerUserId.toString();
@@ -212,7 +216,10 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
       final leftSeconds = (dialingData?['left_seconds'] as num?)?.toInt() ?? 30;
       ref
           .read(callOutgoingControllerProvider.notifier)
-          .initCountdown(leftSeconds, onTimeout: () => _closeWithReason('timeout'));
+          .initCountdown(
+            leftSeconds,
+            onTimeout: () => _closeWithReason('timeout'),
+          );
     } on ApiException catch (e) {
       final current = ref.read(callOutgoingControllerProvider);
       if (!mounted || current.isPageClosing) return;
@@ -223,7 +230,9 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
       _closeWithDialingError('通话启动失败，请稍后重试');
     } finally {
       if (mounted) {
-        ref.read(callOutgoingControllerProvider.notifier).setDialingInFlight(false);
+        ref
+            .read(callOutgoingControllerProvider.notifier)
+            .setDialingInFlight(false);
       }
     }
   }
@@ -315,7 +324,9 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
       );
     } finally {
       if (mounted) {
-        ref.read(callOutgoingControllerProvider.notifier).setActionInFlight(false);
+        ref
+            .read(callOutgoingControllerProvider.notifier)
+            .setActionInFlight(false);
       }
     }
   }
@@ -365,11 +376,16 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
                 CircleAvatar(
                   radius: 56,
                   backgroundColor: Colors.white12,
-                  backgroundImage: (_peerAvatar != null && _peerAvatar!.isNotEmpty)
+                  backgroundImage:
+                      (_peerAvatar != null && _peerAvatar!.isNotEmpty)
                       ? NetworkImage(_peerAvatar!)
                       : null,
                   child: (_peerAvatar == null || _peerAvatar!.isEmpty)
-                      ? const Icon(Icons.person, color: Colors.white70, size: 50)
+                      ? const Icon(
+                          Icons.person,
+                          color: Colors.white70,
+                          size: 50,
+                        )
                       : null,
                 ),
                 const SizedBox(height: 18),

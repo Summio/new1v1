@@ -1,6 +1,9 @@
+import 'dart:math';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/constants/api_endpoints.dart';
+import '../../core/network/api_exception.dart';
 import '../../core/utils/app_logger.dart';
 
 /// 礼物信息
@@ -8,12 +11,14 @@ class GiftInfo {
   final int id;
   final String name;
   final String icon;
+  final String svgaUrl;
   final double price;
 
   const GiftInfo({
     required this.id,
     required this.name,
     required this.icon,
+    required this.svgaUrl,
     required this.price,
   });
 
@@ -22,6 +27,7 @@ class GiftInfo {
       id: json['id'] as int,
       name: json['name'] as String,
       icon: json['icon'] as String? ?? '',
+      svgaUrl: json['svga_url'] as String? ?? '',
       price: (json['price'] as num?)?.toDouble() ?? 0,
     );
   }
@@ -56,13 +62,36 @@ class GiftListState {
 class GiftSendResult {
   final bool success;
   final int? coins;
+  final int? quantity;
+  final int? unitPrice;
+  final int? totalPrice;
+  final int? anchorIncomeDiamonds;
+  final int? giftId;
+  final String? giftName;
+  final String? giftIcon;
+  final String? svgaUrl;
+  final String? msg;
 
-  const GiftSendResult({required this.success, this.coins});
+  const GiftSendResult({
+    required this.success,
+    this.coins,
+    this.quantity,
+    this.unitPrice,
+    this.totalPrice,
+    this.anchorIncomeDiamonds,
+    this.giftId,
+    this.giftName,
+    this.giftIcon,
+    this.svgaUrl,
+    this.msg,
+  });
 }
 
 /// 礼物列表 Provider
 class GiftListNotifier extends StateNotifier<GiftListState> {
   final DioClient _dio;
+  final Random _random = Random();
+  int _requestSeq = 0;
 
   GiftListNotifier(this._dio) : super(const GiftListState());
 
@@ -92,18 +121,48 @@ class GiftListNotifier extends StateNotifier<GiftListState> {
   Future<GiftSendResult> _sendGiftInternal({
     required int giftId,
     required int anchorId,
+    required int quantity,
+    required String scene,
+    int? callId,
   }) async {
+    _requestSeq++;
+    final requestId =
+        '${DateTime.now().microsecondsSinceEpoch}_${_requestSeq}_${_random.nextInt(1 << 31)}_${giftId}_${anchorId}_${quantity}_${scene}_${callId ?? 0}';
     try {
       final data = await _dio.apiPost(
         ApiEndpoints.giftSend,
-        data: {'gift_id': giftId, 'anchor_user_id': anchorId},
+        data: {
+          'gift_id': giftId,
+          'anchor_user_id': anchorId,
+          'quantity': quantity,
+          'scene': scene,
+          'call_id': callId,
+          'request_id': requestId,
+        },
       );
       final success = data['code'] == 200;
-      final coins = (data['data'] as Map<String, dynamic>?)?['coins'] as int?;
-      return GiftSendResult(success: success, coins: coins);
+      final resultData = (data['data'] as Map<String, dynamic>?) ?? const {};
+      return GiftSendResult(
+        success: success,
+        coins: resultData['coins'] as int?,
+        quantity: resultData['quantity'] as int?,
+        unitPrice: resultData['unit_price'] as int?,
+        totalPrice: resultData['total_price'] as int?,
+        anchorIncomeDiamonds: resultData['anchor_income_diamonds'] as int?,
+        giftId: resultData['gift_id'] as int?,
+        giftName: resultData['gift_name'] as String?,
+        giftIcon: resultData['gift_icon'] as String?,
+        svgaUrl: resultData['svga_url'] as String?,
+        msg: resultData['msg'] as String?,
+      );
+    } on ApiException catch (e) {
+      AppLogger.debug(
+        'gift._sendGiftInternal api error: ${e.code} ${e.message}',
+      );
+      return GiftSendResult(success: false, msg: e.message);
     } catch (e) {
       AppLogger.debug('gift._sendGiftInternal error: $e');
-      return const GiftSendResult(success: false);
+      return const GiftSendResult(success: false, msg: '发送失败，请稍后重试');
     }
   }
 
@@ -111,8 +170,17 @@ class GiftListNotifier extends StateNotifier<GiftListState> {
   Future<GiftSendResult> sendGift({
     required int giftId,
     required int anchorId,
+    int quantity = 1,
+    String scene = 'chat',
+    int? callId,
   }) {
-    return _sendGiftInternal(giftId: giftId, anchorId: anchorId);
+    return _sendGiftInternal(
+      giftId: giftId,
+      anchorId: anchorId,
+      quantity: quantity,
+      scene: scene,
+      callId: callId,
+    );
   }
 }
 

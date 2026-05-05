@@ -4,9 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:svgaplayer_flutter/svgaplayer_flutter.dart';
 import 'package:tencent_cloud_chat_sdk/models/v2_tim_user_full_info.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/routes/app_router.dart';
+import '../../core/utils/svga_once_player.dart';
 import '../../services/im_service.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/dio_client.dart';
@@ -17,6 +19,7 @@ import '../../core/im/call_trace_message.dart';
 import '../../app/providers/auth_provider.dart';
 import 'package:tencent_cloud_chat_sdk/models/v2_tim_message.dart';
 import 'package:huanxi/core/utils/app_toast.dart';
+import '../gift/gift_panel.dart';
 
 /// IM 聊天页面
 /// 发送文字消息（后续接入 WebSocket）
@@ -38,6 +41,7 @@ class ImPage extends ConsumerStatefulWidget {
 
 class _ImPageState extends ConsumerState<ImPage> {
   static const String _chatPrefix = 'chat';
+  static const Duration _giftOverlayDuration = Duration(seconds: 3);
   final _controller = TextEditingController();
   final _scrollController = ScrollController();
   final List<_ChatMessage> _messages = [];
@@ -53,6 +57,8 @@ class _ImPageState extends ConsumerState<ImPage> {
   final Set<String> _messageIds = <String>{};
   V2TimMessage? _lastHistoryMsg;
   bool _isStartingCall = false;
+  GiftNotifyMessage? _fullscreenGift;
+  Timer? _fullscreenGiftTimer;
   String _normalizeIMUserId(String userId) {
     if (userId.startsWith('chat_')) return userId;
     return '${_chatPrefix}_$userId';
@@ -143,8 +149,9 @@ class _ImPageState extends ConsumerState<ImPage> {
       }
 
       final trace = _imService.parseCallTraceMessage(message);
+      final giftNotify = _imService.parseGiftNotifyMessage(message);
       final text = (message?.textElem?.text as String?)?.trim() ?? '';
-      if (trace == null && text.isEmpty) return;
+      if (trace == null && giftNotify == null && text.isEmpty) return;
 
       final sender = message?.sender as String?;
       final isMe = sender != null && sender == _myUserId;
@@ -156,9 +163,11 @@ class _ImPageState extends ConsumerState<ImPage> {
       }
 
       final currentUserId = _extractAppUserId(_myUserId ?? '') ?? 0;
-      final renderedText = trace != null
-          ? trace.toDisplayText(currentUserId: currentUserId)
-          : text;
+      final renderedText =
+          giftNotify?.previewText() ??
+          (trace != null
+              ? trace.toDisplayText(currentUserId: currentUserId)
+              : text);
 
       setState(() {
         _messages.add(
@@ -169,9 +178,13 @@ class _ImPageState extends ConsumerState<ImPage> {
                 ? DateTime.fromMillisecondsSinceEpoch(timestamp * 1000)
                 : DateTime.now(),
             callTrace: trace,
+            giftNotify: giftNotify,
           ),
         );
       });
+      if (giftNotify != null) {
+        _showFullscreenGift(giftNotify);
+      }
       _scrollToBottom();
       if (_peerUserId != null) {
         _imService.cleanC2CUnread(peerUserId: _peerUserId!);
@@ -273,14 +286,17 @@ class _ImPageState extends ConsumerState<ImPage> {
           _messageIds.add(msgId);
         }
         final trace = _imService.parseCallTraceMessage(msg);
+        final giftNotify = _imService.parseGiftNotifyMessage(msg);
         final text = msg.textElem?.text?.trim() ?? '';
-        if (trace == null && text.isEmpty) continue;
+        if (trace == null && giftNotify == null && text.isEmpty) continue;
         final sender = msg.sender;
         final isMe = sender != null && sender == _myUserId;
         final timestamp = msg.timestamp;
-        final renderedText = trace != null
-            ? trace.toDisplayText(currentUserId: currentUserId)
-            : text;
+        final renderedText =
+            giftNotify?.previewText() ??
+            (trace != null
+                ? trace.toDisplayText(currentUserId: currentUserId)
+                : text);
         parsed.add(
           _ChatMessage(
             content: renderedText,
@@ -289,6 +305,7 @@ class _ImPageState extends ConsumerState<ImPage> {
                 ? DateTime.fromMillisecondsSinceEpoch(timestamp * 1000)
                 : DateTime.now(),
             callTrace: trace,
+            giftNotify: giftNotify,
           ),
         );
       }
@@ -344,9 +361,58 @@ class _ImPageState extends ConsumerState<ImPage> {
     }
   }
 
+  int? _resolveGiftAnchorId() {
+    if (_peerAnchorId != null && _peerAnchorId! > 0) {
+      return _peerAnchorId;
+    }
+    final peer = _peerUserId ?? widget.userId;
+    return _extractAppUserId(peer);
+  }
+
+  void _showFullscreenGift(GiftNotifyMessage gift) {
+    _fullscreenGiftTimer?.cancel();
+    if (!mounted) return;
+    setState(() {
+      _fullscreenGift = gift;
+    });
+    if (gift.svgaUrl.trim().isEmpty) {
+      _fullscreenGiftTimer = Timer(_giftOverlayDuration, _hideFullscreenGift);
+    }
+  }
+
+  void _hideFullscreenGift() {
+    _fullscreenGiftTimer?.cancel();
+    if (!mounted) return;
+    setState(() {
+      _fullscreenGift = null;
+    });
+  }
+
+  void _openGiftPanel() {
+    final anchorId = _resolveGiftAnchorId();
+    if (anchorId == null || anchorId <= 0) {
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('当前聊天对象暂不支持送礼')),
+      );
+      return;
+    }
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => GiftPanel(
+        anchorId: anchorId.toString(),
+        scene: 'chat',
+        onClose: () => Navigator.pop(context),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _imService.removeMessageListener(_onMessageReceived);
+    _fullscreenGiftTimer?.cancel();
     _controller.dispose();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
@@ -500,104 +566,136 @@ class _ImPageState extends ConsumerState<ImPage> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : Column(
+          : Stack(
               children: [
-                Expanded(
-                  child: _messages.isEmpty
-                      ? const Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.chat_bubble_outline,
-                                size: 48,
-                                color: AppTheme.textHint,
+                Column(
+                  children: [
+                    Expanded(
+                      child: _messages.isEmpty
+                          ? const Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.chat_bubble_outline,
+                                    size: 48,
+                                    color: AppTheme.textHint,
+                                  ),
+                                  SizedBox(height: 12),
+                                  Text(
+                                    '暂无消息，开始聊天吧',
+                                    style: TextStyle(color: AppTheme.textHint),
+                                  ),
+                                ],
                               ),
-                              SizedBox(height: 12),
-                              Text(
-                                '暂无消息，开始聊天吧',
-                                style: TextStyle(color: AppTheme.textHint),
-                              ),
-                            ],
-                          ),
-                        )
-                      : RepaintBoundary(
-                          child: ListView.builder(
-                            controller: _scrollController,
-                            padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
-                            keyboardDismissBehavior:
-                                ScrollViewKeyboardDismissBehavior.onDrag,
-                            itemCount: _messages.length,
-                            itemBuilder: (context, index) {
-                              final msg = _messages[index];
-                              return _MessageBubble(
-                                message: msg,
-                                maxBubbleWidth: maxBubbleWidth,
-                                currentUserId: currentUserId,
-                                isCurrentUserAnchor: isCurrentUserAnchor,
-                                coinName: tokenNames.coinName,
-                                diamondName: tokenNames.diamondName,
-                                avatarUrl: msg.isMe
-                                    ? _myAvatarUrl
-                                    : _peerAvatarUrl,
-                              );
-                            },
-                          ),
-                        ),
-                ),
-                Container(
-                  decoration: const BoxDecoration(color: AppTheme.surfaceColor),
-                  child: SafeArea(
-                    top: false,
-                    minimum: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                    child: Row(
-                      children: [
-                        IconButton(
-                          icon: const Icon(
-                            Icons.videocam_outlined,
-                            color: AppTheme.textSecondary,
-                          ),
-                          onPressed: _isStartingCall ? null : _startVideoCall,
-                        ),
-                        Expanded(
-                          child: TextField(
-                            controller: _controller,
-                            decoration: InputDecoration(
-                              hintText: '输入消息...',
-                              filled: true,
-                              fillColor: AppTheme.backgroundColor,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(24),
-                                borderSide: BorderSide.none,
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 10,
+                            )
+                          : RepaintBoundary(
+                              child: ListView.builder(
+                                controller: _scrollController,
+                                padding: const EdgeInsets.fromLTRB(
+                                  12,
+                                  12,
+                                  12,
+                                  12,
+                                ),
+                                keyboardDismissBehavior:
+                                    ScrollViewKeyboardDismissBehavior.onDrag,
+                                itemCount: _messages.length,
+                                itemBuilder: (context, index) {
+                                  final msg = _messages[index];
+                                  return _MessageBubble(
+                                    message: msg,
+                                    maxBubbleWidth: maxBubbleWidth,
+                                    currentUserId: currentUserId,
+                                    isCurrentUserAnchor: isCurrentUserAnchor,
+                                    coinName: tokenNames.coinName,
+                                    diamondName: tokenNames.diamondName,
+                                    avatarUrl: msg.isMe
+                                        ? _myAvatarUrl
+                                        : _peerAvatarUrl,
+                                  );
+                                },
                               ),
                             ),
-                            minLines: 1,
-                            maxLines: 4,
-                            textInputAction: TextInputAction.send,
-                            onSubmitted: (_) => _sendMessage(),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: const BoxDecoration(
-                            color: AppTheme.primaryColor,
-                            shape: BoxShape.circle,
-                          ),
-                          child: IconButton(
-                            icon: const Icon(Icons.send, color: Colors.white),
-                            onPressed: _sendMessage,
-                          ),
-                        ),
-                      ],
                     ),
-                  ),
+                    Container(
+                      decoration: const BoxDecoration(
+                        color: AppTheme.surfaceColor,
+                      ),
+                      child: SafeArea(
+                        top: false,
+                        minimum: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(
+                                Icons.videocam_outlined,
+                                color: AppTheme.textSecondary,
+                              ),
+                              onPressed: _isStartingCall
+                                  ? null
+                                  : _startVideoCall,
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.card_giftcard,
+                                color: AppTheme.textSecondary,
+                              ),
+                              onPressed: _openGiftPanel,
+                            ),
+                            Expanded(
+                              child: TextField(
+                                controller: _controller,
+                                decoration: InputDecoration(
+                                  hintText: '输入消息...',
+                                  filled: true,
+                                  fillColor: AppTheme.backgroundColor,
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(24),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 10,
+                                  ),
+                                ),
+                                minLines: 1,
+                                maxLines: 4,
+                                textInputAction: TextInputAction.send,
+                                onSubmitted: (_) => _sendMessage(),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              width: 44,
+                              height: 44,
+                              decoration: const BoxDecoration(
+                                color: AppTheme.primaryColor,
+                                shape: BoxShape.circle,
+                              ),
+                              child: IconButton(
+                                icon: const Icon(
+                                  Icons.send,
+                                  color: Colors.white,
+                                ),
+                                onPressed: _sendMessage,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
+                if (_fullscreenGift != null)
+                  _GiftFullscreenOverlay(
+                    key: ValueKey(
+                      '${_fullscreenGift!.senderId}_${_fullscreenGift!.giftId}_${_fullscreenGift!.timestamp}',
+                    ),
+                    gift: _fullscreenGift!,
+                    coinName: tokenNames.coinName,
+                    onClose: _hideFullscreenGift,
+                  ),
               ],
             ),
     );
@@ -609,15 +707,18 @@ class _ChatMessage {
   final bool isMe;
   final DateTime time;
   final CallTraceMessage? callTrace;
+  final GiftNotifyMessage? giftNotify;
 
   _ChatMessage({
     required this.content,
     required this.isMe,
     required this.time,
     this.callTrace,
+    this.giftNotify,
   });
 
   bool get isCallTrace => callTrace != null;
+  bool get isGiftNotify => giftNotify != null;
 }
 
 class _MessageBubble extends StatelessWidget {
@@ -641,6 +742,14 @@ class _MessageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (message.isGiftNotify) {
+      return _GiftMessageCard(
+        message: message,
+        maxBubbleWidth: maxBubbleWidth,
+        avatarUrl: avatarUrl,
+        coinName: coinName,
+      );
+    }
     if (message.isCallTrace) {
       return _CallTraceCard(
         message: message,
@@ -696,6 +805,120 @@ class _MessageBubble extends StatelessWidget {
                     fontSize: 10,
                     color: message.isMe ? Colors.white60 : AppTheme.textHint,
                   ),
+                ),
+              ],
+            ),
+          ),
+          if (message.isMe) ...[
+            const SizedBox(width: 8),
+            _BubbleAvatar(avatarUrl: avatarUrl),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _GiftMessageCard extends StatelessWidget {
+  final _ChatMessage message;
+  final double maxBubbleWidth;
+  final String? avatarUrl;
+  final String coinName;
+
+  const _GiftMessageCard({
+    required this.message,
+    required this.maxBubbleWidth,
+    required this.avatarUrl,
+    required this.coinName,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final gift = message.giftNotify!;
+    final showSvga = gift.svgaUrl.trim().isNotEmpty;
+    final showIcon = gift.giftIcon.trim().isNotEmpty;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: message.isMe
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (!message.isMe) ...[
+            _BubbleAvatar(avatarUrl: avatarUrl),
+            const SizedBox(width: 8),
+          ],
+          Container(
+            constraints: BoxConstraints(maxWidth: maxBubbleWidth),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: message.isMe
+                  ? AppTheme.primaryColor
+                  : AppTheme.primaryColor.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.only(
+                topLeft: const Radius.circular(16),
+                topRight: const Radius.circular(16),
+                bottomLeft: Radius.circular(message.isMe ? 16 : 4),
+                bottomRight: Radius.circular(message.isMe ? 4 : 16),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (showSvga)
+                  SizedBox(
+                    width: 56,
+                    height: 56,
+                    child: SVGASimpleImage(resUrl: gift.svgaUrl),
+                  )
+                else if (showIcon)
+                  Image.network(
+                    gift.giftIcon,
+                    width: 40,
+                    height: 40,
+                    errorBuilder: (context, error, stackTrace) =>
+                        const Icon(Icons.card_giftcard, color: Colors.white70),
+                  )
+                else
+                  const Icon(Icons.card_giftcard, color: Colors.white70),
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${message.isMe ? '赠送' : '收到'} ${gift.giftName} x${gift.quantity}',
+                      style: TextStyle(
+                        color: message.isMe
+                            ? Colors.white
+                            : AppTheme.textPrimary,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      gift.totalPrice > 0
+                          ? '总价 ${gift.totalPrice}$coinName'
+                          : '单价 ${gift.unitPrice}$coinName',
+                      style: TextStyle(
+                        color: message.isMe
+                            ? Colors.white70
+                            : AppTheme.textSecondary,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${message.time.hour.toString().padLeft(2, '0')}:${message.time.minute.toString().padLeft(2, '0')}',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: message.isMe
+                            ? Colors.white60
+                            : AppTheme.textHint,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -774,6 +997,96 @@ class _CallTraceCard extends StatelessWidget {
               Text(
                 '${message.time.hour.toString().padLeft(2, '0')}:${message.time.minute.toString().padLeft(2, '0')}',
                 style: const TextStyle(fontSize: 10, color: AppTheme.textHint),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _GiftFullscreenOverlay extends StatelessWidget {
+  final GiftNotifyMessage gift;
+  final String coinName;
+  final VoidCallback onClose;
+
+  const _GiftFullscreenOverlay({
+    super.key,
+    required this.gift,
+    required this.coinName,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasSvga = gift.svgaUrl.trim().isNotEmpty;
+    final hasIcon = gift.giftIcon.trim().isNotEmpty;
+    return Positioned.fill(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onClose,
+        child: Container(
+          color: Colors.black.withValues(alpha: 0.65),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Center(
+                  child: hasSvga
+                      ? SizedBox.expand(
+                          child: SvgaOncePlayer(
+                            resUrl: gift.svgaUrl,
+                            fit: BoxFit.contain,
+                            onCompleted: onClose,
+                          ),
+                        )
+                      : hasIcon
+                      ? Image.network(
+                          gift.giftIcon,
+                          width: 180,
+                          height: 180,
+                          errorBuilder: (context, error, stackTrace) =>
+                              const Icon(
+                                Icons.card_giftcard,
+                                size: 120,
+                                color: Colors.white70,
+                              ),
+                        )
+                      : const Icon(
+                          Icons.card_giftcard,
+                          size: 120,
+                          color: Colors.white70,
+                        ),
+                ),
+              ),
+              Positioned(
+                left: 16,
+                right: 16,
+                bottom: 72,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${gift.senderNickname} 送出 ${gift.giftName} x${gift.quantity}',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${gift.totalPrice > 0 ? gift.totalPrice : gift.unitPrice}$coinName',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: AppTheme.secondaryColor,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),

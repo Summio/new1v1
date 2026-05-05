@@ -8,6 +8,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/providers/anchor_provider.dart';
 import '../../app/providers/auth_provider.dart';
+import '../../app/providers/gift_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/constants/api_endpoints.dart';
@@ -17,6 +18,7 @@ import '../../core/network/response_parsers.dart';
 import '../../core/storage/storage.dart';
 import '../../core/utils/app_toast.dart';
 import '../../core/utils/app_logger.dart';
+import '../../core/utils/svga_once_player.dart';
 import '../../services/im_service.dart';
 import '../beauty/beauty_camera_view.dart';
 import '../beauty/beauty_panel.dart';
@@ -277,6 +279,10 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
     if (fromRoute != null && fromRoute > 0) {
       return fromRoute;
     }
+    final fromPeer = int.tryParse(widget.peerUserId.trim());
+    if (fromPeer != null && fromPeer > 0) {
+      return fromPeer;
+    }
     return anchor?.id;
   }
 
@@ -285,7 +291,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
     if (targetAnchorId == null || targetAnchorId <= 0) {
       AppToast.showSnackBar(
         context,
-        const SnackBar(content: Text('当前通话对象非主播，暂不支持送礼')),
+        const SnackBar(content: Text('目标用户参数异常，暂无法送礼')),
       );
       return;
     }
@@ -296,9 +302,38 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
       backgroundColor: Colors.transparent,
       builder: (context) => GiftPanel(
         anchorId: targetAnchorId.toString(),
+        scene: 'call',
+        callId: widget.callId,
+        onGiftSent: _handleCallGiftSent,
         onClose: () => Navigator.pop(context),
       ),
     );
+  }
+
+  void _handleCallGiftSent(GiftSendResult result) {
+    // IM 可用时由 gift_notify 消息落地，避免本地回显与 IM 回执重复两条。
+    if (_isImChatReady && _isImChatAvailable) {
+      return;
+    }
+    final myAppUserId = _myAppUserId;
+    if (myAppUserId == null || myAppUserId <= 0) {
+      return;
+    }
+    final now = DateTime.now();
+    final giftName = (result.giftName ?? '').trim().isEmpty
+        ? '礼物'
+        : (result.giftName ?? '').trim();
+    _chatStore.addIncoming(
+      msgId: 'gift_local_${widget.callId}_${now.microsecondsSinceEpoch}',
+      text: '[礼物] $giftName x${result.quantity ?? 1}',
+      senderId: myAppUserId,
+      senderName: _myDisplayName,
+      sentAt: now,
+      isMe: true,
+    );
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _toggleBeautyPanel() {
@@ -442,8 +477,10 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
 
     final items = <CallOverlayMessage>[];
     for (final msg in history.reversed) {
+      final giftNotify = _imService.parseGiftNotifyMessage(msg);
       final text = msg.textElem?.text?.trim() ?? '';
-      if (text.isEmpty) {
+      final renderedText = giftNotify?.previewText() ?? text;
+      if (renderedText.isEmpty) {
         continue;
       }
       final msgId = (msg.msgID ?? '').trim();
@@ -465,7 +502,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
       items.add(
         CallOverlayMessage(
           msgId: msgId,
-          text: text,
+          text: renderedText,
           senderId: senderId,
           senderName: isMe ? _myDisplayName : '对方',
           sentAt: sentAt,
@@ -489,12 +526,18 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
     }
 
     final messagePeerUserId = (message?.userID as String?)?.trim() ?? '';
-    if (messagePeerUserId != peerChatUserId) {
+    final senderChatUserId = (message?.sender as String?)?.trim() ?? '';
+    final isPeerConversation =
+        messagePeerUserId == peerChatUserId ||
+        senderChatUserId == peerChatUserId;
+    if (!isPeerConversation) {
       return;
     }
 
+    final giftNotify = _imService.parseGiftNotifyMessage(message);
     final text = (message?.textElem?.text as String?)?.trim() ?? '';
-    if (text.isEmpty) {
+    final renderedText = giftNotify?.previewText() ?? text;
+    if (renderedText.isEmpty) {
       return;
     }
 
@@ -503,7 +546,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
       return;
     }
 
-    final senderChatUserId = (message?.sender as String?)?.trim() ?? '';
     final senderId = _extractAppUserId(senderChatUserId);
     if (senderId == null) {
       return;
@@ -520,12 +562,42 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
 
     _chatStore.addIncoming(
       msgId: msgId,
-      text: text,
+      text: renderedText,
       senderId: senderId,
       senderName: isMe ? _myDisplayName : '对方',
       sentAt: sentAt,
       isMe: isMe,
     );
+    if (giftNotify != null &&
+        giftNotify.scene == 'call' &&
+        (giftNotify.callId == null || giftNotify.callId == widget.callId)) {
+      final currentGiftState = ref.read(
+        callGiftControllerProvider(widget.callId),
+      );
+      if (currentGiftState.isShowing) {
+        if (mounted) {
+          setState(() {});
+        }
+        return;
+      }
+      final quantity = giftNotify.quantity < 1 ? 1 : giftNotify.quantity;
+      final totalPrice = giftNotify.totalPrice > 0
+          ? giftNotify.totalPrice
+          : (giftNotify.unitPrice * quantity);
+      ref
+          .read(callGiftControllerProvider(widget.callId).notifier)
+          .showGift(
+            giftName: giftNotify.giftName,
+            giftIcon: giftNotify.giftIcon,
+            svgaUrl: giftNotify.svgaUrl,
+            giftPrice: giftNotify.unitPrice,
+            quantity: quantity,
+            totalPrice: totalPrice,
+            scene: 'call',
+            callId: widget.callId,
+            senderNickname: giftNotify.senderNickname,
+          );
+    }
     if (mounted) {
       setState(() {});
     }
@@ -772,6 +844,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
     );
     final sessionState = ref.watch(callSessionProvider(widget.callId));
     final giftState = ref.watch(callGiftControllerProvider(widget.callId));
+    final tokenNames = ref.watch(tokenNamesProvider);
 
     final anchorState = ref.watch(anchorListProvider);
     AnchorInfo? found;
@@ -913,7 +986,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
-                            '￥${anchor!.callPrice!.toStringAsFixed(0)}/min',
+                            '${anchor!.callPrice!.toStringAsFixed(0)}${tokenNames.coinName}/min',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 12,
@@ -1223,82 +1296,52 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
   Widget _buildGiftAnimationOverlay({required CallGiftState giftState}) {
     return Positioned.fill(
       child: IgnorePointer(
-        child: Center(
-          child: TweenAnimationBuilder<double>(
-            tween: Tween(begin: 0.0, end: 1.0),
-            duration: const Duration(milliseconds: 300),
-            builder: (context, value, child) {
-              return Opacity(
-                opacity: value,
-                child: Transform.scale(
-                  scale: 0.8 + (0.2 * value),
-                  child: child,
-                ),
-              );
-            },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.7),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: AppTheme.secondaryColor.withValues(alpha: 0.5),
-                  width: 2,
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  giftState.giftIcon.isNotEmpty
+        child: Container(
+          color: Colors.black.withValues(alpha: 0.62),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Center(
+                  child: giftState.svgaUrl.isNotEmpty
+                      ? SizedBox(
+                          width: double.infinity,
+                          height: double.infinity,
+                          child: SvgaOncePlayer(
+                            key: ValueKey(giftState.displaySeq),
+                            resUrl: giftState.svgaUrl,
+                            fit: BoxFit.contain,
+                            onCompleted: () {
+                              if (!mounted) return;
+                              ref
+                                  .read(
+                                    callGiftControllerProvider(
+                                      widget.callId,
+                                    ).notifier,
+                                  )
+                                  .hideGift();
+                            },
+                          ),
+                        )
+                      : giftState.giftIcon.isNotEmpty
                       ? Image.network(
                           giftState.giftIcon,
-                          width: 48,
-                          height: 48,
+                          width: 180,
+                          height: 180,
                           errorBuilder: (context, error, stackTrace) =>
                               const Icon(
                                 Icons.card_giftcard,
                                 color: AppTheme.secondaryColor,
-                                size: 48,
+                                size: 120,
                               ),
                         )
                       : const Icon(
                           Icons.card_giftcard,
                           color: AppTheme.secondaryColor,
-                          size: 48,
+                          size: 120,
                         ),
-                  const SizedBox(width: 16),
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        giftState.senderNickname,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
-                        ),
-                      ),
-                      Text(
-                        '送出了 ${giftState.giftName}',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      if (giftState.giftPrice > 0)
-                        Text(
-                          '价值 ¥${giftState.giftPrice.toStringAsFixed(0)}',
-                          style: const TextStyle(
-                            color: AppTheme.secondaryColor,
-                            fontSize: 13,
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ),

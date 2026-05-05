@@ -55,9 +55,21 @@ const modalForm = ref({
 const callRecordLoading = ref(false)
 const callRecordRows = ref([])
 const peerJumpLoading = ref(false)
+const billLoading = ref(false)
+const billRows = ref([])
+const billSummary = reactive({
+  income_coins_total: 0,
+  income_diamonds_total: 0,
+  expense_coins_total: 0,
+  expense_diamonds_total: 0,
+})
 const callRecordQuery = reactive({
   status: null,
   end_reason: null,
+})
+const billQuery = reactive({
+  direction: 'all',
+  biz_type: null,
 })
 const callRecordPagination = reactive({
   page: 1,
@@ -76,6 +88,25 @@ const callRecordPagination = reactive({
     callRecordPagination.pageSize = pageSize
     callRecordPagination.page = 1
     fetchUserCallRecords()
+  },
+})
+const billPagination = reactive({
+  page: 1,
+  pageSize: 8,
+  itemCount: 0,
+  pageSizes: [8, 12, 20],
+  showSizePicker: true,
+  prefix({ itemCount }) {
+    return `共 ${itemCount} 条`
+  },
+  onChange(page) {
+    billPagination.page = page
+    fetchUserBills()
+  },
+  onUpdatePageSize(pageSize) {
+    billPagination.pageSize = pageSize
+    billPagination.page = 1
+    fetchUserBills()
   },
 })
 
@@ -139,6 +170,28 @@ const callRecordEndReasonMap = {
   timeout: '呼叫超时',
   balance_empty: '余额不足',
   force_exit: '用户离场',
+}
+const billDirectionOptions = [
+  { label: '全部', value: 'all' },
+  { label: '仅收入', value: 'income' },
+  { label: '仅支出', value: 'expense' },
+]
+const billBizTypeOptions = [
+  { label: '全部业务', value: null },
+  { label: '充值', value: 'recharge' },
+  { label: '通话', value: 'call' },
+  { label: '礼物', value: 'gift' },
+  { label: '提现', value: 'withdraw' },
+]
+const billBizTypeTextMap = {
+  recharge: '充值',
+  call: '通话',
+  gift: '礼物',
+  withdraw: '提现',
+}
+const billAssetTypeTextMap = {
+  coins: '金币',
+  diamonds: '钻石',
 }
 
 const avatarImgStyle = {
@@ -210,6 +263,15 @@ function openEditModal(row) {
   callRecordPagination.itemCount = 0
   callRecordQuery.status = null
   callRecordQuery.end_reason = null
+  billRows.value = []
+  billPagination.page = 1
+  billPagination.itemCount = 0
+  billQuery.direction = 'all'
+  billQuery.biz_type = null
+  billSummary.income_coins_total = 0
+  billSummary.income_diamonds_total = 0
+  billSummary.expense_coins_total = 0
+  billSummary.expense_diamonds_total = 0
   editModalVisible.value = true
 }
 
@@ -359,6 +421,73 @@ const callRecordColumns = [
   },
 ]
 
+const billColumns = [
+  { title: '账单ID', key: 'id', width: 140, align: 'center' },
+  {
+    title: '类型',
+    key: 'direction',
+    width: 90,
+    align: 'center',
+    render(row) {
+      const isIncome = !!row.is_income
+      return h(
+        NTag,
+        { type: isIncome ? 'success' : 'error' },
+        { default: () => (isIncome ? '收入' : '支出') }
+      )
+    },
+  },
+  {
+    title: '业务',
+    key: 'biz_type',
+    width: 90,
+    align: 'center',
+    render(row) {
+      return billBizTypeTextMap[row.biz_type] || row.biz_type || '-'
+    },
+  },
+  {
+    title: '关联方',
+    key: 'related_user',
+    minWidth: 200,
+    render(row) {
+      const relatedId = row.related_user_id
+      const relatedNickname = row.related_user_nickname || '-'
+      if (!relatedId) return relatedNickname
+      return `ID:${relatedId} ${relatedNickname}`
+    },
+  },
+  {
+    title: '说明',
+    key: 'title',
+    minWidth: 220,
+    render(row) {
+      return row.title || '-'
+    },
+  },
+  {
+    title: '金额',
+    key: 'amount',
+    width: 140,
+    align: 'right',
+    render(row) {
+      const amount = Number(row.amount || 0)
+      const prefix = row.is_income ? '+' : '-'
+      const unit = billAssetTypeTextMap[row.asset_type] || row.asset_type || ''
+      return `${prefix}${amount}${unit}`
+    },
+  },
+  {
+    title: '时间',
+    key: 'created_at',
+    width: 170,
+    align: 'center',
+    render(row) {
+      return row.created_at ? formatDate(row.created_at, 'YYYY-MM-DD HH:mm:ss') : '-'
+    },
+  },
+]
+
 async function fetchUserCallRecords() {
   if (!modalForm.value.id) return
   callRecordLoading.value = true
@@ -392,10 +521,55 @@ async function handleResetUserCallRecords() {
   await fetchUserCallRecords()
 }
 
+async function fetchUserBills() {
+  if (!modalForm.value.id) return
+  billLoading.value = true
+  try {
+    const res = await api.getAppUserBillList({
+      user_id: modalForm.value.id,
+      page: billPagination.page,
+      page_size: billPagination.pageSize,
+      direction: billQuery.direction || 'all',
+      biz_type: billQuery.biz_type || undefined,
+    })
+    billRows.value = res?.data || []
+    billPagination.itemCount = Number(res?.total || 0)
+    billSummary.income_coins_total = Number(res?.income_coins_total || 0)
+    billSummary.income_diamonds_total = Number(res?.income_diamonds_total || 0)
+    billSummary.expense_coins_total = Number(res?.expense_coins_total || 0)
+    billSummary.expense_diamonds_total = Number(res?.expense_diamonds_total || 0)
+  } catch (error) {
+    billRows.value = []
+    billPagination.itemCount = 0
+    billSummary.income_coins_total = 0
+    billSummary.income_diamonds_total = 0
+    billSummary.expense_coins_total = 0
+    billSummary.expense_diamonds_total = 0
+  } finally {
+    billLoading.value = false
+  }
+}
+
+async function handleSearchUserBills() {
+  billPagination.page = 1
+  await fetchUserBills()
+}
+
+async function handleResetUserBills() {
+  billQuery.direction = 'all'
+  billQuery.biz_type = null
+  billPagination.page = 1
+  await fetchUserBills()
+}
+
 async function handleEditTabChange(name) {
   activeEditTab.value = name
   if (name === 'call_records' && !callRecordRows.value.length) {
     await fetchUserCallRecords()
+    return
+  }
+  if (name === 'bills' && !billRows.value.length) {
+    await fetchUserBills()
   }
 }
 
@@ -995,6 +1169,53 @@ const columns = [
             :single-line="false"
           />
         </NTabPane>
+
+        <NTabPane name="bills" tab="账单">
+          <div class="call-record-query">
+            <NSelect
+              v-model:value="billQuery.direction"
+              :options="billDirectionOptions"
+              style="width: 150px"
+              placeholder="账单方向"
+            />
+            <NSelect
+              v-model:value="billQuery.biz_type"
+              clearable
+              :options="billBizTypeOptions"
+              style="width: 160px"
+              placeholder="业务类型"
+            />
+            <NButton type="primary" @click="handleSearchUserBills">查询</NButton>
+            <NButton @click="handleResetUserBills">重置</NButton>
+          </div>
+          <div class="bill-summary">
+            <div class="bill-summary-card income-coins">
+              <div class="label">收入(金币)</div>
+              <div class="value">{{ billSummary.income_coins_total }}</div>
+            </div>
+            <div class="bill-summary-card income-diamonds">
+              <div class="label">收入(钻石)</div>
+              <div class="value">{{ billSummary.income_diamonds_total }}</div>
+            </div>
+            <div class="bill-summary-card expense-coins">
+              <div class="label">支出(金币)</div>
+              <div class="value">{{ billSummary.expense_coins_total }}</div>
+            </div>
+            <div class="bill-summary-card expense-diamonds">
+              <div class="label">支出(钻石)</div>
+              <div class="value">{{ billSummary.expense_diamonds_total }}</div>
+            </div>
+          </div>
+          <NDataTable
+            :loading="billLoading"
+            :columns="billColumns"
+            :data="billRows"
+            :pagination="billPagination"
+            :scroll-x="1080"
+            :bordered="false"
+            :single-line="false"
+          />
+        </NTabPane>
       </NTabs>
 
       <template #action>
@@ -1186,5 +1407,52 @@ const columns = [
   align-items: center;
   gap: 10px;
   margin-bottom: 12px;
+}
+
+.bill-summary {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.bill-summary-card {
+  min-width: 180px;
+  border-radius: 8px;
+  padding: 10px 12px;
+  border: 1px solid #edf0f5;
+  background: #fafbfc;
+}
+
+.bill-summary-card .label {
+  color: #8b8f99;
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+
+.bill-summary-card .value {
+  color: #242933;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.bill-summary-card.income-coins {
+  border-color: #d4efe1;
+  background: #f3fbf6;
+}
+
+.bill-summary-card.income-diamonds {
+  border-color: #d9e5f8;
+  background: #f5f8ff;
+}
+
+.bill-summary-card.expense-coins {
+  border-color: #f1d9d9;
+  background: #fff6f6;
+}
+
+.bill-summary-card.expense-diamonds {
+  border-color: #f3dfcc;
+  background: #fff8f1;
 }
 </style>

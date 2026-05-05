@@ -14,6 +14,7 @@ from .roles import roles_router
 from .users import users_router
 from .app_users import app_users_router
 from .call_records import call_records_router
+from .gift import gift_router
 from app.websocket.router import router as ws_router
 
 v1_router = APIRouter()
@@ -32,3 +33,4 @@ v1_router.include_router(system_config_spec_router, prefix="/apis", dependencies
 v1_router.include_router(withdraw_router, prefix="/withdraw", dependencies=[DependPermission])
 v1_router.include_router(app_users_router, prefix="/app_user", dependencies=[DependPermission])
 v1_router.include_router(call_records_router, prefix="/call_record", dependencies=[DependPermission])
+v1_router.include_router(gift_router, prefix="/gift", dependencies=[DependPermission])

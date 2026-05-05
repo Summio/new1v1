@@ -35,15 +35,26 @@ class AnchorListOut(BaseModel):
 # ===== 通话 =====
 
 class DialingIn(BaseModel):
-    anchor_user_id: Optional[int] = Field(default=None, description="主播用户ID(app_user.id)")
-    anchor_id: Optional[int] = Field(default=None, description="兼容旧字段: 主播用户ID")
+    target_user_id: Optional[int] = Field(default=None, description="目标用户ID(app_user.id)")
+    target_id: Optional[int] = Field(default=None, description="兼容字段: 目标用户ID")
+    anchor_user_id: Optional[int] = Field(default=None, description="兼容旧字段: 目标用户ID")
+    anchor_id: Optional[int] = Field(default=None, description="兼容旧字段: 目标用户ID")
 
     @model_validator(mode="after")
     def validate_anchor_user_id(self):
-        if self.anchor_user_id is None and self.anchor_id is None:
-            raise ValueError("anchor_user_id is required")
-        if self.anchor_user_id is None:
-            self.anchor_user_id = self.anchor_id
+        if (
+            self.target_user_id is None
+            and self.target_id is None
+            and self.anchor_user_id is None
+            and self.anchor_id is None
+        ):
+            raise ValueError("target_user_id is required")
+        if self.target_user_id is None:
+            self.target_user_id = (
+                self.target_id
+                if self.target_id is not None
+                else (self.anchor_user_id if self.anchor_user_id is not None else self.anchor_id)
+            )
         return self
 
 
@@ -100,24 +111,51 @@ class GiftOut(BaseModel):
     name: str
     icon: str
     price: int
+    svga_url: Optional[str] = None
 
 
 class GiftSendIn(BaseModel):
-    anchor_user_id: Optional[int] = Field(default=None, description="主播用户ID(app_user.id)")
-    anchor_id: Optional[int] = Field(default=None, description="兼容旧字段: 主播用户ID")
+    target_user_id: Optional[int] = Field(default=None, description="目标用户ID(app_user.id)")
+    target_id: Optional[int] = Field(default=None, description="兼容字段: 目标用户ID")
+    anchor_user_id: Optional[int] = Field(default=None, description="兼容旧字段: 目标用户ID")
+    anchor_id: Optional[int] = Field(default=None, description="兼容旧字段: 目标用户ID")
     gift_id: int = Field(..., description="礼物ID")
+    quantity: int = Field(default=1, ge=1, le=999, description="赠送数量")
+    scene: str = Field(default="chat", description="送礼场景: chat/call")
+    call_id: Optional[int] = Field(default=None, ge=1, description="通话ID(scene=call时可传)")
+    request_id: Optional[str] = Field(default=None, min_length=8, max_length=64, description="客户端请求幂等ID")
 
     @model_validator(mode="after")
     def validate_anchor_user_id(self):
-        if self.anchor_user_id is None and self.anchor_id is None:
-            raise ValueError("anchor_user_id is required")
-        if self.anchor_user_id is None:
-            self.anchor_user_id = self.anchor_id
+        if (
+            self.target_user_id is None
+            and self.target_id is None
+            and self.anchor_user_id is None
+            and self.anchor_id is None
+        ):
+            raise ValueError("target_user_id is required")
+        if self.target_user_id is None:
+            self.target_user_id = (
+                self.target_id
+                if self.target_id is not None
+                else (self.anchor_user_id if self.anchor_user_id is not None else self.anchor_id)
+            )
+        scene = (self.scene or "").strip()
+        if scene not in {"chat", "call"}:
+            raise ValueError("scene must be chat or call")
+        self.scene = scene
         return self
 
 
 class GiftSendOut(BaseModel):
+    gift_id: int
     gift_name: str
+    gift_icon: Optional[str] = None
+    svga_url: Optional[str] = None
+    quantity: int = 1
+    unit_price: int = 0
+    total_price: int = 0
+    anchor_income_diamonds: int = 0
     coins: int
     msg: str = "发送成功"
 

@@ -13,9 +13,19 @@ import 'package:huanxi/core/utils/app_toast.dart';
 /// 全屏底部弹窗，显示礼物列表，支持发送礼物
 class GiftPanel extends ConsumerStatefulWidget {
   final String anchorId;
+  final String scene;
+  final int? callId;
+  final ValueChanged<GiftSendResult>? onGiftSent;
   final VoidCallback onClose;
 
-  const GiftPanel({super.key, required this.anchorId, required this.onClose});
+  const GiftPanel({
+    super.key,
+    required this.anchorId,
+    this.scene = 'chat',
+    this.callId,
+    this.onGiftSent,
+    required this.onClose,
+  });
 
   @override
   ConsumerState<GiftPanel> createState() => _GiftPanelState();
@@ -23,7 +33,6 @@ class GiftPanel extends ConsumerStatefulWidget {
 
 class _GiftPanelState extends ConsumerState<GiftPanel> {
   int _selectedIndex = 0;
-  int _sendCount = 1;
   bool _isSending = false;
   StreamSubscription<WsEvent>? _wsSubscription;
 
@@ -54,30 +63,31 @@ class _GiftPanelState extends ConsumerState<GiftPanel> {
   void _onWsEvent(WsEvent event) {
     if (!mounted) return;
     if (event.event == 'gift_sent') {
+      final eventScene = (event.data['scene'] as String?) ?? 'chat';
+      if (eventScene != widget.scene) {
+        return;
+      }
+      if (widget.scene == 'call') {
+        final eventCallId = _asInt(event.data['call_id']);
+        if (widget.callId != null && eventCallId != widget.callId) {
+          return;
+        }
+      }
       // 服务端确认礼物发送成功，关闭面板
       final giftName = event.data['gift_name'] as String?;
-      final giftPrice = event.data['gift_price'] as int?;
-      final quantity = event.data['quantity'] as int? ?? 1;
-      final receiverCoins = event.data['receiver_coins'] as int?;
-      if (giftName != null && giftPrice != null) {
-        // 更新余额
-        if (receiverCoins != null) {
-          ref.read(authProvider.notifier).syncBalance(coins: receiverCoins);
-        }
-        AppToast.showSnackBar(
-          context,
-          SnackBar(
-            content: Text('已发送 ${quantity}x $giftName，共 ¥${(giftPrice * quantity).toStringAsFixed(0)}'),
-          ),
-        );
-        widget.onClose();
+      final receiverCoins = _asInt(event.data['receiver_coins']);
+      if (giftName != null && giftName.isNotEmpty && receiverCoins != null) {
+        // 仅同步余额，发送成功提示和关闭交由 HTTP 成功回调处理，避免重复 pop 导致返回上一页。
+        ref.read(authProvider.notifier).syncBalance(coins: receiverCoins);
       }
     } else if (event.event == 'balance_updated') {
       // 余额更新事件
       final coins = event.data['coins'] as int?;
       final diamonds = event.data['diamonds'] as int?;
       if (coins != null || diamonds != null) {
-        ref.read(authProvider.notifier).syncBalance(
+        ref
+            .read(authProvider.notifier)
+            .syncBalance(
               coins: coins ?? ref.read(authProvider).coins,
               diamonds: diamonds ?? ref.read(authProvider).diamonds,
             );
@@ -91,17 +101,12 @@ class _GiftPanelState extends ConsumerState<GiftPanel> {
     super.dispose();
   }
 
-  void _increment() => setState(() => _sendCount++);
-  void _decrement() {
-    if (_sendCount > 1) setState(() => _sendCount--);
-  }
-
   Future<void> _sendGift() async {
     final giftState = ref.read(giftListProvider);
     if (giftState.gifts.isEmpty) return;
 
     final gift = giftState.gifts[_selectedIndex];
-    final total = gift.price * _sendCount;
+    final total = gift.price;
 
     setState(() => _isSending = true);
 
@@ -110,6 +115,9 @@ class _GiftPanelState extends ConsumerState<GiftPanel> {
         .sendGift(
           giftId: gift.id,
           anchorId: int.tryParse(widget.anchorId) ?? 0,
+          quantity: 1,
+          scene: widget.scene,
+          callId: widget.callId,
         );
 
     setState(() => _isSending = false);
@@ -117,9 +125,12 @@ class _GiftPanelState extends ConsumerState<GiftPanel> {
     if (!mounted) return;
 
     if (result.success) {
+      final coinName = ref.read(tokenNamesProvider).coinName;
       // 立即用 HTTP 响应中的余额更新 UI
       if (result.coins != null) {
-        ref.read(authProvider.notifier).syncBalance(
+        ref
+            .read(authProvider.notifier)
+            .syncBalance(
               coins: result.coins,
               diamonds: ref.read(authProvider).diamonds,
             );
@@ -129,18 +140,30 @@ class _GiftPanelState extends ConsumerState<GiftPanel> {
         context,
         SnackBar(
           content: Text(
-            '已发送 ${_sendCount}x ${gift.name}，共 ¥${total.toStringAsFixed(0)}',
+            '已发送 ${result.quantity ?? 1}x ${result.giftName ?? gift.name}，共 ${result.totalPrice ?? total.toInt()}$coinName',
           ),
         ),
       );
+      widget.onGiftSent?.call(result);
       widget.onClose();
     } else {
-      AppToast.showSnackBar(context, const SnackBar(content: Text('发送失败，请重试')));
+      final failMsg = (result.msg ?? '').trim();
+      AppToast.showSnackBar(
+        context,
+        SnackBar(content: Text(failMsg.isEmpty ? '发送失败，请重试' : failMsg)),
+      );
     }
   }
 
   IconData _getIcon(String? iconUrl, String fallback) {
     return _iconMap[fallback] ?? Icons.card_giftcard;
+  }
+
+  int? _asInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
   }
 
   @override
@@ -305,7 +328,7 @@ class _GiftPanelState extends ConsumerState<GiftPanel> {
                                 ),
                               ),
                               Text(
-                                '¥${g.price.toStringAsFixed(0)}',
+                                '${g.price.toStringAsFixed(0)}${tokenNames.coinName}',
                                 style: TextStyle(
                                   fontSize: 10,
                                   color: isSelected
@@ -334,81 +357,6 @@ class _GiftPanelState extends ConsumerState<GiftPanel> {
             ),
             child: Row(
               children: [
-                // 数量选择
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: AppTheme.secondaryColor),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.remove, size: 18),
-                        constraints: const BoxConstraints(
-                          minWidth: 36,
-                          minHeight: 36,
-                        ),
-                        onPressed: _decrement,
-                      ),
-                      SizedBox(
-                        width: 40,
-                        child: Text(
-                          '$_sendCount',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.add, size: 18),
-                        constraints: const BoxConstraints(
-                          minWidth: 36,
-                          minHeight: 36,
-                        ),
-                        onPressed: _increment,
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(width: 12),
-
-                // 快捷数量
-                ...([1, 10, 66, 188]).map(
-                  (n) => Padding(
-                    padding: const EdgeInsets.only(right: 6),
-                    child: GestureDetector(
-                      onTap: () => setState(() => _sendCount = n),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _sendCount == n
-                              ? AppTheme.secondaryColor.withValues(alpha: 0.1)
-                              : Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: _sendCount == n
-                                ? AppTheme.secondaryColor
-                                : Colors.transparent,
-                          ),
-                        ),
-                        child: Text(
-                          '${n}x',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: _sendCount == n
-                                ? AppTheme.secondaryDark
-                                : AppTheme.textSecondary,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
                 const Spacer(),
 
                 // 发送按钮 - 渐变
@@ -445,7 +393,7 @@ class _GiftPanelState extends ConsumerState<GiftPanel> {
                             ),
                           )
                         : Text(
-                            '发送 ¥${selectedGift != null ? (selectedGift.price * _sendCount).toStringAsFixed(0) : 0}',
+                            '发送 ${selectedGift != null ? selectedGift.price.toStringAsFixed(0) : 0}${tokenNames.coinName}',
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,

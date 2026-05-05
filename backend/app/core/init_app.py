@@ -56,6 +56,17 @@ def build_operation_children(parent_id: int) -> list[Menu]:
             component="/operation/call-record",
             keepalive=False,
         ),
+        Menu(
+            menu_type=MenuType.MENU,
+            name="礼物管理",
+            path="gift",
+            order=3,
+            parent_id=parent_id,
+            icon="material-symbols:featured-play-list-outline",
+            is_hidden=False,
+            component="/operation/gift",
+            keepalive=False,
+        ),
     ]
 
 
@@ -312,7 +323,7 @@ async def init_roles():
 
     # 兼容存量环境：为所有历史角色补齐运营中心菜单与通话记录查询权限（幂等）
     all_roles = await Role.all()
-    operation_menus = await Menu.filter(path__in=["/operation", "app-user", "call-record"]).all()
+    operation_menus = await Menu.filter(path__in=["/operation", "app-user", "call-record", "gift"]).all()
     if all_roles and operation_menus:
         for role in all_roles:
             await role.menus.add(*operation_menus)
@@ -321,6 +332,10 @@ async def init_roles():
     if call_record_api and all_roles:
         for role in all_roles:
             await role.apis.add(call_record_api)
+    gift_list_api = await Api.filter(method="GET", path="/api/v1/gift/list").first()
+    if gift_list_api and all_roles:
+        for role in all_roles:
+            await role.apis.add(gift_list_api)
 
     # 兼容存量环境：确保管理员角色始终拥有全部菜单与API（幂等）
     admin_role = await Role.filter(name="管理员").first()

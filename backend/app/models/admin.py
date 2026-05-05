@@ -142,7 +142,11 @@ class GiftRecord(BaseModel, TimestampMixin):
     receiver_id = fields.BigIntField(description="接收者ID", index=True)
     gift_id = fields.BigIntField(description="礼物ID")
     gift_name = fields.CharField(max_length=50, description="礼物名称")
-    price = fields.BigIntField(description="价格(分)")
+    price = fields.BigIntField(description="礼物单价(分)")
+    quantity = fields.IntField(default=1, description="礼物数量")
+    total_price = fields.BigIntField(default=0, description="礼物总价(分)")
+    anchor_share_bps = fields.IntField(default=10000, description="主播分成比例快照(万分比)")
+    anchor_income_diamonds = fields.BigIntField(default=0, description="主播礼物收益钻石(分)")
 
     class Meta:
         table = "gift_record"

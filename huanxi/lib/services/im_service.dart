@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:tencent_cloud_chat_sdk/models/v2_tim_conversation.dart';
 import 'package:tencent_cloud_chat_sdk/models/v2_tim_message.dart';
@@ -9,6 +11,43 @@ import 'package:tencent_cloud_chat_sdk/enum/log_level_enum.dart';
 import 'package:tencent_cloud_chat_sdk/tencent_im_sdk_plugin.dart';
 import '../core/im/call_trace_message.dart';
 import '../core/utils/media_url.dart';
+
+class GiftNotifyMessage {
+  final int giftId;
+  final String giftName;
+  final String giftIcon;
+  final String svgaUrl;
+  final int unitPrice;
+  final int quantity;
+  final int totalPrice;
+  final int anchorIncomeDiamonds;
+  final String scene;
+  final int? callId;
+  final int senderId;
+  final String senderNickname;
+  final int timestamp;
+
+  const GiftNotifyMessage({
+    required this.giftId,
+    required this.giftName,
+    required this.giftIcon,
+    required this.svgaUrl,
+    required this.unitPrice,
+    required this.quantity,
+    required this.totalPrice,
+    required this.anchorIncomeDiamonds,
+    required this.scene,
+    required this.callId,
+    required this.senderId,
+    required this.senderNickname,
+    required this.timestamp,
+  });
+
+  String previewText() {
+    final label = giftName.isEmpty ? '礼物' : giftName;
+    return '[礼物] $label x$quantity';
+  }
+}
 
 /// IM 服务封装
 /// 腾讯云 IM ( TIM ) Flutter SDK
@@ -415,10 +454,50 @@ class IMService {
     return CallTraceMessage.fromTimMessage(message);
   }
 
+  GiftNotifyMessage? parseGiftNotifyMessage(V2TimMessage? message) {
+    final raw = message?.customElem?.data?.trim() ?? '';
+    if (raw.isEmpty) {
+      return null;
+    }
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) {
+        return null;
+      }
+      if ((decoded['type'] as String?) != 'gift_notify') {
+        return null;
+      }
+      final unitPrice = _asInt(decoded['unit_price']) ?? _asInt(decoded['gift_price']) ?? 0;
+      final quantity = _asInt(decoded['quantity']) ?? 1;
+      final totalPrice = _asInt(decoded['total_price']) ?? (unitPrice * quantity);
+      return GiftNotifyMessage(
+        giftId: _asInt(decoded['gift_id']) ?? 0,
+        giftName: (decoded['gift_name'] as String?) ?? '',
+        giftIcon: normalizeMediaUrl(decoded['gift_icon'] as String?),
+        svgaUrl: normalizeMediaUrl(decoded['svga_url'] as String?),
+        unitPrice: unitPrice,
+        quantity: quantity < 1 ? 1 : quantity,
+        totalPrice: totalPrice < 0 ? 0 : totalPrice,
+        anchorIncomeDiamonds: _asInt(decoded['anchor_income_diamonds']) ?? 0,
+        scene: (decoded['scene'] as String?) ?? 'chat',
+        callId: _asInt(decoded['call_id']),
+        senderId: _asInt(decoded['sender_id']) ?? 0,
+        senderNickname: (decoded['sender_nickname'] as String?) ?? '用户',
+        timestamp: _asInt(decoded['ts']) ?? 0,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
   String buildConversationPreview({
     required V2TimMessage? message,
     required int currentUserId,
   }) {
+    final gift = parseGiftNotifyMessage(message);
+    if (gift != null) {
+      return gift.previewText();
+    }
     final trace = parseCallTraceMessage(message);
     if (trace != null) {
       return trace.toDisplayText(currentUserId: currentUserId);
@@ -431,4 +510,11 @@ class IMService {
   }
 
   String normalizeMediaUrl(String? raw) => toAbsoluteMediaUrl(raw);
+
+  int? _asInt(dynamic value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    if (value is String) return int.tryParse(value);
+    return null;
+  }
 }

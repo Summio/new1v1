@@ -41,6 +41,7 @@ const faceBeautyForm = ref({
 const billingForm = ref({
   call_billing_free_seconds: 10,
   call_anchor_share_bps: 5000,
+  gift_anchor_share_bps: 5000,
 })
 
 const anchorSharePercent = computed({
@@ -54,6 +55,20 @@ const anchorSharePercent = computed({
       return
     }
     billingForm.value.call_anchor_share_bps = normalizeSeconds(percent * 100, 5000, 0, 10000)
+  },
+})
+
+const giftSharePercent = computed({
+  get() {
+    return Number((Number(billingForm.value.gift_anchor_share_bps || 0) / 100).toFixed(2))
+  },
+  set(value) {
+    const percent = Number(value)
+    if (!Number.isFinite(percent)) {
+      billingForm.value.gift_anchor_share_bps = 5000
+      return
+    }
+    billingForm.value.gift_anchor_share_bps = normalizeSeconds(percent * 100, 5000, 0, 10000)
   },
 })
 
@@ -104,6 +119,12 @@ async function loadAllConfigs() {
     )
     billingForm.value.call_anchor_share_bps = normalizeSeconds(
       findValue('call_anchor_share_bps', '5000'),
+      5000,
+      0,
+      10000
+    )
+    billingForm.value.gift_anchor_share_bps = normalizeSeconds(
+      findValue('gift_anchor_share_bps', '5000'),
       5000,
       0,
       10000
@@ -291,11 +312,17 @@ async function saveBillingConfigs() {
   try {
     const freeSeconds = normalizeSeconds(billingForm.value.call_billing_free_seconds, 10, 0, 600)
     const anchorShareBps = normalizeSeconds(billingForm.value.call_anchor_share_bps, 5000, 0, 10000)
+    const giftShareBps = normalizeSeconds(billingForm.value.gift_anchor_share_bps, 5000, 0, 10000)
     await upsertConfig('call_billing_free_seconds', String(freeSeconds), '通话免费时长（秒）')
     await upsertConfig(
       'call_anchor_share_bps',
       String(anchorShareBps),
       '视频通话主播分成比例（万分比）'
+    )
+    await upsertConfig(
+      'gift_anchor_share_bps',
+      String(giftShareBps),
+      '礼物主播分成比例（万分比）'
     )
     await loadAllConfigs()
     $message.success('计费配置已保存')
@@ -485,6 +512,15 @@ async function saveWatchdogConfigs() {
           <NFormItem label="视频通话主播分成比例（%） call_anchor_share_bps">
             <NInputNumber
               v-model:value="anchorSharePercent"
+              :min="0"
+              :max="100"
+              :step="0.01"
+              placeholder="例如 50"
+            />
+          </NFormItem>
+          <NFormItem label="礼物主播分成比例（%） gift_anchor_share_bps">
+            <NInputNumber
+              v-model:value="giftSharePercent"
               :min="0"
               :max="100"
               :step="0.01"

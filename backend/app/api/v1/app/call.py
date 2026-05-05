@@ -180,39 +180,44 @@ async def dialing(req_in: DialingIn):
     reject_inbound_protect_seconds = await _get_reject_inbound_protect_seconds()
     reject_pair_protect_seconds = await _get_reject_pair_protect_seconds()
 
-    anchor_user_id = int(req_in.anchor_user_id or 0)
-    if anchor_user_id <= 0:
-        return Fail(code=400, msg="主播参数错误")
+    target_user_id = int(req_in.target_user_id or 0)
+    if target_user_id <= 0:
+        return Fail(code=400, msg="目标用户参数错误")
 
-    # anchor_user_id 直接使用 app_user.id
-    anchor_user = await AppUser.filter(
-        id=anchor_user_id,
-        is_anchor=True,
+    target_user = await AppUser.filter(
+        id=target_user_id,
         status="normal",
     ).first()
-    if not anchor_user:
-        return Fail(code=404, msg="主播不存在或未认证")
+    if not target_user:
+        return Fail(code=404, msg="目标用户不存在或状态异常")
 
     # 禁止自呼叫
-    if caller_id == anchor_user.id:
+    if caller_id == target_user.id:
         return Fail(code=400, msg="不能呼叫自己")
 
     # 使用 Redis 在线状态检查（WebSocket 方式）
-    from app.websocket.presence import is_online as check_anchor_online
-    if not await check_anchor_online(anchor_user.id):
-        return Fail(code=400, msg="主播当前不在线，请稍后再试")
+    from app.websocket.presence import is_online as check_online
+    if not await check_online(target_user.id):
+        return Fail(code=400, msg="对方当前不在线，请稍后再试")
 
-    call_price = int(anchor_user.anchor_call_price or 0)
+    caller_is_anchor = bool(app_user.is_anchor)
+    callee_is_anchor = bool(target_user.is_anchor)
+    if caller_is_anchor and not callee_is_anchor:
+        call_price = int(app_user.anchor_call_price or 0)
+    elif callee_is_anchor and not caller_is_anchor:
+        call_price = int(target_user.anchor_call_price or 0)
+    else:
+        call_price = 0
 
-    # 只做余额门槛检查，不预扣（视频通话消耗金币）
-    if app_user.coins < call_price:
+    # 仅在主叫方是实际扣费方时做余额门槛检查，不预扣。
+    if callee_is_anchor and not caller_is_anchor and app_user.coins < call_price:
         return Fail(code=501, msg="余额不足，请先充值")
 
     # 事务包裹忙线检查 + 记录创建：防止 TOCTOU 竞态
     async with in_transaction() as conn:
         # 加行锁：锁住主叫和被叫用户行，防止并发创建冲突的通话记录
         await AppUser.filter(id=caller_id).using_db(conn).select_for_update().first()
-        await AppUser.filter(id=anchor_user.id).using_db(conn).select_for_update().first()
+        await AppUser.filter(id=target_user.id).using_db(conn).select_for_update().first()
 
         # 主叫忙线检测
         caller_busy = (
@@ -229,7 +234,7 @@ async def dialing(req_in: DialingIn):
         # 被叫忙线检测
         callee_busy = (
             await CallRecord.filter(
-                callee_id=anchor_user.id,
+                (Q(caller_id=target_user.id) | Q(callee_id=target_user.id)),
                 status__in=["pending", "ongoing"],
             )
             .using_db(conn)
@@ -243,7 +248,7 @@ async def dialing(req_in: DialingIn):
             protect_since_inbound = now_local_naive() - timedelta(seconds=reject_inbound_protect_seconds)
             all_rejected_for_callee = (
                 await CallRecord.filter(
-                    callee_id=anchor_user.id,
+                    callee_id=target_user.id,
                     status="ended",
                     end_reason="rejected",
                     updated_at__gte=protect_since_inbound,
@@ -262,7 +267,7 @@ async def dialing(req_in: DialingIn):
             all_rejected_for_pair = (
                 await CallRecord.filter(
                     caller_id=caller_id,
-                    callee_id=anchor_user.id,
+                    callee_id=target_user.id,
                     status="ended",
                     end_reason="rejected",
                     updated_at__gte=protect_since_pair,
@@ -278,10 +283,15 @@ async def dialing(req_in: DialingIn):
 
         # 创建通话记录（同一事务内，锁已持有，无竞争）
         anchor_share_bps = await get_anchor_share_bps()
-        income_anchor_user_id = int(anchor_user.id) if not bool(app_user.is_anchor) else None
+        if caller_is_anchor and not callee_is_anchor:
+            income_anchor_user_id = int(caller_id)
+        elif callee_is_anchor and not caller_is_anchor:
+            income_anchor_user_id = int(target_user.id)
+        else:
+            income_anchor_user_id = None
         call_record = await CallRecord.create(
             caller_id=caller_id,
-            callee_id=anchor_user.id,
+            callee_id=target_user.id,
             call_price=call_price,
             status="pending",
             income_anchor_user_id=income_anchor_user_id,
@@ -290,11 +300,11 @@ async def dialing(req_in: DialingIn):
         )
 
     # 事务结束后查询被叫信息（不在锁内执行，减少锁持有时间）
-    callee_user = await AppUser.filter(id=anchor_user.id).first()
+    callee_user = await AppUser.filter(id=target_user.id).first()
     callee_nickname = (
-        (callee_user.nickname or callee_user.username or f"用户{anchor_user.id}")
+        (callee_user.nickname or callee_user.username or f"用户{target_user.id}")
         if callee_user
-        else f"用户{anchor_user.id}"
+        else f"用户{target_user.id}"
     )
     callee_avatar = to_relative_media_url(callee_user.avatar) if callee_user else None
     await _append_call_trace(
@@ -304,7 +314,7 @@ async def dialing(req_in: DialingIn):
     )
     # 推送 WebSocket 来电通知给被叫方（fire-and-forget）
     asyncio.create_task(_ws_push_call_incoming(
-        callee_id=int(anchor_user.id),
+        callee_id=int(target_user.id),
         call_id=int(call_record.id),
         caller_id=int(caller_id),
         caller_name=app_user.nickname or f"用户{caller_id}",
@@ -318,7 +328,7 @@ async def dialing(req_in: DialingIn):
             call_id=call_record.id,
             coins=app_user.coins,
             can_call=True,
-            callee_id=int(anchor_user.id),
+            callee_id=int(target_user.id),
             callee_nickname=callee_nickname,
             callee_avatar=callee_avatar,
             call_price=int(call_price or 0),
