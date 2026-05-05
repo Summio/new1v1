@@ -51,6 +51,20 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
   String? _peerAvatar;
   int _callPrice = 0;
 
+  void _dismissTransientOverlays() {
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+    rootNavigator.popUntil((route) => route is PageRoute<dynamic>);
+  }
+
+  void _exitPage({Object? result}) {
+    _dismissTransientOverlays();
+    if (context.canPop()) {
+      context.pop(result);
+    } else {
+      context.go(AppRoutes.index);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -169,11 +183,7 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
         context,
         const SnackBar(content: Text('目标用户参数异常，无法发起通话')),
       );
-      if (context.canPop()) {
-        context.pop();
-      } else {
-        context.go(AppRoutes.index);
-      }
+      _exitPage();
       return;
     }
 
@@ -239,12 +249,7 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
 
   void _closeWithDialingError(String message) {
     final normalized = AppToast.normalizeMessage(message);
-    if (context.canPop()) {
-      context.pop(normalized);
-      return;
-    }
-    AppToast.showSnackBar(context, SnackBar(content: Text(normalized)));
-    context.go(AppRoutes.index);
+    _exitPage(result: normalized);
   }
 
   void _goToCallRoom(int callId) {
@@ -274,11 +279,7 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
       context,
       SnackBar(content: Text(callEndReasonText(reason))),
     );
-    if (context.canPop()) {
-      context.pop();
-    } else {
-      context.go(AppRoutes.index);
-    }
+    _exitPage();
   }
 
   Future<void> _handleNetworkLost() async {
@@ -311,11 +312,7 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
       if (!mounted) return;
       ref.read(callOutgoingControllerProvider.notifier).setPageClosing(true);
       _wsDisconnectTimer?.cancel();
-      if (context.canPop()) {
-        context.pop();
-      } else {
-        context.go(AppRoutes.index);
-      }
+      _exitPage();
     } catch (_) {
       if (!mounted) return;
       AppToast.showSnackBar(

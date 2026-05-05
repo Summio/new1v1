@@ -52,18 +52,19 @@ class CallRoomPage extends ConsumerStatefulWidget {
   ConsumerState<CallRoomPage> createState() => _CallRoomPageState();
 }
 
-class _CallRoomPageState extends ConsumerState<CallRoomPage>
-    with WidgetsBindingObserver {
+class _CallRoomPageState extends ConsumerState<CallRoomPage> {
   static const int _callChatHistoryCount = 30;
-  static const Duration _keyboardInsetSettleDelay = Duration(milliseconds: 120);
+  static const Duration _connectingWatchdogTimeout = Duration(seconds: 20);
+  static const double _chatInputBottomSpacing = 12;
+  static const double _chatInputEstimatedHeight = 60;
+  static const double _chatOverlayGapAboveInput = 8;
+
   bool _endingConsuming = false;
-  bool _disposed = false;
   bool _isRemoteInMainView = true;
   bool _isChatInputVisible = false;
   bool _isImChatReady = false;
   bool _isImChatAvailable = true;
   bool _isImChatLoading = false;
-  double _settledKeyboardInset = 0;
   int? _myAppUserId;
   String? _myChatUserId;
   String? _peerChatUserId;
@@ -72,8 +73,8 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
   final TextEditingController _chatController = TextEditingController();
   final FocusNode _chatFocusNode = FocusNode();
   final CallOverlayChatStore _chatStore = CallOverlayChatStore(maxMessages: 20);
-  Timer? _keyboardInsetSettleTimer;
   late final DateTime _chatSessionStartedAt;
+  Timer? _connectingWatchdogTimer;
 
   void _log(String message) {
     AppLogger.debug('[CALL_FLOW][callId=${widget.callId}] $message');
@@ -83,7 +84,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
   void initState() {
     super.initState();
     _chatSessionStartedAt = DateTime.now();
-    WidgetsBinding.instance.addObserver(this);
     unawaited(
       SystemChrome.setPreferredOrientations(const [
         DeviceOrientation.portraitUp,
@@ -98,6 +98,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
     Future.microtask(() {
       if (!mounted) return;
       ref.read(callSessionProvider(widget.callId).notifier).markConnecting();
+      _startConnectingWatchdog();
       ref.read(callWsControllerProvider(widget.callId).notifier).bind();
 
       unawaited(
@@ -121,36 +122,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
       );
       unawaited(_initImCallChat());
     });
-  }
-
-  @override
-  void didChangeMetrics() {
-    _scheduleKeyboardInsetSettleUpdate();
-  }
-
-  void _scheduleKeyboardInsetSettleUpdate() {
-    _keyboardInsetSettleTimer?.cancel();
-    _keyboardInsetSettleTimer = Timer(_keyboardInsetSettleDelay, () {
-      if (!mounted) {
-        return;
-      }
-      final nextInset = _readKeyboardInset();
-      if ((_settledKeyboardInset - nextInset).abs() < 0.5) {
-        return;
-      }
-      setState(() {
-        _settledKeyboardInset = nextInset;
-      });
-    });
-  }
-
-  double _readKeyboardInset() {
-    final views = WidgetsBinding.instance.platformDispatcher.views;
-    if (views.isEmpty) {
-      return 0;
-    }
-    final view = views.first;
-    return view.viewInsets.bottom / view.devicePixelRatio;
   }
 
   Future<void> _consumeEnding(CallSessionState sessionState) async {
@@ -223,10 +194,49 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
       return;
     }
 
+    final latestSession = ref.read(callSessionProvider(widget.callId));
+    if (latestSession.endingInProgress || latestSession.hasEnded) {
+      _log('end call ignored: session already ending/ended');
+      return;
+    }
+
     _log('end call confirmed');
     ref
         .read(callSessionProvider(widget.callId).notifier)
         .beginEnding(endReason: 'normal', notifyEndApi: true);
+  }
+
+  void _startConnectingWatchdog() {
+    _connectingWatchdogTimer?.cancel();
+    _connectingWatchdogTimer = Timer(_connectingWatchdogTimeout, () {
+      if (!mounted) {
+        return;
+      }
+      final session = ref.read(callSessionProvider(widget.callId));
+      final rtcState = ref.read(callRtcControllerProvider(widget.callId));
+      if (session.phase != CallPhase.connecting ||
+          session.endingInProgress ||
+          session.hasEnded ||
+          rtcState.isJoined ||
+          rtcState.remoteUid != null) {
+        return;
+      }
+      _log('connecting watchdog timeout, force ending to avoid stuck');
+      ref.read(callSessionProvider(widget.callId).notifier).beginEnding(
+        endReason: 'timeout',
+        notifyEndApi: false,
+      );
+    });
+  }
+
+  void _cancelConnectingWatchdog() {
+    _connectingWatchdogTimer?.cancel();
+    _connectingWatchdogTimer = null;
+  }
+
+  void _dismissTransientOverlays() {
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+    rootNavigator.popUntil((route) => route is PageRoute<dynamic>);
   }
 
   Future<void> _leaveAndExit({
@@ -261,6 +271,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
     if (!mounted) {
       return;
     }
+    _dismissTransientOverlays();
     if (context.canPop()) {
       context.pop();
     } else {
@@ -592,15 +603,10 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
     final willShowInput = !_isChatInputVisible;
     setState(() {
       _isChatInputVisible = willShowInput;
-      if (!willShowInput) {
-        _settledKeyboardInset = 0;
-      }
     });
     if (willShowInput) {
       _chatFocusNode.requestFocus();
-      _scheduleKeyboardInsetSettleUpdate();
     } else {
-      _keyboardInsetSettleTimer?.cancel();
       _chatFocusNode.unfocus();
     }
   }
@@ -611,9 +617,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
     }
     setState(() {
       _isChatInputVisible = false;
-      _settledKeyboardInset = 0;
     });
-    _keyboardInsetSettleTimer?.cancel();
     _chatFocusNode.unfocus();
   }
 
@@ -714,9 +718,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
 
   @override
   void dispose() {
-    _disposed = true;
-    WidgetsBinding.instance.removeObserver(this);
-    _keyboardInsetSettleTimer?.cancel();
+    _cancelConnectingWatchdog();
     _imService.removeMessageListener(_onImMessageReceived);
     _chatController.dispose();
     _chatFocusNode.dispose();
@@ -728,14 +730,12 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
         DeviceOrientation.landscapeRight,
       ]),
     );
-    Future.microtask(() {
-      if (!_disposed) {
-        ref.read(callWsControllerProvider(widget.callId).notifier).unbind();
-        ref
-            .read(callRtcControllerProvider(widget.callId).notifier)
-            .leaveAndRelease(onLog: _log);
-      }
-    });
+    ref.read(callWsControllerProvider(widget.callId).notifier).unbind();
+    unawaited(
+      ref
+          .read(callRtcControllerProvider(widget.callId).notifier)
+          .leaveAndRelease(onLog: _log),
+    );
     if (_shouldBestEffortTerminateOnDispose()) {
       unawaited(_bestEffortTerminateCall());
     }
@@ -748,6 +748,13 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
       previous,
       next,
     ) {
+      if (next.phase == CallPhase.connecting &&
+          previous?.phase != CallPhase.connecting) {
+        _startConnectingWatchdog();
+      } else if (next.phase != CallPhase.connecting &&
+          previous?.phase == CallPhase.connecting) {
+        _cancelConnectingWatchdog();
+      }
       if (next.phase == CallPhase.ending &&
           previous?.phase != CallPhase.ending) {
         unawaited(_consumeEnding(next));
@@ -761,6 +768,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
     final sessionState = ref.watch(callSessionProvider(widget.callId));
     final giftState = ref.watch(callGiftControllerProvider(widget.callId));
     final tokenNames = ref.watch(tokenNamesProvider);
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
 
     final anchorState = ref.watch(anchorListProvider);
     AnchorInfo? found;
@@ -802,7 +810,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
               if (giftState.isShowing)
                 _buildGiftAnimationOverlay(giftState: giftState),
               if (_chatStore.messages.isNotEmpty)
-                _buildChatMessageOverlay(context),
+                _buildChatMessageOverlay(context, keyboardInset: keyboardInset),
               Positioned(
                 top: MediaQuery.paddingOf(context).top + 16,
                 right: 16,
@@ -906,110 +914,115 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
                   ),
                 ),
               ),
-              Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  child: Container(
-                    padding: EdgeInsets.only(
-                      left: 24,
-                      right: 24,
-                      bottom: MediaQuery.paddingOf(context).bottom + 24,
-                      top: 20,
-                    ),
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.bottomCenter,
-                        end: Alignment.topCenter,
-                        colors: [Colors.black54, Colors.transparent],
+              if (!_isChatInputVisible)
+                Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      padding: EdgeInsets.only(
+                        left: 24,
+                        right: 24,
+                        bottom: MediaQuery.paddingOf(context).bottom + 24,
+                        top: 20,
                       ),
-                    ),
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      physics: const BouncingScrollPhysics(),
-                      child: Row(
-                        children: [
-                          _ControlButton(
-                            icon: rtcState.isMicOn ? Icons.mic : Icons.mic_off,
-                            label: rtcState.isMicOn ? '麦克风' : '静音',
-                            isActive: !rtcState.isMicOn,
-                            onTap: () => unawaited(rtcController.toggleMic()),
-                          ),
-                          const SizedBox(width: 10),
-                          _ControlButton(
-                            icon: rtcState.isSpeakerOn
-                                ? Icons.volume_up
-                                : Icons.volume_off,
-                            label: '扬声器',
-                            isActive: !rtcState.isSpeakerOn,
-                            onTap: () =>
-                                unawaited(rtcController.toggleSpeaker()),
-                          ),
-                          const SizedBox(width: 10),
-                          _ControlButton(
-                            icon: rtcState.isCameraOn
-                                ? Icons.videocam
-                                : Icons.videocam_off,
-                            label: '摄像头',
-                            isActive: !rtcState.isCameraOn,
-                            onTap: () =>
-                                unawaited(rtcController.toggleCamera()),
-                          ),
-                          const SizedBox(width: 10),
-                          _ControlButton(
-                            icon: Icons.card_giftcard,
-                            label: '礼物',
-                            onTap: () => _showGiftPanel(anchor),
-                          ),
-                          const SizedBox(width: 10),
-                          _ControlButton(
-                            icon: Icons.chat_bubble_outline,
-                            label: _isImChatLoading ? '聊天中' : '聊天',
-                            isActive: _isChatInputVisible,
-                            onTap: _toggleChatInput,
-                          ),
-                          const SizedBox(width: 10),
-                          _ControlButton(
-                            icon: Icons.flip_camera_ios,
-                            label: '翻转',
-                            isSpinning: rtcState.isFlipping,
-                            onTap: () => unawaited(rtcController.flipCamera()),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: MediaQuery.paddingOf(context).bottom + 116,
-                  child: Center(
-                    child: GestureDetector(
-                      onTap: _endCall,
-                      child: Container(
-                        width: 62,
-                        height: 62,
-                        decoration: const BoxDecoration(
-                          color: AppTheme.errorColor,
-                          shape: BoxShape.circle,
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          colors: [Colors.black54, Colors.transparent],
                         ),
-                        child: const Icon(
-                          Icons.call_end,
-                          color: Colors.white,
-                          size: 30,
+                      ),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
+                        child: Row(
+                          children: [
+                            _ControlButton(
+                              icon: rtcState.isMicOn ? Icons.mic : Icons.mic_off,
+                              label: rtcState.isMicOn ? '麦克风' : '静音',
+                              isActive: !rtcState.isMicOn,
+                              onTap: () => unawaited(rtcController.toggleMic()),
+                            ),
+                            const SizedBox(width: 10),
+                            _ControlButton(
+                              icon: rtcState.isSpeakerOn
+                                  ? Icons.volume_up
+                                  : Icons.volume_off,
+                              label: '扬声器',
+                              isActive: !rtcState.isSpeakerOn,
+                              onTap: () =>
+                                  unawaited(rtcController.toggleSpeaker()),
+                            ),
+                            const SizedBox(width: 10),
+                            _ControlButton(
+                              icon: rtcState.isCameraOn
+                                  ? Icons.videocam
+                                  : Icons.videocam_off,
+                              label: '摄像头',
+                              isActive: !rtcState.isCameraOn,
+                              onTap: () =>
+                                  unawaited(rtcController.toggleCamera()),
+                            ),
+                            const SizedBox(width: 10),
+                            _ControlButton(
+                              icon: Icons.card_giftcard,
+                              label: '礼物',
+                              onTap: () => _showGiftPanel(anchor),
+                            ),
+                            const SizedBox(width: 10),
+                            _ControlButton(
+                              icon: Icons.chat_bubble_outline,
+                              label: _isImChatLoading ? '聊天中' : '聊天',
+                              isActive: _isChatInputVisible,
+                              onTap: _toggleChatInput,
+                            ),
+                            const SizedBox(width: 10),
+                            _ControlButton(
+                              icon: Icons.flip_camera_ios,
+                              label: '翻转',
+                              isSpinning: rtcState.isFlipping,
+                              onTap: () => unawaited(rtcController.flipCamera()),
+                            ),
+                          ],
                         ),
                       ),
                     ),
                   ),
-                ),
+              if (!_isChatInputVisible)
+                Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: MediaQuery.paddingOf(context).bottom + 116,
+                    child: Center(
+                      child: GestureDetector(
+                        onTap: _endCall,
+                        child: Container(
+                          width: 62,
+                          height: 62,
+                          decoration: const BoxDecoration(
+                            color: AppTheme.errorColor,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.call_end,
+                            color: Colors.white,
+                            size: 30,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
               if (_isChatInputVisible)
-                _buildChatInputBar(context),
+                _buildChatInputBar(context, keyboardInset: keyboardInset),
               if (rtcState.isLoading)
-                Container(
-                  color: Colors.black45,
-                  child: const Center(
-                    child: CircularProgressIndicator(color: Colors.white),
+                IgnorePointer(
+                  ignoring: true,
+                  child: Container(
+                    color: Colors.black45,
+                    child: const Center(
+                      child: CircularProgressIndicator(color: Colors.white),
+                    ),
                   ),
                 ),
             ],
@@ -1238,26 +1251,50 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
     );
   }
 
-  Widget _buildChatMessageOverlay(BuildContext context) {
+  double _resolveChatMessageOverlayBottomOffset({
+    required BuildContext context,
+    required double keyboardInset,
+  }) {
+    final paddingBottom = MediaQuery.paddingOf(context).bottom;
+    if (_isChatInputVisible) {
+      return paddingBottom +
+          keyboardInset +
+          _chatInputBottomSpacing +
+          _chatInputEstimatedHeight +
+          _chatOverlayGapAboveInput;
+    }
+    return paddingBottom + 188;
+  }
+
+  Widget _buildChatMessageOverlay(
+    BuildContext context, {
+    required double keyboardInset,
+  }) {
     final visibleMessages = _chatStore.messages.length > 6
         ? _chatStore.messages.sublist(_chatStore.messages.length - 6)
         : _chatStore.messages;
 
     return _KeyboardAwareChatMessageOverlay(
       messages: visibleMessages,
-      isInputVisible: _isChatInputVisible,
-      keyboardInset: _settledKeyboardInset,
+      bottomOffset: _resolveChatMessageOverlayBottomOffset(
+        context: context,
+        keyboardInset: keyboardInset,
+      ),
       onRetry: _retryFailedMessage,
       formatChatTime: _formatChatTime,
       statusSuffix: _statusSuffix,
     );
   }
 
-  Widget _buildChatInputBar(BuildContext context) {
+  Widget _buildChatInputBar(
+    BuildContext context, {
+    required double keyboardInset,
+  }) {
+    final paddingBottom = MediaQuery.paddingOf(context).bottom;
     return _KeyboardAwareChatInputBar(
       controller: _chatController,
       focusNode: _chatFocusNode,
-      keyboardInset: _settledKeyboardInset,
+      bottomOffset: paddingBottom + _chatInputBottomSpacing + keyboardInset,
       onSend: _sendChatMessage,
       onClose: _closeChatInput,
     );
@@ -1286,16 +1323,14 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
 
 class _KeyboardAwareChatMessageOverlay extends StatelessWidget {
   final List<CallOverlayMessage> messages;
-  final bool isInputVisible;
-  final double keyboardInset;
+  final double bottomOffset;
   final Future<void> Function(CallOverlayMessage message) onRetry;
   final String Function(DateTime time) formatChatTime;
   final String Function(CallOverlayMessage message) statusSuffix;
 
   const _KeyboardAwareChatMessageOverlay({
     required this.messages,
-    required this.isInputVisible,
-    required this.keyboardInset,
+    required this.bottomOffset,
     required this.onRetry,
     required this.formatChatTime,
     required this.statusSuffix,
@@ -1303,16 +1338,10 @@ class _KeyboardAwareChatMessageOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final paddingBottom = MediaQuery.paddingOf(context).bottom;
-    final bottomOffset = paddingBottom + (isInputVisible ? 176 : 188);
-    final adjustedBottomOffset = isInputVisible
-        ? bottomOffset + keyboardInset
-        : bottomOffset;
-
     return Positioned(
       left: 12,
       right: 12,
-      bottom: adjustedBottomOffset,
+      bottom: bottomOffset,
       child: IgnorePointer(
         ignoring: false,
         child: Align(
@@ -1383,26 +1412,24 @@ class _KeyboardAwareChatMessageOverlay extends StatelessWidget {
 class _KeyboardAwareChatInputBar extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
-  final double keyboardInset;
+  final double bottomOffset;
   final Future<void> Function() onSend;
   final VoidCallback onClose;
 
   const _KeyboardAwareChatInputBar({
     required this.controller,
     required this.focusNode,
-    required this.keyboardInset,
+    required this.bottomOffset,
     required this.onSend,
     required this.onClose,
   });
 
   @override
   Widget build(BuildContext context) {
-    final paddingBottom = MediaQuery.paddingOf(context).bottom;
-
     return Positioned(
       left: 12,
       right: 12,
-      bottom: paddingBottom + 12 + keyboardInset,
+      bottom: bottomOffset,
       child: Container(
         padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
         decoration: BoxDecoration(

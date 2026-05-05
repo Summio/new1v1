@@ -41,6 +41,20 @@ class _IncomingCallPageState extends ConsumerState<IncomingCallPage> {
   StreamSubscription<WsConnectionEvent>? _wsConnectionSubscription;
   bool _disposed = false;
 
+  void _dismissTransientOverlays() {
+    final rootNavigator = Navigator.of(context, rootNavigator: true);
+    rootNavigator.popUntil((route) => route is PageRoute<dynamic>);
+  }
+
+  void _exitPage() {
+    _dismissTransientOverlays();
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(AppRoutes.index);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -133,11 +147,7 @@ class _IncomingCallPageState extends ConsumerState<IncomingCallPage> {
       context,
       SnackBar(content: Text(callEndReasonText(reason))),
     );
-    if (context.canPop()) {
-      context.pop();
-    } else {
-      context.go(AppRoutes.index);
-    }
+    _exitPage();
   }
 
   Future<void> _acceptCall() async {
@@ -187,11 +197,7 @@ class _IncomingCallPageState extends ConsumerState<IncomingCallPage> {
       if (!mounted) return;
       ref.read(callIncomingControllerProvider.notifier).setPageClosing(true);
       _wsDisconnectTimer?.cancel();
-      if (context.canPop()) {
-        context.pop();
-      } else {
-        context.go(AppRoutes.index);
-      }
+      _exitPage();
     } catch (_) {
       if (!mounted) return;
       AppToast.showSnackBar(
