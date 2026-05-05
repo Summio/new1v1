@@ -26,26 +26,6 @@ class AppConstants {
   static const String storageFirstLaunch = 'first_launch';
   static const String storageDarkMode = 'dark_mode';
 
-  /// 美颜参数存储 Keys
-  static const String beautyWhitening = 'beauty_whitening';
-  static const String beautyBlurriness = 'beauty_blurriness';
-  static const String beautyRosiness = 'beauty_rosiness';
-  static const String beautyClearness = 'beauty_clearness';
-  static const String beautyBrightness = 'beauty_brightness';
-  static const String beautyEyeEnlarging = 'beauty_eye_enlarging';
-  static const String beautyEyeRounding = 'beauty_eye_rounding';
-  static const String beautyCheekThinning = 'beauty_cheek_thinning';
-  static const String beautyCheekV = 'beauty_cheek_v';
-  static const String beautyCheekNarrowing = 'beauty_cheek_narrowing';
-  static const String beautyChin = 'beauty_chin';
-  static const String beautyForehead = 'beauty_forehead';
-  static const String beautyNoseThinning = 'beauty_nose_thinning';
-  static const String beautyIsBeautyEnabled = 'beauty_is_beauty_enabled';
-  static const String beautyIsFaceShapeEnabled = 'beauty_is_face_shape_enabled';
-  static const String beautyIsRenderEnabled = 'beauty_is_render_enabled';
-  static const String beautyCurrentFilter = 'beauty_current_filter';
-  static const String beautyFilterIntensity = 'beauty_filter_intensity';
-
   /// Hive Box Names
   static const String hiveBoxUser = 'user_box';
   static const String hiveBoxCache = 'cache_box';
