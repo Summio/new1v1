@@ -62,6 +62,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
   Timer? _cleanUnreadDebounceTimer;
   Timer? _keyboardScrollDebounceTimer;
   bool _shouldAutoScroll = true;
+  bool _stickToBottomForKeyboard = true;
   double _lastKeyboardInset = 0;
   String _normalizeIMUserId(String userId) {
     if (userId.startsWith('chat_')) return userId;
@@ -87,8 +88,16 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
     final wasHidden = _lastKeyboardInset <= 0;
     final isVisible = keyboardInset > 0;
     _lastKeyboardInset = keyboardInset;
-    if (wasHidden && isVisible) {
-      _scheduleScrollAfterKeyboard();
+    if (!isVisible) {
+      _stickToBottomForKeyboard = _isNearBottom();
+      return;
+    }
+    if (_inputFocusNode.hasFocus && _stickToBottomForKeyboard) {
+      if (wasHidden) {
+        _scheduleScrollAfterKeyboard();
+      } else {
+        _followKeyboardToBottom();
+      }
     }
   }
 
@@ -474,6 +483,9 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
     if (!_scrollController.hasClients) return;
     final position = _scrollController.position;
     _shouldAutoScroll = (position.maxScrollExtent - position.pixels) <= 120;
+    if (_inputFocusNode.hasFocus) {
+      _stickToBottomForKeyboard = _isNearBottom(threshold: 180);
+    }
     final isAtTop = position.pixels <= 60;
     final isUserScrollingToTop =
         position.userScrollDirection == ScrollDirection.forward;
@@ -493,16 +505,43 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
 
   void _onInputFocusChanged() {
     if (_inputFocusNode.hasFocus) {
+      _stickToBottomForKeyboard = _isNearBottom(threshold: 220);
       _scheduleScrollAfterKeyboard();
     }
   }
 
+  bool _isNearBottom({double threshold = 120}) {
+    if (!_scrollController.hasClients) return true;
+    final position = _scrollController.position;
+    return (position.maxScrollExtent - position.pixels) <= threshold;
+  }
+
+  void _followKeyboardToBottom() {
+    if (!_scrollController.hasClients) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) return;
+      final position = _scrollController.position;
+      final target = position.maxScrollExtent;
+      if ((target - position.pixels).abs() < 1) return;
+      _scrollController.jumpTo(target);
+    });
+  }
+
   void _scheduleScrollAfterKeyboard() {
     _keyboardScrollDebounceTimer?.cancel();
-    _keyboardScrollDebounceTimer = Timer(
-      const Duration(milliseconds: 90),
-      () => _scrollToBottom(animated: true, force: true),
-    );
+    _keyboardScrollDebounceTimer = Timer(const Duration(milliseconds: 90), () {
+      _followKeyboardToBottom();
+      Future<void>.delayed(const Duration(milliseconds: 120), () {
+        if (!mounted || !_inputFocusNode.hasFocus) return;
+        if (_lastKeyboardInset <= 0 || !_stickToBottomForKeyboard) return;
+        _followKeyboardToBottom();
+      });
+      Future<void>.delayed(const Duration(milliseconds: 260), () {
+        if (!mounted || !_inputFocusNode.hasFocus) return;
+        if (_lastKeyboardInset <= 0 || !_stickToBottomForKeyboard) return;
+        _followKeyboardToBottom();
+      });
+    });
   }
 
   void _scrollToBottom({bool animated = false, bool force = false}) {
