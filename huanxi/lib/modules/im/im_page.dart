@@ -510,7 +510,8 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
   }
 
   void _dismissKeyboard() {
-    _dismissKeyboard();
+    FocusManager.instance.primaryFocus?.unfocus();
+    _inputFocusNode.unfocus();
   }
 
   void _onInputFocusChanged() {
