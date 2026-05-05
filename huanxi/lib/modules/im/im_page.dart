@@ -60,7 +60,6 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
   GiftNotifyMessage? _fullscreenGift;
   Timer? _fullscreenGiftTimer;
   Timer? _cleanUnreadDebounceTimer;
-  Timer? _keyboardScrollDebounceTimer;
   bool _shouldAutoScroll = true;
   bool _stickToBottomForKeyboard = true;
   double _lastKeyboardInset = 0;
@@ -93,10 +92,13 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
       return;
     }
     if (_inputFocusNode.hasFocus && _stickToBottomForKeyboard) {
+      _followKeyboardToBottom();
       if (wasHidden) {
-        _scheduleScrollAfterKeyboard();
-      } else {
-        _followKeyboardToBottom();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || !_inputFocusNode.hasFocus) return;
+          if (_lastKeyboardInset <= 0 || !_stickToBottomForKeyboard) return;
+          _followKeyboardToBottom();
+        });
       }
     }
   }
@@ -452,16 +454,21 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
       );
       return;
     }
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => GiftPanel(
-        anchorId: anchorId.toString(),
-        scene: 'chat',
-        onClose: () => Navigator.pop(context),
-      ),
-    );
+    FocusManager.instance.primaryFocus?.unfocus();
+    _inputFocusNode.unfocus();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => GiftPanel(
+          anchorId: anchorId.toString(),
+          scene: 'chat',
+          onClose: () => Navigator.pop(context),
+        ),
+      );
+    });
   }
 
   @override
@@ -470,7 +477,6 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
     _imService.removeMessageListener(_onMessageReceived);
     _fullscreenGiftTimer?.cancel();
     _cleanUnreadDebounceTimer?.cancel();
-    _keyboardScrollDebounceTimer?.cancel();
     _inputFocusNode.removeListener(_onInputFocusChanged);
     _inputFocusNode.dispose();
     _controller.dispose();
@@ -503,10 +509,14 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
     });
   }
 
+  void _dismissKeyboard() {
+    _dismissKeyboard();
+  }
+
   void _onInputFocusChanged() {
     if (_inputFocusNode.hasFocus) {
       _stickToBottomForKeyboard = _isNearBottom(threshold: 220);
-      _scheduleScrollAfterKeyboard();
+      _followKeyboardToBottom();
     }
   }
 
@@ -524,23 +534,6 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
       final target = position.maxScrollExtent;
       if ((target - position.pixels).abs() < 1) return;
       _scrollController.jumpTo(target);
-    });
-  }
-
-  void _scheduleScrollAfterKeyboard() {
-    _keyboardScrollDebounceTimer?.cancel();
-    _keyboardScrollDebounceTimer = Timer(const Duration(milliseconds: 90), () {
-      _followKeyboardToBottom();
-      Future<void>.delayed(const Duration(milliseconds: 120), () {
-        if (!mounted || !_inputFocusNode.hasFocus) return;
-        if (_lastKeyboardInset <= 0 || !_stickToBottomForKeyboard) return;
-        _followKeyboardToBottom();
-      });
-      Future<void>.delayed(const Duration(milliseconds: 260), () {
-        if (!mounted || !_inputFocusNode.hasFocus) return;
-        if (_lastKeyboardInset <= 0 || !_stickToBottomForKeyboard) return;
-        _followKeyboardToBottom();
-      });
     });
   }
 
@@ -589,10 +582,12 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
   }
 
   Future<void> _startVideoCall() async {
+    _dismissKeyboard();
     if (_isStartingCall) return;
     final peerNumId = _extractAppUserId(_peerUserId ?? widget.userId);
     if (peerNumId == null || peerNumId <= 0) {
       if (!mounted) return;
+      _dismissKeyboard();
       AppToast.showSnackBar(
         context,
         const SnackBar(content: Text('目标用户信息异常，无法发起通话')),
@@ -620,6 +615,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
             .then(_handleCallPageResult)
             .catchError((_) {
               if (!mounted) return;
+              _dismissKeyboard();
               AppToast.showSnackBar(
                 context,
                 const SnackBar(content: Text('通话启动失败，请稍后重试')),
@@ -628,6 +624,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
       );
     } catch (_) {
       if (!mounted) return;
+      _dismissKeyboard();
       AppToast.showSnackBar(
         context,
         const SnackBar(content: Text('通话启动失败，请稍后重试')),
@@ -696,9 +693,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
           ? const Center(child: CircularProgressIndicator())
           : Stack(
               children: [
-                AnimatedPadding(
-                  duration: const Duration(milliseconds: 140),
-                  curve: Curves.easeOut,
+                Padding(
                   padding: EdgeInsets.only(bottom: keyboardInset),
                   child: Column(
                     children: [
