@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -11,6 +13,7 @@ import '../../core/constants/api_endpoints.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/network/response_parsers.dart';
 import '../../core/storage/storage.dart';
+import '../../core/utils/conversation_refresh_throttler.dart';
 import '../../services/im_service.dart';
 import 'package:huanxi/core/utils/app_toast.dart';
 
@@ -30,7 +33,12 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
   List<V2TimConversation> _conversations = [];
   final Map<String, V2TimUserFullInfo> _profileByUserId = {};
   final Map<String, _PeerAppProfile> _appProfileByUserId = {};
+  final ConversationRefreshThrottler _refreshThrottler =
+      ConversationRefreshThrottler(interval: const Duration(seconds: 2));
   void Function(int)? _totalUnreadListener;
+  Timer? _pendingRefreshTimer;
+  bool _isLoadingConversations = false;
+  bool _pendingRefreshAfterLoad = false;
 
   @override
   void initState() {
@@ -44,6 +52,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
     if (_totalUnreadListener != null) {
       _imService.removeTotalUnreadListener(_totalUnreadListener!);
     }
+    _pendingRefreshTimer?.cancel();
     super.dispose();
   }
 
@@ -62,7 +71,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
       _totalUnreadListener ??= _onTotalUnreadChanged;
       _imService.removeTotalUnreadListener(_totalUnreadListener!);
       _imService.addTotalUnreadListener(_totalUnreadListener!);
-      await _loadConversations();
+      await _loadConversations(force: true);
     } catch (e) {
       debugPrint('消息页 IM 初始化失败: $e');
       if (mounted) {
@@ -92,7 +101,43 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
     );
   }
 
-  Future<void> _loadConversations() async {
+  bool _isPageVisible() {
+    final route = ModalRoute.of(context);
+    return route?.isCurrent ?? true;
+  }
+
+  void _scheduleConversationsRefresh({bool immediate = false}) {
+    if (!mounted) return;
+    if (!_isPageVisible()) {
+      _pendingRefreshAfterLoad = true;
+      return;
+    }
+    _pendingRefreshTimer?.cancel();
+    if (immediate || _refreshThrottler.canRefresh()) {
+      unawaited(_loadConversations(force: true));
+      return;
+    }
+    _pendingRefreshTimer = Timer(_refreshThrottler.interval, () {
+      if (!mounted || !_isPageVisible()) {
+        _pendingRefreshAfterLoad = true;
+        return;
+      }
+      unawaited(_loadConversations(force: true));
+    });
+  }
+
+  Future<void> _loadConversations({bool force = false}) async {
+    if (_isLoadingConversations) {
+      _pendingRefreshAfterLoad = true;
+      return;
+    }
+    if (!force && !_refreshThrottler.canRefresh()) {
+      _scheduleConversationsRefresh();
+      return;
+    }
+
+    _pendingRefreshTimer?.cancel();
+    _isLoadingConversations = true;
     try {
       final list = await _imService.getConversationList(count: 50);
       final c2c = list
@@ -108,6 +153,12 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
       await _loadPeerAppProfiles(c2c);
     } catch (e) {
       debugPrint('加载会话列表失败: $e');
+    } finally {
+      _isLoadingConversations = false;
+      if (_pendingRefreshAfterLoad) {
+        _pendingRefreshAfterLoad = false;
+        _scheduleConversationsRefresh(immediate: true);
+      }
     }
   }
 
@@ -183,15 +234,22 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
   }
 
   void _onMessageReceived(dynamic message) {
-    // 有新消息时刷新会话页，确保“消息页”可见
-    debugPrint('[MSG_PAGE] 收到消息，刷新会话列表');
-    _loadConversations();
+    if (!_isPageVisible()) {
+      _pendingRefreshAfterLoad = true;
+      return;
+    }
+    debugPrint('[MSG_PAGE] 收到消息，调度会话刷新');
+    _scheduleConversationsRefresh();
   }
 
   void _onTotalUnreadChanged(int totalUnreadCount) {
     if (totalUnreadCount < 0) return;
-    debugPrint('[MSG_PAGE] 未读数变化: $totalUnreadCount，刷新会话列表');
-    _loadConversations();
+    if (!_isPageVisible()) {
+      _pendingRefreshAfterLoad = true;
+      return;
+    }
+    debugPrint('[MSG_PAGE] 未读数变化: $totalUnreadCount，调度会话刷新');
+    _scheduleConversationsRefresh();
   }
 
   String _displayName(V2TimConversation conv) {
@@ -315,7 +373,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
               ),
             )
           : RefreshIndicator(
-              onRefresh: _loadConversations,
+              onRefresh: () => _loadConversations(force: true),
               child: ListView.separated(
                 itemCount: _conversations.length,
                 separatorBuilder: (_, itemIndex) => const Divider(height: 1),
@@ -390,14 +448,14 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
                           'peerAvatarUrl': _avatarUrl(conv),
                         },
                       );
-                      if (mounted && result is String && result.trim().isNotEmpty) {
+                      if (!context.mounted) return;
+                      if (result is String && result.trim().isNotEmpty) {
                         AppToast.showSnackBar(
                           context,
                           SnackBar(content: Text(result.trim())),
                         );
                       }
-                      if (!mounted) return;
-                      await _loadConversations();
+                      await _loadConversations(force: true);
                       await _imService.syncTotalUnreadCount();
                     },
                   );

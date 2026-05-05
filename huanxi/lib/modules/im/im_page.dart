@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:svgaplayer_flutter/svgaplayer_flutter.dart';
 import 'package:tencent_cloud_chat_sdk/models/v2_tim_user_full_info.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/routes/app_router.dart';
@@ -39,10 +38,11 @@ class ImPage extends ConsumerStatefulWidget {
   ConsumerState<ImPage> createState() => _ImPageState();
 }
 
-class _ImPageState extends ConsumerState<ImPage> {
+class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
   static const String _chatPrefix = 'chat';
   static const Duration _giftOverlayDuration = Duration(seconds: 3);
   final _controller = TextEditingController();
+  final FocusNode _inputFocusNode = FocusNode();
   final _scrollController = ScrollController();
   final List<_ChatMessage> _messages = [];
   final IMService _imService = IMService();
@@ -59,6 +59,10 @@ class _ImPageState extends ConsumerState<ImPage> {
   bool _isStartingCall = false;
   GiftNotifyMessage? _fullscreenGift;
   Timer? _fullscreenGiftTimer;
+  Timer? _cleanUnreadDebounceTimer;
+  Timer? _keyboardScrollDebounceTimer;
+  bool _shouldAutoScroll = true;
+  double _lastKeyboardInset = 0;
   String _normalizeIMUserId(String userId) {
     if (userId.startsWith('chat_')) return userId;
     return '${_chatPrefix}_$userId';
@@ -67,8 +71,25 @@ class _ImPageState extends ConsumerState<ImPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _scrollController.addListener(_onScroll);
+    _inputFocusNode.addListener(_onInputFocusChanged);
     _initIM();
+  }
+
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    if (!mounted) return;
+    final view = View.maybeOf(context);
+    if (view == null) return;
+    final keyboardInset = view.viewInsets.bottom / view.devicePixelRatio;
+    final wasHidden = _lastKeyboardInset <= 0;
+    final isVisible = keyboardInset > 0;
+    _lastKeyboardInset = keyboardInset;
+    if (wasHidden && isVisible) {
+      _scheduleScrollAfterKeyboard();
+    }
   }
 
   Future<void> _initIM() async {
@@ -116,7 +137,7 @@ class _ImPageState extends ConsumerState<ImPage> {
       await _loadPeerProfile();
       await _loadPeerProfileFromApp();
       await _loadHistoryMessages();
-      await _imService.cleanC2CUnread(peerUserId: _peerUserId!);
+      _scheduleCleanUnread();
     } catch (e) {
       if (!mounted) return;
       if (e is ApiException && e.code == 400) {
@@ -133,7 +154,7 @@ class _ImPageState extends ConsumerState<ImPage> {
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
-        _scrollToBottom();
+        _scrollToBottom(force: true);
       }
     }
   }
@@ -172,6 +193,7 @@ class _ImPageState extends ConsumerState<ImPage> {
       setState(() {
         _messages.add(
           _ChatMessage(
+            msgId: msgId,
             content: renderedText,
             isMe: isMe,
             time: timestamp != null
@@ -185,10 +207,8 @@ class _ImPageState extends ConsumerState<ImPage> {
       if (giftNotify != null) {
         _showFullscreenGift(giftNotify);
       }
-      _scrollToBottom();
-      if (_peerUserId != null) {
-        _imService.cleanC2CUnread(peerUserId: _peerUserId!);
-      }
+      _scrollToBottom(animated: true);
+      _scheduleCleanUnread();
       debugPrint('IM 页面收到消息');
     } catch (e) {
       debugPrint('IM 消息解析失败: $e');
@@ -277,6 +297,12 @@ class _ImPageState extends ConsumerState<ImPage> {
 
       final parsed = <_ChatMessage>[];
       final currentUserId = _extractAppUserId(_myUserId ?? '') ?? 0;
+      double? beforePixels;
+      double? beforeMaxExtent;
+      if (!initial && _scrollController.hasClients) {
+        beforePixels = _scrollController.position.pixels;
+        beforeMaxExtent = _scrollController.position.maxScrollExtent;
+      }
       for (final msg in messages.reversed) {
         final msgId = msg.msgID;
         if (msgId != null && msgId.isNotEmpty && _messageIds.contains(msgId)) {
@@ -299,6 +325,7 @@ class _ImPageState extends ConsumerState<ImPage> {
                 : text);
         parsed.add(
           _ChatMessage(
+            msgId: msgId,
             content: renderedText,
             isMe: isMe,
             time: timestamp != null
@@ -322,7 +349,21 @@ class _ImPageState extends ConsumerState<ImPage> {
       });
       _lastHistoryMsg = messages.last;
       if (initial) {
-        _scrollToBottom();
+        _scrollToBottom(force: true);
+      } else if (beforePixels != null && beforeMaxExtent != null) {
+        final previousPixels = beforePixels;
+        final previousMaxExtent = beforeMaxExtent;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!_scrollController.hasClients) return;
+          final position = _scrollController.position;
+          final newMaxExtent = position.maxScrollExtent;
+          final delta = newMaxExtent - previousMaxExtent;
+          final target = (previousPixels + delta).clamp(
+            position.minScrollExtent,
+            position.maxScrollExtent,
+          );
+          _scrollController.jumpTo(target);
+        });
       }
     } catch (e) {
       debugPrint('IM 历史消息加载异常: $e');
@@ -348,12 +389,17 @@ class _ImPageState extends ConsumerState<ImPage> {
       // 添加到本地列表
       setState(() {
         _messages.add(
-          _ChatMessage(content: text, isMe: true, time: DateTime.now()),
+          _ChatMessage(
+            msgId: sentMsgId,
+            content: text,
+            isMe: true,
+            time: DateTime.now(),
+          ),
         );
       });
 
       _controller.clear();
-      _scrollToBottom();
+      _scrollToBottom(animated: true, force: true);
     } catch (e) {
       if (mounted) {
         AppToast.showSnackBar(context, SnackBar(content: Text('消息发送失败: $e')));
@@ -411,8 +457,13 @@ class _ImPageState extends ConsumerState<ImPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _imService.removeMessageListener(_onMessageReceived);
     _fullscreenGiftTimer?.cancel();
+    _cleanUnreadDebounceTimer?.cancel();
+    _keyboardScrollDebounceTimer?.cancel();
+    _inputFocusNode.removeListener(_onInputFocusChanged);
+    _inputFocusNode.dispose();
     _controller.dispose();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
@@ -422,6 +473,7 @@ class _ImPageState extends ConsumerState<ImPage> {
   void _onScroll() {
     if (!_scrollController.hasClients) return;
     final position = _scrollController.position;
+    _shouldAutoScroll = (position.maxScrollExtent - position.pixels) <= 120;
     final isAtTop = position.pixels <= 60;
     final isUserScrollingToTop =
         position.userScrollDirection == ScrollDirection.forward;
@@ -430,10 +482,46 @@ class _ImPageState extends ConsumerState<ImPage> {
     }
   }
 
-  void _scrollToBottom() {
+  void _scheduleCleanUnread() {
+    final peer = _peerUserId;
+    if (peer == null || peer.isEmpty) return;
+    _cleanUnreadDebounceTimer?.cancel();
+    _cleanUnreadDebounceTimer = Timer(const Duration(milliseconds: 350), () {
+      _imService.cleanC2CUnread(peerUserId: peer);
+    });
+  }
+
+  void _onInputFocusChanged() {
+    if (_inputFocusNode.hasFocus) {
+      _scheduleScrollAfterKeyboard();
+    }
+  }
+
+  void _scheduleScrollAfterKeyboard() {
+    _keyboardScrollDebounceTimer?.cancel();
+    _keyboardScrollDebounceTimer = Timer(
+      const Duration(milliseconds: 90),
+      () => _scrollToBottom(animated: true, force: true),
+    );
+  }
+
+  void _scrollToBottom({bool animated = false, bool force = false}) {
+    if (!force && !_shouldAutoScroll) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
-        _scrollController.jumpTo(_scrollController.position.maxScrollExtent);
+        final position = _scrollController.position;
+        final target = position.maxScrollExtent;
+        final current = position.pixels;
+        if ((target - current).abs() < 1) return;
+        if (animated) {
+          _scrollController.animateTo(
+            target,
+            duration: const Duration(milliseconds: 160),
+            curve: Curves.easeOut,
+          );
+          return;
+        }
+        _scrollController.jumpTo(target);
       }
     });
   }
@@ -528,9 +616,10 @@ class _ImPageState extends ConsumerState<ImPage> {
     final isCurrentUserAnchor = authState.appRole == 'anchor';
     final size = MediaQuery.sizeOf(context);
     final maxBubbleWidth = size.width * 0.75;
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
 
     return Scaffold(
-      resizeToAvoidBottomInset: true,
+      resizeToAvoidBottomInset: false,
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         backgroundColor: AppTheme.surfaceColor,
@@ -568,124 +657,133 @@ class _ImPageState extends ConsumerState<ImPage> {
           ? const Center(child: CircularProgressIndicator())
           : Stack(
               children: [
-                Column(
-                  children: [
-                    Expanded(
-                      child: _messages.isEmpty
-                          ? const Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.chat_bubble_outline,
-                                    size: 48,
-                                    color: AppTheme.textHint,
-                                  ),
-                                  SizedBox(height: 12),
-                                  Text(
-                                    '暂无消息，开始聊天吧',
-                                    style: TextStyle(color: AppTheme.textHint),
-                                  ),
-                                ],
-                              ),
-                            )
-                          : RepaintBoundary(
-                              child: ListView.builder(
-                                controller: _scrollController,
-                                padding: const EdgeInsets.fromLTRB(
-                                  12,
-                                  12,
-                                  12,
-                                  12,
+                AnimatedPadding(
+                  duration: const Duration(milliseconds: 140),
+                  curve: Curves.easeOut,
+                  padding: EdgeInsets.only(bottom: keyboardInset),
+                  child: Column(
+                    children: [
+                      Expanded(
+                        child: _messages.isEmpty
+                            ? const Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.chat_bubble_outline,
+                                      size: 48,
+                                      color: AppTheme.textHint,
+                                    ),
+                                    SizedBox(height: 12),
+                                    Text(
+                                      '暂无消息，开始聊天吧',
+                                      style: TextStyle(
+                                        color: AppTheme.textHint,
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                keyboardDismissBehavior:
-                                    ScrollViewKeyboardDismissBehavior.onDrag,
-                                itemCount: _messages.length,
-                                itemBuilder: (context, index) {
-                                  final msg = _messages[index];
-                                  return _MessageBubble(
-                                    message: msg,
-                                    maxBubbleWidth: maxBubbleWidth,
-                                    currentUserId: currentUserId,
-                                    isCurrentUserAnchor: isCurrentUserAnchor,
-                                    coinName: tokenNames.coinName,
-                                    diamondName: tokenNames.diamondName,
-                                    avatarUrl: msg.isMe
-                                        ? _myAvatarUrl
-                                        : _peerAvatarUrl,
-                                  );
-                                },
+                              )
+                            : RepaintBoundary(
+                                child: ListView.builder(
+                                  controller: _scrollController,
+                                  padding: const EdgeInsets.fromLTRB(
+                                    12,
+                                    12,
+                                    12,
+                                    12,
+                                  ),
+                                  keyboardDismissBehavior:
+                                      ScrollViewKeyboardDismissBehavior.onDrag,
+                                  itemCount: _messages.length,
+                                  itemBuilder: (context, index) {
+                                    final msg = _messages[index];
+                                    return _MessageBubble(
+                                      key: ValueKey(msg.stableKey),
+                                      message: msg,
+                                      maxBubbleWidth: maxBubbleWidth,
+                                      currentUserId: currentUserId,
+                                      isCurrentUserAnchor: isCurrentUserAnchor,
+                                      coinName: tokenNames.coinName,
+                                      diamondName: tokenNames.diamondName,
+                                      avatarUrl: msg.isMe
+                                          ? _myAvatarUrl
+                                          : _peerAvatarUrl,
+                                    );
+                                  },
+                                ),
                               ),
-                            ),
-                    ),
-                    Container(
-                      decoration: const BoxDecoration(
-                        color: AppTheme.surfaceColor,
                       ),
-                      child: SafeArea(
-                        top: false,
-                        minimum: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                        child: Row(
-                          children: [
-                            IconButton(
-                              icon: const Icon(
-                                Icons.videocam_outlined,
-                                color: AppTheme.textSecondary,
-                              ),
-                              onPressed: _isStartingCall
-                                  ? null
-                                  : _startVideoCall,
-                            ),
-                            IconButton(
-                              icon: const Icon(
-                                Icons.card_giftcard,
-                                color: AppTheme.textSecondary,
-                              ),
-                              onPressed: _openGiftPanel,
-                            ),
-                            Expanded(
-                              child: TextField(
-                                controller: _controller,
-                                decoration: InputDecoration(
-                                  hintText: '输入消息...',
-                                  filled: true,
-                                  fillColor: AppTheme.backgroundColor,
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(24),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 10,
-                                  ),
-                                ),
-                                minLines: 1,
-                                maxLines: 4,
-                                textInputAction: TextInputAction.send,
-                                onSubmitted: (_) => _sendMessage(),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Container(
-                              width: 44,
-                              height: 44,
-                              decoration: const BoxDecoration(
-                                color: AppTheme.primaryColor,
-                                shape: BoxShape.circle,
-                              ),
-                              child: IconButton(
+                      Container(
+                        decoration: const BoxDecoration(
+                          color: AppTheme.surfaceColor,
+                        ),
+                        child: SafeArea(
+                          top: false,
+                          minimum: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                          child: Row(
+                            children: [
+                              IconButton(
                                 icon: const Icon(
-                                  Icons.send,
-                                  color: Colors.white,
+                                  Icons.videocam_outlined,
+                                  color: AppTheme.textSecondary,
                                 ),
-                                onPressed: _sendMessage,
+                                onPressed: _isStartingCall
+                                    ? null
+                                    : _startVideoCall,
                               ),
-                            ),
-                          ],
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.card_giftcard,
+                                  color: AppTheme.textSecondary,
+                                ),
+                                onPressed: _openGiftPanel,
+                              ),
+                              Expanded(
+                                child: TextField(
+                                  focusNode: _inputFocusNode,
+                                  controller: _controller,
+                                  decoration: InputDecoration(
+                                    hintText: '输入消息...',
+                                    filled: true,
+                                    fillColor: AppTheme.backgroundColor,
+                                    border: OutlineInputBorder(
+                                      borderRadius: BorderRadius.circular(24),
+                                      borderSide: BorderSide.none,
+                                    ),
+                                    contentPadding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 10,
+                                    ),
+                                  ),
+                                  minLines: 1,
+                                  maxLines: 4,
+                                  textInputAction: TextInputAction.send,
+                                  onSubmitted: (_) => _sendMessage(),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                width: 44,
+                                height: 44,
+                                decoration: const BoxDecoration(
+                                  color: AppTheme.primaryColor,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: IconButton(
+                                  icon: const Icon(
+                                    Icons.send,
+                                    color: Colors.white,
+                                  ),
+                                  onPressed: _sendMessage,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 if (_fullscreenGift != null)
                   _GiftFullscreenOverlay(
@@ -703,6 +801,7 @@ class _ImPageState extends ConsumerState<ImPage> {
 }
 
 class _ChatMessage {
+  final String? msgId;
   final String content;
   final bool isMe;
   final DateTime time;
@@ -710,6 +809,7 @@ class _ChatMessage {
   final GiftNotifyMessage? giftNotify;
 
   _ChatMessage({
+    this.msgId,
     required this.content,
     required this.isMe,
     required this.time,
@@ -719,6 +819,9 @@ class _ChatMessage {
 
   bool get isCallTrace => callTrace != null;
   bool get isGiftNotify => giftNotify != null;
+  String get stableKey =>
+      msgId ??
+      'local_${isMe ? 1 : 0}_${time.microsecondsSinceEpoch}_${content.hashCode}';
 }
 
 class _MessageBubble extends StatelessWidget {
@@ -731,6 +834,7 @@ class _MessageBubble extends StatelessWidget {
   final String? avatarUrl;
 
   const _MessageBubble({
+    super.key,
     required this.message,
     required this.maxBubbleWidth,
     required this.currentUserId,
@@ -835,7 +939,6 @@ class _GiftMessageCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final gift = message.giftNotify!;
-    final showSvga = gift.svgaUrl.trim().isNotEmpty;
     final showIcon = gift.giftIcon.trim().isNotEmpty;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -866,13 +969,7 @@ class _GiftMessageCard extends StatelessWidget {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (showSvga)
-                  SizedBox(
-                    width: 56,
-                    height: 56,
-                    child: SVGASimpleImage(resUrl: gift.svgaUrl),
-                  )
-                else if (showIcon)
+                if (showIcon)
                   Image.network(
                     gift.giftIcon,
                     width: 40,
