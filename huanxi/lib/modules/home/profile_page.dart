@@ -172,7 +172,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                       ),
                     ),
                   _buildMenuTile(icon: Icons.account_balance_wallet_rounded, title: '我的钱包', iconColor: const Color(0xFFFF9500), onTap: () => context.push(AppRoutes.wallet)),
-                  _buildMenuTile(icon: Icons.auto_awesome, title: '美颜设置', iconColor: const Color(0xFFFF6B9D), onTap: () => context.push(AppRoutes.beautySettings)),
                   _buildMenuTile(icon: Icons.dynamic_feed_rounded, title: '我的动态', iconColor: const Color(0xFF5856D6), onTap: () => context.push(AppRoutes.myMoments), isLast: true),
                 ],
               ),
