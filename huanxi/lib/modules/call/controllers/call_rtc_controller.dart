@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:mt_plugin/mt_plugin.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../../core/constants/api_endpoints.dart';
@@ -10,41 +8,6 @@ import '../../../core/network/dio_client.dart';
 import '../../../core/utils/app_logger.dart';
 
 const _rtcNoValue = Object();
-const int _nativeBackCameraId = 0;
-const int _nativeFrontCameraId = 1;
-
-bool? resolveFrontCameraFromNativeState({String? facing, int? cameraId}) {
-  final normalized = facing?.trim().toLowerCase();
-  if (normalized == 'front') {
-    return true;
-  }
-  if (normalized == 'back') {
-    return false;
-  }
-  if (cameraId == _nativeFrontCameraId) {
-    return true;
-  }
-  if (cameraId == _nativeBackCameraId) {
-    return false;
-  }
-  return null;
-}
-
-int? resolveFrameRotationFromNativeState(dynamic frameRotation) {
-  final value = (frameRotation as num?)?.toInt();
-  if (value == null) {
-    return null;
-  }
-  switch (value) {
-    case 0:
-    case 90:
-    case 180:
-    case 270:
-      return value;
-    default:
-      return null;
-  }
-}
 
 class CallRtcState {
   final bool isMicOn;
@@ -127,52 +90,9 @@ class CallRtcController extends StateNotifier<CallRtcState> {
   RtcEngine? _engine;
   RtcEngineEventHandler? _rtcEventHandler;
   bool _joinedCallbackEmitted = false;
-  int _externalFrameLogCounter = 0;
-  int _externalFrameHeadLogCounter = 0;
-  int _externalBlackFrameCounter = 0;
-  int _externalFrameWarnCounter = 0;
-  int _externalPushOkCounter = 0;
-  int _externalFrameRotation = 0;
-  bool _isFrontCamera = true;
-  bool _dropFramesDuringCameraSwitch = false;
-  Timer? _cameraSwitchDropGuardTimer;
-  Timer? _flipUiGuardTimer;
-  Timer? _cameraSwitchResumePushTimer;
-  bool _nativePushStarted = false;
   int _logSeq = 0;
 
-  // MethodChannel 用于与原生 FaceBeauty 通信
-  static const MethodChannel _beautyChannel = MethodChannel('beauty_plugin');
-
   RtcEngine? get engine => _engine;
-
-  static const int _frontCameraRotation = 180;
-  static const int _backCameraRotation = 0;
-
-  int _rotationForCamera(bool isFrontCamera) {
-    return isFrontCamera ? _frontCameraRotation : _backCameraRotation;
-  }
-
-  void _applyCameraFacing(bool isFrontCamera) {
-    _isFrontCamera = isFrontCamera;
-    _externalFrameRotation = _rotationForCamera(isFrontCamera);
-    if (mounted) {
-      state = state.copyWith(isFrontCamera: isFrontCamera);
-    }
-  }
-
-  void _applyNativeCameraState({bool? isFrontCamera, int? frameRotation}) {
-    if (isFrontCamera != null) {
-      _isFrontCamera = isFrontCamera;
-      _externalFrameRotation = _rotationForCamera(isFrontCamera);
-      if (mounted) {
-        state = state.copyWith(isFrontCamera: isFrontCamera);
-      }
-    }
-    if (frameRotation != null) {
-      _externalFrameRotation = frameRotation;
-    }
-  }
 
   void _flowLog(
     String event, {
@@ -188,318 +108,14 @@ class CallRtcController extends StateNotifier<CallRtcState> {
       'flipping': state.isFlipping,
       'localUid': state.localUid,
       'remoteUid': state.remoteUid,
-      'rotation': _externalFrameRotation,
     }..addAll(extra);
     AppLogger.debugJson('[CALL_FLOW][callId=$callId]', snapshot);
-  }
-
-  void _finishFlipTransition({
-    Duration delay = const Duration(milliseconds: 280),
-  }) {
-    _flipUiGuardTimer?.cancel();
-    _flipUiGuardTimer = Timer(delay, () {
-      if (!mounted) {
-        return;
-      }
-      state = state.copyWith(isFlipping: false);
-      _flowLog('ui.flipCamera.end');
-    });
-  }
-
-  void _scheduleResumePushAfterCameraSwitch() {
-    _cameraSwitchResumePushTimer?.cancel();
-    _cameraSwitchResumePushTimer = Timer(const Duration(milliseconds: 320), () {
-      _cameraSwitchResumePushTimer = null;
-      _dropFramesDuringCameraSwitch = false;
-      if (state.isJoined && state.isCameraOn) {
-        _startNativePush();
-      }
-      if (state.isFlipping) {
-        _finishFlipTransition();
-      }
-      _flowLog('ui.flipCamera.resumePushAfterStable');
-    });
-  }
-
-  Future<dynamic> _handleNativeMethod(MethodCall call) async {
-    if (call.method == 'previewReady') {
-      final args = (call.arguments as Map<dynamic, dynamic>? ?? const {});
-      final width = args['width'];
-      final height = args['height'];
-      final rawWidth = args['rawWidth'];
-      final rawHeight = args['rawHeight'];
-      final cameraId = (args['cameraId'] as num?)?.toInt();
-      final frameRotation = resolveFrameRotationFromNativeState(
-        args['frameRotation'],
-      );
-      final nativeIsFront = resolveFrontCameraFromNativeState(
-        cameraId: cameraId,
-      );
-      _applyNativeCameraState(
-        isFrontCamera: nativeIsFront,
-        frameRotation: frameRotation,
-      );
-      _flowLog(
-        'native.previewReady',
-        extra: <String, Object?>{
-          'width': width,
-          'height': height,
-          'rawWidth': rawWidth,
-          'rawHeight': rawHeight,
-          'cameraId': cameraId,
-          'nativeFrameRotation': frameRotation,
-          'rotation': _externalFrameRotation,
-        },
-      );
-      if (_dropFramesDuringCameraSwitch) {
-        _scheduleResumePushAfterCameraSwitch();
-      } else {
-        if (state.isJoined && state.isCameraOn) {
-          _startNativePush();
-        }
-        if (state.isFlipping) {
-          _finishFlipTransition();
-        }
-      }
-      return;
-    }
-    if (call.method == 'cameraSwitchResult') {
-      final args = (call.arguments as Map<dynamic, dynamic>? ?? const {});
-      final success = args['success'] as bool? ?? true;
-      final cameraId = (args['cameraId'] as num?)?.toInt();
-      final from = (args['from'] as String?)?.trim().toLowerCase();
-      final to = (args['to'] as String?)?.trim().toLowerCase();
-      final frameRotation = resolveFrameRotationFromNativeState(
-        args['frameRotation'],
-      );
-      final nativeFrom = resolveFrontCameraFromNativeState(facing: from);
-      final nativeTo = resolveFrontCameraFromNativeState(
-        facing: to,
-        cameraId: cameraId,
-      );
-      if (success) {
-        _applyNativeCameraState(
-          isFrontCamera: nativeTo,
-          frameRotation: frameRotation,
-        );
-      } else if (nativeFrom != null) {
-        // 切换失败时回滚到切换前镜头，避免旋转状态错误。
-        _applyNativeCameraState(
-          isFrontCamera: nativeFrom,
-          frameRotation: frameRotation,
-        );
-      } else {
-        final fallbackByCameraId = resolveFrontCameraFromNativeState(
-          cameraId: cameraId,
-        );
-        _applyNativeCameraState(
-          isFrontCamera: fallbackByCameraId,
-          frameRotation: frameRotation,
-        );
-      }
-      _cameraSwitchDropGuardTimer?.cancel();
-      _cameraSwitchDropGuardTimer = null;
-      if (success) {
-        _scheduleResumePushAfterCameraSwitch();
-      } else {
-        _cameraSwitchResumePushTimer?.cancel();
-        _cameraSwitchResumePushTimer = null;
-        _dropFramesDuringCameraSwitch = false;
-        if (!success && state.isFlipping) {
-          _finishFlipTransition(delay: Duration.zero);
-        }
-      }
-      _flowLog(
-        'native.cameraSwitchResult',
-        extra: <String, Object?>{
-          'success': success,
-          'from': from ?? args['from'],
-          'to': to ?? args['to'],
-          'cameraId': cameraId,
-          'nativeFrameRotation': frameRotation,
-          'width': args['width'],
-          'height': args['height'],
-          'rotation': _externalFrameRotation,
-        },
-      );
-      return;
-    }
-    if (call.method == 'onFrame') {
-      if (_dropFramesDuringCameraSwitch) {
-        return;
-      }
-      try {
-        final args = call.arguments as Map<dynamic, dynamic>;
-        final bytes = args['bytes'] as Uint8List;
-        final width = args['width'] as int;
-        final height = args['height'] as int;
-        final strideRaw = args['stride'] as int;
-        if (width <= 0 || height <= 0 || strideRaw <= 0) {
-          return;
-        }
-
-        // 参考项目：native 上报 stride 为字节数（rowStride = width * 4）
-        if (bytes.length != strideRaw * height) {
-          return;
-        }
-
-        final int frameRotation = _externalFrameRotation;
-
-        if (_externalFrameHeadLogCounter < 5) {
-          _externalFrameHeadLogCounter += 1;
-          _flowLog(
-            'ext.frameHead',
-            extra: <String, Object?>{
-              'index': _externalFrameHeadLogCounter,
-              'bytes': bytes.length,
-              'width': width,
-              'height': height,
-              'expectedBytes': strideRaw * height,
-              'strideRaw': strideRaw,
-              'pixelFormat': 'BGRA',
-              'ratio': width > 0 && height > 0
-                  ? (width / height).toStringAsFixed(4)
-                  : 'invalid',
-              'rotation': frameRotation,
-            },
-          );
-        }
-
-        // 采样外部帧亮度，用于定位“已解码但黑屏”是否来自发送黑帧。
-        _externalFrameLogCounter += 1;
-        if (_externalFrameLogCounter % 30 == 0) {
-          var acc = 0;
-          var cnt = 0;
-          // BGRA，每 16 像素采样一次，控制开销。
-          for (var i = 0; i + 2 < bytes.length && cnt < 2000; i += 16 * 4) {
-            final b = bytes[i];
-            final g = bytes[i + 1];
-            final r = bytes[i + 2];
-            acc += (r + g + b) ~/ 3;
-            cnt += 1;
-          }
-          if (cnt > 0) {
-            final luma = acc ~/ cnt;
-            if (luma <= 6) {
-              _externalBlackFrameCounter += 1;
-            } else {
-              _externalBlackFrameCounter = 0;
-            }
-            // 统一在 flutter log 输出，便于你直接从日志判断发送内容是否为黑帧。
-            _flowLog(
-              'ext.frameSample',
-              extra: <String, Object?>{
-                'luma': luma,
-                'blackSeq': _externalBlackFrameCounter,
-                'width': width,
-                'height': height,
-                'ratio': width > 0 && height > 0
-                    ? (width / height).toStringAsFixed(4)
-                    : 'invalid',
-                'strideRaw': strideRaw,
-              },
-            );
-          }
-        }
-
-        try {
-          await _engine?.getMediaEngine().pushVideoFrame(
-            frame: ExternalVideoFrame(
-              type: VideoBufferType.videoBufferRawData,
-              format: VideoPixelFormat.videoPixelBgra,
-              buffer: bytes,
-              stride: width,
-              height: height,
-              rotation: frameRotation,
-              timestamp: DateTime.now().millisecondsSinceEpoch,
-            ),
-          );
-          _externalPushOkCounter += 1;
-          if (_externalPushOkCounter <= 5 ||
-              _externalPushOkCounter % 120 == 0) {
-            _flowLog(
-              'ext.pushVideoFrameOk',
-              extra: <String, Object?>{
-                'count': _externalPushOkCounter,
-                'width': width,
-                'height': height,
-                'stride': width,
-                'rotation': frameRotation,
-              },
-            );
-          }
-        } catch (e) {
-          _externalFrameWarnCounter += 1;
-          if (_externalFrameWarnCounter <= 5 ||
-              _externalFrameWarnCounter % 30 == 0) {
-            _flowLog(
-              'ext.pushVideoFrameFailed',
-              extra: <String, Object?>{'error': e.toString()},
-            );
-          }
-        }
-      } catch (e) {
-        _externalFrameWarnCounter += 1;
-        if (_externalFrameWarnCounter <= 5 ||
-            _externalFrameWarnCounter % 30 == 0) {
-          _flowLog(
-            'ext.onFrameHandleFailed',
-            extra: <String, Object?>{'error': e.toString()},
-          );
-        }
-      }
-    }
-  }
-
-  void _startNativePush() {
-    if (_nativePushStarted) {
-      _flowLog('native.startAgoraPush.skipAlreadyStarted');
-      return;
-    }
-    _nativePushStarted = true;
-    _flowLog('native.startAgoraPush.invoke');
-    _beautyChannel.invokeMethod('startAgoraPush').catchError((e) {
-      _nativePushStarted = false;
-      _flowLog(
-        'native.startAgoraPush.failed',
-        extra: <String, Object?>{'error': e.toString()},
-      );
-    });
-  }
-
-  void _stopNativePush() {
-    if (!_nativePushStarted) {
-      _flowLog('native.stopAgoraPush.skipAlreadyStopped');
-      return;
-    }
-    _nativePushStarted = false;
-    _flowLog('native.stopAgoraPush.invoke');
-    _beautyChannel.invokeMethod('stopAgoraPush').catchError((e) {
-      _flowLog(
-        'native.stopAgoraPush.failed',
-        extra: <String, Object?>{'error': e.toString()},
-      );
-    });
-  }
-
-  Future<void> _switchNativeCamera() async {
-    _flowLog('native.switchCamera.invoke');
-    try {
-      await _beautyChannel.invokeMethod('switchCamera');
-      _flowLog('native.switchCamera.ack');
-    } catch (e) {
-      _flowLog(
-        'native.switchCamera.failed',
-        extra: <String, Object?>{'error': e.toString()},
-      );
-    }
   }
 
   Future<void> initRtc({
     required void Function() onCallConnected,
     required void Function(String endReason) onRemoteEnd,
     void Function(String message)? onLog,
-    String? faceBeautyKey,
   }) async {
     final initStartAt = DateTime.now();
     if (state.isJoining || state.isJoined) {
@@ -509,16 +125,12 @@ class CallRtcController extends StateNotifier<CallRtcState> {
       return;
     }
     _joinedCallbackEmitted = false;
-    _applyCameraFacing(true);
     state = state.copyWith(
       isJoining: true,
       isLoading: true,
       errorMessage: null,
     );
     onLog?.call('rtc init start');
-
-    // 设置原生回调
-    _beautyChannel.setMethodCallHandler(_handleNativeMethod);
 
     try {
       final permissionGranted = await _ensureMediaPermissions();
@@ -551,21 +163,6 @@ class CallRtcController extends StateNotifier<CallRtcState> {
         throw Exception('RTC 参数不完整');
       }
 
-      // 初始化 FaceBeauty SDK
-      if (faceBeautyKey != null && faceBeautyKey.isNotEmpty) {
-        final beautyInitAt = DateTime.now();
-        try {
-          MtPlugin.initSdk(faceBeautyKey);
-          onLog?.call(
-            'faceBeauty init done in ${DateTime.now().difference(beautyInitAt).inMilliseconds}ms',
-          );
-        } catch (e) {
-          onLog?.call('FaceBeauty SDK init failed: $e');
-        }
-      } else {
-        onLog?.call('faceBeauty key missing, skip sdk init');
-      }
-
       final engine = createAgoraRtcEngine();
       _engine = engine;
       state = state.copyWith(channelName: channel, errorMessage: null);
@@ -579,13 +176,6 @@ class CallRtcController extends StateNotifier<CallRtcState> {
         ),
       );
       onLog?.call('agora engine initialized');
-
-      // 启用外部视频源模式（FaceBeauty 原生相机采集 + 美颜处理）
-      await engine.getMediaEngine().setExternalVideoSource(
-        enabled: true,
-        useTexture: false,
-      );
-      onLog?.call('external video source enabled');
 
       void markJoined(int localUid) {
         if (!mounted) {
@@ -602,8 +192,6 @@ class CallRtcController extends StateNotifier<CallRtcState> {
         if (!_joinedCallbackEmitted) {
           _joinedCallbackEmitted = true;
           onCallConnected();
-          // 加入频道成功后再通知原生开始相机采集 + 美颜推流
-          _startNativePush();
         }
       }
 
@@ -772,8 +360,10 @@ class CallRtcController extends StateNotifier<CallRtcState> {
       await engine.enableVideo();
       await engine.setClientRole(role: ClientRoleType.clientRoleBroadcaster);
       onLog?.call('enableVideo + setClientRole done');
-      // 移除 startPreview()，改为使用原生相机采集
-      // await engine.startPreview();
+
+      // 启用 Agora 内置视频预览
+      await engine.startPreview();
+      onLog?.call('startPreview done');
 
       Future<void> doJoin() async {
         await engine.joinChannel(
@@ -783,11 +373,7 @@ class CallRtcController extends StateNotifier<CallRtcState> {
           options: const ChannelMediaOptions(
             channelProfile: ChannelProfileType.channelProfileCommunication,
             clientRoleType: ClientRoleType.clientRoleBroadcaster,
-            // 外部视频源模式下，不发布内置摄像头轨道
-            publishCameraTrack: false,
-            // 外部源帧通过 pushVideoFrame(trackId=0) 推送，需要发布自定义视频轨。
-            publishCustomVideoTrack: true,
-            customVideoTrackId: 0,
+            publishCameraTrack: true,
             publishMicrophoneTrack: true,
             autoSubscribeAudio: true,
             autoSubscribeVideo: true,
@@ -845,13 +431,9 @@ class CallRtcController extends StateNotifier<CallRtcState> {
   }
 
   Future<void> leaveAndRelease({void Function(String message)? onLog}) async {
-    // 离开前先停止原生推流
-    _stopNativePush();
-
     final engine = _engine;
     _engine = null;
     _joinedCallbackEmitted = false;
-    _nativePushStarted = false;
 
     if (engine != null) {
       onLog?.call('rtc release start');
@@ -908,85 +490,38 @@ class CallRtcController extends StateNotifier<CallRtcState> {
 
   Future<void> toggleCamera() async {
     final next = !state.isCameraOn;
-    _flowLog('ui.toggleCamera', extra: <String, Object?>{'next': next});
     try {
-      if (next) {
-        await _beautyChannel.invokeMethod('startAgoraPush');
-        _nativePushStarted = true;
-      } else {
-        await _beautyChannel.invokeMethod('stopAgoraPush');
-        _nativePushStarted = false;
-      }
-      _flowLog(
-        'ui.toggleCamera.nativeAck',
-        extra: <String, Object?>{'next': next},
-      );
+      await _engine?.muteLocalVideoStream(!next);
     } catch (e) {
-      _flowLog(
-        'ui.toggleCamera.nativeFailed',
-        extra: <String, Object?>{'next': next, 'error': e.toString()},
-      );
+      _flowLog('toggleCamera failed', extra: {'error': e.toString()});
     }
     if (!mounted) {
       return;
     }
     state = state.copyWith(isCameraOn: next);
-    _flowLog(
-      'ui.toggleCamera.stateUpdated',
-      extra: <String, Object?>{'next': next},
-    );
   }
 
   Future<void> flipCamera() async {
     _flowLog('ui.flipCamera.start');
     state = state.copyWith(isFlipping: true);
-    final predictedNextIsFrontCamera = !_isFrontCamera;
-    _flowLog(
-      'ui.flipCamera.rotationPredicted',
-      extra: <String, Object?>{
-        'from': _isFrontCamera ? 'front' : 'back',
-        'to': predictedNextIsFrontCamera ? 'front' : 'back',
-        'rotation': _rotationForCamera(predictedNextIsFrontCamera),
-      },
-    );
-    _dropFramesDuringCameraSwitch = true;
-    _cameraSwitchDropGuardTimer?.cancel();
-    _cameraSwitchDropGuardTimer = Timer(const Duration(seconds: 2), () {
-      _dropFramesDuringCameraSwitch = false;
-      _cameraSwitchDropGuardTimer = null;
-      _cameraSwitchResumePushTimer?.cancel();
-      _cameraSwitchResumePushTimer = null;
-      if (state.isJoined && state.isCameraOn) {
-        _startNativePush();
-      }
-      if (state.isFlipping) {
-        _finishFlipTransition(delay: Duration.zero);
-      }
-      _flowLog('ui.flipCamera.dropGuardTimeout');
-    });
+    final predictedNextIsFrontCamera = !state.isFrontCamera;
     try {
-      final shouldPausePush = state.isCameraOn && state.isJoined;
-      if (shouldPausePush) {
-        _stopNativePush();
+      await _engine?.switchCamera();
+      if (!mounted) {
+        return;
       }
-      await _switchNativeCamera();
-      // 切镜头后由 native 回调（cameraSwitchResult/previewReady）统一恢复推流，
-      // 避免在旋转状态尚未更新前提前推送，导致短暂倒置。
+      state = state.copyWith(isFlipping: false, isFrontCamera: predictedNextIsFrontCamera);
+      _flowLog(
+        'ui.flipCamera.done',
+        extra: {'next': predictedNextIsFrontCamera ? 'front' : 'back'},
+      );
     } catch (e) {
       _flowLog(
         'ui.flipCamera.error',
-        extra: <String, Object?>{
-          'error': e.toString(),
-          'current': _isFrontCamera ? 'front' : 'back',
-          'rotation': _externalFrameRotation,
-        },
+        extra: {'error': e.toString()},
       );
-      _cameraSwitchDropGuardTimer?.cancel();
-      _cameraSwitchDropGuardTimer = null;
-      _dropFramesDuringCameraSwitch = false;
       if (mounted) {
         state = state.copyWith(isFlipping: false);
-        _flowLog('ui.flipCamera.end');
       }
     }
   }
@@ -1000,14 +535,7 @@ class CallRtcController extends StateNotifier<CallRtcState> {
 
   @override
   void dispose() {
-    _cameraSwitchDropGuardTimer?.cancel();
-    _cameraSwitchDropGuardTimer = null;
-    _cameraSwitchResumePushTimer?.cancel();
-    _cameraSwitchResumePushTimer = null;
-    _flipUiGuardTimer?.cancel();
-    _flipUiGuardTimer = null;
     unawaited(leaveAndRelease());
-    _beautyChannel.setMethodCallHandler(null);
     super.dispose();
   }
 }
