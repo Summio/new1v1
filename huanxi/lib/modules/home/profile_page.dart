@@ -143,7 +143,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(gradient: AppTheme.balanceGradient, borderRadius: BorderRadius.circular(24), boxShadow: AppTheme.elevatedShadow),
               child: isAnchor
-                  ? _buildAnchorBalance(authState, tokenNames)
+                  ? _buildAnchorBalance(authState, tokenNames, context)
                   : _buildUserBalance(authState, tokenNames, context),
             ),
           ),
@@ -171,7 +171,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                         activeTrackColor: AppTheme.primaryColor.withValues(alpha: 0.4),
                       ),
                     ),
-                  _buildMenuTile(icon: Icons.account_balance_wallet_rounded, title: '我的钱包', iconColor: const Color(0xFFFF9500), onTap: () => context.push(AppRoutes.wallet)),
                   _buildMenuTile(icon: Icons.dynamic_feed_rounded, title: '我的动态', iconColor: const Color(0xFF5856D6), onTap: () => context.push(AppRoutes.myMoments), isLast: true),
                 ],
               ),
@@ -220,7 +219,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                   Text('${tokenNames.diamondName}余额', style: const TextStyle(color: Colors.white70, fontSize: 13)),
                   const SizedBox(height: 8),
                   GestureDetector(
-                    onTap: () => context.push(AppRoutes.wallet),
+                    onTap: () => context.push(AppRoutes.diamondTransactions),
                     child: Text(authState.diamonds.toString(), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
                   ),
                 ],
@@ -232,7 +231,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     );
   }
 
-  Widget _buildAnchorBalance(AuthState authState, TokenNamesState tokenNames) {
+  Widget _buildAnchorBalance(AuthState authState, TokenNamesState tokenNames, BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -242,9 +241,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const Text('累计收益 (元)', style: TextStyle(color: Colors.white70, fontSize: 13)),
+                  Text('${tokenNames.coinName}余额', style: const TextStyle(color: Colors.white70, fontSize: 13)),
                   const SizedBox(height: 8),
-                  Text((authState.coins / 100).toStringAsFixed(2), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+                  GestureDetector(
+                    onTap: () => context.push(AppRoutes.recharge),
+                    child: Text(authState.coins.toString(), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+                  ),
                 ],
               ),
             ),
@@ -254,7 +256,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 children: [
                   Text('${tokenNames.diamondName}余额', style: const TextStyle(color: Colors.white70, fontSize: 13)),
                   const SizedBox(height: 8),
-                  Text(authState.diamonds.toString(), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+                  GestureDetector(
+                    onTap: () => context.push(AppRoutes.diamondTransactions),
+                    child: Text(authState.diamonds.toString(), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+                  ),
                 ],
               ),
             ),

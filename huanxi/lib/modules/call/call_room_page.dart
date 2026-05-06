@@ -52,16 +52,16 @@ class CallRoomPage extends ConsumerStatefulWidget {
   ConsumerState<CallRoomPage> createState() => _CallRoomPageState();
 }
 
-class _CallRoomPageState extends ConsumerState<CallRoomPage> {
+class _CallRoomPageState extends ConsumerState<CallRoomPage>
+    with WidgetsBindingObserver {
   static const int _callChatHistoryCount = 30;
   static const Duration _connectingWatchdogTimeout = Duration(seconds: 20);
-  static const double _chatInputBottomSpacing = 12;
+  static const double _chatInputBottomSpacing = 0;
   static const double _chatInputEstimatedHeight = 60;
   static const double _chatOverlayGapAboveInput = 8;
 
   bool _endingConsuming = false;
   bool _isRemoteInMainView = true;
-  bool _isChatInputVisible = false;
   bool _isImChatReady = false;
   bool _isImChatAvailable = true;
   bool _isImChatLoading = false;
@@ -73,6 +73,9 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
   final TextEditingController _chatController = TextEditingController();
   final FocusNode _chatFocusNode = FocusNode();
   final CallOverlayChatStore _chatStore = CallOverlayChatStore(maxMessages: 20);
+  final ValueNotifier<bool> _chatInputVisible = ValueNotifier<bool>(false);
+  final ValueNotifier<double> _keyboardInset = ValueNotifier<double>(0);
+  OverlayEntry? _chatOverlayEntry;
   late final DateTime _chatSessionStartedAt;
   Timer? _connectingWatchdogTimer;
 
@@ -83,6 +86,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _chatSessionStartedAt = DateTime.now();
     unawaited(
       SystemChrome.setPreferredOrientations(const [
@@ -97,6 +101,8 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     // 使用 Future.microtask 延迟执行，避免 widget build 阶段修改 provider
     Future.microtask(() {
       if (!mounted) return;
+      _syncKeyboardInsetFromView();
+      _ensureChatOverlay();
       ref.read(callSessionProvider(widget.callId).notifier).markConnecting();
       _startConnectingWatchdog();
       ref.read(callWsControllerProvider(widget.callId).notifier).bind();
@@ -122,6 +128,27 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       );
       unawaited(_initImCallChat());
     });
+  }
+
+  void _syncKeyboardInsetFromView() {
+    if (!mounted) {
+      return;
+    }
+    final view = View.maybeOf(context);
+    if (view == null) {
+      return;
+    }
+    final inset = view.viewInsets.bottom / view.devicePixelRatio;
+    if ((_keyboardInset.value - inset).abs() < 0.5) {
+      return;
+    }
+    _keyboardInset.value = inset;
+  }
+
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    _syncKeyboardInsetFromView();
   }
 
   Future<void> _consumeEnding(CallSessionState sessionState) async {
@@ -222,10 +249,9 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
         return;
       }
       _log('connecting watchdog timeout, force ending to avoid stuck');
-      ref.read(callSessionProvider(widget.callId).notifier).beginEnding(
-        endReason: 'timeout',
-        notifyEndApi: false,
-      );
+      ref
+          .read(callSessionProvider(widget.callId).notifier)
+          .beginEnding(endReason: 'timeout', notifyEndApi: false);
     });
   }
 
@@ -237,6 +263,36 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
   void _dismissTransientOverlays() {
     final rootNavigator = Navigator.of(context, rootNavigator: true);
     rootNavigator.popUntil((route) => route is PageRoute<dynamic>);
+  }
+
+  void _ensureChatOverlay() {
+    if (!mounted) {
+      return;
+    }
+    if (_chatOverlayEntry != null) {
+      return;
+    }
+    final overlay = Overlay.of(context, rootOverlay: true);
+    _chatOverlayEntry = OverlayEntry(
+      builder: (context) => _CallChatOverlayLayer(
+        chatInputVisible: _chatInputVisible,
+        keyboardInset: _keyboardInset,
+        revision: _chatStore.revision,
+        hasMessages: () => _chatStore.messages.isNotEmpty,
+        buildMessageOverlay: _buildChatMessageOverlay,
+        controller: _chatController,
+        focusNode: _chatFocusNode,
+        onSend: _sendChatMessage,
+        onClose: _closeChatInput,
+        bottomSpacing: _chatInputBottomSpacing,
+      ),
+    );
+    overlay.insert(_chatOverlayEntry!);
+  }
+
+  void _removeChatOverlay() {
+    _chatOverlayEntry?.remove();
+    _chatOverlayEntry = null;
   }
 
   Future<void> _leaveAndExit({
@@ -336,9 +392,16 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       sentAt: now,
       isMe: true,
     );
-    if (mounted) {
-      setState(() {});
+  }
+
+  AnchorInfo? _findAnchorForPeer() {
+    final anchorState = ref.read(anchorListProvider);
+    for (final anchor in anchorState.anchors) {
+      if (anchor.userId.toString() == widget.peerUserId) {
+        return anchor;
+      }
     }
+    return null;
   }
 
   int? _extractAppUserId(String value) {
@@ -450,9 +513,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     );
     if (history.isEmpty) {
       _chatStore.clear();
-      if (mounted) {
-        setState(() {});
-      }
       return;
     }
 
@@ -494,9 +554,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     }
 
     _chatStore.setInitialMessages(items);
-    if (mounted) {
-      setState(() {});
-    }
   }
 
   void _onImMessageReceived(dynamic message) {
@@ -556,9 +613,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
         callGiftControllerProvider(widget.callId),
       );
       if (currentGiftState.isShowing) {
-        if (mounted) {
-          setState(() {});
-        }
         return;
       }
       final quantity = giftNotify.quantity < 1 ? 1 : giftNotify.quantity;
@@ -579,9 +633,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
             senderNickname: giftNotify.senderNickname,
           );
     }
-    if (mounted) {
-      setState(() {});
-    }
   }
 
   void _toggleChatInput() {
@@ -600,10 +651,8 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       return;
     }
 
-    final willShowInput = !_isChatInputVisible;
-    setState(() {
-      _isChatInputVisible = willShowInput;
-    });
+    final willShowInput = !_chatInputVisible.value;
+    _chatInputVisible.value = willShowInput;
     if (willShowInput) {
       _chatFocusNode.requestFocus();
     } else {
@@ -612,12 +661,10 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
   }
 
   void _closeChatInput() {
-    if (!_isChatInputVisible) {
+    if (!_chatInputVisible.value) {
       return;
     }
-    setState(() {
-      _isChatInputVisible = false;
-    });
+    _chatInputVisible.value = false;
     _chatFocusNode.unfocus();
   }
 
@@ -645,7 +692,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
       senderName: _myDisplayName,
       sentAt: now,
     );
-    setState(() {});
     _chatController.clear();
 
     try {
@@ -666,13 +712,9 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
           sentAt: sentAt,
         );
       }
-      if (mounted) {
-        setState(() {});
-      }
     } catch (e) {
       _chatStore.markSendFailed(clientMsgId: clientMsgId);
       if (mounted) {
-        setState(() {});
         AppToast.showSnackBar(context, SnackBar(content: Text('消息发送失败: $e')));
       }
     }
@@ -718,10 +760,15 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
 
   @override
   void dispose() {
+    _removeChatOverlay();
     _cancelConnectingWatchdog();
     _imService.removeMessageListener(_onImMessageReceived);
     _chatController.dispose();
     _chatFocusNode.dispose();
+    _chatInputVisible.dispose();
+    _keyboardInset.dispose();
+    _chatStore.dispose();
+    WidgetsBinding.instance.removeObserver(this);
     unawaited(
       SystemChrome.setPreferredOrientations(const [
         DeviceOrientation.portraitUp,
@@ -765,23 +812,6 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     final rtcController = ref.watch(
       callRtcControllerProvider(widget.callId).notifier,
     );
-    final sessionState = ref.watch(callSessionProvider(widget.callId));
-    final giftState = ref.watch(callGiftControllerProvider(widget.callId));
-    final tokenNames = ref.watch(tokenNamesProvider);
-    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
-
-    final anchorState = ref.watch(anchorListProvider);
-    AnchorInfo? found;
-    for (final a in anchorState.anchors) {
-      if (a.userId.toString() == widget.peerUserId) {
-        found = a;
-        break;
-      }
-    }
-    final anchor = found;
-    final peerName = widget.peerName.trim().isNotEmpty
-        ? widget.peerName.trim()
-        : (anchor?.username ?? '主播');
 
     return PopScope(
       canPop: false,
@@ -803,14 +833,23 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              _buildRemoteView(
-                rtcState: rtcState,
-                rtcController: rtcController,
+              RepaintBoundary(
+                child: _buildRemoteView(
+                  rtcState: rtcState,
+                  rtcController: rtcController,
+                ),
               ),
-              if (giftState.isShowing)
-                _buildGiftAnimationOverlay(giftState: giftState),
-              if (_chatStore.messages.isNotEmpty)
-                _buildChatMessageOverlay(context, keyboardInset: keyboardInset),
+              Consumer(
+                builder: (context, ref, child) {
+                  final giftState = ref.watch(
+                    callGiftControllerProvider(widget.callId),
+                  );
+                  if (!giftState.isShowing) {
+                    return const SizedBox.shrink();
+                  }
+                  return _buildGiftAnimationOverlay(giftState: giftState);
+                },
+              ),
               Positioned(
                 top: MediaQuery.paddingOf(context).top + 16,
                 right: 16,
@@ -820,8 +859,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
                       _isRemoteInMainView = !_isRemoteInMainView;
                     });
                   },
-                  child: AnimatedContainer(
-                    duration: Duration.zero,
+                  child: Container(
                     width: 90,
                     height: 160,
                     decoration: BoxDecoration(
@@ -845,176 +883,25 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
                   ),
                 ),
               ),
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  padding: EdgeInsets.only(
-                    top: MediaQuery.paddingOf(context).top + 12,
-                    left: 16,
-                    right: 16,
-                    bottom: 12,
-                  ),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Colors.black54, Colors.transparent],
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.arrow_back, color: Colors.white),
-                        onPressed: _endCall,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              peerName,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            Text(
-                              _formatDuration(sessionState.callDuration),
-                              style: const TextStyle(
-                                color: Colors.white70,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      if (anchor?.callPrice != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 4,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white24,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Text(
-                            '${anchor!.callPrice!.toStringAsFixed(0)}${tokenNames.coinName}/min',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
+              _CallTopBar(
+                callId: widget.callId,
+                peerUserId: widget.peerUserId,
+                routePeerName: widget.peerName,
+                onBack: _endCall,
+                formatDuration: _formatDuration,
               ),
-              if (!_isChatInputVisible)
-                Positioned(
-                    bottom: 0,
-                    left: 0,
-                    right: 0,
-                    child: Container(
-                      padding: EdgeInsets.only(
-                        left: 24,
-                        right: 24,
-                        bottom: MediaQuery.paddingOf(context).bottom + 24,
-                        top: 20,
-                      ),
-                      decoration: const BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.bottomCenter,
-                          end: Alignment.topCenter,
-                          colors: [Colors.black54, Colors.transparent],
-                        ),
-                      ),
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        physics: const BouncingScrollPhysics(),
-                        child: Row(
-                          children: [
-                            _ControlButton(
-                              icon: rtcState.isMicOn ? Icons.mic : Icons.mic_off,
-                              label: rtcState.isMicOn ? '麦克风' : '静音',
-                              isActive: !rtcState.isMicOn,
-                              onTap: () => unawaited(rtcController.toggleMic()),
-                            ),
-                            const SizedBox(width: 10),
-                            _ControlButton(
-                              icon: rtcState.isSpeakerOn
-                                  ? Icons.volume_up
-                                  : Icons.volume_off,
-                              label: '扬声器',
-                              isActive: !rtcState.isSpeakerOn,
-                              onTap: () =>
-                                  unawaited(rtcController.toggleSpeaker()),
-                            ),
-                            const SizedBox(width: 10),
-                            _ControlButton(
-                              icon: rtcState.isCameraOn
-                                  ? Icons.videocam
-                                  : Icons.videocam_off,
-                              label: '摄像头',
-                              isActive: !rtcState.isCameraOn,
-                              onTap: () =>
-                                  unawaited(rtcController.toggleCamera()),
-                            ),
-                            const SizedBox(width: 10),
-                            _ControlButton(
-                              icon: Icons.card_giftcard,
-                              label: '礼物',
-                              onTap: () => _showGiftPanel(anchor),
-                            ),
-                            const SizedBox(width: 10),
-                            _ControlButton(
-                              icon: Icons.chat_bubble_outline,
-                              label: _isImChatLoading ? '聊天中' : '聊天',
-                              isActive: _isChatInputVisible,
-                              onTap: _toggleChatInput,
-                            ),
-                            const SizedBox(width: 10),
-                            _ControlButton(
-                              icon: Icons.flip_camera_ios,
-                              label: '翻转',
-                              isSpinning: rtcState.isFlipping,
-                              onTap: () => unawaited(rtcController.flipCamera()),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-              if (!_isChatInputVisible)
-                Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: MediaQuery.paddingOf(context).bottom + 116,
-                    child: Center(
-                      child: GestureDetector(
-                        onTap: _endCall,
-                        child: Container(
-                          width: 62,
-                          height: 62,
-                          decoration: const BoxDecoration(
-                            color: AppTheme.errorColor,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.call_end,
-                            color: Colors.white,
-                            size: 30,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-              if (_isChatInputVisible)
-                _buildChatInputBar(context, keyboardInset: keyboardInset),
+              _CallBottomControls(
+                rtcState: rtcState,
+                rtcController: rtcController,
+                isChatInputVisible: _chatInputVisible,
+                isImChatLoading: _isImChatLoading,
+                onToggleChat: _toggleChatInput,
+                onShowGift: () => _showGiftPanel(_findAnchorForPeer()),
+              ),
+              _CallHangupButton(
+                isChatInputVisible: _chatInputVisible,
+                onTap: _endCall,
+              ),
               if (rtcState.isLoading)
                 IgnorePointer(
                   ignoring: true,
@@ -1251,52 +1138,21 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
     );
   }
 
-  double _resolveChatMessageOverlayBottomOffset({
-    required BuildContext context,
-    required double keyboardInset,
-  }) {
-    final paddingBottom = MediaQuery.paddingOf(context).bottom;
-    if (_isChatInputVisible) {
-      return paddingBottom +
-          keyboardInset +
-          _chatInputBottomSpacing +
-          _chatInputEstimatedHeight +
-          _chatOverlayGapAboveInput;
-    }
-    return paddingBottom + 188;
-  }
-
-  Widget _buildChatMessageOverlay(
-    BuildContext context, {
-    required double keyboardInset,
-  }) {
-    final visibleMessages = _chatStore.messages.length > 6
-        ? _chatStore.messages.sublist(_chatStore.messages.length - 6)
-        : _chatStore.messages;
+  Widget _buildChatMessageOverlay() {
+    final allMessages = _chatStore.messages;
+    final startIndex = allMessages.length > 6 ? allMessages.length - 6 : 0;
 
     return _KeyboardAwareChatMessageOverlay(
-      messages: visibleMessages,
-      bottomOffset: _resolveChatMessageOverlayBottomOffset(
-        context: context,
-        keyboardInset: keyboardInset,
-      ),
+      messages: allMessages,
+      startIndex: startIndex,
+      chatInputVisible: _chatInputVisible,
+      keyboardInset: _keyboardInset,
+      bottomSpacing: _chatInputBottomSpacing,
+      inputEstimatedHeight: _chatInputEstimatedHeight,
+      overlayGapAboveInput: _chatOverlayGapAboveInput,
       onRetry: _retryFailedMessage,
       formatChatTime: _formatChatTime,
       statusSuffix: _statusSuffix,
-    );
-  }
-
-  Widget _buildChatInputBar(
-    BuildContext context, {
-    required double keyboardInset,
-  }) {
-    final paddingBottom = MediaQuery.paddingOf(context).bottom;
-    return _KeyboardAwareChatInputBar(
-      controller: _chatController,
-      focusNode: _chatFocusNode,
-      bottomOffset: paddingBottom + _chatInputBottomSpacing + keyboardInset,
-      onSend: _sendChatMessage,
-      onClose: _closeChatInput,
     );
   }
 
@@ -1323,14 +1179,24 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage> {
 
 class _KeyboardAwareChatMessageOverlay extends StatelessWidget {
   final List<CallOverlayMessage> messages;
-  final double bottomOffset;
+  final int startIndex;
+  final ValueNotifier<bool> chatInputVisible;
+  final ValueNotifier<double> keyboardInset;
+  final double bottomSpacing;
+  final double inputEstimatedHeight;
+  final double overlayGapAboveInput;
   final Future<void> Function(CallOverlayMessage message) onRetry;
   final String Function(DateTime time) formatChatTime;
   final String Function(CallOverlayMessage message) statusSuffix;
 
   const _KeyboardAwareChatMessageOverlay({
     required this.messages,
-    required this.bottomOffset,
+    required this.startIndex,
+    required this.chatInputVisible,
+    required this.keyboardInset,
+    required this.bottomSpacing,
+    required this.inputEstimatedHeight,
+    required this.overlayGapAboveInput,
     required this.onRetry,
     required this.formatChatTime,
     required this.statusSuffix,
@@ -1338,73 +1204,90 @@ class _KeyboardAwareChatMessageOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Positioned(
-      left: 12,
-      right: 12,
-      bottom: bottomOffset,
-      child: IgnorePointer(
-        ignoring: false,
-        child: Align(
-          alignment: Alignment.bottomLeft,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 280),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                for (final message in messages)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: GestureDetector(
-                      onTap: () => unawaited(onRetry(message)),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 7,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withValues(alpha: 0.55),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: RichText(
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          text: TextSpan(
-                            children: [
-                              TextSpan(
-                                text: '${message.senderName}: ',
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
+    return ValueListenableBuilder<bool>(
+      valueListenable: chatInputVisible,
+      builder: (context, isVisible, _) {
+        return ValueListenableBuilder<double>(
+          valueListenable: keyboardInset,
+          builder: (context, keyboardBottom, _) {
+            final safeBottom = MediaQuery.paddingOf(context).bottom;
+            final bottomOffset = isVisible
+                ? safeBottom +
+                      (keyboardBottom > 0 ? keyboardBottom : bottomSpacing) +
+                      inputEstimatedHeight +
+                      overlayGapAboveInput
+                : safeBottom + 188;
+            return Positioned(
+              left: 12,
+              right: 12,
+              bottom: bottomOffset,
+              child: IgnorePointer(
+                ignoring: false,
+                child: Align(
+                  alignment: Alignment.bottomLeft,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 280),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (int i = startIndex; i < messages.length; i++)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: GestureDetector(
+                              onTap: () => unawaited(onRetry(messages[i])),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 7,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withValues(alpha: 0.55),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: RichText(
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  text: TextSpan(
+                                    children: [
+                                      TextSpan(
+                                        text: '${messages[i].senderName}: ',
+                                        style: const TextStyle(
+                                          color: Colors.white70,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      TextSpan(
+                                        text: messages[i].text,
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 13,
+                                        ),
+                                      ),
+                                      TextSpan(
+                                        text:
+                                            '  ${formatChatTime(messages[i].sentAt)}${statusSuffix(messages[i])}',
+                                        style: const TextStyle(
+                                          color: Colors.white54,
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
-                              TextSpan(
-                                text: message.text,
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              TextSpan(
-                                text:
-                                    '  ${formatChatTime(message.sentAt)}${statusSuffix(message)}',
-                                style: const TextStyle(
-                                  color: Colors.white54,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
-                        ),
-                      ),
+                      ],
                     ),
                   ),
-              ],
-            ),
-          ),
-        ),
-      ),
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
@@ -1412,64 +1295,463 @@ class _KeyboardAwareChatMessageOverlay extends StatelessWidget {
 class _KeyboardAwareChatInputBar extends StatelessWidget {
   final TextEditingController controller;
   final FocusNode focusNode;
-  final double bottomOffset;
   final Future<void> Function() onSend;
   final VoidCallback onClose;
 
   const _KeyboardAwareChatInputBar({
     required this.controller,
     required this.focusNode,
-    required this.bottomOffset,
     required this.onSend,
     required this.onClose,
   });
 
   @override
   Widget build(BuildContext context) {
+    final inputTheme = Theme.of(context).copyWith(
+      textSelectionTheme: const TextSelectionThemeData(
+        cursorColor: Color(0xFF1F2937),
+        selectionColor: Color(0x332563EB),
+        selectionHandleColor: Color(0xFF2563EB),
+      ),
+    );
+    return Theme(
+      data: inputTheme,
+      child: Material(
+        color: Colors.white,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+          decoration: const BoxDecoration(color: Colors.white),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: controller,
+                  focusNode: focusNode,
+                  style: const TextStyle(
+                    color: Color(0xFF111827),
+                    fontSize: 15,
+                    fontWeight: FontWeight.w400,
+                  ),
+                  cursorColor: const Color(0xFF1F2937),
+                  cursorOpacityAnimates: true,
+                  minLines: 1,
+                  maxLines: 2,
+                  textInputAction: TextInputAction.send,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    filled: false,
+                    hintText: '输入聊天内容',
+                    hintStyle: TextStyle(
+                      color: Color(0xFF9CA3AF),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w400,
+                    ),
+                    border: InputBorder.none,
+                  ),
+                  onSubmitted: (_) => unawaited(onSend()),
+                ),
+              ),
+              IconButton(
+                onPressed: () => unawaited(onSend()),
+                icon: const Icon(Icons.send, color: Color(0xFF111827)),
+                tooltip: '发送消息',
+              ),
+              IconButton(
+                onPressed: onClose,
+                icon: const Icon(Icons.close, color: Color(0xFF6B7280)),
+                tooltip: '关闭聊天输入',
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CallTopBar extends ConsumerWidget {
+  final int callId;
+  final String peerUserId;
+  final String routePeerName;
+  final VoidCallback onBack;
+  final String Function(Duration) formatDuration;
+
+  const _CallTopBar({
+    required this.callId,
+    required this.peerUserId,
+    required this.routePeerName,
+    required this.onBack,
+    required this.formatDuration,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokenNames = ref.watch(tokenNamesProvider);
+    final anchorState = ref.watch(anchorListProvider);
+    AnchorInfo? anchor;
+    for (final item in anchorState.anchors) {
+      if (item.userId.toString() == peerUserId) {
+        anchor = item;
+        break;
+      }
+    }
+    final peerName = routePeerName.trim().isNotEmpty
+        ? routePeerName.trim()
+        : (anchor?.username ?? '主播');
+
     return Positioned(
-      left: 12,
-      right: 12,
-      bottom: bottomOffset,
+      top: 0,
+      left: 0,
+      right: 0,
       child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.72),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.white24),
+        padding: EdgeInsets.only(
+          top: MediaQuery.paddingOf(context).top + 12,
+          left: 16,
+          right: 16,
+          bottom: 12,
+        ),
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Colors.black54, Colors.transparent],
+          ),
         ),
         child: Row(
           children: [
+            IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: onBack,
+            ),
+            const SizedBox(width: 8),
             Expanded(
-              child: TextField(
-                controller: controller,
-                focusNode: focusNode,
-                style: const TextStyle(color: Colors.white),
-                minLines: 1,
-                maxLines: 2,
-                textInputAction: TextInputAction.send,
-                decoration: const InputDecoration(
-                  isDense: true,
-                  hintText: '输入聊天内容',
-                  hintStyle: TextStyle(color: Colors.white60),
-                  border: InputBorder.none,
-                ),
-                onSubmitted: (_) => unawaited(onSend()),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    peerName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  _CallDurationText(
+                    callId: callId,
+                    formatDuration: formatDuration,
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
+                ],
               ),
             ),
-            IconButton(
-              onPressed: () => unawaited(onSend()),
-              icon: const Icon(Icons.send, color: Colors.white),
-              tooltip: '发送消息',
-            ),
-            IconButton(
-              onPressed: onClose,
-              icon: const Icon(Icons.close, color: Colors.white70),
-              tooltip: '关闭聊天输入',
-            ),
+            if (anchor?.callPrice != null)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white24,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '${anchor!.callPrice!.toStringAsFixed(0)}${tokenNames.coinName}/min',
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ),
           ],
         ),
       ),
     );
+  }
+}
+
+class _CallBottomControls extends StatelessWidget {
+  final CallRtcState rtcState;
+  final CallRtcController rtcController;
+  final ValueNotifier<bool> isChatInputVisible;
+  final bool isImChatLoading;
+  final VoidCallback onToggleChat;
+  final VoidCallback onShowGift;
+
+  const _CallBottomControls({
+    required this.rtcState,
+    required this.rtcController,
+    required this.isChatInputVisible,
+    required this.isImChatLoading,
+    required this.onToggleChat,
+    required this.onShowGift,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final safeBottom = MediaQuery.paddingOf(context).bottom;
+    return ValueListenableBuilder<bool>(
+      valueListenable: isChatInputVisible,
+      builder: (context, visible, _) {
+        return Positioned(
+          bottom: 0,
+          left: 0,
+          right: 0,
+          child: Opacity(
+            opacity: visible ? 0 : 1,
+            child: IgnorePointer(
+              ignoring: visible,
+              child: Container(
+                padding: EdgeInsets.only(
+                  left: 24,
+                  right: 24,
+                  bottom: safeBottom + 24,
+                  top: 20,
+                ),
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [Colors.black54, Colors.transparent],
+                  ),
+                ),
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  child: Row(
+                    children: [
+                      _ControlButton(
+                        icon: rtcState.isMicOn ? Icons.mic : Icons.mic_off,
+                        label: rtcState.isMicOn ? '麦克风' : '静音',
+                        isActive: !rtcState.isMicOn,
+                        onTap: () => unawaited(rtcController.toggleMic()),
+                      ),
+                      const SizedBox(width: 10),
+                      _ControlButton(
+                        icon: rtcState.isSpeakerOn
+                            ? Icons.volume_up
+                            : Icons.volume_off,
+                        label: '扬声器',
+                        isActive: !rtcState.isSpeakerOn,
+                        onTap: () => unawaited(rtcController.toggleSpeaker()),
+                      ),
+                      const SizedBox(width: 10),
+                      _ControlButton(
+                        icon: rtcState.isCameraOn
+                            ? Icons.videocam
+                            : Icons.videocam_off,
+                        label: '摄像头',
+                        isActive: !rtcState.isCameraOn,
+                        onTap: () => unawaited(rtcController.toggleCamera()),
+                      ),
+                      const SizedBox(width: 10),
+                      _ControlButton(
+                        icon: Icons.card_giftcard,
+                        label: '礼物',
+                        onTap: onShowGift,
+                      ),
+                      const SizedBox(width: 10),
+                      _ControlButton(
+                        icon: Icons.chat_bubble_outline,
+                        label: isImChatLoading ? '聊天中' : '聊天',
+                        isActive: visible,
+                        onTap: onToggleChat,
+                      ),
+                      const SizedBox(width: 10),
+                      _ControlButton(
+                        icon: Icons.flip_camera_ios,
+                        label: '翻转',
+                        isSpinning: rtcState.isFlipping,
+                        onTap: () => unawaited(rtcController.flipCamera()),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _CallHangupButton extends StatelessWidget {
+  final ValueNotifier<bool> isChatInputVisible;
+  final VoidCallback onTap;
+
+  const _CallHangupButton({
+    required this.isChatInputVisible,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final safeBottom = MediaQuery.paddingOf(context).bottom;
+    return ValueListenableBuilder<bool>(
+      valueListenable: isChatInputVisible,
+      builder: (context, visible, _) {
+        return Positioned(
+          left: 0,
+          right: 0,
+          bottom: safeBottom + 116,
+          child: Opacity(
+            opacity: visible ? 0 : 1,
+            child: IgnorePointer(
+              ignoring: visible,
+              child: Center(
+                child: GestureDetector(
+                  onTap: onTap,
+                  child: Container(
+                    width: 62,
+                    height: 62,
+                    decoration: const BoxDecoration(
+                      color: AppTheme.errorColor,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.call_end,
+                      color: Colors.white,
+                      size: 30,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _CallChatOverlayLayer extends StatelessWidget {
+  final ValueNotifier<bool> chatInputVisible;
+  final ValueNotifier<double> keyboardInset;
+  final ValueNotifier<int> revision;
+  final bool Function() hasMessages;
+  final Widget Function() buildMessageOverlay;
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final Future<void> Function() onSend;
+  final VoidCallback onClose;
+  final double bottomSpacing;
+
+  const _CallChatOverlayLayer({
+    required this.chatInputVisible,
+    required this.keyboardInset,
+    required this.revision,
+    required this.hasMessages,
+    required this.buildMessageOverlay,
+    required this.controller,
+    required this.focusNode,
+    required this.onSend,
+    required this.onClose,
+    required this.bottomSpacing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      ignoring: false,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ValueListenableBuilder<int>(
+            valueListenable: revision,
+            builder: (context, _, child) {
+              if (!hasMessages()) {
+                return const SizedBox.shrink();
+              }
+              return buildMessageOverlay();
+            },
+          ),
+          _CallChatInputOverlay(
+            chatInputVisible: chatInputVisible,
+            keyboardInset: keyboardInset,
+            controller: controller,
+            focusNode: focusNode,
+            onSend: onSend,
+            onClose: onClose,
+            bottomSpacing: bottomSpacing,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CallChatInputOverlay extends StatelessWidget {
+  final ValueNotifier<bool> chatInputVisible;
+  final ValueNotifier<double> keyboardInset;
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final Future<void> Function() onSend;
+  final VoidCallback onClose;
+  final double bottomSpacing;
+
+  const _CallChatInputOverlay({
+    required this.chatInputVisible,
+    required this.keyboardInset,
+    required this.controller,
+    required this.focusNode,
+    required this.onSend,
+    required this.onClose,
+    required this.bottomSpacing,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: chatInputVisible,
+      builder: (context, isInputVisible, _) {
+        return ValueListenableBuilder<double>(
+          valueListenable: keyboardInset,
+          builder: (context, keyboardBottom, _) {
+            final paddingBottom = MediaQuery.paddingOf(context).bottom;
+            final bottomInset = keyboardBottom > 0
+                ? keyboardBottom
+                : (paddingBottom + bottomSpacing);
+            return Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: IgnorePointer(
+                ignoring: !isInputVisible,
+                child: Opacity(
+                  opacity: isInputVisible ? 1 : 0,
+                  child: Padding(
+                    padding: EdgeInsets.only(bottom: bottomInset),
+                    child: _KeyboardAwareChatInputBar(
+                      controller: controller,
+                      focusNode: focusNode,
+                      onSend: onSend,
+                      onClose: onClose,
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _CallDurationText extends ConsumerWidget {
+  final int callId;
+  final String Function(Duration) formatDuration;
+  final TextStyle style;
+
+  const _CallDurationText({
+    required this.callId,
+    required this.formatDuration,
+    required this.style,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final callDuration = ref.watch(
+      callSessionProvider(callId).select((state) => state.callDuration),
+    );
+    return Text(formatDuration(callDuration), style: style);
   }
 }
 
@@ -1496,8 +1778,7 @@ class _ControlButton extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          AnimatedContainer(
-            duration: Duration.zero,
+          Container(
             width: 50,
             height: 50,
             decoration: BoxDecoration(

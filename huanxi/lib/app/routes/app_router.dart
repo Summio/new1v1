@@ -13,6 +13,8 @@ import '../../modules/call/call_room_page.dart';
 import '../../modules/call/call_outgoing_page.dart';
 import '../../modules/call/incoming_call_page.dart';
 import '../../modules/profile/recharge_page.dart';
+import '../../modules/profile/coin_transactions_page.dart';
+import '../../modules/profile/diamond_transactions_page.dart';
 import '../../modules/profile/edit_profile_page.dart';
 import '../../modules/settings/settings_page.dart';
 import '../../modules/settings/agreement_page.dart';
@@ -24,7 +26,6 @@ import '../../modules/home/my_moments_page.dart';
 import '../../modules/home/publish_moment_page.dart';
 import '../../modules/home/anchor_detail_page.dart';
 import '../../modules/home/user_search_page.dart';
-import '../../modules/home/wallet_page.dart';
 import '../../modules/home/call_page.dart';
 import '../../app/providers/anchor_provider.dart';
 import '../../core/storage/storage.dart';
@@ -41,8 +42,9 @@ class AppRoutes {
   static const String userSearch = '/search';
   static const String profile = '/profile';
   static const String recharge = '/profile/recharge';
+  static const String coinTransactions = '/profile/recharge/transactions';
+  static const String diamondTransactions = '/profile/diamond/transactions';
   static const String callHistory = '/profile/call-history';
-  static const String wallet = '/wallet';
   static const String editProfile = '/profile/edit';
   static const String settings = '/settings';
   static const String settingsAgreement = '/settings/agreement';
@@ -199,8 +201,12 @@ final appRouter = GoRouter(
       builder: (context, state) => const RechargePage(),
     ),
     GoRoute(
-      path: AppRoutes.wallet,
-      builder: (context, state) => const WalletPage(),
+      path: AppRoutes.coinTransactions,
+      builder: (context, state) => const CoinTransactionsPage(),
+    ),
+    GoRoute(
+      path: AppRoutes.diamondTransactions,
+      builder: (context, state) => const DiamondTransactionsPage(),
     ),
     GoRoute(
       path: AppRoutes.editProfile,

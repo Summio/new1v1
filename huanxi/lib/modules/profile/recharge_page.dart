@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/providers/auth_provider.dart';
+import '../../app/routes/app_router.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/dio_client.dart';
 import 'package:huanxi/core/utils/app_toast.dart';
@@ -131,7 +133,13 @@ class _RechargePageState extends ConsumerState<RechargePage> {
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         backgroundColor: AppTheme.surfaceColor,
-        title: const Text('我的钱包'),
+        title: const Text('充值'),
+        actions: [
+          TextButton(
+            onPressed: () => context.push(AppRoutes.coinTransactions),
+            child: const Text('明细'),
+          ),
+        ],
       ),
       body: Column(
         children: [

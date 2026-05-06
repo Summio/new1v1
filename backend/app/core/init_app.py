@@ -67,6 +67,17 @@ def build_operation_children(parent_id: int) -> list[Menu]:
             component="/operation/gift",
             keepalive=False,
         ),
+        Menu(
+            menu_type=MenuType.MENU,
+            name="充值管理",
+            path="recharge",
+            order=4,
+            parent_id=parent_id,
+            icon="material-symbols:account-balance-wallet-outline-rounded",
+            is_hidden=False,
+            component="/operation/recharge",
+            keepalive=False,
+        ),
     ]
 
 
@@ -323,7 +334,7 @@ async def init_roles():
 
     # 兼容存量环境：为所有历史角色补齐运营中心菜单与通话记录查询权限（幂等）
     all_roles = await Role.all()
-    operation_menus = await Menu.filter(path__in=["/operation", "app-user", "call-record", "gift"]).all()
+    operation_menus = await Menu.filter(path__in=["/operation", "app-user", "call-record", "gift", "recharge"]).all()
     if all_roles and operation_menus:
         for role in all_roles:
             await role.menus.add(*operation_menus)
@@ -336,6 +347,14 @@ async def init_roles():
     if gift_list_api and all_roles:
         for role in all_roles:
             await role.apis.add(gift_list_api)
+    recharge_list_api = await Api.filter(method="GET", path="/api/v1/recharge/list").first()
+    if recharge_list_api and all_roles:
+        for role in all_roles:
+            await role.apis.add(recharge_list_api)
+    recharge_review_api = await Api.filter(method="POST", path="/api/v1/recharge/review").first()
+    if recharge_review_api and all_roles:
+        for role in all_roles:
+            await role.apis.add(recharge_review_api)
 
     # 兼容存量环境：确保管理员角色始终拥有全部菜单与API（幂等）
     admin_role = await Role.filter(name="管理员").first()

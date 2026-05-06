@@ -229,46 +229,55 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
     offset = max(0, (page - 1) * page_size)
 
     # P-2 修复：UNION ALL 合并所有表，单次 DB 查询 + ORDER BY 做分页，消除多次查询和内存排序
-    from tortoise import Tortoise
+
+    # 不依赖硬编码别名（如 default），直接使用模型绑定的实际连接
+    conn = RechargeOrder._meta.db
+    if conn is None:
+        return Fail(code=500, msg="数据库连接未初始化")
+
+    # 兼容不同驱动参数占位符（MySQL: %s，SQLite: ?）
+    placeholder = "%s" if "mysql" in conn.__class__.__module__.lower() else "?"
 
     union_parts = []
     base_params: list = []
 
     # recharge
-    if type in ("all", "recharge"):
+    if type in ("all", "recharge", "coins"):
         union_parts.append(
-            "SELECT id, 'recharge' AS rec_type, amount, created_at, 1 AS is_income "
-            "FROM recharge_orders WHERE user_id = ? AND status = 'paid'"
+            f"SELECT id, 'recharge' AS rec_type, amount, created_at, 1 AS is_income "
+            f"FROM recharge_order WHERE user_id = {placeholder} AND status = 'paid'"
         )
-        base_params.extend([user_id, "paid"])
+        base_params.append(user_id)
 
     # call
-    if type in ("all", "call"):
+    if type in ("all", "call", "coins"):
         union_parts.append(
-            "SELECT id, 'call' AS rec_type, COALESCE(total_fee, 0) AS amount, created_at, 0 AS is_income "
-            "FROM call_records WHERE caller_id = ?"
+            f"SELECT id, 'call' AS rec_type, COALESCE(total_fee, 0) AS amount, created_at, 0 AS is_income "
+            f"FROM call_record WHERE caller_id = {placeholder}"
         )
         base_params.append(user_id)
 
-    # gift sent
-    if type in ("all", "gift"):
+    # gift sent (coins expense)
+    if type in ("all", "gift", "coins"):
         union_parts.append(
-            "SELECT id, 'gift' AS rec_type, total_price AS amount, created_at, 0 AS is_income "
-            "FROM gift_records WHERE sender_id = ?"
+            f"SELECT id, 'gift' AS rec_type, total_price AS amount, created_at, 0 AS is_income "
+            f"FROM gift_record WHERE sender_id = {placeholder}"
         )
         base_params.append(user_id)
-        if type == "all":
-            union_parts.append(
-                "SELECT id, 'gift' AS rec_type, anchor_income_diamonds AS amount, created_at, 1 AS is_income "
-                "FROM gift_records WHERE receiver_id = ?"
-            )
-            base_params.append(user_id)
+
+    # gift receive (diamonds income)
+    if type in ("all", "diamonds"):
+        union_parts.append(
+            f"SELECT id, 'gift' AS rec_type, anchor_income_diamonds AS amount, created_at, 1 AS is_income "
+            f"FROM gift_record WHERE receiver_id = {placeholder}"
+        )
+        base_params.append(user_id)
 
     # withdraw
-    if type in ("all", "withdraw"):
+    if type in ("all", "withdraw", "diamonds"):
         union_parts.append(
-            "SELECT id, 'withdraw' AS rec_type, amount, created_at, 0 AS is_income "
-            "FROM withdraw_applies WHERE user_id = ?"
+            f"SELECT id, 'withdraw' AS rec_type, amount, created_at, 0 AS is_income "
+            f"FROM withdraw_apply WHERE user_id = {placeholder}"
         )
         base_params.append(user_id)
 
@@ -289,7 +298,7 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
         SELECT id, rec_type, amount, created_at, is_income FROM (
             {inner_sql}
             ORDER BY created_at DESC
-            LIMIT ? OFFSET ?
+            LIMIT {placeholder} OFFSET {placeholder}
         ) AS t
     """
     query_params = base_params + [inner_limit, inner_offset]
@@ -298,22 +307,55 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
     count_sql = f"SELECT COUNT(*) AS cnt FROM ({inner_sql}) AS cnt_tbl"
     count_params = list(base_params)
 
-    conn = Tortoise.get_connection("default")
-    count_row = await conn.execute_query(count_sql, count_params)
-    total = count_row.rows[0][0] if count_row.rows else 0
+    def _extract_rows(query_result):
+        # MySQL 常见返回: (rowcount, rows)；部分驱动返回带 .rows 的对象
+        if isinstance(query_result, tuple):
+            if len(query_result) >= 2 and isinstance(query_result[1], (list, tuple)):
+                return query_result[1]
+            if len(query_result) == 1 and isinstance(query_result[0], (list, tuple)):
+                return query_result[0]
+            return []
+        rows_attr = getattr(query_result, "rows", None)
+        if rows_attr is not None:
+            return rows_attr
+        if isinstance(query_result, list):
+            return query_result
+        return []
 
-    rows = await conn.execute_query(full_sql, query_params)
+    count_result = await conn.execute_query(count_sql, count_params)
+    count_rows = _extract_rows(count_result)
+    total = 0
+    if count_rows:
+        first_row = count_rows[0]
+        if isinstance(first_row, dict):
+            total = int(first_row.get("cnt") or 0)
+        elif isinstance(first_row, (list, tuple)):
+            total = int(first_row[0]) if first_row else 0
+
+    query_result = await conn.execute_query(full_sql, query_params)
+    rows = _extract_rows(query_result)
     records = []
-    for row in rows.rows:
-        rec_id, rec_type, amount, created_at, is_income = row
+    for row in rows:
+        if isinstance(row, dict):
+            rec_id = row.get("id")
+            rec_type = row.get("rec_type")
+            amount = row.get("amount")
+            created_at = row.get("created_at")
+            is_income = row.get("is_income")
+        else:
+            rec_id, rec_type, amount, created_at, is_income = row
         title_map = {"recharge": "充值", "call": "通话消费", "gift": "收到礼物" if is_income else "送礼物", "withdraw": "提现申请"}
+        if hasattr(created_at, "strftime"):
+            created_at_text = created_at.strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            created_at_text = str(created_at) if created_at else ""
         records.append(TransactionRecord(
             id=str(rec_id),
-            type=rec_type,
+            type=str(rec_type or ""),
             title=title_map.get(rec_type, rec_type),
             amount=int(amount) if amount else 0,
             is_income=bool(is_income),
-            created_at=created_at.strftime("%Y-%m-%d %H:%M:%S") if created_at else "",
+            created_at=created_at_text,
         ))
 
     has_more = total > offset + page_size

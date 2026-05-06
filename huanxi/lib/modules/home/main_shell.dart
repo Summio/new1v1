@@ -57,8 +57,8 @@ class _MainShellState extends ConsumerState<MainShell>
   StreamSubscription<WsEvent>? _wsSubscription;
 
   bool _shouldGuardIncomingRouteByRole() {
-    // 关键：来电互斥保护仅用于非主播场景，主播来电不应被该标记阻断。
-    return ref.read(authProvider).appRole != 'anchor';
+    // 与主播策略保持一致：不按角色做来电路由互斥拦截。
+    return false;
   }
 
   void _log(String message) {
@@ -284,7 +284,7 @@ class _MainShellState extends ConsumerState<MainShell>
 
   void _handleWsIncomingCall(Map<String, dynamic> data) {
     final auth = ref.read(authProvider);
-    if (!auth.isLoggedIn || auth.appRole != 'anchor') {
+    if (!auth.isLoggedIn) {
       return;
     }
     try {

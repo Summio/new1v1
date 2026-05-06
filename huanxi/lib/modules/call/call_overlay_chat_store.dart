@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 enum CallOverlayMessageStatus { sending, sent, failed }
 
 class CallOverlayMessage {
@@ -51,11 +53,16 @@ class CallOverlayChatStore {
 
   final int maxMessages;
   final List<CallOverlayMessage> _messages = <CallOverlayMessage>[];
+  final ValueNotifier<int> revision = ValueNotifier<int>(0);
 
   List<CallOverlayMessage> get messages => List.unmodifiable(_messages);
 
   void clear() {
+    if (_messages.isEmpty) {
+      return;
+    }
     _messages.clear();
+    _markChanged();
   }
 
   void setInitialMessages(List<CallOverlayMessage> items) {
@@ -63,6 +70,7 @@ class CallOverlayChatStore {
       ..clear()
       ..addAll(items);
     _trimToLimit();
+    _markChanged();
   }
 
   void addLocalSending({
@@ -86,6 +94,7 @@ class CallOverlayChatStore {
       ),
     );
     _trimToLimit();
+    _markChanged();
   }
 
   void markSendSuccess({
@@ -104,6 +113,7 @@ class CallOverlayChatStore {
         status: CallOverlayMessageStatus.sent,
       );
       _trimToLimit();
+      _markChanged();
       return;
     }
   }
@@ -115,6 +125,7 @@ class CallOverlayChatStore {
         continue;
       }
       _messages[i] = item.copyWith(status: CallOverlayMessageStatus.failed);
+      _markChanged();
       return;
     }
   }
@@ -151,6 +162,15 @@ class CallOverlayChatStore {
       ),
     );
     _trimToLimit();
+    _markChanged();
+  }
+
+  void dispose() {
+    revision.dispose();
+  }
+
+  void _markChanged() {
+    revision.value += 1;
   }
 
   void _trimToLimit() {

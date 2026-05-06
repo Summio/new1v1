@@ -181,6 +181,23 @@ class RechargeCreateOut(BaseModel):
     msg: str = "订单创建成功"
 
 
+class RechargeReviewIn(BaseModel):
+    order_id: int = Field(..., description="充值订单ID")
+    action: str = Field(..., description="操作：mark_paid（标记已支付）或 cancel（取消）")
+
+
+class RechargeListItem(BaseModel):
+    id: int
+    user_id: int
+    amount: int
+    order_no: str
+    status: str
+    pay_channel: str
+    created_at: Optional[datetime] = None
+    paid_at: Optional[datetime] = None
+    username: Optional[str] = None
+
+
 class WithdrawApplyIn(BaseModel):
     amount: int = Field(..., ge=100, le=50000, description="提现金额(分)，最低1元，最高500元")
     bank_name: str = Field(..., description="银行名称")
