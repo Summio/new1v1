@@ -62,12 +62,11 @@ class _RechargePageState extends ConsumerState<RechargePage> {
         final amount = _toInt(item['amount'] ?? item['money']);
         final coins = _toInt(item['coins'] ?? item['token_amount']);
         if (amount <= 0 || coins <= 0) continue;
-        final label = item['label']?.toString() ?? '${(amount / 100).toStringAsFixed(2)}元';
         parsed.add({
           'amount': amount,
           'coins': coins,
-          'label': label,
           'tag': item['tag']?.toString(),
+          'tag_color': item['tag_color']?.toString(),
         });
       }
 
@@ -100,6 +99,20 @@ class _RechargePageState extends ConsumerState<RechargePage> {
     if (value is num) return value.toInt();
     if (value is String) return int.tryParse(value.trim()) ?? 0;
     return 0;
+  }
+
+  Color _parseColor(String? colorStr) {
+    if (colorStr == null || colorStr.isEmpty) {
+      return const Color(0xFFFF5722); // 默认颜色
+    }
+    try {
+      // 移除 # 前缀
+      final hex = colorStr.replaceFirst('#', '');
+      // 解析为整数并添加完全不透明的 alpha 通道
+      return Color(int.parse('FF$hex', radix: 16));
+    } catch (e) {
+      return const Color(0xFFFF5722); // 解析失败时使用默认颜色
+    }
   }
 
   Future<void> _submitRecharge() async {
@@ -279,7 +292,7 @@ class _RechargePageState extends ConsumerState<RechargePage> {
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
                                       Text(
-                                        pkg['label']?.toString() ?? '',
+                                        '${(pkg['amount'] / 100).toStringAsFixed(2)}元',
                                         style: TextStyle(
                                           fontSize: 18,
                                           fontWeight: FontWeight.bold,
@@ -309,14 +322,7 @@ class _RechargePageState extends ConsumerState<RechargePage> {
                                         vertical: 1,
                                       ),
                                       decoration: BoxDecoration(
-                                        gradient: pkg['tag'] == '推荐'
-                                            ? AppTheme.primaryGradient
-                                            : const LinearGradient(
-                                                colors: [
-                                                  Color(0xFFFFB74D),
-                                                  Color(0xFFFF9800),
-                                                ],
-                                              ),
+                                        color: _parseColor(pkg['tag_color']?.toString()),
                                         borderRadius: BorderRadius.circular(4),
                                       ),
                                       child: Text(
