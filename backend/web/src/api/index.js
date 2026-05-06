@@ -1,4 +1,5 @@
 import { request } from '@/utils'
+import systemApi from './system'
 
 export default {
   login: (data) => request.post('/base/access_token', data, { noNeedToken: true }),
@@ -37,6 +38,9 @@ export default {
       params,
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
+  // recharge manage
+  getRechargeList: (params = {}) => request.get('/recharge/list', { params }),
+  reviewRechargeOrder: (data = {}) => request.post('/recharge/review', data),
   // role
   getRoleList: (params = {}) => request.get('/role/list', { params }),
   createRole: (data = {}) => request.post('/role/create', data),
@@ -67,4 +71,6 @@ export default {
   createSystemConfig: (data = {}) => request.post('/system_config/create', data),
   updateSystemConfig: (data = {}) => request.post('/system_config/update', data),
   deleteSystemConfig: (params = {}) => request.delete('/system_config/delete', { params }),
+  // system - recharge config
+  ...systemApi,
 }
