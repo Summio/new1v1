@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
-@router.get("", summary="获取充值配置", response_model=Success)
+@router.get("", summary="获取充值配置")
 async def get_recharge_config():
     """获取当前充值配置"""
     config_value = await SystemConfig.get_value("recharge_packages", "[]")
@@ -27,7 +27,7 @@ async def get_recharge_config():
     return Success(data={"packages": [p.model_dump() for p in packages]})
 
 
-@router.put("", summary="更新充值配置", response_model=Success)
+@router.put("", summary="更新充值配置")
 async def update_recharge_config(config_in: RechargeConfigIn):
     """更新充值配置"""
     try:

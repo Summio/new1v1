@@ -1,23 +1,23 @@
-from .system_config import system_config_router, system_config_spec_router
-from .withdraw import router as withdraw_router
-from .recharge import router as recharge_router
-from .apis.system import system_router
 from fastapi import APIRouter
 
 from app.core.dependency import DependPermission
+from app.websocket.router import router as ws_router
 
-from .app import app_router
 from .apis import apis_router
+from .apis.system import system_router
+from .app import app_router
+from .app_users import app_users_router
 from .auditlog import auditlog_router
 from .base import base_router
-from .depts import depts_router
-from .menus import menus_router
-from .roles import roles_router
-from .users import users_router
-from .app_users import app_users_router
 from .call_records import call_records_router
+from .depts import depts_router
 from .gift import gift_router
-from app.websocket.router import router as ws_router
+from .menus import menus_router
+from .recharge import router as recharge_router
+from .roles import roles_router
+from .system_config import system_config_router, system_config_spec_router
+from .users import users_router
+from .withdraw import router as withdraw_router
 
 v1_router = APIRouter()
 
