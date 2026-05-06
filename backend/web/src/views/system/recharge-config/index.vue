@@ -1,9 +1,8 @@
 <script setup>
 import { h, onMounted, ref } from 'vue'
-import { NButton, NInput, NInputNumber, NPopconfirm, NSpace, NTag, useMessage } from 'naive-ui'
+import { NButton, NDataTable, NInput, NInputNumber, NPopconfirm, NSpace, NTag, useMessage } from 'naive-ui'
 
 import CommonPage from '@/components/page/CommonPage.vue'
-import CrudTable from '@/components/table/CrudTable.vue'
 import api from '@/api'
 
 defineOptions({ name: '充值配置' })
@@ -320,12 +319,13 @@ const columns = [
       </NSpace>
     </template>
 
-    <CrudTable
-      ref="$table"
+    <NDataTable
       :columns="columns"
       :data="packages"
       :loading="loading"
       :pagination="false"
+      :bordered="true"
+      :single-line="false"
     />
   </CommonPage>
 </template>
