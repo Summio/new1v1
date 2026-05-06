@@ -1,6 +1,6 @@
 <script setup>
 import { h, onMounted, ref } from 'vue'
-import { NButton, NDataTable, NInput, NInputNumber, NPopconfirm, NSpace, NTag, useMessage } from 'naive-ui'
+import { NButton, NColorPicker, NDataTable, NInput, NInputNumber, NPopconfirm, NSpace, NTag, useMessage } from 'naive-ui'
 
 import CommonPage from '@/components/page/CommonPage.vue'
 import api from '@/api'
@@ -26,8 +26,8 @@ async function loadConfig() {
         key: `pkg-${index}`,
         amount: (pkg.amount / 100).toFixed(2),
         coins: pkg.coins,
-        label: pkg.label || '',
         tag: pkg.tag || '',
+        tag_color: pkg.tag_color || '#FF5722',
         editable: false,
       }))
     }
@@ -50,8 +50,8 @@ function addPackage() {
     key: newKey,
     amount: '6.00',
     coins: 600,
-    label: '',
     tag: '',
+    tag_color: '#FF5722',
     editable: true,
   })
   editingKey.value = newKey
@@ -75,14 +75,6 @@ async function handleSaveRow(row) {
     message.error('金币数必须是大于 0 的整数')
     return
   }
-  if (!row.label || row.label.trim() === '') {
-    message.error('标签不能为空')
-    return
-  }
-  if (row.label.length > 20) {
-    message.error('标签最多20个字符')
-    return
-  }
   if (row.tag && row.tag.length > 10) {
     message.error('角标最多10个字符')
     return
@@ -96,7 +88,7 @@ async function handleSaveRow(row) {
 }
 
 function handleCancel(row) {
-  if (!row.amount || !row.coins || !row.label) {
+  if (!row.amount || !row.coins) {
     // 新增的空行，直接删除
     const index = packages.value.findIndex(p => p.key === row.key)
     if (index > -1) {
@@ -147,8 +139,8 @@ async function saveToBackend() {
       packages: packages.value.map((pkg) => ({
         amount: Math.round(Number(pkg.amount) * 100),
         coins: Number(pkg.coins),
-        label: pkg.label.trim(),
         tag: pkg.tag ? pkg.tag.trim() : '',
+        tag_color: pkg.tag_color || '#FF5722',
       })),
     })
     message.success('保存成功')
@@ -220,26 +212,7 @@ const columns = [
     },
   },
   {
-    title: '标签',
-    key: 'label',
-    width: 200,
-    render(row) {
-      if (row.editable) {
-        return h(NInput, {
-          value: row.label,
-          placeholder: '例如: 6元、30元',
-          maxlength: 20,
-          showCount: true,
-          onUpdateValue: (val) => {
-            row.label = val
-          },
-        })
-      }
-      return row.label || '-'
-    },
-  },
-  {
-    title: '角标',
+    title: '角标文字',
     key: 'tag',
     width: 150,
     render(row) {
@@ -254,7 +227,46 @@ const columns = [
           },
         })
       }
-      return row.tag ? h(NTag, { type: 'success', size: 'small' }, { default: () => row.tag }) : '-'
+      return row.tag ? h(NTag, {
+        type: 'success',
+        size: 'small',
+        color: { color: row.tag_color || '#FF5722', textColor: '#fff' }
+      }, { default: () => row.tag }) : '-'
+    },
+  },
+  {
+    title: '角标颜色',
+    key: 'tag_color',
+    width: 150,
+    render(row) {
+      if (row.editable) {
+        return h(NColorPicker, {
+          value: row.tag_color,
+          showAlpha: false,
+          modes: ['hex'],
+          onUpdateValue: (val) => {
+            row.tag_color = val
+          },
+        })
+      }
+      return h('div', {
+        style: {
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+        },
+      }, [
+        h('div', {
+          style: {
+            width: '20px',
+            height: '20px',
+            borderRadius: '4px',
+            backgroundColor: row.tag_color || '#FF5722',
+            border: '1px solid #e0e0e6',
+          },
+        }),
+        h('span', {}, row.tag_color || '#FF5722'),
+      ])
     },
   },
   {
