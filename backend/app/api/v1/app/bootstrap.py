@@ -1,3 +1,5 @@
+import json
+
 from fastapi import APIRouter
 
 from app.schemas.base import Success
@@ -45,6 +47,15 @@ async def get_app_bootstrap():
     if call_reject_pair_protect_seconds < 0:
         call_reject_pair_protect_seconds = 0
 
+    # 读取充值套餐配置
+    recharge_packages_raw = config_map.get("recharge_packages") or "[]"
+    try:
+        recharge_packages = json.loads(recharge_packages_raw)
+        if not isinstance(recharge_packages, list):
+            recharge_packages = []
+    except (json.JSONDecodeError, ValueError):
+        recharge_packages = []
+
     return Success(
         data={
             "token_names": {
@@ -62,5 +73,6 @@ async def get_app_bootstrap():
                 "reject_inbound_protect_seconds": call_reject_inbound_protect_seconds,
                 "reject_pair_protect_seconds": call_reject_pair_protect_seconds,
             },
+            "recharge_packages": recharge_packages,
         }
     )
