@@ -1,7 +1,7 @@
 # AGENTS.md
 
 本文件用于指导在本仓库中执行开发任务的智能体与协作者。
-最后更新：2026-04-24
+最后更新：2026-05-07
 
 ## 项目概述
 
@@ -15,7 +15,7 @@
 
 ## 当前项目状态（以仓库现状为准）
 
-- 核心链路已具备：登录、推荐、速配、呼叫、通话心跳计费、礼物、钱包、提现申请。
+- 核心链路已具备：登录、推荐、速配、呼叫、通话心跳计费、礼物、钱包、提现申请、充值配置。
 - Flutter 端基础框架已完成：Riverpod + Dio + go_router + 本地存储。
 - 后端 App API 已实现主要业务接口，管理端 RBAC 能力可用。
 - 持续完善方向：
@@ -126,6 +126,42 @@ App 端接口默认使用 `Authorization: Bearer <token>`。
 - 生产配置不得依赖默认弱口令，敏感配置必须走环境变量。
 - 新增功能时，同步评估对通话计费、鉴权、余额扣减链路的影响。
 - 开发原则：所有能够由后端实现或配置的信息，均应从后端获取或在后端实现；前端仅做展示与交互，不固化业务配置与业务规则。
+
+## 功能模块说明
+
+### 充值配置系统
+
+运营人员可通过管理后台动态配置充值套餐，配置通过后端接口下发给客户端。
+
+**核心文件：**
+- 后端 Schema：`backend/app/schemas/system.py`
+- 后端接口：`backend/app/api/v1/apis/system/recharge_config.py`
+- 管理后台页面：`backend/web/src/views/system/recharge-config/index.vue`
+- 数据存储：`system_config` 表，配置项 `recharge_packages`（JSON 格式）
+
+**接口说明：**
+- `GET /api/v1/apis/system/recharge-config`：获取充值配置（需管理员权限）
+- `PUT /api/v1/apis/system/recharge-config`：更新充值配置（需管理员权限）
+- `GET /api/v1/app/init/bootstrap`：客户端启动接口，返回 `recharge_packages` 字段
+
+**数据格式：**
+```json
+{
+  "packages": [
+    {
+      "amount": 600,
+      "coins": 600,
+      "label": "6元",
+      "tag": "尝鲜"
+    }
+  ]
+}
+```
+
+**注意事项：**
+- `amount` 和 `coins` 单位均为分（int），前端显示时需转换为元
+- 配置变更后 Redis 缓存自动清除，60秒内生效
+- 客户端应实现默认套餐兜底，防止配置异常时无法充值
 
 ## 任务执行建议
 
