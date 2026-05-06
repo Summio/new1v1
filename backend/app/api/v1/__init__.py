@@ -1,5 +1,7 @@
 from .system_config import system_config_router, system_config_spec_router
 from .withdraw import router as withdraw_router
+from .recharge import router as recharge_router
+from .apis.system import system_router
 from fastapi import APIRouter
 
 from app.core.dependency import DependPermission
@@ -34,3 +36,5 @@ v1_router.include_router(withdraw_router, prefix="/withdraw", dependencies=[Depe
 v1_router.include_router(app_users_router, prefix="/app_user", dependencies=[DependPermission])
 v1_router.include_router(call_records_router, prefix="/call_record", dependencies=[DependPermission])
 v1_router.include_router(gift_router, prefix="/gift", dependencies=[DependPermission])
+v1_router.include_router(recharge_router, prefix="/recharge", dependencies=[DependPermission])
+v1_router.include_router(system_router, prefix="/apis/system", dependencies=[DependPermission])
