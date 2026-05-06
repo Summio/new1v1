@@ -62,6 +62,39 @@ function handleEdit(row) {
   row.editable = true
 }
 
+async function handleSaveRow(row) {
+  // 验证当前行
+  const amountNum = Number(row.amount)
+  const coinsNum = Number(row.coins)
+
+  if (!amountNum || amountNum <= 0) {
+    message.error('金额必须大于 0')
+    return
+  }
+  if (!coinsNum || coinsNum <= 0 || !Number.isInteger(coinsNum)) {
+    message.error('金币数必须是大于 0 的整数')
+    return
+  }
+  if (!row.label || row.label.trim() === '') {
+    message.error('标签不能为空')
+    return
+  }
+  if (row.label.length > 20) {
+    message.error('标签最多20个字符')
+    return
+  }
+  if (row.tag && row.tag.length > 10) {
+    message.error('角标最多10个字符')
+    return
+  }
+
+  row.editable = false
+  editingKey.value = ''
+
+  // 自动保存到后端
+  await saveToBackend()
+}
+
 function handleCancel(row) {
   if (!row.amount || !row.coins || !row.label) {
     // 新增的空行，直接删除
@@ -76,60 +109,38 @@ function handleCancel(row) {
   editingKey.value = ''
 }
 
-function handleDelete(row) {
+async function handleDelete(row) {
   const index = packages.value.findIndex(p => p.key === row.key)
   if (index > -1) {
     packages.value.splice(index, 1)
+    // 自动保存
+    await saveToBackend()
   }
 }
 
-function moveUp(row) {
+async function moveUp(row) {
   const index = packages.value.findIndex(p => p.key === row.key)
   if (index > 0) {
     const temp = packages.value[index]
     packages.value[index] = packages.value[index - 1]
     packages.value[index - 1] = temp
+    // 自动保存
+    await saveToBackend()
   }
 }
 
-function moveDown(row) {
+async function moveDown(row) {
   const index = packages.value.findIndex(p => p.key === row.key)
   if (index < packages.value.length - 1) {
     const temp = packages.value[index]
     packages.value[index] = packages.value[index + 1]
     packages.value[index + 1] = temp
+    // 自动保存
+    await saveToBackend()
   }
 }
 
-async function handleSave() {
-  // 验证数据
-  for (let i = 0; i < packages.value.length; i++) {
-    const pkg = packages.value[i]
-    const amountNum = Number(pkg.amount)
-    const coinsNum = Number(pkg.coins)
-
-    if (!amountNum || amountNum <= 0) {
-      message.error(`第 ${i + 1} 个套餐的金额必须大于 0`)
-      return
-    }
-    if (!coinsNum || coinsNum <= 0 || !Number.isInteger(coinsNum)) {
-      message.error(`第 ${i + 1} 个套餐的金币数必须是大于 0 的整数`)
-      return
-    }
-    if (!pkg.label || pkg.label.trim() === '') {
-      message.error(`第 ${i + 1} 个套餐的标签不能为空`)
-      return
-    }
-    if (pkg.label.length > 20) {
-      message.error(`第 ${i + 1} 个套餐的标签最多20个字符`)
-      return
-    }
-    if (pkg.tag && pkg.tag.length > 10) {
-      message.error(`第 ${i + 1} 个套餐的角标最多10个字符`)
-      return
-    }
-  }
-
+async function saveToBackend() {
   loading.value = true
   try {
     await api.updateRechargeConfig({
@@ -140,17 +151,21 @@ async function handleSave() {
         tag: pkg.tag ? pkg.tag.trim() : '',
       })),
     })
-    message.success('保存成功，配置将在60秒内生效')
-    editingKey.value = ''
-    await loadConfig()
+    message.success('保存成功')
   }
   catch (error) {
     message.error(error?.message || '保存失败')
     console.error(error)
+    // 保存失败，重新加载
+    await loadConfig()
   }
   finally {
     loading.value = false
   }
+}
+
+async function handleSave() {
+  await saveToBackend()
 }
 
 const columns = [
@@ -255,11 +270,8 @@ const columns = [
             h(NButton, {
               size: 'small',
               type: 'primary',
-              onClick: () => {
-                row.editable = false
-                editingKey.value = ''
-              },
-            }, { default: () => '完成' }),
+              onClick: () => handleSaveRow(row),
+            }, { default: () => '保存' }),
             h(NButton, {
               size: 'small',
               onClick: () => handleCancel(row),
@@ -312,9 +324,6 @@ const columns = [
       <NSpace>
         <NButton type="primary" :disabled="editingKey !== ''" @click="addPackage">
           添加套餐
-        </NButton>
-        <NButton type="success" :loading="loading" :disabled="editingKey !== ''" @click="handleSave">
-          保存配置
         </NButton>
       </NSpace>
     </template>
