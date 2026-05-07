@@ -16,6 +16,7 @@ from app.schemas.app_api import (
 )
 from app.schemas.base import Fail, Success
 from app.core.redis import get_redis
+from app.services.gift_income_service import decimal_to_float_2
 from tortoise.expressions import F
 from tortoise.transactions import in_transaction
 
@@ -30,9 +31,9 @@ async def wallet_balance():
     token_names = await SystemConfig.get_all_as_dict()
     return Success(
         data=BalanceOut(
-            coins=app_user.coins,
-            diamonds=app_user.diamonds,
-            frozen_diamonds=app_user.frozen_diamonds,
+            coins=decimal_to_float_2(app_user.coins),
+            diamonds=decimal_to_float_2(app_user.diamonds),
+            frozen_diamonds=decimal_to_float_2(app_user.frozen_diamonds),
             coin_name=token_names.get("coin_name", "金币"),
             diamond_name=token_names.get("diamond_name", "钻石"),
         ).model_dump()
@@ -131,8 +132,8 @@ async def recharge_callback(order_no: str):
     if updated_user:
         asyncio.create_task(_ws_push_balance_update(
             user_id=int(order.user_id),
-            coins=int(updated_user.coins),
-            diamonds=int(updated_user.diamonds),
+            coins=decimal_to_float_2(updated_user.coins),
+            diamonds=decimal_to_float_2(updated_user.diamonds),
         ))
 
     return Success(data={"msg": "充值成功"})
@@ -213,8 +214,8 @@ async def withdraw_apply(req_in: WithdrawApplyIn):
 
     return Success(
         data=WithdrawApplyOut(
-            diamonds=final_diamonds,
-            frozen_diamonds=final_frozen,
+            diamonds=decimal_to_float_2(final_diamonds),
+            frozen_diamonds=decimal_to_float_2(final_frozen),
             msg="提现申请已提交，审核通过后到账",
         ).model_dump()
     )
@@ -244,23 +245,36 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
     # recharge
     if type in ("all", "recharge", "coins"):
         union_parts.append(
-            f"SELECT id, 'recharge' AS rec_type, amount, created_at, 1 AS is_income "
+            f"SELECT id, 'recharge' AS rec_type, amount, created_at, 1 AS is_income, "
+            f"NULL AS counterparty_user_id, '' AS gift_name "
             f"FROM recharge_order WHERE user_id = {placeholder} AND status = 'paid'"
         )
         base_params.append(user_id)
 
-    # call
+    # call expense (coins)
     if type in ("all", "call", "coins"):
         union_parts.append(
-            f"SELECT id, 'call' AS rec_type, COALESCE(total_fee, 0) AS amount, created_at, 0 AS is_income "
+            f"SELECT id, 'call' AS rec_type, COALESCE(total_fee, 0) AS amount, created_at, 0 AS is_income, "
+            f"callee_id AS counterparty_user_id, '' AS gift_name "
             f"FROM call_record WHERE caller_id = {placeholder}"
         )
+        base_params.append(user_id)
+
+    # call income (diamonds)
+    if type in ("all", "call", "diamonds"):
+        union_parts.append(
+            f"SELECT id, 'call' AS rec_type, COALESCE(anchor_income_diamonds, 0) AS amount, created_at, 1 AS is_income, "
+            f"CASE WHEN caller_id = {placeholder} THEN callee_id ELSE caller_id END AS counterparty_user_id, '' AS gift_name "
+            f"FROM call_record WHERE income_anchor_user_id = {placeholder} AND COALESCE(anchor_income_diamonds, 0) > 0"
+        )
+        base_params.append(user_id)
         base_params.append(user_id)
 
     # gift sent (coins expense)
     if type in ("all", "gift", "coins"):
         union_parts.append(
-            f"SELECT id, 'gift' AS rec_type, total_price AS amount, created_at, 0 AS is_income "
+            f"SELECT id, 'gift' AS rec_type, total_price AS amount, created_at, 0 AS is_income, "
+            f"receiver_id AS counterparty_user_id, gift_name AS gift_name "
             f"FROM gift_record WHERE sender_id = {placeholder}"
         )
         base_params.append(user_id)
@@ -268,7 +282,8 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
     # gift receive (diamonds income)
     if type in ("all", "diamonds"):
         union_parts.append(
-            f"SELECT id, 'gift' AS rec_type, anchor_income_diamonds AS amount, created_at, 1 AS is_income "
+            f"SELECT id, 'gift' AS rec_type, anchor_income_diamonds AS amount, created_at, 1 AS is_income, "
+            f"sender_id AS counterparty_user_id, gift_name AS gift_name "
             f"FROM gift_record WHERE receiver_id = {placeholder}"
         )
         base_params.append(user_id)
@@ -276,7 +291,8 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
     # im text sent (coins expense)
     if type in ("all", "im_text", "coins"):
         union_parts.append(
-            f"SELECT id, 'im_text' AS rec_type, price AS amount, created_at, 0 AS is_income "
+            f"SELECT id, 'im_text' AS rec_type, price AS amount, created_at, 0 AS is_income, "
+            f"receiver_id AS counterparty_user_id, '' AS gift_name "
             f"FROM im_text_message_charge_record WHERE sender_id = {placeholder} AND status = 'charged'"
         )
         base_params.append(user_id)
@@ -284,7 +300,8 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
     # im text receive (diamonds income)
     if type in ("all", "im_text", "diamonds"):
         union_parts.append(
-            f"SELECT id, 'im_text' AS rec_type, anchor_income_diamonds AS amount, created_at, 1 AS is_income "
+            f"SELECT id, 'im_text' AS rec_type, anchor_income_diamonds AS amount, created_at, 1 AS is_income, "
+            f"sender_id AS counterparty_user_id, '' AS gift_name "
             f"FROM im_text_message_charge_record WHERE receiver_id = {placeholder} "
             f"AND status = 'charged' AND anchor_income_diamonds > 0"
         )
@@ -293,7 +310,8 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
     # withdraw
     if type in ("all", "withdraw", "diamonds"):
         union_parts.append(
-            f"SELECT id, 'withdraw' AS rec_type, amount, created_at, 0 AS is_income "
+            f"SELECT id, 'withdraw' AS rec_type, amount, created_at, 0 AS is_income, "
+            f"NULL AS counterparty_user_id, '' AS gift_name "
             f"FROM withdraw_apply WHERE user_id = {placeholder}"
         )
         base_params.append(user_id)
@@ -312,7 +330,7 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
     if not isinstance(inner_offset, int) or inner_offset < 0:
         inner_offset = 0
     full_sql = f"""
-        SELECT id, rec_type, amount, created_at, is_income FROM (
+        SELECT id, rec_type, amount, created_at, is_income, counterparty_user_id, gift_name FROM (
             {inner_sql}
             ORDER BY created_at DESC
             LIMIT {placeholder} OFFSET {placeholder}
@@ -351,6 +369,21 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
 
     query_result = await conn.execute_query(full_sql, query_params)
     rows = _extract_rows(query_result)
+    counterparty_ids: set[int] = set()
+    for row in rows:
+        counterparty_id = row.get("counterparty_user_id") if isinstance(row, dict) else row[5]
+        if counterparty_id is None:
+            continue
+        try:
+            counterparty_ids.add(int(counterparty_id))
+        except (TypeError, ValueError):
+            continue
+
+    user_name_map: dict[int, str] = {}
+    if counterparty_ids:
+        users = await AppUser.filter(id__in=list(counterparty_ids)).values("id", "nickname")
+        user_name_map = {int(item["id"]): str(item.get("nickname") or "") for item in users}
+
     records = []
     for row in rows:
         if isinstance(row, dict):
@@ -359,12 +392,24 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
             amount = row.get("amount")
             created_at = row.get("created_at")
             is_income = row.get("is_income")
+            counterparty_id = row.get("counterparty_user_id")
+            gift_name = row.get("gift_name")
         else:
-            rec_id, rec_type, amount, created_at, is_income = row
+            rec_id, rec_type, amount, created_at, is_income, counterparty_id, gift_name = row
+
+        counterparty_name = ""
+        if counterparty_id is not None:
+            try:
+                counterparty_name = user_name_map.get(int(counterparty_id), "")
+            except (TypeError, ValueError):
+                counterparty_name = ""
+
         title_map = {
             "recharge": "充值",
-            "call": "通话消费",
-            "gift": "收到礼物" if is_income else "送礼物",
+            "call": "通话收益" if is_income else "通话消费",
+            "gift": (f"收到礼物·{gift_name}" if gift_name else "收到礼物")
+            if is_income
+            else (f"送礼物·{gift_name}" if gift_name else "送礼物"),
             "im_text": "文字聊天收益" if is_income else "文字聊天",
             "withdraw": "提现申请",
         }
@@ -376,9 +421,10 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
             id=str(rec_id),
             type=str(rec_type or ""),
             title=title_map.get(rec_type, rec_type),
-            amount=int(amount) if amount else 0,
+            amount=decimal_to_float_2(amount),
             is_income=bool(is_income),
             created_at=created_at_text,
+            counterparty_name=counterparty_name,
         ))
 
     has_more = total > offset + page_size
@@ -394,8 +440,8 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
 
 async def _ws_push_balance_update(
     user_id: int,
-    coins: int,
-    diamonds: int,
+    coins: float,
+    diamonds: float | str,
 ) -> None:
     try:
         from app.websocket import events as ws_events

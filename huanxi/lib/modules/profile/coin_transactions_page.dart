@@ -22,6 +22,8 @@ class _CoinTransactionsPageState extends ConsumerState<CoinTransactionsPage> {
   int _total = 0;
   int _filter = 0; // 0=all 1=income 2=expense
 
+  String _formatAmount(double value) => value.toStringAsFixed(2);
+
   @override
   void initState() {
     super.initState();
@@ -240,6 +242,14 @@ class _CoinTransactionsPageState extends ConsumerState<CoinTransactionsPage> {
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
+                                        '对方：${row.counterpartyName.isEmpty ? '-' : row.counterpartyName}',
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: AppTheme.textSecondary,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
                                         row.createdAt,
                                         style: const TextStyle(
                                           fontSize: 12,
@@ -250,7 +260,7 @@ class _CoinTransactionsPageState extends ConsumerState<CoinTransactionsPage> {
                                   ),
                                 ),
                                 Text(
-                                  '${row.isIncome ? '+' : '-'}${row.amount}',
+                                '${row.isIncome ? '+' : '-'}${_formatAmount(row.amount)}',
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
@@ -301,9 +311,10 @@ class _CoinRecord {
   final String id;
   final String type;
   final String title;
-  final int amount;
+  final double amount;
   final bool isIncome;
   final String createdAt;
+  final String counterpartyName;
 
   const _CoinRecord({
     required this.id,
@@ -312,23 +323,18 @@ class _CoinRecord {
     required this.amount,
     required this.isIncome,
     required this.createdAt,
+    required this.counterpartyName,
   });
 
   factory _CoinRecord.fromJson(Map<String, dynamic> json) {
-    int parseInt(dynamic value, {int fallback = 0}) {
-      if (value is int) return value;
-      if (value is num) return value.toInt();
-      if (value is String) return int.tryParse(value.trim()) ?? fallback;
-      return fallback;
-    }
-
     return _CoinRecord(
       id: (json['id'] ?? '').toString(),
       type: json['type'] as String? ?? '',
       title: json['title'] as String? ?? '',
-      amount: parseInt(json['amount']),
+      amount: (json['amount'] as num?)?.toDouble() ?? 0,
       isIncome: json['is_income'] as bool? ?? false,
       createdAt: json['created_at'] as String? ?? '',
+      counterpartyName: json['counterparty_name'] as String? ?? '',
     );
   }
 }

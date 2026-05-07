@@ -60,7 +60,7 @@ class DialingIn(BaseModel):
 
 class DialingOut(BaseModel):
     call_id: int
-    coins: int
+    coins: float
     can_call: bool
     callee_id: int
     callee_nickname: str
@@ -75,8 +75,8 @@ class CallEndIn(BaseModel):
     call_id: int = Field(..., description="通话记录ID")
 
 class CallEndOut(BaseModel):
-    total_fee: int
-    coins: int
+    total_fee: float
+    coins: float
     duration: int
     next_status: str = "ended"
     msg: str = "通话已结束"
@@ -155,17 +155,17 @@ class GiftSendOut(BaseModel):
     quantity: int = 1
     unit_price: int = 0
     total_price: int = 0
-    anchor_income_diamonds: int = 0
-    coins: int
+    anchor_income_diamonds: float = 0.0
+    coins: float
     msg: str = "发送成功"
 
 
 # ===== 钱包 =====
 
 class BalanceOut(BaseModel):
-    coins: int
-    diamonds: int
-    frozen_diamonds: int = 0
+    coins: float
+    diamonds: float
+    frozen_diamonds: float = 0.0
     coin_name: str = "金币"
     diamond_name: str = "钻石"
 
@@ -183,7 +183,7 @@ class RechargeCreateOut(BaseModel):
 
 class RechargeReviewIn(BaseModel):
     order_id: int = Field(..., description="充值订单ID")
-    action: str = Field(..., description="操作：mark_paid（标记已支付）或 cancel（取消）")
+    action: str = Field(..., description="操作：mark_paid（标记已支付）")
 
 
 class RechargeListItem(BaseModel):
@@ -206,8 +206,8 @@ class WithdrawApplyIn(BaseModel):
 
 
 class WithdrawApplyOut(BaseModel):
-    diamonds: int
-    frozen_diamonds: int = 0
+    diamonds: float
+    frozen_diamonds: float = 0.0
     msg: str = "申请已提交"
 
 
@@ -236,9 +236,10 @@ class TransactionRecord(BaseModel):
     id: str
     type: str  # recharge / call / gift / withdraw
     title: str
-    amount: int
+    amount: float
     is_income: bool
     created_at: str
+    counterparty_name: str = ""
 
 
 class TransactionListOut(BaseModel):
@@ -264,7 +265,7 @@ class IMTextChargeIn(BaseModel):
 class IMTextChargeOut(BaseModel):
     charged: bool = False
     price: int = 0
-    anchor_income_diamonds: int = 0
+    anchor_income_diamonds: float = 0.0
     coins: int = 0
     diamonds: int = 0
     receiver_user_id: int
