@@ -204,6 +204,7 @@ async def init_menus():
         keepalive=False,
         redirect="/system/user",
     )
+    await Menu.filter(path="im-text-billing", component="/system/im-text-billing").delete()
     system_children = [
         {
             "name": "用户管理",
@@ -229,13 +230,6 @@ async def init_menus():
             "order": 7,
             "icon": "material-symbols:settings-outline-rounded",
             "component": "/system/config",
-        },
-        {
-            "name": "文字聊天计费",
-            "path": "im-text-billing",
-            "order": 8,
-            "icon": "material-symbols:chat-outline-rounded",
-            "component": "/system/im-text-billing",
         },
         {
             "name": "提现配置",

@@ -131,14 +131,13 @@ def test_admin_user_bill_include_im_text_filter() -> None:
     assert '"biz_type": "im_text"' in content
 
 
-def test_admin_web_im_text_billing_page_exists() -> None:
+def test_admin_web_im_text_billing_page_removed() -> None:
     api_content = _read_backend_file("web/src/api/system.js")
-    page_content = _read_backend_file("web/src/views/system/im-text-billing/index.vue")
     menu_content = _read_backend_file("app/core/init_app.py")
+    page_path = Path("web/src/views/system/im-text-billing/index.vue")
 
-    assert "getIMTextBillingConfig" in api_content
-    assert "updateIMTextBillingConfig" in api_content
-    assert "文字聊天计费" in page_content
-    assert "NInputNumber" in page_content
-    assert "NSwitch" in page_content
-    assert 'component": "/system/im-text-billing"' in menu_content
+    assert "getIMTextBillingConfig" not in api_content
+    assert "updateIMTextBillingConfig" not in api_content
+    assert not page_path.exists()
+    assert 'Menu.filter(path="im-text-billing", component="/system/im-text-billing").delete()' in menu_content
+    assert 'component": "/system/im-text-billing"' not in menu_content
