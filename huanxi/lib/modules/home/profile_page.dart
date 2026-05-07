@@ -207,7 +207,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                   const SizedBox(height: 8),
                   GestureDetector(
                     onTap: () => context.push(AppRoutes.recharge),
-                    child: Text(authState.coins.toString(), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+                    child: Text(authState.coins.toStringAsFixed(2), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
@@ -219,8 +219,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                   Text('${tokenNames.diamondName}余额', style: const TextStyle(color: Colors.white70, fontSize: 13)),
                   const SizedBox(height: 8),
                   GestureDetector(
-                    onTap: () => context.push(AppRoutes.diamondTransactions),
-                    child: Text(authState.diamonds.toString(), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+                    onTap: () => context.push(AppRoutes.withdraw),
+                    child: Text(authState.diamonds.toStringAsFixed(2), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
@@ -245,7 +245,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                   const SizedBox(height: 8),
                   GestureDetector(
                     onTap: () => context.push(AppRoutes.recharge),
-                    child: Text(authState.coins.toString(), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+                    child: Text(authState.coins.toStringAsFixed(2), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),
@@ -257,8 +257,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                   Text('${tokenNames.diamondName}余额', style: const TextStyle(color: Colors.white70, fontSize: 13)),
                   const SizedBox(height: 8),
                   GestureDetector(
-                    onTap: () => context.push(AppRoutes.diamondTransactions),
-                    child: Text(authState.diamonds.toString(), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+                    onTap: () => context.push(AppRoutes.withdraw),
+                    child: Text(authState.diamonds.toStringAsFixed(2), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
                   ),
                 ],
               ),

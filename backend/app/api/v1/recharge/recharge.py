@@ -14,7 +14,7 @@ router = APIRouter()
 async def recharge_list(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(10, ge=1, le=100, description="每页数量"),
-    status: str = Query("", description="状态筛选：pending/paid/cancelled/refunded"),
+    status: str = Query("", description="状态筛选：pending/paid/refunded"),
     user_id: int = Query(None, description="用户ID"),
     order_no: str = Query("", description="订单号"),
     pay_channel: str = Query("", description="支付渠道 wx/alipay"),
@@ -72,33 +72,23 @@ async def recharge_list(
 @router.post("/review", summary="充值订单处理")
 async def recharge_review(req_in: RechargeReviewIn):
     action = req_in.action.strip().lower()
-    if action not in ("mark_paid", "cancel"):
-        return Fail(code=400, msg="action 必须为 mark_paid 或 cancel")
+    if action != "mark_paid":
+        return Fail(code=400, msg="action 必须为 mark_paid")
 
     async with in_transaction() as conn:
         order = await RechargeOrder.filter(id=req_in.order_id).using_db(conn).first()
         if not order:
             return Fail(code=404, msg="充值订单不存在")
 
-        if action == "mark_paid":
-            if order.status == "paid":
-                return Success(msg="订单已是已支付状态")
-            if order.status != "pending":
-                return Fail(code=400, msg=f"该订单状态为「{order.status}」，无法标记已支付")
-
-            await AppUser.filter(id=order.user_id).using_db(conn).update(
-                coins=F("coins") + order.amount,
-            )
-            order.status = "paid"
-            order.paid_at = now_local_naive()
-            await order.save(using_db=conn, update_fields=["status", "paid_at"])
-            return Success(msg="已标记为支付成功")
-
-        if order.status == "cancelled":
-            return Success(msg="订单已是已取消状态")
+        if order.status == "paid":
+            return Success(msg="订单已是已支付状态")
         if order.status != "pending":
-            return Fail(code=400, msg=f"该订单状态为「{order.status}」，无法取消")
+            return Fail(code=400, msg=f"该订单状态为「{order.status}」，无法标记已支付")
 
-        order.status = "cancelled"
-        await order.save(using_db=conn, update_fields=["status"])
-        return Success(msg="已取消订单")
+        await AppUser.filter(id=order.user_id).using_db(conn).update(
+            coins=F("coins") + order.amount,
+        )
+        order.status = "paid"
+        order.paid_at = now_local_naive()
+        await order.save(using_db=conn, update_fields=["status", "paid_at"])
+        return Success(msg="已标记为支付成功")

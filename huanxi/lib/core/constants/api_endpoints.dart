@@ -71,6 +71,10 @@ class ApiEndpoints {
 
   /// 申请提现
   static const String withdrawApply = 'app/withdraw/apply';
+  /// 获取提现账户
+  static const String withdrawAccount = 'app/withdraw/account';
+  /// 上传提现收款码
+  static const String withdrawUploadQrCode = 'app/withdraw/upload-qr-code';
 
   // ========== 初始化模块 ==========
   /// 获取 App 初始化配置（第三方 SDK + 通用配置）

@@ -42,3 +42,9 @@ class UserUpdate(BaseModel):
 class UpdatePassword(BaseModel):
     old_password: str = Field(description="旧密码")
     new_password: str = Field(description="新密码")
+
+
+class UserProfileUpdate(BaseModel):
+    username: str = Field(example="admin")
+    email: EmailStr = Field(example="admin@qq.com")
+    avatar: Optional[str] = Field(default=None, max_length=500, description="头像URL")

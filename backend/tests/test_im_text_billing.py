@@ -1,4 +1,5 @@
 from pathlib import Path
+from decimal import Decimal
 
 import pytest
 from pydantic import ValidationError
@@ -8,6 +9,7 @@ from app.schemas.system import IMTextBillingConfigIn
 from app.services.im_text_billing_service import (
     DEFAULT_IM_TEXT_ANCHOR_SHARE_BPS,
     DEFAULT_IM_TEXT_PRICE,
+    calc_im_text_anchor_income_diamonds,
     parse_im_text_billing_config,
 )
 
@@ -35,6 +37,11 @@ def test_im_text_billing_config_rejects_enabled_zero_price() -> None:
 def test_im_text_billing_config_rejects_invalid_share() -> None:
     with pytest.raises(ValidationError):
         IMTextBillingConfigIn(enabled=False, price=0, anchor_share_bps=10001)
+
+
+def test_im_text_anchor_income_keeps_two_decimal_precision() -> None:
+    assert calc_im_text_anchor_income_diamonds(1, 5000) == Decimal("0.50")
+    assert calc_im_text_anchor_income_diamonds(99, 5250) == Decimal("51.98")
 
 
 def test_im_text_charge_request_requires_request_id() -> None:
@@ -68,12 +75,17 @@ def test_im_text_charge_model_and_migration_exist() -> None:
     migration_content = _read_backend_file(
         "migrations/models/23_20260507100000_im_text_message_billing.py"
     )
+    decimal_migration_content = _read_backend_file(
+        "migrations/models/26_20260507193000_im_text_message_billing_decimal.py"
+    )
 
     assert "class ImTextMessageChargeRecord" in model_content
     assert 'table = "im_text_message_charge_record"' in model_content
     assert 'unique_together = (("sender_id", "request_id"),)' in model_content
+    assert "DecimalField" in model_content
     assert "CREATE TABLE IF NOT EXISTS `im_text_message_charge_record`" in migration_content
     assert "im_text_message_billing_enabled" in migration_content
+    assert "DECIMAL(18,2)" in decimal_migration_content
 
 
 def test_im_text_charge_service_uses_atomic_balance_updates() -> None:

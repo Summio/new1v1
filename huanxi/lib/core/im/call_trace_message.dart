@@ -22,9 +22,9 @@ class CallTraceMessage {
   final int peerUserId;
   final int ts;
   final int durationSeconds;
-  final int totalFeeCoins;
+  final double totalFeeCoins;
   final int incomeAnchorUserId;
-  final int anchorIncomeDiamonds;
+  final double anchorIncomeDiamonds;
   final String? reason;
 
   const CallTraceMessage({
@@ -73,9 +73,9 @@ class CallTraceMessage {
     final peerUserId = _asInt(json['peer_user_id']);
     final ts = _asInt(json['ts']);
     final durationSeconds = _asInt(json['duration_seconds']);
-    final totalFeeCoins = _asInt(json['total_fee_coins']);
+    final totalFeeCoins = _asDouble(json['total_fee_coins']);
     final incomeAnchorUserId = _asInt(json['income_anchor_user_id']);
-    final anchorIncomeDiamonds = _asInt(json['anchor_income_diamonds']);
+    final anchorIncomeDiamonds = _asDouble(json['anchor_income_diamonds']);
     final reason = (json['reason'] as String?)?.trim();
 
     if (callId <= 0 || actorUserId <= 0 || peerUserId <= 0) {
@@ -136,9 +136,9 @@ class CallTraceMessage {
         anchorIncomeDiamonds > 0;
     final shouldShowExpense = totalFeeCoins > 0 && !isCurrentUserAnchor;
     if (shouldShowIncome) {
-      parts.add('收入 $anchorIncomeDiamonds $diamondName');
+      parts.add('收入 ${anchorIncomeDiamonds.toStringAsFixed(2)} $diamondName');
     } else if (shouldShowExpense) {
-      parts.add('消费 $totalFeeCoins $coinName');
+      parts.add('消费 ${totalFeeCoins.toStringAsFixed(2)} $coinName');
     }
     return parts.join(' · ');
   }
@@ -147,6 +147,14 @@ class CallTraceMessage {
     if (value is int) return value;
     if (value is num) return value.toInt();
     if (value is String) return int.tryParse(value) ?? 0;
+    return 0;
+  }
+
+  static double _asDouble(dynamic value) {
+    if (value is double) return value;
+    if (value is int) return value.toDouble();
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value) ?? 0;
     return 0;
   }
 

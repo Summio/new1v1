@@ -11,6 +11,7 @@ class User(BaseModel, TimestampMixin):
     alias = fields.CharField(max_length=30, null=True, description="姓名", index=True)
     email = fields.CharField(max_length=190, unique=True, description="邮箱", index=True)
     phone = fields.CharField(max_length=20, null=True, description="电话", index=True)
+    avatar = fields.CharField(max_length=500, null=True, description="头像URL")
     password = fields.CharField(max_length=128, null=True, description="密码")
     is_active = fields.BooleanField(default=True, description="是否激活", index=True)
     is_superuser = fields.BooleanField(default=False, description="是否为超级管理员", index=True)
@@ -129,7 +130,7 @@ class CallRecord(BaseModel, TimestampMixin):
     payer_user_id = fields.BigIntField(null=True, description="本次通话付费用户ID快照")
     income_anchor_user_id = fields.BigIntField(null=True, description="本次通话收益主播ID快照")
     anchor_share_bps = fields.IntField(default=5000, description="本次通话主播分成比例快照（万分比）")
-    anchor_income_diamonds = fields.BigIntField(default=0, description="本次通话主播收益钻石(分)")
+    anchor_income_diamonds = fields.BigIntField(default=0, description="本次通话主播收益钻石")
     income_settled_at = fields.DatetimeField(null=True, description="主播收益结算时间")
 
     class Meta:
@@ -146,7 +147,7 @@ class GiftRecord(BaseModel, TimestampMixin):
     quantity = fields.IntField(default=1, description="礼物数量")
     total_price = fields.BigIntField(default=0, description="礼物总价(分)")
     anchor_share_bps = fields.IntField(default=10000, description="主播分成比例快照(万分比)")
-    anchor_income_diamonds = fields.BigIntField(default=0, description="主播礼物收益钻石(分)")
+    anchor_income_diamonds = fields.DecimalField(max_digits=18, decimal_places=2, default=0, description="主播礼物收益钻石")
 
     class Meta:
         table = "gift_record"
@@ -159,7 +160,12 @@ class ImTextMessageChargeRecord(BaseModel, TimestampMixin):
     request_id = fields.CharField(max_length=64, description="客户端请求幂等ID")
     price = fields.BigIntField(default=0, description="文字消息扣费金币数")
     anchor_share_bps = fields.IntField(default=5000, description="主播分成比例快照(万分比)")
-    anchor_income_diamonds = fields.BigIntField(default=0, description="主播收益钻石")
+    anchor_income_diamonds = fields.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        default=0,
+        description="主播收益钻石",
+    )
     status = fields.CharField(max_length=20, default="charged", description="charged", index=True)
 
     class Meta:
@@ -187,8 +193,22 @@ class WithdrawApply(BaseModel, TimestampMixin):
     bank_name = fields.CharField(max_length=50, null=True, description="银行名称")
     account_no = fields.CharField(max_length=50, null=True, description="银行账号")
     real_name = fields.CharField(max_length=30, null=True, description="真实姓名")
-    status = fields.CharField(max_length=20, default="pending", description="pending/processed/rejected", index=True)
+    payment_qr_code = fields.CharField(max_length=500, null=True, description="收款码URL")
+    status = fields.CharField(max_length=20, default="pending", description="pending/paid/rejected", index=True)
+    processed_by = fields.BigIntField(null=True, description="处理人后台用户ID")
+    review_remark = fields.CharField(max_length=500, null=True, description="处理备注/驳回原因")
     processed_at = fields.DatetimeField(null=True, description="处理时间")
 
     class Meta:
         table = "withdraw_apply"
+
+
+class WithdrawAccount(BaseModel, TimestampMixin):
+    """用户提现账户"""
+    user_id = fields.BigIntField(description="用户ID", unique=True, index=True)
+    real_name = fields.CharField(max_length=30, description="真实姓名")
+    account_no = fields.CharField(max_length=80, description="支付宝账号")
+    payment_qr_code = fields.CharField(max_length=500, description="收款码URL")
+
+    class Meta:
+        table = "withdraw_account"

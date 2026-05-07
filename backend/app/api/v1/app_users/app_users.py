@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from decimal import Decimal
 from pathlib import Path
 
 from fastapi import APIRouter, File, Query, UploadFile
@@ -7,6 +8,7 @@ from tortoise.expressions import Q
 from app.models import AppUser, CallRecord, GiftRecord, ImTextMessageChargeRecord, RechargeOrder, WithdrawApply
 from app.schemas.app_user import AnchorApplyReviewIn, AppUserAdminUpdateIn
 from app.schemas.base import Fail, Success, SuccessExtra
+from app.services.gift_income_service import decimal_to_float_2
 from app.settings.config import settings
 from app.utils.media_url import normalize_media_list, to_relative_media_url
 from app.utils.upload_files import (
@@ -22,6 +24,8 @@ _ALLOWED_IMAGE_SUFFIX = {".jpg", ".jpeg", ".png", ".webp"}
 def _json_safe(value):
     if isinstance(value, (datetime, date)):
         return value.isoformat()
+    if isinstance(value, Decimal):
+        return decimal_to_float_2(value)
     if isinstance(value, list):
         return [_json_safe(v) for v in value]
     if isinstance(value, dict):
@@ -37,6 +41,13 @@ def _format_bill_dt(value: datetime | None) -> str:
     if not value:
         return ""
     return value.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _amount_decimal(value) -> Decimal:
+    try:
+        return Decimal(str(value or "0"))
+    except Exception:  # noqa: BLE001
+        return Decimal("0")
 
 
 @router.get("/list", summary="查看App用户列表")
@@ -362,7 +373,7 @@ async def list_app_user_bill(
 
     bills = []
     for row in recharges:
-        amount = int(row.get("amount") or 0)
+        amount = decimal_to_float_2(row.get("amount"))
         bills.append(
             {
                 "id": f"recharge_{row['id']}",
@@ -379,7 +390,7 @@ async def list_app_user_bill(
             }
         )
     for row in call_expenses:
-        amount = int(row.get("total_fee") or 0)
+        amount = decimal_to_float_2(row.get("total_fee"))
         caller_id = int(row.get("caller_id") or 0)
         callee_id = int(row.get("callee_id") or 0)
         related_user_id = callee_id if caller_id == user_id else caller_id
@@ -400,7 +411,7 @@ async def list_app_user_bill(
             }
         )
     for row in call_incomes:
-        amount = int(row.get("anchor_income_diamonds") or 0)
+        amount = decimal_to_float_2(row.get("anchor_income_diamonds"))
         payer_user_id = int(row.get("payer_user_id") or 0)
         caller_id = int(row.get("caller_id") or 0)
         callee_id = int(row.get("callee_id") or 0)
@@ -426,7 +437,7 @@ async def list_app_user_bill(
             }
         )
     for row in gift_expenses:
-        amount = int(row.get("total_price") or 0)
+        amount = decimal_to_float_2(row.get("total_price"))
         gift_name = (row.get("gift_name") or "").strip()
         related_id, related_nickname = _resolve_related_user(int(row.get("receiver_id") or 0))
         bills.append(
@@ -445,7 +456,7 @@ async def list_app_user_bill(
             }
         )
     for row in gift_incomes:
-        amount = int(row.get("anchor_income_diamonds") or 0)
+        amount = decimal_to_float_2(row.get("anchor_income_diamonds"))
         gift_name = (row.get("gift_name") or "").strip()
         related_id, related_nickname = _resolve_related_user(int(row.get("sender_id") or 0))
         bills.append(
@@ -482,7 +493,7 @@ async def list_app_user_bill(
             }
         )
     for row in im_text_incomes:
-        amount = int(row.get("anchor_income_diamonds") or 0)
+        amount = decimal_to_float_2(row.get("anchor_income_diamonds"))
         related_id, related_nickname = _resolve_related_user(int(row.get("sender_id") or 0))
         bills.append(
             {
@@ -500,7 +511,7 @@ async def list_app_user_bill(
             }
         )
     for row in withdraw_expenses:
-        amount = int(row.get("amount") or 0)
+        amount = decimal_to_float_2(row.get("amount"))
         status = (row.get("status") or "").strip()
         bills.append(
             {
@@ -537,22 +548,22 @@ async def list_app_user_bill(
         filtered = [item for item in filtered if item["biz_type"] == normalized_biz_type]
 
     income_coins_total = sum(
-        item["amount"]
+        _amount_decimal(item["amount"])
         for item in filtered
         if item["is_income"] and item.get("asset_type") == "coins"
     )
     income_diamonds_total = sum(
-        item["amount"]
+        _amount_decimal(item["amount"])
         for item in filtered
         if item["is_income"] and item.get("asset_type") == "diamonds"
     )
     expense_coins_total = sum(
-        item["amount"]
+        _amount_decimal(item["amount"])
         for item in filtered
         if (not item["is_income"]) and item.get("asset_type") == "coins"
     )
     expense_diamonds_total = sum(
-        item["amount"]
+        _amount_decimal(item["amount"])
         for item in filtered
         if (not item["is_income"]) and item.get("asset_type") == "diamonds"
     )
@@ -570,8 +581,8 @@ async def list_app_user_bill(
         total=total,
         current=page,
         has_more=has_more,
-        income_coins_total=income_coins_total,
-        income_diamonds_total=income_diamonds_total,
-        expense_coins_total=expense_coins_total,
-        expense_diamonds_total=expense_diamonds_total,
+        income_coins_total=decimal_to_float_2(income_coins_total),
+        income_diamonds_total=decimal_to_float_2(income_diamonds_total),
+        expense_coins_total=decimal_to_float_2(expense_coins_total),
+        expense_diamonds_total=decimal_to_float_2(expense_diamonds_total),
     )

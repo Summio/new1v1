@@ -78,6 +78,17 @@ def build_operation_children(parent_id: int) -> list[Menu]:
             component="/operation/recharge",
             keepalive=False,
         ),
+        Menu(
+            menu_type=MenuType.MENU,
+            name="提现管理",
+            path="withdraw",
+            order=5,
+            parent_id=parent_id,
+            icon="material-symbols:payments-outline-rounded",
+            is_hidden=False,
+            component="/operation/withdraw",
+            keepalive=False,
+        ),
     ]
 
 
@@ -226,6 +237,13 @@ async def init_menus():
             "icon": "material-symbols:chat-outline-rounded",
             "component": "/system/im-text-billing",
         },
+        {
+            "name": "提现配置",
+            "path": "withdraw-config",
+            "order": 9,
+            "icon": "material-symbols:payments-outline-rounded",
+            "component": "/system/withdraw-config",
+        },
     ]
     for child in system_children:
         await _ensure_menu_exists(
@@ -279,9 +297,7 @@ async def init_menus():
 
 
 async def init_apis():
-    apis = await api_controller.model.exists()
-    if not apis:
-        await api_controller.refresh_api()
+    await api_controller.refresh_api()
 
 
 async def init_db():
@@ -341,7 +357,9 @@ async def init_roles():
 
     # 兼容存量环境：为所有历史角色补齐运营中心菜单与通话记录查询权限（幂等）
     all_roles = await Role.all()
-    operation_menus = await Menu.filter(path__in=["/operation", "app-user", "call-record", "gift", "recharge"]).all()
+    operation_menus = await Menu.filter(
+        path__in=["/operation", "app-user", "call-record", "gift", "recharge", "withdraw"]
+    ).all()
     if all_roles and operation_menus:
         for role in all_roles:
             await role.menus.add(*operation_menus)
@@ -362,10 +380,29 @@ async def init_roles():
     if recharge_review_api and all_roles:
         for role in all_roles:
             await role.apis.add(recharge_review_api)
+    withdraw_apis = await Api.filter(
+        path__in=[
+            "/api/v1/withdraw/list",
+            "/api/v1/withdraw/review",
+        ],
+    ).all()
+    if withdraw_apis and all_roles:
+        for role in all_roles:
+            await role.apis.add(*withdraw_apis)
+    withdraw_config_menu = await Menu.filter(path="withdraw-config").first()
+    withdraw_config_apis = await Api.filter(
+        path__in=[
+            "/api/v1/apis/system/withdraw-config",
+        ],
+    ).all()
 
     # 兼容存量环境：确保管理员角色始终拥有全部菜单与API（幂等）
     admin_role = await Role.filter(name="管理员").first()
     if admin_role:
+        if withdraw_config_menu:
+            await admin_role.menus.add(withdraw_config_menu)
+        if withdraw_config_apis:
+            await admin_role.apis.add(*withdraw_config_apis)
         all_apis = await Api.all()
         if all_apis:
             await admin_role.apis.add(*all_apis)

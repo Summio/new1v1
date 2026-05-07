@@ -10,28 +10,15 @@ from app.core.redis import get_redis
 from app.models import AppUser, CallRecord, Gift, GiftRecord
 from app.schemas.app_api import GiftSendIn, GiftSendOut
 from app.schemas.base import Fail, Success, SuccessExtra
+from app.services.gift_income_service import (
+    calc_gift_anchor_income_diamonds,
+    decimal_to_float_2,
+    get_gift_anchor_share_bps,
+)
 from app.services.tim_service import send_gift_notification
 from app.utils.media_url import to_relative_media_url
-from app.utils.parse import clamp_int, safe_parse_int
 
 router = APIRouter()
-
-DEFAULT_GIFT_ANCHOR_SHARE_BPS = 5000
-MAX_ANCHOR_SHARE_BPS = 10000
-
-
-async def _get_gift_anchor_share_bps() -> int:
-    from app.models.system_config import SystemConfig
-
-    raw = await SystemConfig.get_value(
-        "gift_anchor_share_bps",
-        str(DEFAULT_GIFT_ANCHOR_SHARE_BPS),
-    )
-    return clamp_int(
-        safe_parse_int(raw, DEFAULT_GIFT_ANCHOR_SHARE_BPS),
-        0,
-        MAX_ANCHOR_SHARE_BPS,
-    )
 
 
 async def _validate_call_scene(
@@ -142,17 +129,17 @@ async def gift_send(req_in: GiftSendIn):
     sender = await AppUser.filter(id=sender_id).first()
     sender_nickname = sender.nickname if sender else f"用户{sender_id}"
     sender_avatar = to_relative_media_url(sender.avatar) if sender else None
-    if not sender or int(sender.coins) < total_price:
+    if not sender or decimal_to_float_2(sender.coins) < decimal_to_float_2(total_price):
         return Fail(code=501, msg="余额不足，请先充值")
 
     receiver_is_anchor = bool(target_user.is_anchor)
-    anchor_share_bps = await _get_gift_anchor_share_bps()
+    anchor_share_bps = await get_gift_anchor_share_bps()
     anchor_income_diamonds = (
-        total_price * anchor_share_bps // MAX_ANCHOR_SHARE_BPS
+        calc_gift_anchor_income_diamonds(total_price, anchor_share_bps)
         if receiver_is_anchor
-        else 0
+        else calc_gift_anchor_income_diamonds(0, anchor_share_bps)
     )
-    current_coins = 0
+    current_coins = 0.0
     try:
         async with in_transaction() as conn:
             updated = await AppUser.filter(
@@ -181,7 +168,7 @@ async def gift_send(req_in: GiftSendIn):
             )
 
             sender_after = await AppUser.filter(id=sender_id).using_db(conn).first()
-            current_coins = sender_after.coins if sender_after else 0
+            current_coins = decimal_to_float_2(sender_after.coins) if sender_after else 0.0
     except ValueError:
         return Fail(code=501, msg="余额不足，请先充值")
 
@@ -199,7 +186,7 @@ async def gift_send(req_in: GiftSendIn):
             gift_price=int(gift.price),
             quantity=quantity,
             total_price=total_price,
-            anchor_income_diamonds=anchor_income_diamonds,
+            anchor_income_diamonds=decimal_to_float_2(anchor_income_diamonds),
             scene=scene,
             call_id=call_id,
             sender_nickname=sender_nickname,
@@ -216,7 +203,7 @@ async def gift_send(req_in: GiftSendIn):
             gift_price=int(gift.price),
             quantity=quantity,
             total_price=total_price,
-            anchor_income_diamonds=anchor_income_diamonds,
+            anchor_income_diamonds=decimal_to_float_2(anchor_income_diamonds),
             scene=scene,
             call_id=call_id,
             sender_nickname=sender_nickname,
@@ -236,7 +223,7 @@ async def gift_send(req_in: GiftSendIn):
             gift_price=int(gift.price),
             quantity=quantity,
             total_price=total_price,
-            anchor_income_diamonds=anchor_income_diamonds,
+            anchor_income_diamonds=decimal_to_float_2(anchor_income_diamonds),
             scene=scene,
             call_id=call_id,
         )
@@ -251,7 +238,7 @@ async def gift_send(req_in: GiftSendIn):
             quantity=quantity,
             unit_price=int(gift.price),
             total_price=total_price,
-            anchor_income_diamonds=anchor_income_diamonds,
+            anchor_income_diamonds=decimal_to_float_2(anchor_income_diamonds),
             coins=current_coins,
             msg="发送成功",
         ).model_dump()
@@ -268,11 +255,11 @@ async def _ws_push_gift_sent(
     gift_price: int,
     quantity: int,
     total_price: int,
-    anchor_income_diamonds: int,
+    anchor_income_diamonds: float,
     scene: str,
     call_id: int | None,
     sender_nickname: str,
-    receiver_coins: int,
+    receiver_coins: float,
 ) -> None:
     try:
         from app.websocket import events as ws_events
@@ -309,7 +296,7 @@ async def _ws_push_gift_received(
     gift_price: int,
     quantity: int,
     total_price: int,
-    anchor_income_diamonds: int,
+    anchor_income_diamonds: float,
     scene: str,
     call_id: int | None,
 ) -> None:

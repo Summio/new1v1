@@ -15,6 +15,8 @@ import '../../modules/call/incoming_call_page.dart';
 import '../../modules/profile/recharge_page.dart';
 import '../../modules/profile/coin_transactions_page.dart';
 import '../../modules/profile/diamond_transactions_page.dart';
+import '../../modules/profile/withdraw_account_page.dart';
+import '../../modules/profile/withdraw_page.dart';
 import '../../modules/profile/edit_profile_page.dart';
 import '../../modules/settings/settings_page.dart';
 import '../../modules/settings/agreement_page.dart';
@@ -28,6 +30,7 @@ import '../../modules/home/anchor_detail_page.dart';
 import '../../modules/home/user_search_page.dart';
 import '../../modules/home/call_page.dart';
 import '../../app/providers/anchor_provider.dart';
+import '../../app/providers/wallet_provider.dart';
 import '../../core/storage/storage.dart';
 
 class AppRoutes {
@@ -42,6 +45,8 @@ class AppRoutes {
   static const String userSearch = '/search';
   static const String profile = '/profile';
   static const String recharge = '/profile/recharge';
+  static const String withdraw = '/profile/withdraw';
+  static const String withdrawAccount = '/profile/withdraw/account';
   static const String coinTransactions = '/profile/recharge/transactions';
   static const String diamondTransactions = '/profile/diamond/transactions';
   static const String callHistory = '/profile/call-history';
@@ -199,6 +204,18 @@ final appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.recharge,
       builder: (context, state) => const RechargePage(),
+    ),
+    GoRoute(
+      path: AppRoutes.withdraw,
+      builder: (context, state) => const WithdrawPage(),
+    ),
+    GoRoute(
+      path: AppRoutes.withdrawAccount,
+      builder: (context, state) => WithdrawAccountPage(
+        initialAccount: state.extra is WithdrawAccount
+            ? state.extra as WithdrawAccount
+            : null,
+      ),
     ),
     GoRoute(
       path: AppRoutes.coinTransactions,

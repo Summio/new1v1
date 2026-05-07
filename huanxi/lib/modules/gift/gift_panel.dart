@@ -75,15 +75,15 @@ class _GiftPanelState extends ConsumerState<GiftPanel> {
       }
       // 服务端确认礼物发送成功，关闭面板
       final giftName = event.data['gift_name'] as String?;
-      final receiverCoins = _asInt(event.data['receiver_coins']);
+      final receiverCoins = _asDouble(event.data['receiver_coins']);
       if (giftName != null && giftName.isNotEmpty && receiverCoins != null) {
         // 仅同步余额，发送成功提示和关闭交由 HTTP 成功回调处理，避免重复 pop 导致返回上一页。
         ref.read(authProvider.notifier).syncBalance(coins: receiverCoins);
       }
     } else if (event.event == 'balance_updated') {
       // 余额更新事件
-      final coins = event.data['coins'] as int?;
-      final diamonds = event.data['diamonds'] as int?;
+      final coins = _asDouble(event.data['coins']);
+      final diamonds = _asDouble(event.data['diamonds']);
       if (coins != null || diamonds != null) {
         ref
             .read(authProvider.notifier)
@@ -166,6 +166,14 @@ class _GiftPanelState extends ConsumerState<GiftPanel> {
     return null;
   }
 
+  double? _asDouble(dynamic value) {
+    if (value is int) return value.toDouble();
+    if (value is double) return value;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final giftState = ref.watch(giftListProvider);
@@ -216,7 +224,7 @@ class _GiftPanelState extends ConsumerState<GiftPanel> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      '${tokenNames.coinName}: ${authState.coins}',
+                      '${tokenNames.coinName}: ${authState.coins.toStringAsFixed(2)}',
                       style: const TextStyle(
                         fontSize: 12,
                         color: AppTheme.secondaryDark,
@@ -409,3 +417,4 @@ class _GiftPanelState extends ConsumerState<GiftPanel> {
     );
   }
 }
+

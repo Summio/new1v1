@@ -9,6 +9,7 @@ from app.core.ctx import CTX_APP_USER_ID, CTX_APP_USER_OBJ
 from app.models import AppUser
 from app.schemas.app_user import AppUserProfileUpdateIn
 from app.schemas.base import Fail, Success
+from app.services.gift_income_service import decimal_to_float_2
 from app.settings.config import settings
 from app.utils.media_url import normalize_media_list, to_relative_media_url
 from app.utils.upload_files import (
@@ -64,9 +65,9 @@ async def get_user_info():
             "location_city": app_user.location_city or "",
             "album_photos": _normalize_album(app_user.album_photos),
             "cover_url": to_relative_media_url(app_user.cover_url),
-            "coins": app_user.coins,
-            "diamonds": app_user.diamonds,
-            "frozen_diamonds": app_user.frozen_diamonds,
+            "coins": decimal_to_float_2(app_user.coins),
+            "diamonds": decimal_to_float_2(app_user.diamonds),
+            "frozen_diamonds": decimal_to_float_2(app_user.frozen_diamonds),
             "status": app_user.status or "normal",
             "ban_reason": app_user.ban_reason or "",
             "is_anchor": app_user.is_anchor,

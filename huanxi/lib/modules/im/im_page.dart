@@ -409,8 +409,8 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
         requestId: requestId,
       );
       ref.read(authProvider.notifier).syncBalance(
-            coins: charge.coins,
-            diamonds: charge.diamonds,
+            coins: charge.coins.toDouble(),
+            diamonds: charge.diamonds.toDouble(),
           );
 
       final sentMsg = await _imService.sendTextMessage(

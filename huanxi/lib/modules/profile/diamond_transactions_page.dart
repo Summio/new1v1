@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../app/providers/auth_provider.dart';
+import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/dio_client.dart';
-import '../profile/withdraw_dialog.dart';
 
 class DiamondTransactionsPage extends ConsumerStatefulWidget {
   const DiamondTransactionsPage({super.key});
@@ -106,7 +107,7 @@ class _DiamondTransactionsPageState
         title: Text('${tokenNames.diamondName}明细'),
         actions: [
           TextButton(
-            onPressed: () => showWithdrawDialog(context),
+            onPressed: () => context.push(AppRoutes.withdraw),
             child: const Text('提现'),
           ),
         ],
@@ -248,9 +249,15 @@ class _DiamondTransactionsPageState
                                           color: AppTheme.textPrimary,
                                         ),
                                       ),
+                                      if (row.type == 'withdraw') ...[
+                                        const SizedBox(height: 4),
+                                        _WithdrawStatusBadge(status: row.status),
+                                      ],
                                       const SizedBox(height: 2),
                                       Text(
-                                        '对方：${row.counterpartyName.isEmpty ? '-' : row.counterpartyName}',
+                                        row.type == 'withdraw'
+                                            ? '去向：${row.counterpartyName.isEmpty ? '支付宝' : '支付宝（${row.counterpartyName}）'}'
+                                            : '对方：${row.counterpartyName.isEmpty ? '-' : row.counterpartyName}',
                                         style: const TextStyle(
                                           fontSize: 12,
                                           color: AppTheme.textSecondary,
@@ -319,6 +326,7 @@ class _DiamondRecord {
   final bool isIncome;
   final String createdAt;
   final String counterpartyName;
+  final String status;
 
   const _DiamondRecord({
     required this.id,
@@ -328,6 +336,7 @@ class _DiamondRecord {
     required this.isIncome,
     required this.createdAt,
     required this.counterpartyName,
+    required this.status,
   });
 
   factory _DiamondRecord.fromJson(Map<String, dynamic> json) {
@@ -339,7 +348,57 @@ class _DiamondRecord {
       isIncome: json['is_income'] as bool? ?? false,
       createdAt: json['created_at'] as String? ?? '',
       counterpartyName: json['counterparty_name'] as String? ?? '',
+      status: json['status'] as String? ?? '',
     );
+  }
+}
+
+class _WithdrawStatusBadge extends StatelessWidget {
+  final String status;
+
+  const _WithdrawStatusBadge({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = _withdrawStatusMeta(status);
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: meta.color.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          meta.text,
+          style: TextStyle(
+            fontSize: 11,
+            color: meta.color,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WithdrawStatusMeta {
+  final String text;
+  final Color color;
+
+  const _WithdrawStatusMeta(this.text, this.color);
+}
+
+_WithdrawStatusMeta _withdrawStatusMeta(String status) {
+  switch (status) {
+    case 'paid':
+    case 'approved':
+      return const _WithdrawStatusMeta('已打款', Color(0xFF4CAF50));
+    case 'rejected':
+      return const _WithdrawStatusMeta('已驳回', Color(0xFFFF5252));
+    case 'pending':
+    default:
+      return const _WithdrawStatusMeta('待处理', Color(0xFFFF9800));
   }
 }
 

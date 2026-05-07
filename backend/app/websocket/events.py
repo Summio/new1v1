@@ -127,11 +127,11 @@ async def push_gift_sent(
     gift_price: int,
     quantity: int,
     total_price: int,
-    anchor_income_diamonds: int,
+    anchor_income_diamonds: float,
     scene: str,
     call_id: int | None,
     sender_nickname: str,
-    receiver_coins: int,
+    receiver_coins: float,
 ) -> PushResult:
     """推送礼物发送确认给发送方。"""
     data = {
@@ -143,11 +143,11 @@ async def push_gift_sent(
         "unit_price": int(gift_price),
         "quantity": int(quantity),
         "total_price": int(total_price),
-        "anchor_income_diamonds": int(anchor_income_diamonds),
+        "anchor_income_diamonds": anchor_income_diamonds,
         "scene": scene,
         "call_id": int(call_id) if call_id is not None else None,
         "sender_nickname": sender_nickname,
-        "receiver_coins": int(receiver_coins),
+        "receiver_coins": receiver_coins,
     }
     return await get_manager().push_to_user(int(sender_id), "gift_sent", data)
 
@@ -164,7 +164,7 @@ async def push_gift_received(
     gift_price: int,
     quantity: int,
     total_price: int,
-    anchor_income_diamonds: int,
+    anchor_income_diamonds: float,
     scene: str,
     call_id: int | None,
 ) -> PushResult:
@@ -178,7 +178,7 @@ async def push_gift_received(
         "unit_price": int(gift_price),
         "quantity": int(quantity),
         "total_price": int(total_price),
-        "anchor_income_diamonds": int(anchor_income_diamonds),
+        "anchor_income_diamonds": anchor_income_diamonds,
         "scene": scene,
         "call_id": int(call_id) if call_id is not None else None,
         "sender_id": int(sender_id),
@@ -192,13 +192,13 @@ async def push_gift_received(
 
 async def push_balance_update(
     user_id: int,
-    coins: int,
-    diamonds: int,
+    coins: float,
+    diamonds: float | str,
 ) -> PushResult:
     """推送余额变更给用户（充值成功后调用）。"""
     data = {
-        "coins": int(coins),
-        "diamonds": int(diamonds),
+        "coins": coins,
+        "diamonds": diamonds,
     }
     return await get_manager().push_to_user(int(user_id), "balance_updated", data, critical=True)
 

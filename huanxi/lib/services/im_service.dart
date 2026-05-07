@@ -20,7 +20,7 @@ class GiftNotifyMessage {
   final int unitPrice;
   final int quantity;
   final int totalPrice;
-  final int anchorIncomeDiamonds;
+  final double anchorIncomeDiamonds;
   final String scene;
   final int? callId;
   final int senderId;
@@ -478,7 +478,7 @@ class IMService {
         unitPrice: unitPrice,
         quantity: quantity < 1 ? 1 : quantity,
         totalPrice: totalPrice < 0 ? 0 : totalPrice,
-        anchorIncomeDiamonds: _asInt(decoded['anchor_income_diamonds']) ?? 0,
+        anchorIncomeDiamonds: _asDouble(decoded['anchor_income_diamonds']) ?? 0,
         scene: (decoded['scene'] as String?) ?? 'chat',
         callId: _asInt(decoded['call_id']),
         senderId: _asInt(decoded['sender_id']) ?? 0,
@@ -515,6 +515,14 @@ class IMService {
     if (value is int) return value;
     if (value is num) return value.toInt();
     if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  double? _asDouble(dynamic value) {
+    if (value is int) return value.toDouble();
+    if (value is double) return value;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
     return null;
   }
 }

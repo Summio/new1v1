@@ -200,9 +200,10 @@ class RechargeListItem(BaseModel):
 
 class WithdrawApplyIn(BaseModel):
     amount: int = Field(..., ge=100, le=50000, description="提现金额(分)，最低1元，最高500元")
-    bank_name: str = Field(..., description="银行名称")
-    account_no: str = Field(..., min_length=10, max_length=23, description="银行账号(10-23位)")
-    real_name: str = Field(..., description="真实姓名")
+    bank_name: str = Field(default="支付宝", description="提现渠道")
+    account_no: str = Field(default="", min_length=1, max_length=80, description="支付宝账号")
+    real_name: str = Field(default="", min_length=1, max_length=30, description="真实姓名")
+    payment_qr_code: str = Field(default="", max_length=500, description="收款码URL")
 
 
 class WithdrawApplyOut(BaseModel):
@@ -211,10 +212,24 @@ class WithdrawApplyOut(BaseModel):
     msg: str = "申请已提交"
 
 
+class WithdrawAccountIn(BaseModel):
+    real_name: str = Field(..., min_length=1, max_length=30, description="真实姓名")
+    account_no: str = Field(..., min_length=1, max_length=80, description="支付宝账号")
+    payment_qr_code: str = Field(..., min_length=1, max_length=500, description="收款码URL")
+
+
+class WithdrawAccountOut(BaseModel):
+    real_name: str = ""
+    account_no: str = ""
+    payment_qr_code: str = ""
+    has_account: bool = False
+
+
 class WithdrawReviewIn(BaseModel):
     withdraw_id: int = Field(..., description="提现申请ID")
-    action: str = Field(..., description="操作：approve（通过）或 reject（拒绝）")
-    review_reason: Optional[str] = Field(None, description="拒绝原因")
+    action: str = Field(..., description="操作：approve（确认已打款）或 reject（拒绝）")
+    review_remark: Optional[str] = Field(None, max_length=500, description="处理备注/驳回原因")
+    review_reason: Optional[str] = Field(None, max_length=500, description="兼容旧字段：拒绝原因")
 
 
 class WithdrawListItem(BaseModel):
@@ -222,9 +237,13 @@ class WithdrawListItem(BaseModel):
     user_id: int
     amount: int
     bank_name: str
+    account_no: str = ""
     account_no_masked: str
     real_name: str
+    payment_qr_code: str = ""
     status: str
+    review_remark: str = ""
+    processed_by: Optional[int] = None
     created_at: Optional[datetime] = None
     processed_at: Optional[datetime] = None
     username: Optional[str] = None
@@ -240,6 +259,7 @@ class TransactionRecord(BaseModel):
     is_income: bool
     created_at: str
     counterparty_name: str = ""
+    status: str = ""
 
 
 class TransactionListOut(BaseModel):

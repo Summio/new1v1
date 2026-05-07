@@ -270,8 +270,8 @@ class _MainShellState extends ConsumerState<MainShell>
   }
 
   void _handleBalanceUpdated(Map<String, dynamic> data) {
-    final coins = data['coins'] as int?;
-    final diamonds = data['diamonds'] as int?;
+    final coins = _asDouble(data['coins']);
+    final diamonds = _asDouble(data['diamonds']);
     if (coins != null || diamonds != null) {
       ref
           .read(authProvider.notifier)
@@ -280,6 +280,14 @@ class _MainShellState extends ConsumerState<MainShell>
             diamonds: diamonds ?? ref.read(authProvider).diamonds,
           );
     }
+  }
+
+  double? _asDouble(dynamic value) {
+    if (value is int) return value.toDouble();
+    if (value is double) return value;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
+    return null;
   }
 
   void _handleWsIncomingCall(Map<String, dynamic> data) {

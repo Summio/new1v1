@@ -11,7 +11,7 @@ class UserSigPayload {
 class IMTextChargePayload {
   final bool charged;
   final int price;
-  final int anchorIncomeDiamonds;
+  final double anchorIncomeDiamonds;
   final int coins;
   final int diamonds;
   final int receiverUserId;
@@ -59,7 +59,7 @@ class ResponseParsers {
     }
     final chargedRaw = data['charged'];
     final price = _parseInt(data['price']);
-    final anchorIncomeDiamonds = _parseInt(data['anchor_income_diamonds']);
+    final anchorIncomeDiamonds = _parseDouble(data['anchor_income_diamonds']);
     final coins = _parseInt(data['coins']);
     final diamonds = _parseInt(data['diamonds']);
     final receiverUserId = _parseInt(data['receiver_user_id']);
@@ -91,6 +91,13 @@ class ResponseParsers {
     if (value is int) return value;
     if (value is num) return value.toInt();
     if (value is String) return int.tryParse(value.trim());
+    return null;
+  }
+
+  static double? _parseDouble(dynamic value) {
+    if (value is double) return value;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value.trim());
     return null;
   }
 }

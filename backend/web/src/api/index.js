@@ -7,6 +7,11 @@ export default {
   getUserMenu: () => request.get('/base/usermenu'),
   getUserApi: () => request.get('/base/userapi'),
   // profile
+  updateProfile: (data = {}) => request.post('/base/profile/update', data),
+  uploadUserAvatar: (data) =>
+    request.post('/base/profile/upload-avatar', data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
   updatePassword: (data = {}) => request.post('/base/update_password', data),
   // users
   getUserList: (params = {}) => request.get('/user/list', { params }),
@@ -41,6 +46,9 @@ export default {
   // recharge manage
   getRechargeList: (params = {}) => request.get('/recharge/list', { params }),
   reviewRechargeOrder: (data = {}) => request.post('/recharge/review', data),
+  // withdraw manage
+  getWithdrawList: (params = {}) => request.get('/withdraw/list', { params }),
+  reviewWithdrawApply: (data = {}) => request.post('/withdraw/review', data),
   // role
   getRoleList: (params = {}) => request.get('/role/list', { params }),
   createRole: (data = {}) => request.post('/role/create', data),

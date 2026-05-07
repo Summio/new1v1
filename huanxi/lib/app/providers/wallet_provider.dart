@@ -1,18 +1,29 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/constants/api_endpoints.dart';
+import '../../core/media/image_upload_preprocessor.dart';
+import '../../core/network/api_exception.dart';
 import '../../core/utils/app_logger.dart';
 import '../../app/providers/auth_provider.dart';
 
 /// 交易记录类型
 enum TransactionType { all, income, expense }
 
+double parseDouble(dynamic value, {double fallback = 0}) {
+  if (value is int) return value.toDouble();
+  if (value is double) return value;
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value.trim()) ?? fallback;
+  return fallback;
+}
+
 /// 单条交易记录
 class TransactionRecord {
   final String id;
   final String type;
   final String title;
-  final int amount;
+  final double amount;
   final bool isIncome;
   final String createdAt;
 
@@ -26,18 +37,11 @@ class TransactionRecord {
   });
 
   factory TransactionRecord.fromJson(Map<String, dynamic> json) {
-    int parseInt(dynamic value, {int fallback = 0}) {
-      if (value is int) return value;
-      if (value is num) return value.toInt();
-      if (value is String) return int.tryParse(value.trim()) ?? fallback;
-      return fallback;
-    }
-
     return TransactionRecord(
       id: (json['id'] ?? '').toString(),
       type: json['type'] as String? ?? '',
       title: json['title'] as String? ?? '',
-      amount: parseInt(json['amount']),
+      amount: parseDouble(json['amount']),
       isIncome: json['is_income'] as bool? ?? false,
       createdAt: json['created_at'] as String? ?? '',
     );
@@ -46,9 +50,9 @@ class TransactionRecord {
 
 /// 钱包状态
 class WalletState {
-  final int coins;
-  final int diamonds;
-  final int frozenDiamonds;
+  final double coins;
+  final double diamonds;
+  final double frozenDiamonds;
   final List<TransactionRecord> transactions;
   final int total;
   final int currentPage;
@@ -73,9 +77,9 @@ class WalletState {
   });
 
   WalletState copyWith({
-    int? coins,
-    int? diamonds,
-    int? frozenDiamonds,
+    double? coins,
+    double? diamonds,
+    double? frozenDiamonds,
     List<TransactionRecord>? transactions,
     int? total,
     int? currentPage,
@@ -103,8 +107,8 @@ class WalletState {
 
 /// 提现请求结果
 class WithdrawResult {
-  final int diamonds;
-  final int frozenDiamonds;
+  final double diamonds;
+  final double frozenDiamonds;
   final String msg;
 
   const WithdrawResult({
@@ -115,11 +119,37 @@ class WithdrawResult {
 
   factory WithdrawResult.fromJson(Map<String, dynamic> json) {
     return WithdrawResult(
-      diamonds: json['diamonds'] as int? ?? 0,
-      frozenDiamonds: json['frozen_diamonds'] as int? ?? 0,
+      diamonds: parseDouble(json['diamonds']),
+      frozenDiamonds: parseDouble(json['frozen_diamonds']),
       msg: json['msg'] as String? ?? '',
     );
   }
+}
+
+class WithdrawAccount {
+  final String realName;
+  final String accountNo;
+  final String paymentQrCode;
+  final bool hasAccount;
+
+  const WithdrawAccount({
+    this.realName = '',
+    this.accountNo = '',
+    this.paymentQrCode = '',
+    this.hasAccount = false,
+  });
+
+  factory WithdrawAccount.fromJson(Map<String, dynamic> json) {
+    return WithdrawAccount(
+      realName: (json['real_name'] as String?)?.trim() ?? '',
+      accountNo: (json['account_no'] as String?)?.trim() ?? '',
+      paymentQrCode: (json['payment_qr_code'] as String?)?.trim() ?? '',
+      hasAccount: json['has_account'] == true,
+    );
+  }
+
+  bool get isComplete =>
+      realName.isNotEmpty && accountNo.isNotEmpty && paymentQrCode.isNotEmpty;
 }
 
 /// 钱包 Provider
@@ -137,9 +167,9 @@ class WalletNotifier extends StateNotifier<WalletState> {
       if (respData == null) return;
 
       state = state.copyWith(
-        coins: respData['coins'] as int? ?? 0,
-        diamonds: respData['diamonds'] as int? ?? 0,
-        frozenDiamonds: respData['frozen_diamonds'] as int? ?? 0,
+        coins: parseDouble(respData['coins']),
+        diamonds: parseDouble(respData['diamonds']),
+        frozenDiamonds: parseDouble(respData['frozen_diamonds']),
       );
 
       _ref
@@ -246,18 +276,19 @@ class WalletNotifier extends StateNotifier<WalletState> {
   /// 提现申请
   Future<WithdrawResult?> withdraw({
     required int amount,
-    required String bankName,
     required String accountNo,
     required String realName,
+    required String paymentQrCode,
   }) async {
     try {
       final data = await _dio.apiPost(
         ApiEndpoints.withdrawApply,
         data: {
           'amount': amount,
-          'bank_name': bankName,
+          'bank_name': '支付宝',
           'account_no': accountNo,
           'real_name': realName,
+          'payment_qr_code': paymentQrCode,
         },
       );
       final respData = data['data'] as Map<String, dynamic>?;
@@ -277,6 +308,79 @@ class WalletNotifier extends StateNotifier<WalletState> {
       return result;
     } catch (e) {
       AppLogger.debug('wallet.withdraw error: $e');
+      return null;
+    }
+  }
+
+  Future<WithdrawAccount?> fetchWithdrawAccount() async {
+    try {
+      final data = await _dio.apiGet(ApiEndpoints.withdrawAccount);
+      final respData = data['data'] as Map<String, dynamic>?;
+      if (respData == null) return const WithdrawAccount();
+      return WithdrawAccount.fromJson(respData);
+    } catch (e) {
+      AppLogger.debug('wallet.fetchWithdrawAccount error: $e');
+      return null;
+    }
+  }
+
+  Future<WithdrawAccount?> saveWithdrawAccount({
+    required String realName,
+    required String accountNo,
+    required String paymentQrCode,
+  }) async {
+    try {
+      final data = await _dio.apiPost(
+        ApiEndpoints.withdrawAccount,
+        data: {
+          'real_name': realName,
+          'account_no': accountNo,
+          'payment_qr_code': paymentQrCode,
+        },
+      );
+      final respData = data['data'] as Map<String, dynamic>?;
+      if (respData == null) return null;
+      return WithdrawAccount.fromJson(respData);
+    } catch (e) {
+      AppLogger.debug('wallet.saveWithdrawAccount error: $e');
+      return null;
+    }
+  }
+
+  Future<String?> uploadWithdrawQrCode({
+    required List<int> bytes,
+    required String filename,
+  }) async {
+    try {
+      final prepared = await ImageUploadPreprocessor.instance.prepareImage(
+        bytes: bytes,
+        filename: filename,
+        scene: ImageUploadScene.avatar,
+      );
+      final formData = FormData.fromMap({
+        'file': MultipartFile.fromBytes(
+          prepared.bytes,
+          filename: prepared.filename,
+        ),
+      });
+      final resp = await _dio.post<Map<String, dynamic>>(
+        ApiEndpoints.withdrawUploadQrCode,
+        data: formData,
+      );
+      final data = resp.data ?? {};
+      if ((data['code'] as int?) != 200) {
+        return null;
+      }
+      final url = (data['data'] as Map<String, dynamic>?)?['url'] as String?;
+      return (url == null || url.trim().isEmpty) ? null : url.trim();
+    } on ImageUploadPreprocessException catch (e) {
+      AppLogger.debug('wallet.uploadWithdrawQrCode preprocess error: ${e.message}');
+      return null;
+    } on ApiException catch (e) {
+      AppLogger.debug('wallet.uploadWithdrawQrCode ApiException: ${e.message}');
+      return null;
+    } catch (e) {
+      AppLogger.debug('wallet.uploadWithdrawQrCode error: $e');
       return null;
     }
   }

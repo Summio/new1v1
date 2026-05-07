@@ -83,9 +83,9 @@ class AppUserInfoOut(BaseModel):
     location_city: Optional[str] = None
     album_photos: List[str] = Field(default_factory=list)
     cover_url: Optional[str] = None
-    coins: int = 0
-    diamonds: int = 0
-    frozen_diamonds: int = 0
+    coins: float = 0.0
+    diamonds: float = 0.0
+    frozen_diamonds: float = 0.0
     status: str = "normal"
     ban_reason: Optional[str] = None
     is_anchor: bool = False

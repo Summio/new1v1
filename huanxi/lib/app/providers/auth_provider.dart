@@ -24,8 +24,8 @@ class AuthState {
   final List<String> albumPhotos;
   final String? coverUrl;
   final String? appRole;
-  final int coins;
-  final int diamonds;
+  final double coins;
+  final double diamonds;
   final bool isLoading;
   final String? error;
 
@@ -61,8 +61,8 @@ class AuthState {
     List<String>? albumPhotos,
     String? coverUrl,
     String? appRole,
-    int? coins,
-    int? diamonds,
+    double? coins,
+    double? diamonds,
     bool? isLoading,
     String? error,
   }) {
@@ -173,6 +173,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
     return null;
   }
 
+  double _parseDouble(dynamic value, {double fallback = 0}) {
+    if (value is int) return value.toDouble();
+    if (value is double) return value;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value.trim()) ?? fallback;
+    return fallback;
+  }
+
   List<String> _parseAlbum(dynamic value) {
     final normalized = normalizeMediaPayload(value, parentKey: 'album_photos');
     if (normalized is! List) return const <String>[];
@@ -208,8 +216,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
           coverUrl: (normalizeMediaPayload(cachedInfo['cover_url']) as String?)
               ?.trim(),
           appRole: cachedInfo['is_anchor'] == true ? 'anchor' : 'user',
-          coins: cachedInfo['coins'] as int? ?? 0,
-          diamonds: cachedInfo['diamonds'] as int? ?? 0,
+          coins: _parseDouble(cachedInfo['coins']),
+          diamonds: _parseDouble(cachedInfo['diamonds']),
         );
       } else {
         state = state.copyWith(isLoggedIn: true, userId: localUserId);
@@ -276,8 +284,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         albumPhotos: _parseAlbum(respData['album_photos']),
         coverUrl: (respData['cover_url'] as String?)?.trim(),
         appRole: respData['is_anchor'] == true ? 'anchor' : 'user',
-        coins: respData['coins'] as int? ?? 0,
-        diamonds: respData['diamonds'] as int? ?? 0,
+        coins: _parseDouble(respData['coins']),
+        diamonds: _parseDouble(respData['diamonds']),
         isLoading: false,
       );
 
@@ -330,8 +338,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
         albumPhotos: _parseAlbum(respData['album_photos']),
         coverUrl: (respData['cover_url'] as String?)?.trim(),
         appRole: respData['is_anchor'] == true ? 'anchor' : 'user',
-        coins: respData['coins'] as int? ?? 0,
-        diamonds: respData['diamonds'] as int? ?? 0,
+        coins: _parseDouble(respData['coins']),
+        diamonds: _parseDouble(respData['diamonds']),
       );
     } on UnauthorizedException {
       // Token 无效，清除存储
@@ -429,8 +437,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final respData = data['data'] as Map<String, dynamic>?;
       if (respData == null) return;
 
-      final coins = respData['coins'] as int? ?? state.coins;
-      final diamonds = respData['diamonds'] as int? ?? state.diamonds;
+      final coins = _parseDouble(respData['coins'], fallback: state.coins);
+      final diamonds = _parseDouble(respData['diamonds'], fallback: state.diamonds);
       syncBalance(coins: coins, diamonds: diamonds);
     } catch (e) {
       AppLogger.debug('auth.refreshBalance error: $e');
@@ -440,7 +448,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// 同步余额到全局状态（避免必须重新登录才更新）
   /// - `coins`/`diamonds` 为空时保持当前值
   /// - 同步更新本地缓存余额字段
-  void syncBalance({int? coins, int? diamonds}) {
+  void syncBalance({double? coins, double? diamonds}) {
     final nextCoins = coins ?? state.coins;
     final nextDiamonds = diamonds ?? state.diamonds;
     state = state.copyWith(coins: nextCoins, diamonds: nextDiamonds);

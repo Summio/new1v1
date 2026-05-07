@@ -61,11 +61,11 @@ class GiftListState {
 /// 礼物发送结果
 class GiftSendResult {
   final bool success;
-  final int? coins;
+  final double? coins;
   final int? quantity;
   final int? unitPrice;
   final int? totalPrice;
-  final int? anchorIncomeDiamonds;
+  final double? anchorIncomeDiamonds;
   final int? giftId;
   final String? giftName;
   final String? giftIcon;
@@ -85,6 +85,14 @@ class GiftSendResult {
     this.svgaUrl,
     this.msg,
   });
+}
+
+double? _parseDouble(dynamic value) {
+  if (value is int) return value.toDouble();
+  if (value is double) return value;
+  if (value is num) return value.toDouble();
+  if (value is String) return double.tryParse(value.trim());
+  return null;
 }
 
 /// 礼物列表 Provider
@@ -144,11 +152,11 @@ class GiftListNotifier extends StateNotifier<GiftListState> {
       final resultData = (data['data'] as Map<String, dynamic>?) ?? const {};
       return GiftSendResult(
         success: success,
-        coins: resultData['coins'] as int?,
+        coins: _parseDouble(resultData['coins']),
         quantity: resultData['quantity'] as int?,
         unitPrice: resultData['unit_price'] as int?,
         totalPrice: resultData['total_price'] as int?,
-        anchorIncomeDiamonds: resultData['anchor_income_diamonds'] as int?,
+        anchorIncomeDiamonds: _parseDouble(resultData['anchor_income_diamonds']),
         giftId: resultData['gift_id'] as int?,
         giftName: resultData['gift_name'] as String?,
         giftIcon: resultData['gift_icon'] as String?,

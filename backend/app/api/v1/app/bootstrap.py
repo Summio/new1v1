@@ -60,6 +60,14 @@ async def get_app_bootstrap():
     except (json.JSONDecodeError, ValueError):
         recharge_packages = []
 
+    withdraw_packages_raw = config_map.get("withdraw_packages") or "[]"
+    try:
+        withdraw_packages = json.loads(withdraw_packages_raw)
+        if not isinstance(withdraw_packages, list):
+            withdraw_packages = []
+    except (json.JSONDecodeError, ValueError):
+        withdraw_packages = []
+
     return Success(
         data={
             "token_names": {
@@ -78,6 +86,7 @@ async def get_app_bootstrap():
                 "reject_pair_protect_seconds": call_reject_pair_protect_seconds,
             },
             "recharge_packages": recharge_packages,
+            "withdraw_packages": withdraw_packages,
             "im_text_billing": dump_im_text_billing_config(
                 parse_im_text_billing_config(config_map)
             ),

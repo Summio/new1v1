@@ -1,10 +1,12 @@
 from dataclasses import dataclass
+from decimal import Decimal
 
 from tortoise.expressions import F
 from tortoise.transactions import in_transaction
 
 from app.models import AppUser, ImTextMessageChargeRecord, SystemConfig
 from app.schemas.system import IMTextBillingConfigOut
+from app.services.gift_income_service import decimal_to_float_2, quantize_decimal_2
 from app.utils.parse import clamp_int, safe_parse_int
 
 DEFAULT_IM_TEXT_PRICE = 0
@@ -17,6 +19,16 @@ class IMTextBillingConfig:
     enabled: bool
     price: int
     anchor_share_bps: int
+
+
+def calc_im_text_anchor_income_diamonds(
+    total_price: int,
+    anchor_share_bps: int,
+) -> Decimal:
+    amount = max(0, int(total_price or 0))
+    bps = clamp_int(int(anchor_share_bps or 0), 0, MAX_ANCHOR_SHARE_BPS)
+    income = Decimal(amount) * Decimal(bps) / Decimal(MAX_ANCHOR_SHARE_BPS)
+    return quantize_decimal_2(income)
 
 
 def parse_bool_config(raw: str | None, default: bool = False) -> bool:
@@ -58,7 +70,7 @@ def dump_im_text_billing_config(config: IMTextBillingConfig) -> dict[str, int | 
 class IMTextChargeResult:
     charged: bool
     price: int
-    anchor_income_diamonds: int
+    anchor_income_diamonds: float
     coins: int
     diamonds: int
     receiver_user_id: int
@@ -101,7 +113,7 @@ async def charge_im_text_message(
         return IMTextChargeResult(
             charged=True,
             price=int(existing.price),
-            anchor_income_diamonds=int(existing.anchor_income_diamonds),
+            anchor_income_diamonds=decimal_to_float_2(existing.anchor_income_diamonds),
             coins=int(current.coins if current else sender.coins),
             diamonds=int(current.diamonds if current else sender.diamonds),
             receiver_user_id=receiver_user_id,
@@ -122,7 +134,7 @@ async def charge_im_text_message(
         )
 
     price = int(config.price)
-    anchor_income_diamonds = price * int(config.anchor_share_bps) // MAX_ANCHOR_SHARE_BPS
+    anchor_income_diamonds = calc_im_text_anchor_income_diamonds(price, config.anchor_share_bps)
     async with in_transaction() as conn:
         updated = await AppUser.filter(
             id=sender_id,
@@ -149,7 +161,7 @@ async def charge_im_text_message(
     return IMTextChargeResult(
         charged=True,
         price=price,
-        anchor_income_diamonds=anchor_income_diamonds,
+        anchor_income_diamonds=decimal_to_float_2(anchor_income_diamonds),
         coins=int(current.coins if current else 0),
         diamonds=int(current.diamonds if current else 0),
         receiver_user_id=receiver_user_id,

@@ -1,180 +1,336 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
-import { NButton, NCard, NForm, NFormItem, NInput, NInputNumber, NSpace, NSwitch } from 'naive-ui'
+import { computed, h, onMounted, ref } from 'vue'
+import {
+  NButton,
+  NDataTable,
+  NInput,
+  NInputNumber,
+  NSpace,
+  NSwitch,
+  NTag,
+  useMessage,
+} from 'naive-ui'
 
 import CommonPage from '@/components/page/CommonPage.vue'
 import api from '@/api'
 
 defineOptions({ name: '系统配置' })
 
+const message = useMessage()
+const loading = ref(false)
+const savingKey = ref('')
 const allConfigRows = ref([])
+const editValues = ref({})
 
-const tokenLoading = ref(false)
-const imLoading = ref(false)
-const rtcLoading = ref(false)
-const faceBeautyLoading = ref(false)
-const billingLoading = ref(false)
-const protectLoading = ref(false)
-const watchdogLoading = ref(false)
-
-const tokenForm = ref({
-  coin_name: '金币',
-  diamond_name: '钻石',
-})
-
-const imForm = ref({
-  im_sdk_app_id: null,
-  im_secret_key: '',
-  im_call_trace_enabled: true,
-  im_admin_identifier: 'trace_bot',
-})
-
-const rtcForm = ref({
-  rtc_app_id: '',
-  rtc_app_certificate: '',
-})
-
-const faceBeautyForm = ref({
-  face_beauty_key: '',
-})
-
-const billingForm = ref({
-  call_billing_free_seconds: 10,
-  call_anchor_share_bps: 5000,
-  gift_anchor_share_bps: 5000,
-})
-
-const anchorSharePercent = computed({
-  get() {
-    return Number((Number(billingForm.value.call_anchor_share_bps || 0) / 100).toFixed(2))
+const configDefs = [
+  {
+    group: '基础配置',
+    name: '金币名称',
+    key: 'coin_name',
+    type: 'text',
+    defaultValue: '金币',
+    description: '代币名称：金币',
   },
-  set(value) {
-    const percent = Number(value)
-    if (!Number.isFinite(percent)) {
-      billingForm.value.call_anchor_share_bps = 5000
-      return
+  {
+    group: '基础配置',
+    name: '钻石名称',
+    key: 'diamond_name',
+    type: 'text',
+    defaultValue: '钻石',
+    description: '代币名称：钻石',
+  },
+  {
+    group: 'IM 配置',
+    name: 'IM SDK AppID',
+    key: 'im_sdk_app_id',
+    type: 'number',
+    min: 1,
+    max: 999999999999,
+    defaultValue: '',
+    description: '腾讯IM SDK AppID',
+  },
+  {
+    group: 'IM 配置',
+    name: 'IM SecretKey',
+    key: 'im_secret_key',
+    type: 'secret',
+    defaultValue: '',
+    description: '腾讯IM SecretKey',
+  },
+  {
+    group: 'IM 配置',
+    name: '通话 IM 留痕',
+    key: 'im_call_trace_enabled',
+    type: 'bool',
+    defaultValue: '1',
+    description: '是否启用通话 IM 留痕',
+  },
+  {
+    group: 'IM 配置',
+    name: '留痕管理员账号',
+    key: 'im_admin_identifier',
+    type: 'text',
+    defaultValue: 'trace_bot',
+    description: '腾讯 IM 通话留痕管理员账号',
+  },
+  {
+    group: 'IM 配置',
+    name: '文字聊天扣费',
+    key: 'im_text_message_billing_enabled',
+    type: 'bool',
+    defaultValue: 'false',
+    description: '是否开启 IM 普通文字聊天按条扣金币',
+  },
+  {
+    group: 'IM 配置',
+    name: '文字聊天每条扣费',
+    key: 'im_text_message_price',
+    type: 'number',
+    unit: '金币',
+    min: 0,
+    max: 1000000,
+    defaultValue: '0',
+    description: '非主播用户给主播发送普通文字消息时，每条消耗的金币数',
+  },
+  {
+    group: 'IM 配置',
+    name: '文字聊天主播分成',
+    key: 'im_text_message_anchor_share_bps',
+    type: 'percent',
+    unit: '%',
+    min: 0,
+    max: 100,
+    defaultValue: '5000',
+    description: '文字聊天扣费后主播获得钻石的分成比例',
+  },
+  {
+    group: 'RTC 配置',
+    name: 'RTC App ID',
+    key: 'rtc_app_id',
+    type: 'text',
+    defaultValue: '',
+    description: '声网 RTC App ID',
+  },
+  {
+    group: 'RTC 配置',
+    name: 'RTC App Certificate',
+    key: 'rtc_app_certificate',
+    type: 'secret',
+    defaultValue: '',
+    description: '声网 RTC App Certificate',
+  },
+  {
+    group: '美颜配置',
+    name: '美颜 Key',
+    key: 'face_beauty_key',
+    type: 'secret',
+    defaultValue: '',
+    description: '美颜 SDK License Key',
+  },
+  {
+    group: '计费配置',
+    name: '通话免费时长',
+    key: 'call_billing_free_seconds',
+    type: 'number',
+    unit: '秒',
+    min: 0,
+    max: 600,
+    defaultValue: '10',
+    description: '通话免费时长（秒）',
+  },
+  {
+    group: '计费配置',
+    name: '视频通话主播分成',
+    key: 'call_anchor_share_bps',
+    type: 'percent',
+    unit: '%',
+    min: 0,
+    max: 100,
+    defaultValue: '5000',
+    description: '视频通话主播分成比例',
+  },
+  {
+    group: '计费配置',
+    name: '礼物主播分成',
+    key: 'gift_anchor_share_bps',
+    type: 'percent',
+    unit: '%',
+    min: 0,
+    max: 100,
+    defaultValue: '5000',
+    description: '礼物主播分成比例',
+  },
+  {
+    group: '通话保护',
+    name: '拒绝后禁止呼入',
+    key: 'call_reject_inbound_protect_seconds',
+    type: 'number',
+    unit: '秒',
+    min: 0,
+    max: 600,
+    defaultValue: '5',
+    description: '拒绝后禁止呼入保护时间（秒）',
+  },
+  {
+    group: '通话保护',
+    name: '拒绝后禁止同一用户再次呼叫',
+    key: 'call_reject_pair_protect_seconds',
+    type: 'number',
+    unit: '秒',
+    min: 0,
+    max: 600,
+    defaultValue: '5',
+    description: '拒绝后禁止同一主叫再次呼叫保护时间（秒）',
+  },
+  {
+    group: 'Watchdog 配置',
+    name: '轮询间隔',
+    key: 'call_watchdog_poll_seconds',
+    type: 'number',
+    unit: '秒',
+    min: 1,
+    max: 600,
+    defaultValue: '5',
+    description: 'Watchdog 轮询间隔（秒）',
+  },
+  {
+    group: 'Watchdog 配置',
+    name: '振铃超时',
+    key: 'call_watchdog_ring_timeout_seconds',
+    type: 'number',
+    unit: '秒',
+    min: 1,
+    max: 600,
+    defaultValue: '30',
+    description: '呼叫振铃超时自动结束（秒）',
+  },
+  {
+    group: 'Watchdog 配置',
+    name: '续费宽限',
+    key: 'call_watchdog_renew_grace_seconds',
+    type: 'number',
+    unit: '秒',
+    min: 0,
+    max: 5,
+    defaultValue: '5',
+    description: '续费宽限时长（秒）',
+  },
+  {
+    group: 'Watchdog 配置',
+    name: '离线判定阈值',
+    key: 'call_presence_offline_detect_seconds',
+    type: 'number',
+    unit: '秒',
+    min: 1,
+    max: 600,
+    defaultValue: '3',
+    description: '在线状态离线判定阈值（秒）',
+  },
+  {
+    group: 'Watchdog 配置',
+    name: '离线结算宽限',
+    key: 'call_presence_settle_grace_seconds',
+    type: 'number',
+    unit: '秒',
+    min: 0,
+    max: 30,
+    defaultValue: '5',
+    description: '离线结算宽限时长（秒）',
+  },
+]
+
+const tableRows = computed(() =>
+  configDefs.map((def) => {
+    const row = findRow(def.key)
+    return {
+      ...def,
+      id: row?.id,
+      dbValue: row?.cfg_value,
+      currentValue: editValues.value[def.key] ?? def.defaultValue,
+      exists: !!row,
     }
-    billingForm.value.call_anchor_share_bps = normalizeSeconds(percent * 100, 5000, 0, 10000)
-  },
-})
+  })
+)
 
-const giftSharePercent = computed({
-  get() {
-    return Number((Number(billingForm.value.gift_anchor_share_bps || 0) / 100).toFixed(2))
+const columns = [
+  {
+    title: '分类',
+    key: 'group',
+    width: 120,
+    render(row) {
+      return h(NTag, { type: groupTagType(row.group), bordered: false }, { default: () => row.group })
+    },
   },
-  set(value) {
-    const percent = Number(value)
-    if (!Number.isFinite(percent)) {
-      billingForm.value.gift_anchor_share_bps = 5000
-      return
-    }
-    billingForm.value.gift_anchor_share_bps = normalizeSeconds(percent * 100, 5000, 0, 10000)
+  { title: '配置名称', key: 'name', width: 190 },
+  {
+    title: '配置键',
+    key: 'key',
+    width: 260,
+    ellipsis: { tooltip: true },
   },
-})
-
-const protectForm = ref({
-  reject_inbound_protect_seconds: 5,
-  reject_pair_protect_seconds: 5,
-})
-
-const watchdogForm = ref({
-  call_watchdog_poll_seconds: 5,
-  call_watchdog_ring_timeout_seconds: 30,
-  call_watchdog_renew_grace_seconds: 5,
-  call_presence_offline_detect_seconds: 3,
-  call_presence_settle_grace_seconds: 5,
-})
+  {
+    title: '配置值',
+    key: 'currentValue',
+    minWidth: 260,
+    render(row) {
+      return renderEditor(row)
+    },
+  },
+  {
+    title: '单位/类型',
+    key: 'unit',
+    width: 110,
+    render(row) {
+      return row.unit || typeLabel(row.type)
+    },
+  },
+  {
+    title: '说明',
+    key: 'description',
+    minWidth: 260,
+    ellipsis: { tooltip: true },
+  },
+  {
+    title: '操作',
+    key: 'actions',
+    width: 120,
+    fixed: 'right',
+    render(row) {
+      return h(
+        NButton,
+        {
+          size: 'small',
+          type: 'primary',
+          loading: savingKey.value === row.key,
+          disabled: loading.value,
+          onClick: () => saveConfig(row),
+        },
+        { default: () => '保存' }
+      )
+    },
+  },
+]
 
 onMounted(async () => {
   await loadAllConfigs()
 })
 
 async function loadAllConfigs() {
+  loading.value = true
   try {
     const res = await api.getSystemConfigList({ page: 1, page_size: 500 })
-    const rows = res.data || []
-    allConfigRows.value = rows
-
-    tokenForm.value.coin_name = findValue('coin_name', '金币')
-    tokenForm.value.diamond_name = findValue('diamond_name', '钻石')
-
-    imForm.value.im_sdk_app_id = normalizeNullablePositiveInt(findValue('im_sdk_app_id', ''))
-    imForm.value.im_secret_key = findValue('im_secret_key', '')
-    imForm.value.im_call_trace_enabled = normalizeBool(
-      findValue('im_call_trace_enabled', '1'),
-      true
-    )
-    imForm.value.im_admin_identifier = findValue('im_admin_identifier', 'trace_bot')
-
-    rtcForm.value.rtc_app_id = findValue('rtc_app_id', '')
-    rtcForm.value.rtc_app_certificate = findValue('rtc_app_certificate', '')
-
-    faceBeautyForm.value.face_beauty_key = findValue('face_beauty_key', '')
-
-    billingForm.value.call_billing_free_seconds = normalizeSeconds(
-      findValue('call_billing_free_seconds', '10'),
-      10,
-      0,
-      600
-    )
-    billingForm.value.call_anchor_share_bps = normalizeSeconds(
-      findValue('call_anchor_share_bps', '5000'),
-      5000,
-      0,
-      10000
-    )
-    billingForm.value.gift_anchor_share_bps = normalizeSeconds(
-      findValue('gift_anchor_share_bps', '5000'),
-      5000,
-      0,
-      10000
-    )
-
-    protectForm.value.reject_inbound_protect_seconds = normalizeSeconds(
-      findValue('call_reject_inbound_protect_seconds', '5'),
-      5,
-      0,
-      600
-    )
-    protectForm.value.reject_pair_protect_seconds = normalizeSeconds(
-      findValue('call_reject_pair_protect_seconds', '5'),
-      5,
-      0,
-      600
-    )
-
-    watchdogForm.value.call_watchdog_poll_seconds = normalizeSeconds(
-      findValue('call_watchdog_poll_seconds', '5'),
-      5,
-      1,
-      600
-    )
-    watchdogForm.value.call_watchdog_ring_timeout_seconds = normalizeSeconds(
-      findValue('call_watchdog_ring_timeout_seconds', '30'),
-      30,
-      1,
-      600
-    )
-    watchdogForm.value.call_watchdog_renew_grace_seconds = normalizeSeconds(
-      findValue('call_watchdog_renew_grace_seconds', '5'),
-      5,
-      0,
-      5
-    )
-    watchdogForm.value.call_presence_offline_detect_seconds = normalizeSeconds(
-      findValue('call_presence_offline_detect_seconds', '3'),
-      3,
-      1,
-      600
-    )
-    watchdogForm.value.call_presence_settle_grace_seconds = normalizeSeconds(
-      findValue('call_presence_settle_grace_seconds', '5'),
-      5,
-      0,
-      30
-    )
-  } catch (_) {
+    allConfigRows.value = res.data || []
+    const nextValues = {}
+    for (const def of configDefs) {
+      nextValues[def.key] = findValue(def.key, def.defaultValue)
+    }
+    editValues.value = nextValues
+  } catch (error) {
     allConfigRows.value = []
+    message.error('加载系统配置失败')
+    console.error(error)
+  } finally {
+    loading.value = false
   }
 }
 
@@ -188,18 +344,28 @@ function findValue(cfgKey, fallback = '') {
   return (row.cfg_value ?? fallback).toString()
 }
 
-function normalizeSeconds(raw, fallback, min = 0, max = 600) {
-  const n = Number(raw)
-  if (!Number.isFinite(n)) return fallback
-  if (n < min) return min
-  if (n > max) return max
-  return Math.floor(n)
+function groupTagType(group) {
+  const map = {
+    基础配置: 'default',
+    'IM 配置': 'info',
+    'RTC 配置': 'success',
+    美颜配置: 'warning',
+    计费配置: 'error',
+    通话保护: 'warning',
+    'Watchdog 配置': 'default',
+  }
+  return map[group] || 'default'
 }
 
-function normalizeNullablePositiveInt(raw) {
-  const n = Number(raw)
-  if (!Number.isFinite(n) || n <= 0) return null
-  return Math.floor(n)
+function typeLabel(type) {
+  const map = {
+    text: '文本',
+    secret: '密钥',
+    number: '数字',
+    percent: '百分比',
+    bool: '开关',
+  }
+  return map[type] || type
 }
 
 function normalizeBool(raw, fallback = false) {
@@ -211,211 +377,106 @@ function normalizeBool(raw, fallback = false) {
   return fallback
 }
 
-async function upsertConfig(cfgKey, cfgValue, description) {
-  const existing = findRow(cfgKey)
-  if (existing) {
-    await api.updateSystemConfig({
-      id: existing.id,
-      cfg_key: cfgKey,
-      cfg_value: cfgValue,
-      description: existing.description || description,
+function clampNumber(raw, fallback, min, max) {
+  const n = Number(raw)
+  if (!Number.isFinite(n)) return fallback
+  if (typeof min === 'number' && n < min) return min
+  if (typeof max === 'number' && n > max) return max
+  return Math.floor(n)
+}
+
+function renderEditor(row) {
+  if (row.type === 'bool') {
+    return h(NSwitch, {
+      value: normalizeBool(row.currentValue, normalizeBool(row.defaultValue)),
+      checkedValue: true,
+      uncheckedValue: false,
+      onUpdateValue: (value) => {
+        editValues.value[row.key] = value ? '1' : '0'
+      },
     })
-    return
   }
-  await api.createSystemConfig({
-    cfg_key: cfgKey,
-    cfg_value: cfgValue,
-    description,
+  if (row.type === 'number') {
+    return h(NInputNumber, {
+      value: Number(row.currentValue || row.defaultValue || 0),
+      min: row.min,
+      max: row.max,
+      precision: 0,
+      step: 1,
+      placeholder: '请输入配置值',
+      style: { width: '100%' },
+      onUpdateValue: (value) => {
+        editValues.value[row.key] = value == null ? '' : String(value)
+      },
+    })
+  }
+  if (row.type === 'percent') {
+    return h(NInputNumber, {
+      value: Number((Number(row.currentValue || row.defaultValue || 0) / 100).toFixed(2)),
+      min: row.min,
+      max: row.max,
+      precision: 2,
+      step: 0.01,
+      placeholder: '请输入百分比',
+      style: { width: '100%' },
+      onUpdateValue: (value) => {
+        const percent = Number(value)
+        editValues.value[row.key] = Number.isFinite(percent)
+          ? String(clampNumber(percent * 100, Number(row.defaultValue || 0), 0, 10000))
+          : row.defaultValue
+      },
+    })
+  }
+  return h(NInput, {
+    value: row.currentValue,
+    type: row.type === 'secret' ? 'password' : 'text',
+    showPasswordOn: row.type === 'secret' ? 'mousedown' : undefined,
+    placeholder: '请输入配置值',
+    onUpdateValue: (value) => {
+      editValues.value[row.key] = value ?? ''
+    },
   })
 }
 
-async function saveTokenConfigs() {
-  tokenLoading.value = true
-  try {
-    await upsertConfig('coin_name', tokenForm.value.coin_name.trim() || '金币', '代币名称：金币')
-    await upsertConfig(
-      'diamond_name',
-      tokenForm.value.diamond_name.trim() || '钻石',
-      '代币名称：钻石'
-    )
-    await loadAllConfigs()
-    $message.success('基础代币配置已保存')
-  } catch (_) {
-    $message.error('保存失败，请稍后重试')
-  } finally {
-    tokenLoading.value = false
+function normalizeForSave(row) {
+  const raw = editValues.value[row.key] ?? row.defaultValue
+  if (row.type === 'bool') {
+    return normalizeBool(raw, normalizeBool(row.defaultValue)) ? '1' : '0'
   }
+  if (row.type === 'number') {
+    return String(clampNumber(raw, Number(row.defaultValue || 0), row.min, row.max))
+  }
+  if (row.type === 'percent') {
+    return String(clampNumber(raw, Number(row.defaultValue || 0), 0, 10000))
+  }
+  return String(raw ?? '').trim()
 }
 
-async function saveImConfigs() {
-  imLoading.value = true
+async function saveConfig(row) {
+  const cfgValue = normalizeForSave(row)
+  savingKey.value = row.key
   try {
-    const sdkId = imForm.value.im_sdk_app_id ? String(imForm.value.im_sdk_app_id) : ''
-    await upsertConfig('im_sdk_app_id', sdkId, '腾讯IM SDK AppID')
-    await upsertConfig('im_secret_key', imForm.value.im_secret_key.trim(), '腾讯IM SecretKey')
-    await upsertConfig(
-      'im_call_trace_enabled',
-      imForm.value.im_call_trace_enabled ? '1' : '0',
-      '是否启用通话 IM 留痕'
-    )
-    await upsertConfig(
-      'im_admin_identifier',
-      imForm.value.im_admin_identifier.trim() || 'trace_bot',
-      '腾讯 IM 通话留痕管理员账号'
-    )
+    if (row.id) {
+      await api.updateSystemConfig({
+        id: row.id,
+        cfg_key: row.key,
+        cfg_value: cfgValue,
+        description: row.description,
+      })
+    } else {
+      await api.createSystemConfig({
+        cfg_key: row.key,
+        cfg_value: cfgValue,
+        description: row.description,
+      })
+    }
+    message.success('保存成功')
     await loadAllConfigs()
-    $message.success('IM 配置已保存')
-  } catch (_) {
-    $message.error('保存失败，请稍后重试')
+  } catch (error) {
+    message.error(error?.message || '保存失败')
+    console.error(error)
   } finally {
-    imLoading.value = false
-  }
-}
-
-async function saveRtcConfigs() {
-  rtcLoading.value = true
-  try {
-    await upsertConfig('rtc_app_id', rtcForm.value.rtc_app_id.trim(), '声网 RTC App ID')
-    await upsertConfig(
-      'rtc_app_certificate',
-      rtcForm.value.rtc_app_certificate.trim(),
-      '声网 RTC App Certificate'
-    )
-    await loadAllConfigs()
-    $message.success('RTC 配置已保存')
-  } catch (_) {
-    $message.error('保存失败，请稍后重试')
-  } finally {
-    rtcLoading.value = false
-  }
-}
-
-async function saveFaceBeautyConfigs() {
-  faceBeautyLoading.value = true
-  try {
-    await upsertConfig(
-      'face_beauty_key',
-      faceBeautyForm.value.face_beauty_key.trim(),
-      '美颜 SDK License Key'
-    )
-    await loadAllConfigs()
-    $message.success('美颜配置已保存')
-  } catch (_) {
-    $message.error('保存失败，请稍后重试')
-  } finally {
-    faceBeautyLoading.value = false
-  }
-}
-
-async function saveBillingConfigs() {
-  billingLoading.value = true
-  try {
-    const freeSeconds = normalizeSeconds(billingForm.value.call_billing_free_seconds, 10, 0, 600)
-    const anchorShareBps = normalizeSeconds(billingForm.value.call_anchor_share_bps, 5000, 0, 10000)
-    const giftShareBps = normalizeSeconds(billingForm.value.gift_anchor_share_bps, 5000, 0, 10000)
-    await upsertConfig('call_billing_free_seconds', String(freeSeconds), '通话免费时长（秒）')
-    await upsertConfig(
-      'call_anchor_share_bps',
-      String(anchorShareBps),
-      '视频通话主播分成比例（万分比）'
-    )
-    await upsertConfig(
-      'gift_anchor_share_bps',
-      String(giftShareBps),
-      '礼物主播分成比例（万分比）'
-    )
-    await loadAllConfigs()
-    $message.success('计费配置已保存')
-  } catch (_) {
-    $message.error('保存失败，请稍后重试')
-  } finally {
-    billingLoading.value = false
-  }
-}
-
-async function saveProtectConfigs() {
-  protectLoading.value = true
-  try {
-    const inbound = normalizeSeconds(protectForm.value.reject_inbound_protect_seconds, 5, 0, 600)
-    const pair = normalizeSeconds(protectForm.value.reject_pair_protect_seconds, 5, 0, 600)
-
-    await upsertConfig(
-      'call_reject_inbound_protect_seconds',
-      String(inbound),
-      '拒绝后禁止呼入保护时间（秒）'
-    )
-    await upsertConfig(
-      'call_reject_pair_protect_seconds',
-      String(pair),
-      '拒绝后禁止同一主叫再次呼叫保护时间（秒）'
-    )
-
-    await loadAllConfigs()
-    $message.success('通话保护配置已保存')
-  } catch (_) {
-    $message.error('保存失败，请稍后重试')
-  } finally {
-    protectLoading.value = false
-  }
-}
-
-async function saveWatchdogConfigs() {
-  watchdogLoading.value = true
-  try {
-    const pollSeconds = normalizeSeconds(watchdogForm.value.call_watchdog_poll_seconds, 5, 1, 600)
-    const ringTimeout = normalizeSeconds(
-      watchdogForm.value.call_watchdog_ring_timeout_seconds,
-      30,
-      1,
-      600
-    )
-    const renewGrace = normalizeSeconds(
-      watchdogForm.value.call_watchdog_renew_grace_seconds,
-      5,
-      0,
-      5
-    )
-    const offlineDetect = normalizeSeconds(
-      watchdogForm.value.call_presence_offline_detect_seconds,
-      3,
-      1,
-      600
-    )
-    const settleGrace = normalizeSeconds(
-      watchdogForm.value.call_presence_settle_grace_seconds,
-      5,
-      0,
-      30
-    )
-
-    await upsertConfig('call_watchdog_poll_seconds', String(pollSeconds), 'Watchdog 轮询间隔（秒）')
-    await upsertConfig(
-      'call_watchdog_ring_timeout_seconds',
-      String(ringTimeout),
-      '呼叫振铃超时自动结束（秒）'
-    )
-    await upsertConfig(
-      'call_watchdog_renew_grace_seconds',
-      String(renewGrace),
-      '续费宽限时长（秒）'
-    )
-    await upsertConfig(
-      'call_presence_offline_detect_seconds',
-      String(offlineDetect),
-      '在线状态离线判定阈值（秒）'
-    )
-    await upsertConfig(
-      'call_presence_settle_grace_seconds',
-      String(settleGrace),
-      '离线结算宽限时长（秒）'
-    )
-
-    await loadAllConfigs()
-    $message.success('Watchdog 配置已保存')
-  } catch (_) {
-    $message.error('保存失败，请稍后重试')
-  } finally {
-    watchdogLoading.value = false
+    savingKey.value = ''
   }
 }
 </script>
@@ -423,187 +484,18 @@ async function saveWatchdogConfigs() {
 <template>
   <CommonPage title="系统配置">
     <NSpace vertical :size="16" class="mb-20">
-      <NCard title="基础配置（代币名称）">
-        <NForm label-placement="left" label-align="left" :label-width="160" :model="tokenForm">
-          <NFormItem label="金币名称 coin_name">
-            <NInput v-model:value="tokenForm.coin_name" placeholder="例如：金币" />
-          </NFormItem>
-          <NFormItem label="钻石名称 diamond_name">
-            <NInput v-model:value="tokenForm.diamond_name" placeholder="例如：钻石" />
-          </NFormItem>
-        </NForm>
-        <NButton type="primary" :loading="tokenLoading" @click="saveTokenConfigs"
-          >保存基础配置</NButton
-        >
-      </NCard>
-
-      <NCard title="IM 配置（腾讯云）">
-        <NForm label-placement="left" label-align="left" :label-width="180" :model="imForm">
-          <NFormItem label="IM SDK AppID im_sdk_app_id">
-            <NInputNumber
-              v-model:value="imForm.im_sdk_app_id"
-              :min="1"
-              placeholder="请输入数字 AppID"
-            />
-          </NFormItem>
-          <NFormItem label="IM SecretKey im_secret_key">
-            <NInput
-              v-model:value="imForm.im_secret_key"
-              type="password"
-              show-password-on="mousedown"
-              placeholder="请输入 IM SecretKey"
-            />
-          </NFormItem>
-          <NFormItem label="通话留痕 im_call_trace_enabled">
-            <NSwitch v-model:value="imForm.im_call_trace_enabled" />
-          </NFormItem>
-          <NFormItem label="留痕管理员 im_admin_identifier">
-            <NInput v-model:value="imForm.im_admin_identifier" placeholder="例如：trace_bot" />
-          </NFormItem>
-        </NForm>
-        <NButton type="primary" :loading="imLoading" @click="saveImConfigs">保存 IM 配置</NButton>
-      </NCard>
-
-      <NCard title="RTC 配置（声网）">
-        <NForm label-placement="left" label-align="left" :label-width="220" :model="rtcForm">
-          <NFormItem label="RTC App ID rtc_app_id">
-            <NInput v-model:value="rtcForm.rtc_app_id" placeholder="请输入声网 App ID" />
-          </NFormItem>
-          <NFormItem label="RTC App Certificate rtc_app_certificate">
-            <NInput
-              v-model:value="rtcForm.rtc_app_certificate"
-              type="password"
-              show-password-on="mousedown"
-              placeholder="请输入声网 App Certificate"
-            />
-          </NFormItem>
-        </NForm>
-        <NButton type="primary" :loading="rtcLoading" @click="saveRtcConfigs"
-          >保存 RTC 配置</NButton
-        >
-      </NCard>
-
-      <NCard title="美颜配置">
-        <NForm label-placement="left" label-align="left" :label-width="200" :model="faceBeautyForm">
-          <NFormItem label="美颜 Key face_beauty_key">
-            <NInput
-              v-model:value="faceBeautyForm.face_beauty_key"
-              type="password"
-              show-password-on="mousedown"
-              placeholder="请输入美颜 SDK Key"
-            />
-          </NFormItem>
-        </NForm>
-        <NButton type="primary" :loading="faceBeautyLoading" @click="saveFaceBeautyConfigs">
-          保存美颜配置
-        </NButton>
-      </NCard>
-
-      <NCard title="通话计费配置">
-        <NForm label-placement="left" label-align="left" :label-width="260" :model="billingForm">
-          <NFormItem label="通话免费时长（秒） call_billing_free_seconds">
-            <NInputNumber
-              v-model:value="billingForm.call_billing_free_seconds"
-              :min="0"
-              :max="600"
-              placeholder="例如 10"
-            />
-          </NFormItem>
-          <NFormItem label="视频通话主播分成比例（%） call_anchor_share_bps">
-            <NInputNumber
-              v-model:value="anchorSharePercent"
-              :min="0"
-              :max="100"
-              :step="0.01"
-              placeholder="例如 50"
-            />
-          </NFormItem>
-          <NFormItem label="礼物主播分成比例（%） gift_anchor_share_bps">
-            <NInputNumber
-              v-model:value="giftSharePercent"
-              :min="0"
-              :max="100"
-              :step="0.01"
-              placeholder="例如 50"
-            />
-          </NFormItem>
-        </NForm>
-        <NButton type="primary" :loading="billingLoading" @click="saveBillingConfigs"
-          >保存计费配置</NButton
-        >
-      </NCard>
-
-      <NCard title="通话保护配置">
-        <NForm label-placement="left" label-align="left" :label-width="260" :model="protectForm">
-          <NFormItem label="拒绝后禁止呼入（秒） call_reject_inbound_protect_seconds">
-            <NInputNumber
-              v-model:value="protectForm.reject_inbound_protect_seconds"
-              :min="0"
-              :max="600"
-              placeholder="例如 5"
-            />
-          </NFormItem>
-          <NFormItem label="拒绝后禁止同一用户再次呼叫（秒） call_reject_pair_protect_seconds">
-            <NInputNumber
-              v-model:value="protectForm.reject_pair_protect_seconds"
-              :min="0"
-              :max="600"
-              placeholder="例如 5"
-            />
-          </NFormItem>
-        </NForm>
-        <NButton type="primary" :loading="protectLoading" @click="saveProtectConfigs">
-          保存通话保护配置
-        </NButton>
-      </NCard>
-
-      <NCard title="Watchdog 配置">
-        <NForm label-placement="left" label-align="left" :label-width="300" :model="watchdogForm">
-          <NFormItem label="轮询间隔（秒） call_watchdog_poll_seconds">
-            <NInputNumber
-              v-model:value="watchdogForm.call_watchdog_poll_seconds"
-              :min="1"
-              :max="600"
-              placeholder="例如 5"
-            />
-          </NFormItem>
-          <NFormItem label="振铃超时（秒） call_watchdog_ring_timeout_seconds">
-            <NInputNumber
-              v-model:value="watchdogForm.call_watchdog_ring_timeout_seconds"
-              :min="1"
-              :max="600"
-              placeholder="例如 30"
-            />
-          </NFormItem>
-          <NFormItem label="续费宽限（秒） call_watchdog_renew_grace_seconds">
-            <NInputNumber
-              v-model:value="watchdogForm.call_watchdog_renew_grace_seconds"
-              :min="0"
-              :max="5"
-              placeholder="例如 5"
-            />
-          </NFormItem>
-          <NFormItem label="离线判定阈值（秒） call_presence_offline_detect_seconds">
-            <NInputNumber
-              v-model:value="watchdogForm.call_presence_offline_detect_seconds"
-              :min="1"
-              :max="600"
-              placeholder="例如 3"
-            />
-          </NFormItem>
-          <NFormItem label="离线结算宽限（秒） call_presence_settle_grace_seconds">
-            <NInputNumber
-              v-model:value="watchdogForm.call_presence_settle_grace_seconds"
-              :min="0"
-              :max="30"
-              placeholder="例如 5"
-            />
-          </NFormItem>
-        </NForm>
-        <NButton type="primary" :loading="watchdogLoading" @click="saveWatchdogConfigs">
-          保存 Watchdog 配置
-        </NButton>
-      </NCard>
+      <NSpace justify="end">
+        <NButton :loading="loading" @click="loadAllConfigs">刷新</NButton>
+      </NSpace>
+      <NDataTable
+        :columns="columns"
+        :data="tableRows"
+        :loading="loading"
+        :pagination="false"
+        :bordered="true"
+        :single-line="false"
+        :scroll-x="1320"
+      />
     </NSpace>
   </CommonPage>
 </template>

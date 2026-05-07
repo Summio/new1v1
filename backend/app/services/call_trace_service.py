@@ -9,6 +9,8 @@ from urllib.parse import urlencode
 
 from loguru import logger
 
+from app.services.gift_income_service import decimal_to_float_2
+
 CALL_TRACE_PROTOCOL = "call_trace.v1"
 VALID_CALL_TRACE_PHASES = {
     "dialing",
@@ -91,9 +93,9 @@ def build_call_trace_event(
         "peer_user_id": peer_id,
         "ts": ts or _now_ts_seconds(),
         "duration_seconds": _safe_int(getattr(call_record, "duration", 0)),
-        "total_fee_coins": _safe_int(getattr(call_record, "total_fee", 0)),
+        "total_fee_coins": decimal_to_float_2(getattr(call_record, "total_fee", 0)),
         "income_anchor_user_id": _safe_int(getattr(call_record, "income_anchor_user_id", 0)),
-        "anchor_income_diamonds": _safe_int(getattr(call_record, "anchor_income_diamonds", 0)),
+        "anchor_income_diamonds": decimal_to_float_2(getattr(call_record, "anchor_income_diamonds", 0)),
         "reason": reason,
     }
 

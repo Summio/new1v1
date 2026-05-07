@@ -24,6 +24,28 @@ class RechargeConfigOut(BaseModel):
     packages: List[RechargePackageItem]
 
 
+class WithdrawPackageItem(BaseModel):
+    """提现套餐项"""
+    diamonds: int = Field(gt=0, description="消耗钻石数")
+    amount: int = Field(gt=0, le=10000000, description="到账金额（分），例如 1000 表示 10.00 元")
+    tag: Optional[str] = Field(None, max_length=10, description="角标文字")
+    tag_color: Optional[str] = Field(None, max_length=20, description="角标颜色（十六进制，如 #FF5722）")
+
+
+class WithdrawConfigIn(BaseModel):
+    """提现配置输入"""
+    packages: List[WithdrawPackageItem] = Field(
+        min_length=1,
+        max_length=20,
+        description="提现套餐列表",
+    )
+
+
+class WithdrawConfigOut(BaseModel):
+    """提现配置输出"""
+    packages: List[WithdrawPackageItem]
+
+
 class IMTextBillingConfigIn(BaseModel):
     """IM 文字消息计费配置输入"""
     enabled: bool = Field(default=False, description="是否开启文字聊天扣费")

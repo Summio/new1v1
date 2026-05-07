@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, File, UploadFile
 
 from app.controllers.user import user_controller
 from app.core.ctx import CTX_USER_ID
@@ -8,12 +9,19 @@ from app.core.dependency import DependAuth
 from app.models.admin import Api, Menu, Role, User
 from app.schemas.base import Fail, Success
 from app.schemas.login import *
-from app.schemas.users import UpdatePassword
+from app.schemas.users import UpdatePassword, UserProfileUpdate
 from app.settings import settings
 from app.utils.jwt_utils import create_access_token
+from app.utils.media_url import to_relative_media_url
 from app.utils.password import get_password_hash, verify_password
+from app.utils.upload_files import (
+    UploadValidationError,
+    read_validated_image_upload,
+    save_upload_content,
+)
 
 router = APIRouter()
+_ALLOWED_IMAGE_SUFFIX = {".jpg", ".jpeg", ".png", ".webp"}
 
 
 @router.post("/access_token", summary="获取token")
@@ -43,8 +51,53 @@ async def get_userinfo():
     user_id = CTX_USER_ID.get()
     user_obj = await user_controller.get(id=user_id)
     data = await user_obj.to_dict(exclude_fields=["password"])
-    data["avatar"] = getattr(user_obj, "avatar", None) or data.get("avatar") or ""
+    data["avatar"] = to_relative_media_url(getattr(user_obj, "avatar", None) or data.get("avatar"))
     return Success(data=data)
+
+
+@router.post("/profile/update", summary="更新当前用户资料", dependencies=[DependAuth])
+async def update_user_profile(req_in: UserProfileUpdate):
+    user_id = CTX_USER_ID.get()
+    user = await user_controller.get(id=user_id)
+    update_data = {
+        "username": req_in.username,
+        "email": req_in.email,
+    }
+    if req_in.avatar is not None:
+        update_data["avatar"] = to_relative_media_url(req_in.avatar) or None
+
+    user.update_from_dict(update_data)
+    await user.save()
+    return Success(
+        msg="更新成功",
+        data={
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "avatar": to_relative_media_url(user.avatar),
+        },
+    )
+
+
+@router.post("/profile/upload-avatar", summary="上传当前用户头像", dependencies=[DependAuth])
+async def upload_user_avatar(file: UploadFile = File(...)):
+    try:
+        suffix, content = await read_validated_image_upload(
+            file,
+            allowed_suffixes=_ALLOWED_IMAGE_SUFFIX,
+            invalid_suffix_message="仅支持 jpg/jpeg/png/webp",
+        )
+    except UploadValidationError as exc:
+        return Fail(code=exc.code, msg=exc.message)
+
+    user_id = CTX_USER_ID.get()
+    relative_url = save_upload_content(
+        base_dir=settings.BASE_DIR,
+        relative_dir=Path("admin") / "avatar" / str(user_id),
+        suffix=suffix,
+        content=content,
+    )
+    return Success(data={"url": relative_url})
 
 
 @router.get("/usermenu", summary="查看用户菜单", dependencies=[DependAuth])

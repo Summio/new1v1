@@ -31,9 +31,9 @@ class AppUser(BaseModel, TimestampMixin):
     anchor_reviewed_at = fields.DatetimeField(null=True, description="主播审核时间")
     anchor_reject_reason = fields.CharField(max_length=500, null=True, description="主播申请拒绝原因")
     anchor_apply_face_image = fields.CharField(max_length=500, null=True, description="主播申请正面照URL")
-    coins = fields.BigIntField(default=0, description="金币余额(分)")
-    diamonds = fields.BigIntField(default=0, description="钻石余额(分)")
-    frozen_diamonds = fields.BigIntField(default=0, description="冻结钻石(分)")
+    coins = fields.DecimalField(max_digits=18, decimal_places=2, default=0, description="金币余额")
+    diamonds = fields.DecimalField(max_digits=18, decimal_places=2, default=0, description="钻石余额")
+    frozen_diamonds = fields.DecimalField(max_digits=18, decimal_places=2, default=0, description="冻结钻石")
     ban_reason = fields.CharField(max_length=500, null=True, description="封禁原因")
     last_login = fields.DatetimeField(null=True, description="最后登录时间")
 

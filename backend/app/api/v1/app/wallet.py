@@ -1,26 +1,80 @@
 import asyncio
-from fastapi import APIRouter, Depends
+import json
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, File, UploadFile
 
 from app.core.app_auth import DependAppAuth
 from app.core.dependency import LimitCallback
 from app.core.ctx import CTX_APP_USER_ID, CTX_APP_USER_OBJ
-from app.models import AppUser, RechargeOrder, SystemConfig, WithdrawApply
+from app.models import AppUser, RechargeOrder, SystemConfig, WithdrawAccount, WithdrawApply
 from app.schemas.app_api import (
     BalanceOut,
     RechargeCreateIn,
     RechargeCreateOut,
     TransactionListOut,
     TransactionRecord,
+    WithdrawAccountIn,
+    WithdrawAccountOut,
     WithdrawApplyIn,
     WithdrawApplyOut,
 )
 from app.schemas.base import Fail, Success
 from app.core.redis import get_redis
 from app.services.gift_income_service import decimal_to_float_2
+from app.settings.config import settings
+from app.utils.media_url import to_relative_media_url
+from app.utils.upload_files import (
+    UploadValidationError,
+    read_validated_image_upload,
+    save_upload_content,
+)
 from tortoise.expressions import F
 from tortoise.transactions import in_transaction
 
 router = APIRouter()
+_ALLOWED_IMAGE_SUFFIX = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+def parse_withdraw_packages(config_value: str | None) -> list[dict]:
+    try:
+        data = json.loads(config_value or "[]")
+    except (json.JSONDecodeError, ValueError):
+        return []
+    if not isinstance(data, list):
+        return []
+    packages = []
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        try:
+            diamonds = int(item.get("diamonds") or 0)
+            amount = int(item.get("amount") or 0)
+        except (TypeError, ValueError):
+            continue
+        if diamonds <= 0 or amount <= 0:
+            continue
+        packages.append({"diamonds": diamonds, "amount": amount})
+    return packages
+
+
+async def is_configured_withdraw_amount(amount: int) -> bool:
+    config_value = await SystemConfig.get_value("withdraw_packages", "[]")
+    packages = parse_withdraw_packages(config_value)
+    if not packages:
+        return False
+    return any(item["diamonds"] == amount for item in packages)
+
+
+def dump_withdraw_account(account: WithdrawAccount | None) -> WithdrawAccountOut:
+    if not account:
+        return WithdrawAccountOut()
+    return WithdrawAccountOut(
+        real_name=account.real_name or "",
+        account_no=account.account_no or "",
+        payment_qr_code=to_relative_media_url(account.payment_qr_code),
+        has_account=True,
+    )
 
 
 @router.get("/wallet/balance", summary="查询余额", dependencies=[Depends(DependAppAuth)])
@@ -139,6 +193,65 @@ async def recharge_callback(order_no: str):
     return Success(data={"msg": "充值成功"})
 
 
+@router.get("/withdraw/account", summary="获取提现账户", dependencies=[Depends(DependAppAuth)])
+async def withdraw_account_get():
+    user_id = CTX_APP_USER_ID.get()
+    account = await WithdrawAccount.filter(user_id=user_id).first()
+    return Success(data=dump_withdraw_account(account).model_dump())
+
+
+@router.post("/withdraw/account", summary="保存提现账户", dependencies=[Depends(DependAppAuth)])
+async def withdraw_account_save(req_in: WithdrawAccountIn):
+    user_id = CTX_APP_USER_ID.get()
+    real_name = req_in.real_name.strip()
+    account_no = req_in.account_no.strip()
+    payment_qr_code = to_relative_media_url(req_in.payment_qr_code)
+    if not real_name:
+        return Fail(code=400, msg="请填写真实姓名")
+    if not account_no:
+        return Fail(code=400, msg="请填写支付宝账号")
+    if not payment_qr_code:
+        return Fail(code=400, msg="请上传收款码")
+
+    account = await WithdrawAccount.filter(user_id=user_id).first()
+    if account:
+        account.real_name = real_name
+        account.account_no = account_no
+        account.payment_qr_code = payment_qr_code
+        await account.save(update_fields=["real_name", "account_no", "payment_qr_code"])
+    else:
+        account = await WithdrawAccount.create(
+            user_id=user_id,
+            real_name=real_name,
+            account_no=account_no,
+            payment_qr_code=payment_qr_code,
+        )
+    return Success(data=dump_withdraw_account(account).model_dump(), msg="保存成功")
+
+
+@router.post("/withdraw/upload-qr-code", summary="上传提现收款码", dependencies=[Depends(DependAppAuth)])
+async def withdraw_upload_qr_code(file: UploadFile = File(...)):
+    app_user: AppUser = CTX_APP_USER_OBJ.get()
+    if not app_user:
+        return Fail(code=401, msg="用户不存在")
+    try:
+        suffix, content = await read_validated_image_upload(
+            file,
+            allowed_suffixes=_ALLOWED_IMAGE_SUFFIX,
+            invalid_suffix_message="仅支持 jpg/jpeg/png/webp",
+        )
+    except UploadValidationError as exc:
+        return Fail(code=exc.code, msg=exc.message)
+
+    relative_url = save_upload_content(
+        base_dir=settings.BASE_DIR,
+        relative_dir=Path("withdraw_qr") / str(app_user.id),
+        suffix=suffix,
+        content=content,
+    )
+    return Success(data={"url": relative_url})
+
+
 @router.post("/withdraw/apply", summary="申请提现（扣钻石，冻结审核）", dependencies=[Depends(DependAppAuth)])
 async def withdraw_apply(req_in: WithdrawApplyIn):
     user_id = CTX_APP_USER_ID.get()
@@ -158,17 +271,35 @@ async def withdraw_apply(req_in: WithdrawApplyIn):
     # P13-P15: 提现金额合法性校验
     if req_in.amount <= 0:
         return Fail(code=400, msg="提现金额必须大于 0")
-    if req_in.amount < 100:
-        return Fail(code=400, msg="单次提现金额不低于 100 钻石")
-    # C2 修复：提现金额上限保护，防止单次全额提空
-    if req_in.amount > 50000:
-        return Fail(code=400, msg="单次提现金额不超过 50000 钻石")
-    if not req_in.real_name or not req_in.real_name.strip():
-        return Fail(code=400, msg="请填写完整的真实姓名")
-    if not req_in.bank_name or not req_in.bank_name.strip():
-        return Fail(code=400, msg="请填写完整的银行名称")
-    if not req_in.account_no or not req_in.account_no.strip():
-        return Fail(code=400, msg="请填写完整的银行账号")
+    config_value = await SystemConfig.get_value("withdraw_packages", "[]")
+    if not parse_withdraw_packages(config_value):
+        return Fail(code=400, msg="请先配置提现档位")
+    if not await is_configured_withdraw_amount(req_in.amount):
+        return Fail(code=400, msg="请选择有效的提现档位")
+
+    real_name = req_in.real_name.strip()
+    account_no = req_in.account_no.strip()
+    payment_qr_code = to_relative_media_url(req_in.payment_qr_code)
+    if not real_name:
+        return Fail(code=400, msg="请填写真实姓名")
+    if not account_no:
+        return Fail(code=400, msg="请填写支付宝账号")
+    if not payment_qr_code:
+        return Fail(code=400, msg="请上传收款码")
+
+    account = await WithdrawAccount.filter(user_id=user_id).first()
+    if account:
+        account.real_name = real_name
+        account.account_no = account_no
+        account.payment_qr_code = payment_qr_code
+        await account.save(update_fields=["real_name", "account_no", "payment_qr_code"])
+    else:
+        await WithdrawAccount.create(
+            user_id=user_id,
+            real_name=real_name,
+            account_no=account_no,
+            payment_qr_code=payment_qr_code,
+        )
 
     # H3 修复：所有业务逻辑在事务外执行，事务块内仅执行数据库操作，
     # 避免在 async with in_transaction() 块内 return 导致事务未正确提交/回滚
@@ -191,9 +322,10 @@ async def withdraw_apply(req_in: WithdrawApplyIn):
             await WithdrawApply.create(
                 user_id=user_id,
                 amount=req_in.amount,
-                bank_name=req_in.bank_name.strip(),
-                account_no=req_in.account_no.strip(),
-                real_name=req_in.real_name.strip(),
+                bank_name="支付宝",
+                account_no=account_no,
+                real_name=real_name,
+                payment_qr_code=payment_qr_code,
                 status="pending",
                 using_db=conn,
             )
@@ -216,7 +348,7 @@ async def withdraw_apply(req_in: WithdrawApplyIn):
         data=WithdrawApplyOut(
             diamonds=decimal_to_float_2(final_diamonds),
             frozen_diamonds=decimal_to_float_2(final_frozen),
-            msg="提现申请已提交，审核通过后到账",
+            msg="提现申请已提交，处理通过后到账",
         ).model_dump()
     )
 
@@ -246,7 +378,7 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
     if type in ("all", "recharge", "coins"):
         union_parts.append(
             f"SELECT id, 'recharge' AS rec_type, amount, created_at, 1 AS is_income, "
-            f"NULL AS counterparty_user_id, '' AS gift_name "
+            f"NULL AS counterparty_user_id, '' AS gift_name, '' AS status "
             f"FROM recharge_order WHERE user_id = {placeholder} AND status = 'paid'"
         )
         base_params.append(user_id)
@@ -255,7 +387,7 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
     if type in ("all", "call", "coins"):
         union_parts.append(
             f"SELECT id, 'call' AS rec_type, COALESCE(total_fee, 0) AS amount, created_at, 0 AS is_income, "
-            f"callee_id AS counterparty_user_id, '' AS gift_name "
+            f"callee_id AS counterparty_user_id, '' AS gift_name, '' AS status "
             f"FROM call_record WHERE caller_id = {placeholder}"
         )
         base_params.append(user_id)
@@ -264,7 +396,8 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
     if type in ("all", "call", "diamonds"):
         union_parts.append(
             f"SELECT id, 'call' AS rec_type, COALESCE(anchor_income_diamonds, 0) AS amount, created_at, 1 AS is_income, "
-            f"CASE WHEN caller_id = {placeholder} THEN callee_id ELSE caller_id END AS counterparty_user_id, '' AS gift_name "
+            f"CASE WHEN caller_id = {placeholder} THEN callee_id ELSE caller_id END AS counterparty_user_id, "
+            f"'' AS gift_name, '' AS status "
             f"FROM call_record WHERE income_anchor_user_id = {placeholder} AND COALESCE(anchor_income_diamonds, 0) > 0"
         )
         base_params.append(user_id)
@@ -274,7 +407,7 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
     if type in ("all", "gift", "coins"):
         union_parts.append(
             f"SELECT id, 'gift' AS rec_type, total_price AS amount, created_at, 0 AS is_income, "
-            f"receiver_id AS counterparty_user_id, gift_name AS gift_name "
+            f"receiver_id AS counterparty_user_id, gift_name AS gift_name, '' AS status "
             f"FROM gift_record WHERE sender_id = {placeholder}"
         )
         base_params.append(user_id)
@@ -283,7 +416,7 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
     if type in ("all", "diamonds"):
         union_parts.append(
             f"SELECT id, 'gift' AS rec_type, anchor_income_diamonds AS amount, created_at, 1 AS is_income, "
-            f"sender_id AS counterparty_user_id, gift_name AS gift_name "
+            f"sender_id AS counterparty_user_id, gift_name AS gift_name, '' AS status "
             f"FROM gift_record WHERE receiver_id = {placeholder}"
         )
         base_params.append(user_id)
@@ -292,7 +425,7 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
     if type in ("all", "im_text", "coins"):
         union_parts.append(
             f"SELECT id, 'im_text' AS rec_type, price AS amount, created_at, 0 AS is_income, "
-            f"receiver_id AS counterparty_user_id, '' AS gift_name "
+            f"receiver_id AS counterparty_user_id, '' AS gift_name, '' AS status "
             f"FROM im_text_message_charge_record WHERE sender_id = {placeholder} AND status = 'charged'"
         )
         base_params.append(user_id)
@@ -301,7 +434,7 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
     if type in ("all", "im_text", "diamonds"):
         union_parts.append(
             f"SELECT id, 'im_text' AS rec_type, anchor_income_diamonds AS amount, created_at, 1 AS is_income, "
-            f"sender_id AS counterparty_user_id, '' AS gift_name "
+            f"sender_id AS counterparty_user_id, '' AS gift_name, '' AS status "
             f"FROM im_text_message_charge_record WHERE receiver_id = {placeholder} "
             f"AND status = 'charged' AND anchor_income_diamonds > 0"
         )
@@ -311,7 +444,8 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
     if type in ("all", "withdraw", "diamonds"):
         union_parts.append(
             f"SELECT id, 'withdraw' AS rec_type, amount, created_at, 0 AS is_income, "
-            f"NULL AS counterparty_user_id, '' AS gift_name "
+            f"NULL AS counterparty_user_id, account_no AS gift_name, "
+            f"status AS status "
             f"FROM withdraw_apply WHERE user_id = {placeholder}"
         )
         base_params.append(user_id)
@@ -330,7 +464,7 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
     if not isinstance(inner_offset, int) or inner_offset < 0:
         inner_offset = 0
     full_sql = f"""
-        SELECT id, rec_type, amount, created_at, is_income, counterparty_user_id, gift_name FROM (
+        SELECT id, rec_type, amount, created_at, is_income, counterparty_user_id, gift_name, status FROM (
             {inner_sql}
             ORDER BY created_at DESC
             LIMIT {placeholder} OFFSET {placeholder}
@@ -394,8 +528,9 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
             is_income = row.get("is_income")
             counterparty_id = row.get("counterparty_user_id")
             gift_name = row.get("gift_name")
+            status = row.get("status")
         else:
-            rec_id, rec_type, amount, created_at, is_income, counterparty_id, gift_name = row
+            rec_id, rec_type, amount, created_at, is_income, counterparty_id, gift_name, status = row
 
         counterparty_name = ""
         if counterparty_id is not None:
@@ -403,6 +538,8 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
                 counterparty_name = user_name_map.get(int(counterparty_id), "")
             except (TypeError, ValueError):
                 counterparty_name = ""
+        if rec_type == "withdraw":
+            counterparty_name = str(gift_name or "支付宝")
 
         title_map = {
             "recharge": "充值",
@@ -425,6 +562,7 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
             is_income=bool(is_income),
             created_at=created_at_text,
             counterparty_name=counterparty_name,
+            status=str(status or ""),
         ))
 
     has_more = total > offset + page_size

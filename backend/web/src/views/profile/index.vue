@@ -5,7 +5,6 @@ import { useI18n } from 'vue-i18n'
 import CommonPage from '@/components/page/CommonPage.vue'
 import { useUserStore } from '@/store'
 import api from '@/api'
-import { is } from '~/src/utils'
 
 const { t } = useI18n()
 const userStore = useUserStore()
@@ -21,11 +20,14 @@ const infoForm = ref({
 async function updateProfile() {
   isLoading.value = true
   infoFormRef.value?.validate(async (err) => {
-    if (err) return
+    if (err) {
+      isLoading.value = false
+      return
+    }
     await api
-      .updateUser({ ...infoForm.value, id: userStore.userId })
-      .then(() => {
-        userStore.setUserInfo(infoForm.value)
+      .updateProfile(infoForm.value)
+      .then((res) => {
+        userStore.setUserInfo(res.data || infoForm.value)
         isLoading.value = false
         $message.success(t('common.text.update_success'))
       })
@@ -42,6 +44,35 @@ const infoFormRules = {
       trigger: ['input', 'blur', 'change'],
     },
   ],
+}
+
+function chooseImageFile() {
+  return new Promise((resolve) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/png,image/jpeg,image/webp'
+    input.onchange = () => {
+      const file = input.files && input.files.length ? input.files[0] : null
+      resolve(file)
+    }
+    input.click()
+  })
+}
+
+async function uploadAvatar() {
+  try {
+    const file = await chooseImageFile()
+    if (!file) return
+    const formData = new FormData()
+    formData.append('file', file)
+    const res = await api.uploadUserAvatar(formData)
+    const url = res?.data?.url || ''
+    if (!url) return
+    infoForm.value.avatar = url
+    $message.success('头像上传成功，请点击更新保存')
+  } catch (error) {
+    $message.error(error?.message || '头像上传失败')
+  }
 }
 
 // 修改密码的表单
@@ -134,7 +165,10 @@ function validatePasswordSame(rule, value) {
             class="w-400"
           >
             <NFormItem :label="$t('views.profile.label_avatar')" path="avatar">
-              <NImage width="100" :src="infoForm.avatar"></NImage>
+              <div class="flex items-center gap-12">
+                <NImage width="100" :src="infoForm.avatar"></NImage>
+                <NButton secondary type="primary" @click="uploadAvatar">上传头像</NButton>
+              </div>
             </NFormItem>
             <NFormItem :label="$t('views.profile.label_username')" path="username">
               <NInput

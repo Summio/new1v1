@@ -11,6 +11,8 @@ if "loguru" not in sys.modules:
             warning=lambda *args, **kwargs: None,
             error=lambda *args, **kwargs: None,
             info=lambda *args, **kwargs: None,
+            remove=lambda *args, **kwargs: None,
+            add=lambda *args, **kwargs: None,
         )
     )
 
@@ -64,9 +66,9 @@ class CallTraceServiceTests(unittest.TestCase):
         self.assertEqual(event["peer_user_id"], 2002)
         self.assertEqual(event["ts"], 1_720_000_000)
         self.assertEqual(event["duration_seconds"], 35)
-        self.assertEqual(event["total_fee_coins"], 120)
+        self.assertEqual(event["total_fee_coins"], 120.0)
         self.assertEqual(event["income_anchor_user_id"], 2002)
-        self.assertEqual(event["anchor_income_diamonds"], 60)
+        self.assertEqual(event["anchor_income_diamonds"], 60.0)
         self.assertIsNone(event["reason"])
 
     def test_valid_call_trace_phases_cover_required_phases(self) -> None:

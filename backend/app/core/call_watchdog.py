@@ -12,6 +12,7 @@ from app.log import logger
 from app.models import AppUser, CallRecord
 from app.models.system_config import SystemConfig
 from app.services.call_income_service import settle_call_anchor_income_once
+from app.services.gift_income_service import decimal_to_float_2
 from app.core.time_utils import now_local_naive, to_utc_aware
 from app.services.call_trace_service import CallTraceService
 from app.utils.parse import safe_parse_int, clamp_int
@@ -702,8 +703,8 @@ async def _ws_push_balance_updated_for_charge(payer_id: int) -> None:
         if payer:
             await ws_events.push_balance_update(
                 user_id=payer_id,
-                coins=payer.coins,
-                diamonds=payer.diamonds,
+                coins=decimal_to_float_2(payer.coins),
+                diamonds=decimal_to_float_2(payer.diamonds),
             )
     except Exception as e:  # noqa: BLE001
         logger.warning("ws push balance_updated for charge failed: {}", str(e))

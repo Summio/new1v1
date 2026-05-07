@@ -5,8 +5,6 @@ import '../../app/theme/app_theme.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/providers/wallet_provider.dart';
 import '../../app/providers/auth_provider.dart';
-import '../profile/withdraw_dialog.dart';
-import 'package:huanxi/core/utils/app_toast.dart';
 
 /// 钱包页面
 /// 显示余额 + 账单明细
@@ -19,6 +17,8 @@ class WalletPage extends ConsumerStatefulWidget {
 
 class _WalletPageState extends ConsumerState<WalletPage> {
   int _selectedFilter = 0; // 0=all, 1=income, 2=expense
+
+  String _formatAmount(double value) => value.toStringAsFixed(2);
 
   @override
   void initState() {
@@ -78,7 +78,7 @@ class _WalletPageState extends ConsumerState<WalletPage> {
                   textBaseline: TextBaseline.alphabetic,
                   children: [
                     Text(
-                      '${walletState.coins}',
+                      _formatAmount(walletState.coins),
                       style: const TextStyle(
                         fontSize: 36,
                         fontWeight: FontWeight.bold,
@@ -97,7 +97,7 @@ class _WalletPageState extends ConsumerState<WalletPage> {
                     Container(width: 1, height: 28, color: Colors.white30),
                     const SizedBox(width: 24),
                     Text(
-                      '${walletState.diamonds}',
+                      _formatAmount(walletState.diamonds),
                       style: const TextStyle(
                         fontSize: 36,
                         fontWeight: FontWeight.bold,
@@ -117,7 +117,7 @@ class _WalletPageState extends ConsumerState<WalletPage> {
                 if (walletState.frozenDiamonds > 0) ...[
                   const SizedBox(height: 8),
                   Text(
-                    '冻结中 ${walletState.frozenDiamonds}${tokenNames.diamondName}',
+                    '冻结中 ${_formatAmount(walletState.frozenDiamonds)}${tokenNames.diamondName}',
                     style: const TextStyle(fontSize: 12, color: Colors.white60),
                   ),
                 ],
@@ -136,25 +136,7 @@ class _WalletPageState extends ConsumerState<WalletPage> {
                       child: _ActionButton(
                         icon: Icons.account_balance_wallet_outlined,
                         label: '提现',
-                        onTap: () async {
-                          final result = await showDialog<WithdrawResult>(
-                            context: context,
-                            builder: (context) => Dialog(
-                              insetPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 24,
-                              ),
-                              child: const WithdrawDialog(),
-                            ),
-                          );
-                          if (!context.mounted) return;
-                          if (result != null) {
-                            AppToast.showSnackBar(
-                              context,
-                              SnackBar(content: Text(result.msg)),
-                            );
-                          }
-                        },
+                        onTap: () => context.push(AppRoutes.withdraw),
                       ),
                     ),
                   ],
@@ -436,7 +418,7 @@ class _TransactionList extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${record.isIncome ? '+' : '-'}${record.amount}',
+                  '${record.isIncome ? '+' : '-'}${record.amount.toStringAsFixed(2)}',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.bold,

@@ -1,12 +1,23 @@
 <script setup>
 import { computed, h, onMounted, ref } from 'vue'
-import { NButton, NForm, NFormItem, NImage, NInput, NInputNumber, NModal, NSwitch, NTag } from 'naive-ui'
+import {
+  NButton,
+  NForm,
+  NFormItem,
+  NImage,
+  NInput,
+  NInputNumber,
+  NModal,
+  NSwitch,
+  NSpace,
+  NTag,
+} from 'naive-ui'
 
 import CommonPage from '@/components/page/CommonPage.vue'
 import QueryBarItem from '@/components/query-bar/QueryBarItem.vue'
 import CrudTable from '@/components/table/CrudTable.vue'
 import api from '@/api'
-import { formatDate } from '@/utils'
+import { formatDate, renderIcon } from '@/utils'
 
 defineOptions({ name: '礼物管理' })
 
@@ -14,7 +25,10 @@ const $table = ref(null)
 const queryItems = ref({})
 const editVisible = ref(false)
 const saving = ref(false)
+const shareSaving = ref(false)
 const coinName = ref('金币')
+const shareConfigId = ref(null)
+const giftAnchorSharePercent = ref(50)
 const priceLabel = computed(() => `礼物价格(${coinName.value})`)
 const form = ref({
   id: null,
@@ -26,7 +40,7 @@ const form = ref({
 })
 
 onMounted(() => {
-  loadCoinName()
+  loadGiftSettings()
   $table.value?.handleSearch()
 })
 
@@ -58,9 +72,11 @@ const columns = [
   {
     title: 'SVGA',
     key: 'svga_url',
-    minWidth: 220,
+    width: 120,
+    align: 'center',
     render(row) {
-      return row.svga_url || '-'
+      if (!row.svga_url) return '-'
+      return h(NTag, { type: 'info' }, { default: () => '已上传' })
     },
   },
   {
@@ -90,28 +106,33 @@ const columns = [
     width: 180,
     align: 'center',
     render(row) {
-      return h('div', { class: 'action-buttons' }, [
+      return [
         h(
           NButton,
           {
             type: 'primary',
             size: 'small',
-            secondary: true,
+            style: 'margin-right: 8px;',
             onClick: () => handleEdit(row),
           },
-          { default: () => '编辑' }
+          {
+            default: () => '编辑',
+            icon: renderIcon('material-symbols:edit-outline', { size: 16 }),
+          }
         ),
         h(
           NButton,
           {
             type: 'error',
             size: 'small',
-            secondary: true,
             onClick: () => handleDelete(row),
           },
-          { default: () => '删除' }
+          {
+            default: () => '删除',
+            icon: renderIcon('material-symbols:delete-outline', { size: 16 }),
+          }
         ),
-      ])
+      ]
     },
   },
 ]
@@ -140,18 +161,56 @@ async function fetchData(params = {}) {
   }
 }
 
-async function loadCoinName() {
+async function loadGiftSettings() {
   try {
     const res = await api.getSystemConfigList({ page: 1, page_size: 200 })
     const rows = res.data || []
-    const row = rows.find((item) => item.cfg_key === 'coin_name')
-    coinName.value = (row?.cfg_value || '金币').toString().trim() || '金币'
+    const coinRow = rows.find((item) => item.cfg_key === 'coin_name')
+    coinName.value = (coinRow?.cfg_value || '金币').toString().trim() || '金币'
+    const shareRow = rows.find((item) => item.cfg_key === 'gift_anchor_share_bps')
+    shareConfigId.value = shareRow?.id || null
+    const rawBps = Number(shareRow?.cfg_value ?? 5000)
+    giftAnchorSharePercent.value = Number.isFinite(rawBps)
+      ? Math.min(Math.max(rawBps / 100, 0), 100)
+      : 50
     const priceColumn = columns.find((item) => item.key === 'price')
     if (priceColumn) {
       priceColumn.title = `价格(${coinName.value})`
     }
   } catch (_) {
     coinName.value = '金币'
+  }
+}
+
+async function saveShareConfig() {
+  const percent = Number(giftAnchorSharePercent.value)
+  if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+    window.$message?.warning('接收方分成需在 0% 到 100% 之间')
+    return
+  }
+  const cfgValue = String(Math.round(percent * 100))
+  shareSaving.value = true
+  try {
+    if (shareConfigId.value) {
+      await api.updateSystemConfig({
+        id: shareConfigId.value,
+        cfg_key: 'gift_anchor_share_bps',
+        cfg_value: cfgValue,
+        desc: '礼物接收方分成比例（万分比）',
+      })
+    } else {
+      const res = await api.createSystemConfig({
+        cfg_key: 'gift_anchor_share_bps',
+        cfg_value: cfgValue,
+        desc: '礼物接收方分成比例（万分比）',
+      })
+      shareConfigId.value = res?.data?.id || null
+    }
+    window.$message?.success('分成配置已保存')
+  } catch (error) {
+    window.$message?.error(error?.message || '分成配置保存失败')
+  } finally {
+    shareSaving.value = false
   }
 }
 
@@ -258,6 +317,10 @@ async function handleUploadIcon() {
   }
 }
 
+function handleRemoveIcon() {
+  form.value.icon = ''
+}
+
 async function handleUploadSvga() {
   try {
     const file = await chooseFile('.svga')
@@ -270,15 +333,49 @@ async function handleUploadSvga() {
     window.$message?.error(error?.message || 'SVGA 上传失败')
   }
 }
+
+function handleRemoveSvga() {
+  form.value.svga_url = ''
+}
+
+function getResourceName(url) {
+  const value = (url || '').trim()
+  if (!value) return ''
+  const pathname = value.split('?')[0].split('#')[0]
+  return pathname.split('/').filter(Boolean).pop() || value
+}
 </script>
 
 <template>
   <CommonPage show-footer title="礼物管理">
     <template #action>
-      <NButton type="primary" @click="handleCreate">新增礼物</NButton>
+      <NSpace align="center">
+        <NInputNumber
+          v-model:value="giftAnchorSharePercent"
+          :min="0"
+          :max="100"
+          :step="1"
+          :precision="2"
+          :show-button="false"
+          style="width: 150px"
+          placeholder="接收方分成"
+        >
+          <template #suffix>%</template>
+        </NInputNumber>
+        <NButton secondary type="primary" :loading="shareSaving" @click="saveShareConfig">
+          保存分成
+        </NButton>
+        <NButton type="primary" @click="handleCreate">新增礼物</NButton>
+      </NSpace>
     </template>
 
-    <CrudTable ref="$table" v-model:query-items="queryItems" :columns="columns" :get-data="fetchData" :scroll-x="1180">
+    <CrudTable
+      ref="$table"
+      v-model:query-items="queryItems"
+      :columns="columns"
+      :get-data="fetchData"
+      :scroll-x="1180"
+    >
       <template #queryBar>
         <QueryBarItem label="礼物名称">
           <NInput v-model:value="queryItems.name" clearable placeholder="请输入礼物名称" />
@@ -286,25 +383,57 @@ async function handleUploadSvga() {
       </template>
     </CrudTable>
 
-    <NModal v-model:show="editVisible" preset="card" title="礼物信息" class="gift-modal">
-      <NForm label-placement="left" label-width="110">
+    <NModal
+      v-model:show="editVisible"
+      preset="card"
+      title="礼物信息"
+      :style="{ width: '480px', maxWidth: 'calc(100vw - 32px)' }"
+    >
+      <NForm label-placement="left" label-width="96">
         <NFormItem label="礼物名称">
           <NInput v-model:value="form.name" placeholder="请输入礼物名称" />
         </NFormItem>
         <NFormItem :label="priceLabel">
-          <NInputNumber v-model:value="form.price" :min="1" :max="99999999" :step="1" :precision="0" />
+          <NInputNumber
+            v-model:value="form.price"
+            :min="1"
+            :max="99999999"
+            :step="1"
+            :precision="0"
+          />
         </NFormItem>
         <NFormItem label="礼物图标">
-          <div class="upload-line">
-            <NInput v-model:value="form.icon" placeholder="图标URL" />
-            <NButton secondary type="primary" @click="handleUploadIcon">上传图标</NButton>
+          <div class="resource-field">
+            <NImage
+              v-if="form.icon"
+              :src="form.icon"
+              width="72"
+              height="72"
+              object-fit="cover"
+              class="icon-preview"
+            />
+            <div v-else class="empty-preview">暂无图标</div>
+            <div class="resource-actions">
+              <NButton secondary type="primary" @click="handleUploadIcon">上传图标</NButton>
+              <NButton v-if="form.icon" secondary type="error" @click="handleRemoveIcon">
+                移除
+              </NButton>
+            </div>
           </div>
-          <NImage v-if="form.icon" :src="form.icon" width="56" height="56" object-fit="cover" class="preview" />
         </NFormItem>
         <NFormItem label="SVGA资源">
-          <div class="upload-line">
-            <NInput v-model:value="form.svga_url" placeholder="SVGA URL" />
-            <NButton secondary type="primary" @click="handleUploadSvga">上传SVGA</NButton>
+          <div class="resource-field">
+            <div v-if="form.svga_url" class="svga-preview">
+              <div class="svga-badge">SVGA</div>
+              <div class="svga-name">{{ getResourceName(form.svga_url) }}</div>
+            </div>
+            <div v-else class="empty-preview">暂无SVGA</div>
+            <div class="resource-actions">
+              <NButton secondary type="primary" @click="handleUploadSvga">上传SVGA</NButton>
+              <NButton v-if="form.svga_url" secondary type="error" @click="handleRemoveSvga">
+                移除
+              </NButton>
+            </div>
           </div>
         </NFormItem>
         <NFormItem label="上架状态">
@@ -322,27 +451,62 @@ async function handleUploadSvga() {
 </template>
 
 <style scoped>
-.action-buttons {
+.resource-field {
   display: flex;
-  gap: 8px;
-  justify-content: center;
-}
-
-.gift-modal {
-  width: 680px;
-  max-width: calc(100vw - 32px);
-}
-
-.upload-line {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
+  align-items: center;
+  gap: 12px;
   width: 100%;
 }
 
-.preview {
-  margin-top: 8px;
+.icon-preview {
   border-radius: 8px;
+}
+
+.empty-preview,
+.svga-preview {
+  width: 72px;
+  height: 72px;
+  border: 1px dashed #d9d9e3;
+  border-radius: 8px;
+  background: #fafafa;
+}
+
+.empty-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8b8f99;
+  font-size: 12px;
+}
+
+.svga-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border-style: solid;
+}
+
+.svga-badge {
+  margin-bottom: 6px;
+  color: #18a058;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.svga-name {
+  max-width: 100%;
+  overflow: hidden;
+  color: #606266;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resource-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .modal-footer {

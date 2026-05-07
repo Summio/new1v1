@@ -1,0 +1,74 @@
+2026-05-07 22:41:51.862 | INFO     | app.core.call_watchdog:run_call_watchdog:714 - call watchdog started
+2026-05-07 22:41:51.866 | INFO     | app.core.bgtask:cleanup_old_audit_logs:23 - audit log cleanup: deleted 0 records older than 180 days
+2026-05-07 22:41:51.866 | INFO     | app.core.bgtask:run_auditlog_cleanup:38 - auditlog periodic cleanup completed, deleted=0
+2026-05-07 22:41:53 - INFO - 127.0.0.1:50745 - "GET /api/v1/app_user/list?page=1&page_size=10 HTTP/1.1" 200 OK
+2026-05-07 22:41:53.905 | INFO     | app.core.call_watchdog:run_call_watchdog:727 - call watchdog: follower mode (no leader)
+2026-05-07 22:42:51.795 | INFO     | app.core.call_watchdog:run_call_watchdog:765 - call watchdog: acquired leader
+2026-05-07 22:43:26 - INFO - 127.0.0.1:50886 - "GET /api/v1/system_config/list?page=1&page_size=500 HTTP/1.1" 200 OK
+2026-05-07 22:43:28 - INFO - 127.0.0.1:50903 - "GET /api/v1/base/userinfo HTTP/1.1" 200 OK
+2026-05-07 22:43:28 - INFO - 127.0.0.1:50904 - "GET /api/v1/base/usermenu HTTP/1.1" 200 OK
+2026-05-07 22:43:28 - INFO - 127.0.0.1:50905 - "GET /api/v1/base/userapi HTTP/1.1" 200 OK
+2026-05-07 22:43:28 - INFO - 127.0.0.1:50906 - "GET /api/v1/system_config/list?page=1&page_size=500 HTTP/1.1" 200 OK
+2026-05-07 22:44:07 - INFO - 127.0.0.1:50954 - "GET /api/v1/app_user/list?page=1&page_size=10 HTTP/1.1" 200 OK
+2026-05-07 22:48:22 - INFO - 192.168.31.179:49890 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-07 22:48:22 - INFO - 192.168.31.179:49894 - "GET /api/v1/app/init/bootstrap HTTP/1.1" 200 OK
+2026-05-07 22:48:23.983 | INFO     | app.websocket.manager:start_pubsub:245 - [WS] starting pubsub listener on pid 20972
+2026-05-07 22:48:23.983 | INFO     | app.websocket.manager:_pubsub_loop:259 - [WS] pubsub subscribed to ws:broadcast
+2026-05-07 22:48:24 - INFO - 192.168.31.179:49894 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-07 22:48:24 - INFO - 192.168.31.179:49918 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-07 22:48:26 - INFO - 192.168.31.179:49904 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-07 22:48:26 - INFO - 192.168.31.179:49932 - "GET /api/v1/app/anchor/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-07 22:48:26.216 | INFO     | app.websocket.manager:connect:90 - [WS] user 100001 connected on pid 20972, total=1
+2026-05-07 22:48:26.224 | INFO     | app.websocket.router:ws_app:92 - [WS] user 100001 authenticated successfully
+2026-05-07 22:48:26 - INFO - 192.168.31.179:49940 - "GET /uploads/profile/admin/fc031763ae8c4a85a07f751af1db4c14.png HTTP/1.1" 200 OK
+2026-05-07 22:48:33 - INFO - 192.168.31.179:49980 - "GET /uploads/profile/admin/a861c74d01514c6e9e491011e30ee06f.jpg HTTP/1.1" 200 OK
+2026-05-07 22:48:33 - INFO - 192.168.31.179:50008 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-07 22:48:33 - INFO - 192.168.31.179:49992 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-07 22:48:38 - INFO - 192.168.31.179:50020 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-07 22:48:38 - INFO - 192.168.31.179:50020 - "GET /api/v1/app/user/public?user_id=100002 HTTP/1.1" 200 OK
+2026-05-07 22:48:39 - INFO - 192.168.31.179:50032 - "GET /uploads/profile/admin/fc031763ae8c4a85a07f751af1db4c14.png HTTP/1.1" 200 OK
+2026-05-07 22:48:40 - INFO - 192.168.31.179:50020 - "GET /api/v1/app/moment/feed?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-07 22:48:41 - INFO - 192.168.31.179:50020 - "GET /api/v1/app/anchor/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-07 22:48:41 - INFO - 192.168.31.179:50020 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-07 22:48:41 - INFO - 192.168.31.179:50020 - "GET /api/v1/app/user/public?user_id=100002 HTTP/1.1" 200 OK
+2026-05-07 22:48:41 - INFO - 192.168.31.179:50032 - "GET /uploads/profile/admin/fc031763ae8c4a85a07f751af1db4c14.png HTTP/1.1" 200 OK
+2026-05-07 22:48:43 - INFO - 192.168.31.179:50020 - "GET /api/v1/app/im/usersig?peer_user_id=100002 HTTP/1.1" 200 OK
+2026-05-07 22:48:43 - INFO - 192.168.31.179:50020 - "GET /api/v1/app/user/public?user_id=100002&scene=chat HTTP/1.1" 200 OK
+2026-05-07 22:48:43 - INFO - 192.168.31.179:50032 - "GET /uploads/gift/icon/fce2cd39b3d04165844fd3b3f1bca6a2.png HTTP/1.1" 200 OK
+2026-05-07 22:48:48 - INFO - 192.168.31.179:33544 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-07 22:48:48 - INFO - 192.168.31.179:33554 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-07 22:48:52 - INFO - 192.168.31.179:45028 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-07 22:48:52 - INFO - 192.168.31.179:45028 - "GET /api/v1/app/user/public?user_id=100002 HTTP/1.1" 200 OK
+2026-05-07 22:48:53 - INFO - 192.168.31.179:45028 - "GET /api/v1/app/im/usersig?peer_user_id=100002 HTTP/1.1" 200 OK
+2026-05-07 22:48:53 - INFO - 192.168.31.179:45028 - "GET /api/v1/app/user/public?user_id=100002&scene=chat HTTP/1.1" 200 OK
+2026-05-07 22:49:04 - INFO - 192.168.31.179:57428 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-07 22:49:05 - INFO - 192.168.31.179:57426 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-07 22:49:07 - INFO - 192.168.31.179:57426 - "GET /api/v1/app/init/bootstrap HTTP/1.1" 200 OK
+2026-05-07 22:49:10 - INFO - 192.168.31.179:54338 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-07 22:49:10 - INFO - 192.168.31.179:54338 - "GET /api/v1/app/user/public?user_id=100002 HTTP/1.1" 200 OK
+2026-05-07 22:49:12 - INFO - 192.168.31.179:54338 - "GET /api/v1/app/anchor/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-07 22:49:13 - INFO - 192.168.31.179:54338 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-07 22:49:13 - INFO - 192.168.31.179:54338 - "GET /api/v1/app/user/public?user_id=100002 HTTP/1.1" 200 OK
+2026-05-07 22:49:13 - INFO - 192.168.31.179:54354 - "GET /uploads/profile/admin/fc031763ae8c4a85a07f751af1db4c14.png HTTP/1.1" 200 OK
+2026-05-07 22:49:14 - INFO - 192.168.31.179:54338 - "GET /api/v1/app/im/usersig?peer_user_id=100002 HTTP/1.1" 200 OK
+2026-05-07 22:49:14 - INFO - 192.168.31.179:54338 - "GET /api/v1/app/user/public?user_id=100002&scene=chat HTTP/1.1" 200 OK
+2026-05-07 22:49:33 - INFO - 192.168.31.62:47054 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-07 22:49:33 - INFO - 192.168.31.62:47056 - "GET /api/v1/app/init/bootstrap HTTP/1.1" 200 OK
+2026-05-07 22:49:35 - INFO - 192.168.31.62:47056 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-07 22:49:35 - INFO - 192.168.31.62:47064 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-07 22:49:35 - INFO - 192.168.31.62:47066 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-07 22:49:35.509 | INFO     | app.websocket.manager:connect:90 - [WS] user 100002 connected on pid 20972, total=2
+2026-05-07 22:49:35.509 | INFO     | app.websocket.router:ws_app:92 - [WS] user 100002 authenticated successfully
+2026-05-07 22:49:35 - INFO - 192.168.31.62:47068 - "GET /api/v1/app/anchor/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-07 22:49:35 - INFO - 192.168.31.62:47070 - "GET /uploads/profile/admin/fc031763ae8c4a85a07f751af1db4c14.png HTTP/1.1" 200 OK
+2026-05-07 22:49:37 - INFO - 192.168.31.62:47056 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-07 22:49:37 - INFO - 192.168.31.62:47056 - "GET /api/v1/app/user/public?user_id=100001 HTTP/1.1" 200 OK
+2026-05-07 22:49:37 - INFO - 192.168.31.62:47070 - "GET /uploads/profile/admin/a861c74d01514c6e9e491011e30ee06f.jpg HTTP/1.1" 200 OK
+2026-05-07 22:49:38 - INFO - 192.168.31.62:47056 - "GET /api/v1/app/im/usersig?peer_user_id=100001 HTTP/1.1" 200 OK
+2026-05-07 22:49:38 - INFO - 192.168.31.62:47056 - "GET /api/v1/app/user/public?user_id=100001&scene=chat HTTP/1.1" 200 OK
+2026-05-07 22:49:39 - INFO - 192.168.31.62:47070 - "GET /uploads/gift/icon/fce2cd39b3d04165844fd3b3f1bca6a2.png HTTP/1.1" 200 OK
+2026-05-07 22:49:48 - INFO - 192.168.31.62:47076 - "GET /uploads/profile/admin/fc031763ae8c4a85a07f751af1db4c14.png HTTP/1.1" 200 OK
+2026-05-07 22:49:48 - INFO - 192.168.31.62:47078 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-07 22:49:48 - INFO - 192.168.31.62:47074 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-07 22:49:54 - INFO - 192.168.31.62:47094 - "GET /api/v1/app/wallet/transactions?type=diamonds&page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-07 22:49:59 - INFO - 192.168.31.62:47102 - "GET /api/v1/app/wallet/transactions?type=diamonds&page=1&page_size=20 HTTP/1.1" 200 OK

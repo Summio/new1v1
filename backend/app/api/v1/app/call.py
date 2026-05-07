@@ -15,6 +15,7 @@ from app.services.call_income_service import (
     resolve_income_anchor_id,
     settle_call_anchor_income_once,
 )
+from app.services.gift_income_service import decimal_to_float_2
 from app.schemas.app_api import (
     CallActionOut,
     CallActionIn,
@@ -326,7 +327,7 @@ async def dialing(req_in: DialingIn):
     return Success(
         data=DialingOut(
             call_id=call_record.id,
-            coins=app_user.coins,
+            coins=decimal_to_float_2(app_user.coins),
             can_call=True,
             callee_id=int(target_user.id),
             callee_nickname=callee_nickname,
@@ -644,7 +645,7 @@ async def call_end(req_in: CallEndIn):
             ))
 
         user = await AppUser.filter(id=user_id).using_db(conn).first()
-        final_coins = user.coins if user else 0
+        final_coins = decimal_to_float_2(user.coins) if user else 0.0
 
     # 事务结束后，如余额发生变化则推送余额更新给付费方
     if _payer_id_for_balance_push is not None and _balance_changed_for_push:
@@ -658,7 +659,7 @@ async def call_end(req_in: CallEndIn):
 
     return Success(
         data=CallEndOut(
-            total_fee=int(call_record.total_fee or 0),
+            total_fee=decimal_to_float_2(call_record.total_fee or 0),
             coins=final_coins,
             duration=int(call_record.duration or 0),
             next_status="ended",
@@ -765,8 +766,8 @@ async def _ws_push_balance_updated(payer_id: int) -> None:
         if payer:
             await ws_events.push_balance_update(
                 user_id=payer_id,
-                coins=payer.coins,
-                diamonds=payer.diamonds,
+                coins=decimal_to_float_2(payer.coins),
+                diamonds=decimal_to_float_2(payer.diamonds),
             )
     except Exception:  # noqa: BLE001
         pass

@@ -77,8 +77,8 @@ def test_admin_web_exposes_trace_and_income_controls() -> None:
     assert "im_call_trace_enabled" in config_content
     assert "im_admin_identifier" in config_content
     assert "call_anchor_share_bps" in config_content
-    assert "anchorSharePercent" in config_content
-    assert ":step=\"0.01\"" in config_content
+    assert "im_text_message_anchor_share_bps" in config_content
+    assert "step: 0.01" in config_content
     assert "主播收益(钻石)" in call_record_content
     assert "anchor_income_diamonds" in call_record_content
     assert "收益结算时间" in call_record_content

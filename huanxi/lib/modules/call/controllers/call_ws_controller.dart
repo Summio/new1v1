@@ -55,8 +55,8 @@ class CallWsController extends StateNotifier<CallWsState> {
       state = state.copyWith(lastMappedEvent: mapped);
 
       if (mapped.shouldSyncBalance) {
-        final coins = event.data['coins'] as int?;
-        final diamonds = event.data['diamonds'] as int?;
+        final coins = _asDouble(event.data['coins']);
+        final diamonds = _asDouble(event.data['diamonds']);
         if (coins != null || diamonds != null) {
           _ref.read(authProvider.notifier).syncBalance(
             coins: coins,
@@ -181,6 +181,14 @@ class CallWsController extends StateNotifier<CallWsState> {
     if (value is int) return value;
     if (value is num) return value.toInt();
     if (value is String) return int.tryParse(value);
+    return null;
+  }
+
+  double? _asDouble(dynamic value) {
+    if (value is int) return value.toDouble();
+    if (value is double) return value;
+    if (value is num) return value.toDouble();
+    if (value is String) return double.tryParse(value);
     return null;
   }
 }
