@@ -25,7 +25,9 @@ def test_recharge_callback_credits_coins_not_diamonds() -> None:
 def test_gift_send_credits_receiver_diamonds() -> None:
     content = _read_backend_file("app/api/v1/app/gift.py")
 
-    assert 'diamonds=F("diamonds") + gift.price' in content
+    assert "anchor_income_diamonds = (" in content
+    assert "gift_anchor_share_bps" in content
+    assert 'diamonds=F("diamonds") + anchor_income_diamonds' in content
 
 
 def test_call_end_credits_anchor_diamonds() -> None:

@@ -90,6 +90,9 @@ class ApiEndpoints {
   /// 获取 IM UserSig
   static const String imUserSig = 'app/im/usersig';
 
+  /// 文字消息发送前扣费
+  static const String imTextCharge = 'app/im/text-charge';
+
   // ========== 动态模块 ==========
   /// 上传动态媒体（图片/视频）
   static const String momentUpload = 'app/moment/upload';

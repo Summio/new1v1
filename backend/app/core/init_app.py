@@ -219,6 +219,13 @@ async def init_menus():
             "icon": "material-symbols:settings-outline-rounded",
             "component": "/system/config",
         },
+        {
+            "name": "文字聊天计费",
+            "path": "im-text-billing",
+            "order": 8,
+            "icon": "material-symbols:chat-outline-rounded",
+            "component": "/system/im-text-billing",
+        },
     ]
     for child in system_children:
         await _ensure_menu_exists(

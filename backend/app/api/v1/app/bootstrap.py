@@ -3,6 +3,10 @@ import json
 from fastapi import APIRouter
 
 from app.schemas.base import Success
+from app.services.im_text_billing_service import (
+    dump_im_text_billing_config,
+    parse_im_text_billing_config,
+)
 
 router = APIRouter()
 
@@ -74,5 +78,8 @@ async def get_app_bootstrap():
                 "reject_pair_protect_seconds": call_reject_pair_protect_seconds,
             },
             "recharge_packages": recharge_packages,
+            "im_text_billing": dump_im_text_billing_config(
+                parse_im_text_billing_config(config_map)
+            ),
         }
     )

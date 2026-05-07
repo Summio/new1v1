@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import APIRouter, File, Query, UploadFile
 from tortoise.expressions import Q
 
-from app.models import AppUser, CallRecord, GiftRecord, RechargeOrder, WithdrawApply
+from app.models import AppUser, CallRecord, GiftRecord, ImTextMessageChargeRecord, RechargeOrder, WithdrawApply
 from app.schemas.app_user import AnchorApplyReviewIn, AppUserAdminUpdateIn
 from app.schemas.base import Fail, Success, SuccessExtra
 from app.settings.config import settings
@@ -255,7 +255,7 @@ async def list_app_user_bill(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(10, ge=1, le=100, description="每页数量"),
     direction: str = Query("all", description="方向 all/income/expense"),
-    biz_type: str = Query("", description="业务类型 recharge/call/gift/withdraw"),
+    biz_type: str = Query("", description="业务类型 recharge/call/gift/withdraw/im_text"),
 ):
     user = await AppUser.filter(id=user_id).first()
     if not user:
@@ -296,6 +296,18 @@ async def list_app_user_bill(
         "anchor_income_diamonds",
         "created_at",
     )
+    im_text_expenses = await ImTextMessageChargeRecord.filter(sender_id=user_id, price__gt=0).values(
+        "id", "sender_id", "receiver_id", "price", "created_at"
+    )
+    im_text_incomes = await ImTextMessageChargeRecord.filter(
+        receiver_id=user_id, anchor_income_diamonds__gt=0
+    ).values(
+        "id",
+        "sender_id",
+        "receiver_id",
+        "anchor_income_diamonds",
+        "created_at",
+    )
     withdraw_expenses = await WithdrawApply.filter(user_id=user_id, amount__gt=0).values(
         "id", "amount", "status", "created_at"
     )
@@ -322,6 +334,14 @@ async def list_app_user_bill(
         if related_user_id > 0:
             related_user_ids.add(related_user_id)
     for row in gift_incomes:
+        related_user_id = int(row.get("sender_id") or 0)
+        if related_user_id > 0:
+            related_user_ids.add(related_user_id)
+    for row in im_text_expenses:
+        related_user_id = int(row.get("receiver_id") or 0)
+        if related_user_id > 0:
+            related_user_ids.add(related_user_id)
+    for row in im_text_incomes:
         related_user_id = int(row.get("sender_id") or 0)
         if related_user_id > 0:
             related_user_ids.add(related_user_id)
@@ -443,6 +463,42 @@ async def list_app_user_bill(
                 "created_at": _format_bill_dt(row.get("created_at")),
             }
         )
+    for row in im_text_expenses:
+        amount = int(row.get("price") or 0)
+        related_id, related_nickname = _resolve_related_user(int(row.get("receiver_id") or 0))
+        bills.append(
+            {
+                "id": f"im_text_expense_{row['id']}",
+                "biz_id": row["id"],
+                "biz_type": "im_text",
+                "title": "文字聊天",
+                "direction": "expense",
+                "is_income": False,
+                "asset_type": "coins",
+                "amount": amount,
+                "related_user_id": related_id,
+                "related_user_nickname": related_nickname,
+                "created_at": _format_bill_dt(row.get("created_at")),
+            }
+        )
+    for row in im_text_incomes:
+        amount = int(row.get("anchor_income_diamonds") or 0)
+        related_id, related_nickname = _resolve_related_user(int(row.get("sender_id") or 0))
+        bills.append(
+            {
+                "id": f"im_text_income_{row['id']}",
+                "biz_id": row["id"],
+                "biz_type": "im_text",
+                "title": "文字聊天收益",
+                "direction": "income",
+                "is_income": True,
+                "asset_type": "diamonds",
+                "amount": amount,
+                "related_user_id": related_id,
+                "related_user_nickname": related_nickname,
+                "created_at": _format_bill_dt(row.get("created_at")),
+            }
+        )
     for row in withdraw_expenses:
         amount = int(row.get("amount") or 0)
         status = (row.get("status") or "").strip()
@@ -468,9 +524,9 @@ async def list_app_user_bill(
 
     normalized_biz_type = (biz_type or "").strip().lower()
     if normalized_biz_type:
-        allowed_types = {"recharge", "call", "gift", "withdraw"}
+        allowed_types = {"recharge", "call", "gift", "withdraw", "im_text"}
         if normalized_biz_type not in allowed_types:
-            return Fail(code=400, msg="biz_type 仅支持 recharge/call/gift/withdraw")
+            return Fail(code=400, msg="biz_type 仅支持 recharge/call/gift/withdraw/im_text")
 
     filtered = bills
     if normalized_direction == "income":

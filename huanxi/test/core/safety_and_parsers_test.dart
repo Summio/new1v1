@@ -32,6 +32,33 @@ void main() {
       expect(parsed.userSig, 'abc');
       expect(parsed.sdkAppId, 12345);
     });
+
+    test('parseIMTextChargePayload parses valid payload', () {
+      final parsed = ResponseParsers.parseIMTextChargePayload({
+        'data': {
+          'charged': true,
+          'price': 20,
+          'anchor_income_diamonds': 10,
+          'coins': 980,
+          'diamonds': 0,
+          'receiver_user_id': 2,
+          'request_id': 'req_123456',
+        }
+      });
+      expect(parsed.charged, isTrue);
+      expect(parsed.price, 20);
+      expect(parsed.anchorIncomeDiamonds, 10);
+      expect(parsed.coins, 980);
+      expect(parsed.receiverUserId, 2);
+      expect(parsed.requestId, 'req_123456');
+    });
+
+    test('parseIMTextChargePayload throws format exception when required fields missing', () {
+      expect(
+        () => ResponseParsers.parseIMTextChargePayload({'data': {}}),
+        throwsA(isA<FormatException>()),
+      );
+    });
   });
 
   group('ConversationRefreshThrottler', () {

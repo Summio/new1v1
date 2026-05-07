@@ -273,6 +273,23 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
         )
         base_params.append(user_id)
 
+    # im text sent (coins expense)
+    if type in ("all", "im_text", "coins"):
+        union_parts.append(
+            f"SELECT id, 'im_text' AS rec_type, price AS amount, created_at, 0 AS is_income "
+            f"FROM im_text_message_charge_record WHERE sender_id = {placeholder} AND status = 'charged'"
+        )
+        base_params.append(user_id)
+
+    # im text receive (diamonds income)
+    if type in ("all", "im_text", "diamonds"):
+        union_parts.append(
+            f"SELECT id, 'im_text' AS rec_type, anchor_income_diamonds AS amount, created_at, 1 AS is_income "
+            f"FROM im_text_message_charge_record WHERE receiver_id = {placeholder} "
+            f"AND status = 'charged' AND anchor_income_diamonds > 0"
+        )
+        base_params.append(user_id)
+
     # withdraw
     if type in ("all", "withdraw", "diamonds"):
         union_parts.append(
@@ -344,7 +361,13 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
             is_income = row.get("is_income")
         else:
             rec_id, rec_type, amount, created_at, is_income = row
-        title_map = {"recharge": "充值", "call": "通话消费", "gift": "收到礼物" if is_income else "送礼物", "withdraw": "提现申请"}
+        title_map = {
+            "recharge": "充值",
+            "call": "通话消费",
+            "gift": "收到礼物" if is_income else "送礼物",
+            "im_text": "文字聊天收益" if is_income else "文字聊天",
+            "withdraw": "提现申请",
+        }
         if hasattr(created_at, "strftime"):
             created_at_text = created_at.strftime("%Y-%m-%d %H:%M:%S")
         else:

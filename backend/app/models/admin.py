@@ -152,6 +152,21 @@ class GiftRecord(BaseModel, TimestampMixin):
         table = "gift_record"
 
 
+class ImTextMessageChargeRecord(BaseModel, TimestampMixin):
+    """IM 文字消息扣费记录"""
+    sender_id = fields.BigIntField(description="发送方用户ID", index=True)
+    receiver_id = fields.BigIntField(description="接收方用户ID", index=True)
+    request_id = fields.CharField(max_length=64, description="客户端请求幂等ID")
+    price = fields.BigIntField(default=0, description="文字消息扣费金币数")
+    anchor_share_bps = fields.IntField(default=5000, description="主播分成比例快照(万分比)")
+    anchor_income_diamonds = fields.BigIntField(default=0, description="主播收益钻石")
+    status = fields.CharField(max_length=20, default="charged", description="charged", index=True)
+
+    class Meta:
+        table = "im_text_message_charge_record"
+        unique_together = (("sender_id", "request_id"),)
+
+
 class RechargeOrder(BaseModel, TimestampMixin):
     """充值订单"""
     user_id = fields.BigIntField(description="用户ID", index=True)

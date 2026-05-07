@@ -1,6 +1,12 @@
 from fastapi import APIRouter
 
+from .im_text_billing_config import router as im_text_billing_config_router
 from .recharge_config import router as recharge_config_router
 
 system_router = APIRouter()
 system_router.include_router(recharge_config_router, prefix="/recharge-config", tags=["系统配置-充值"])
+system_router.include_router(
+    im_text_billing_config_router,
+    prefix="/im-text-billing-config",
+    tags=["系统配置-文字聊天计费"],
+)

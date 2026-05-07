@@ -110,6 +110,9 @@ class AppInitState {
   final String diamondName;
   final int? imSdkAppId;
   final bool imConfigured;
+  final bool imTextBillingEnabled;
+  final int imTextBillingPrice;
+  final int imTextBillingAnchorShareBps;
 
   const AppInitState({
     this.isLoading = false,
@@ -118,6 +121,9 @@ class AppInitState {
     this.diamondName = '钻石',
     this.imSdkAppId,
     this.imConfigured = false,
+    this.imTextBillingEnabled = false,
+    this.imTextBillingPrice = 0,
+    this.imTextBillingAnchorShareBps = 5000,
   });
 
   AppInitState copyWith({
@@ -127,6 +133,9 @@ class AppInitState {
     String? diamondName,
     int? imSdkAppId,
     bool? imConfigured,
+    bool? imTextBillingEnabled,
+    int? imTextBillingPrice,
+    int? imTextBillingAnchorShareBps,
   }) {
     return AppInitState(
       isLoading: isLoading ?? this.isLoading,
@@ -135,6 +144,11 @@ class AppInitState {
       diamondName: diamondName ?? this.diamondName,
       imSdkAppId: imSdkAppId ?? this.imSdkAppId,
       imConfigured: imConfigured ?? this.imConfigured,
+      imTextBillingEnabled:
+          imTextBillingEnabled ?? this.imTextBillingEnabled,
+      imTextBillingPrice: imTextBillingPrice ?? this.imTextBillingPrice,
+      imTextBillingAnchorShareBps:
+          imTextBillingAnchorShareBps ?? this.imTextBillingAnchorShareBps,
     );
   }
 }
@@ -470,8 +484,12 @@ class AppInitNotifier extends StateNotifier<AppInitState> {
 
       final tokenNames = respData['token_names'] as Map<String, dynamic>?;
       final im = respData['im'] as Map<String, dynamic>?;
+      final imTextBilling =
+          respData['im_text_billing'] as Map<String, dynamic>?;
       final sdkAppIdRaw = im?['sdk_app_id'];
       final sdkAppId = sdkAppIdRaw is num ? sdkAppIdRaw.toInt() : null;
+      final imTextPriceRaw = imTextBilling?['price'];
+      final imTextShareRaw = imTextBilling?['anchor_share_bps'];
 
       state = state.copyWith(
         isLoading: false,
@@ -480,6 +498,13 @@ class AppInitNotifier extends StateNotifier<AppInitState> {
         diamondName: tokenNames?['diamond_name'] as String? ?? '钻石',
         imConfigured: im?['configured'] == true,
         imSdkAppId: sdkAppId,
+        imTextBillingEnabled: imTextBilling?['enabled'] == true,
+        imTextBillingPrice: imTextPriceRaw is num
+            ? imTextPriceRaw.toInt()
+            : int.tryParse('${imTextPriceRaw ?? 0}') ?? 0,
+        imTextBillingAnchorShareBps: imTextShareRaw is num
+            ? imTextShareRaw.toInt()
+            : int.tryParse('${imTextShareRaw ?? 5000}') ?? 5000,
       );
     } catch (e) {
       AppLogger.debug('appInit.init error: $e');

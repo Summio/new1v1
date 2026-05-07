@@ -57,6 +57,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
   final Set<String> _messageIds = <String>{};
   V2TimMessage? _lastHistoryMsg;
   bool _isStartingCall = false;
+  bool _isSendingText = false;
   GiftNotifyMessage? _fullscreenGift;
   Timer? _fullscreenGiftTimer;
   Timer? _cleanUnreadDebounceTimer;
@@ -384,10 +385,34 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
   }
 
   void _sendMessage() async {
+    if (_isSendingText) return;
     final text = _controller.text.trim();
     if (text.isEmpty) return;
 
+    final receiverUserId = _extractAppUserId(_peerUserId ?? widget.userId);
+    if (receiverUserId == null || receiverUserId <= 0) {
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('聊天对象异常')),
+      );
+      return;
+    }
+
     try {
+      _isSendingText = true;
+      final requestId = _newTextChargeRequestId(
+        receiverUserId: receiverUserId,
+        text: text,
+      );
+      final charge = await _chargeTextMessageIfNeeded(
+        receiverUserId: receiverUserId,
+        requestId: requestId,
+      );
+      ref.read(authProvider.notifier).syncBalance(
+            coins: charge.coins,
+            diamonds: charge.diamonds,
+          );
+
       final sentMsg = await _imService.sendTextMessage(
         receiver: _peerUserId ?? _normalizeIMUserId(widget.userId),
         text: text,
@@ -413,9 +438,33 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
       _scrollToBottom(animated: true, force: true);
     } catch (e) {
       if (mounted) {
-        AppToast.showSnackBar(context, SnackBar(content: Text('消息发送失败: $e')));
+        final msg = e is ApiException ? e.message : '消息发送失败: $e';
+        AppToast.showSnackBar(context, SnackBar(content: Text(msg)));
       }
+    } finally {
+      _isSendingText = false;
     }
+  }
+
+  String _newTextChargeRequestId({
+    required int receiverUserId,
+    required String text,
+  }) {
+    return 'im_text_${DateTime.now().microsecondsSinceEpoch}_${receiverUserId}_${text.hashCode.abs()}';
+  }
+
+  Future<IMTextChargePayload> _chargeTextMessageIfNeeded({
+    required int receiverUserId,
+    required String requestId,
+  }) async {
+    final data = await DioClient.instance.apiPost(
+      ApiEndpoints.imTextCharge,
+      data: {
+        'receiver_user_id': receiverUserId,
+        'request_id': requestId,
+      },
+    );
+    return ResponseParsers.parseIMTextChargePayload(data);
   }
 
   int? _resolveGiftAnchorId() {

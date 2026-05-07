@@ -5,6 +5,7 @@ TARGET_FILES = [
     Path("app/api/v1/app/gift.py"),
     Path("app/api/v1/app/wallet.py"),
     Path("app/api/v1/withdraw/withdraw.py"),
+    Path("app/services/im_text_billing_service.py"),
 ]
 
 

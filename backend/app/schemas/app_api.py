@@ -254,3 +254,18 @@ class IMSigOut(BaseModel):
     usersig: str
     expired_time: int
     sdk_app_id: int
+
+
+class IMTextChargeIn(BaseModel):
+    receiver_user_id: int = Field(..., gt=0, description="接收方 App 用户 ID")
+    request_id: str = Field(..., min_length=8, max_length=64, description="客户端请求幂等 ID")
+
+
+class IMTextChargeOut(BaseModel):
+    charged: bool = False
+    price: int = 0
+    anchor_income_diamonds: int = 0
+    coins: int = 0
+    diamonds: int = 0
+    receiver_user_id: int
+    request_id: str

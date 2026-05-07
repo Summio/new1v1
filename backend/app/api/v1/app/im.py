@@ -5,8 +5,12 @@ from fastapi import APIRouter, Depends, Query
 from app.core.app_auth import DependAppAuth
 from app.core.ctx import CTX_APP_USER_ID
 from app.log import logger
-from app.schemas.app_api import IMSigOut
+from app.schemas.app_api import IMSigOut, IMTextChargeIn, IMTextChargeOut
 from app.schemas.base import Fail, Success
+from app.services.im_text_billing_service import (
+    IMTextBillingError,
+    charge_im_text_message,
+)
 
 router = APIRouter()
 USER_SIG_EXPIRE_SECONDS = 3600 * 2
@@ -60,3 +64,17 @@ async def get_usersig(
     except Exception as e:
         logger.exception("IM usersig generation error: {}", str(e))
         return Fail(msg="UserSig 生成失败，请稍后重试")
+
+
+@router.post("/im/text-charge", summary="文字消息发送前扣费", dependencies=[Depends(DependAppAuth)])
+async def charge_text_message(req_in: IMTextChargeIn):
+    sender_id = CTX_APP_USER_ID.get()
+    try:
+        result = await charge_im_text_message(
+            sender_id=int(sender_id),
+            receiver_user_id=int(req_in.receiver_user_id),
+            request_id=req_in.request_id.strip(),
+        )
+    except IMTextBillingError as exc:
+        return Fail(code=exc.code, msg=exc.message)
+    return Success(data=IMTextChargeOut(**result.__dict__).model_dump())
