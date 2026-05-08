@@ -27,6 +27,7 @@ import '../../modules/gift/gift_panel.dart';
 import '../../modules/home/my_moments_page.dart';
 import '../../modules/home/publish_moment_page.dart';
 import '../../modules/home/anchor_detail_page.dart';
+import '../../modules/home/my_following_page.dart';
 import '../../modules/home/user_search_page.dart';
 import '../../modules/home/call_page.dart';
 import '../../app/providers/anchor_provider.dart';
@@ -59,6 +60,8 @@ class AppRoutes {
   static const String im = '/im';
   static const String giftPanel = '/gift';
   static const String myMoments = '/profile/moments';
+  static const String myFollowing = '/profile/following';
+  static const String myFans = '/profile/fans';
   static const String publishMoment = '/moment/publish';
   static const String callRoom = '/call/room';
   static const String callOutgoing = '/call/outgoing';
@@ -184,13 +187,17 @@ final appRouter = GoRouter(
       path: AppRoutes.anchorDetail,
       builder: (context, state) {
         final anchor = AppRoutes.tryGetAnchorInfo(state.extra);
+        final userId = int.tryParse(state.uri.queryParameters['userId'] ?? '');
         if (anchor == null) {
+          if (userId != null && userId > 0) {
+            return AnchorDetailPage(userId: userId);
+          }
           return Scaffold(
             appBar: AppBar(title: const Text('提示')),
             body: const Center(child: Text('主播信息无效，请返回重试')),
           );
         }
-        return AnchorDetailPage(anchor: anchor);
+        return AnchorDetailPage(anchor: anchor, userId: userId);
       },
     ),
     GoRoute(
@@ -266,6 +273,14 @@ final appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.myMoments,
       builder: (context, state) => const MyMomentsPage(),
+    ),
+    GoRoute(
+      path: AppRoutes.myFollowing,
+      builder: (context, state) => const MyFollowingPage(),
+    ),
+    GoRoute(
+      path: AppRoutes.myFans,
+      builder: (context, state) => const MyFansPage(),
     ),
     GoRoute(
       path: AppRoutes.publishMoment,

@@ -100,13 +100,25 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white, width: 3),
-                            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10)],
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.1),
+                                blurRadius: 10,
+                              ),
+                            ],
                             image: authState.avatar != null
-                                ? DecorationImage(image: NetworkImage(authState.avatar!), fit: BoxFit.cover)
+                                ? DecorationImage(
+                                    image: NetworkImage(authState.avatar!),
+                                    fit: BoxFit.cover,
+                                  )
                                 : null,
                           ),
                           child: authState.avatar == null
-                              ? const Icon(Icons.person, size: 40, color: AppTheme.primaryColor)
+                              ? const Icon(
+                                  Icons.person,
+                                  size: 40,
+                                  color: AppTheme.primaryColor,
+                                )
                               : null,
                         ),
                       ),
@@ -114,34 +126,60 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     const SizedBox(height: 12),
                     Text(
                       authState.username ?? '未设置昵称',
-                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.textPrimary,
+                      ),
                     ),
                     if (isAnchor) ...[
                       const SizedBox(height: 4),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(color: AppTheme.secondaryColor, borderRadius: BorderRadius.circular(8)),
-                        child: const Text('认证主播', style: TextStyle(color: Colors.white, fontSize: 12)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppTheme.secondaryColor,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Text(
+                          '认证主播',
+                          style: TextStyle(color: Colors.white, fontSize: 12),
+                        ),
                       ),
                     ],
                     const SizedBox(height: 4),
                     Text(
                       'ID: ${authState.userId ?? '-'}',
-                      style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppTheme.textSecondary,
+                      ),
                     ),
                   ],
                 ),
               ),
             ),
             actions: [
-              IconButton(icon: const Icon(Icons.settings_outlined, color: AppTheme.textPrimary), onPressed: () => context.push(AppRoutes.settings)),
+              IconButton(
+                icon: const Icon(
+                  Icons.settings_outlined,
+                  color: AppTheme.textPrimary,
+                ),
+                onPressed: () => context.push(AppRoutes.settings),
+              ),
             ],
           ),
           SliverToBoxAdapter(
             child: Container(
               margin: const EdgeInsets.all(16),
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(gradient: AppTheme.balanceGradient, borderRadius: BorderRadius.circular(24), boxShadow: AppTheme.elevatedShadow),
+              decoration: BoxDecoration(
+                gradient: AppTheme.balanceGradient,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: AppTheme.elevatedShadow,
+              ),
               child: isAnchor
                   ? _buildAnchorBalance(authState, tokenNames, context)
                   : _buildUserBalance(authState, tokenNames, context),
@@ -150,14 +188,44 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           SliverToBoxAdapter(
             child: Container(
               margin: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), boxShadow: AppTheme.cardShadow),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: AppTheme.cardShadow,
+              ),
               child: Column(
                 children: [
-                  _buildMenuTile(icon: Icons.currency_exchange_rounded, title: '充值', iconColor: const Color(0xFFFF9500), onTap: () => context.push(AppRoutes.recharge)),
-                  _buildMenuTile(icon: Icons.history_rounded, title: '通话记录', iconColor: const Color(0xFF5856D6), onTap: () => context.push(AppRoutes.callHistory)),
-                  _buildMenuTile(icon: Icons.favorite_rounded, title: '我的关注', iconColor: const Color(0xFFFF2D55), onTap: () {}),
+                  _buildMenuTile(
+                    icon: Icons.currency_exchange_rounded,
+                    title: '充值',
+                    iconColor: const Color(0xFFFF9500),
+                    onTap: () => context.push(AppRoutes.recharge),
+                  ),
+                  _buildMenuTile(
+                    icon: Icons.history_rounded,
+                    title: '通话记录',
+                    iconColor: const Color(0xFF5856D6),
+                    onTap: () => context.push(AppRoutes.callHistory),
+                  ),
+                  _buildMenuTile(
+                    icon: Icons.favorite_rounded,
+                    title: '我的关注',
+                    iconColor: const Color(0xFFFF2D55),
+                    onTap: () => context.push(AppRoutes.myFollowing),
+                  ),
+                  _buildMenuTile(
+                    icon: Icons.people_alt_rounded,
+                    title: '我的粉丝',
+                    iconColor: const Color(0xFF34C759),
+                    onTap: () => context.push(AppRoutes.myFans),
+                  ),
                   if (!isAnchor)
-                    _buildMenuTile(icon: Icons.live_tv_rounded, title: '申请成为主播', iconColor: AppTheme.secondaryColor, onTap: () => context.push(AppRoutes.anchorApply)),
+                    _buildMenuTile(
+                      icon: Icons.live_tv_rounded,
+                      title: '申请成为主播',
+                      iconColor: AppTheme.secondaryColor,
+                      onTap: () => context.push(AppRoutes.anchorApply),
+                    ),
                   if (isAnchor)
                     _buildMenuTile(
                       icon: Icons.online_prediction_rounded,
@@ -168,10 +236,18 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                         value: _anchorOnline,
                         onChanged: _onOnlineStatusChanged,
                         activeThumbColor: AppTheme.primaryColor,
-                        activeTrackColor: AppTheme.primaryColor.withValues(alpha: 0.4),
+                        activeTrackColor: AppTheme.primaryColor.withValues(
+                          alpha: 0.4,
+                        ),
                       ),
                     ),
-                  _buildMenuTile(icon: Icons.dynamic_feed_rounded, title: '我的动态', iconColor: const Color(0xFF5856D6), onTap: () => context.push(AppRoutes.myMoments), isLast: true),
+                  _buildMenuTile(
+                    icon: Icons.dynamic_feed_rounded,
+                    title: '我的动态',
+                    iconColor: const Color(0xFF5856D6),
+                    onTap: () => context.push(AppRoutes.myMoments),
+                    isLast: true,
+                  ),
                 ],
               ),
             ),
@@ -182,8 +258,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: TextButton(
                 onPressed: () => _handleLogout(context, ref),
-                style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor, padding: const EdgeInsets.symmetric(vertical: 16)),
-                child: const Text('退出登录', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppTheme.errorColor,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+                child: const Text(
+                  '退出登录',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                ),
               ),
             ),
           ),
@@ -193,7 +275,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     );
   }
 
-  Widget _buildUserBalance(AuthState authState, TokenNamesState tokenNames, BuildContext context) {
+  Widget _buildUserBalance(
+    AuthState authState,
+    TokenNamesState tokenNames,
+    BuildContext context,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -203,11 +289,21 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text('${tokenNames.coinName}余额', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                  Text(
+                    '${tokenNames.coinName}余额',
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
                   const SizedBox(height: 8),
                   GestureDetector(
                     onTap: () => context.push(AppRoutes.recharge),
-                    child: Text(authState.coins.toStringAsFixed(2), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+                    child: Text(
+                      authState.coins.toStringAsFixed(2),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -216,11 +312,21 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text('${tokenNames.diamondName}余额', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                  Text(
+                    '${tokenNames.diamondName}余额',
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
                   const SizedBox(height: 8),
                   GestureDetector(
                     onTap: () => context.push(AppRoutes.withdraw),
-                    child: Text(authState.diamonds.toStringAsFixed(2), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+                    child: Text(
+                      authState.diamonds.toStringAsFixed(2),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -231,7 +337,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     );
   }
 
-  Widget _buildAnchorBalance(AuthState authState, TokenNamesState tokenNames, BuildContext context) {
+  Widget _buildAnchorBalance(
+    AuthState authState,
+    TokenNamesState tokenNames,
+    BuildContext context,
+  ) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
@@ -241,11 +351,21 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text('${tokenNames.coinName}余额', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                  Text(
+                    '${tokenNames.coinName}余额',
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
                   const SizedBox(height: 8),
                   GestureDetector(
                     onTap: () => context.push(AppRoutes.recharge),
-                    child: Text(authState.coins.toStringAsFixed(2), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+                    child: Text(
+                      authState.coins.toStringAsFixed(2),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -254,11 +374,21 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text('${tokenNames.diamondName}余额', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                  Text(
+                    '${tokenNames.diamondName}余额',
+                    style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  ),
                   const SizedBox(height: 8),
                   GestureDetector(
                     onTap: () => context.push(AppRoutes.withdraw),
-                    child: Text(authState.diamonds.toStringAsFixed(2), style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.bold)),
+                    child: Text(
+                      authState.diamonds.toStringAsFixed(2),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -269,21 +399,53 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     );
   }
 
-  Widget _buildMenuTile({required IconData icon, required String title, required Color iconColor, required VoidCallback onTap, bool isLast = false, Widget? trailing}) {
+  Widget _buildMenuTile({
+    required IconData icon,
+    required String title,
+    required Color iconColor,
+    required VoidCallback onTap,
+    bool isLast = false,
+    Widget? trailing,
+  }) {
     return Column(
       children: [
         ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 4,
+          ),
           leading: Container(
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: iconColor.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+              color: iconColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: Icon(icon, color: iconColor, size: 22),
           ),
-          title: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppTheme.textPrimary)),
-          trailing: trailing ?? const Icon(Icons.chevron_right, color: AppTheme.textHint, size: 20),
+          title: Text(
+            title,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+              color: AppTheme.textPrimary,
+            ),
+          ),
+          trailing:
+              trailing ??
+              const Icon(
+                Icons.chevron_right,
+                color: AppTheme.textHint,
+                size: 20,
+              ),
           onTap: onTap,
         ),
-        if (!isLast) const Divider(indent: 64, endIndent: 20, height: 1, color: AppTheme.dividerColor),
+        if (!isLast)
+          const Divider(
+            indent: 64,
+            endIndent: 20,
+            height: 1,
+            color: AppTheme.dividerColor,
+          ),
       ],
     );
   }
@@ -295,8 +457,15 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         title: const Text('退出登录'),
         content: const Text('确定要退出当前账号吗？'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
-          TextButton(onPressed: () => Navigator.pop(context, true), style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor), child: const Text('退出')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor),
+            child: const Text('退出'),
+          ),
         ],
       ),
     );

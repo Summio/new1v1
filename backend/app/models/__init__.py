@@ -2,4 +2,5 @@
 from .admin import *
 from .app_user import *
 from .moments import *
+from .user_follow import *
 from .system_config import *

@@ -152,3 +152,19 @@ class AnchorApplyReviewIn(BaseModel):
     id: int = Field(..., ge=1, description="用户ID")
     status: Literal["approved", "rejected"] = Field(..., description="审核结果")
     reject_reason: Optional[str] = Field(default=None, max_length=500, description="驳回原因")
+
+
+# ===== 关注 =====
+
+class UserFollowIn(BaseModel):
+    target_user_id: int = Field(..., ge=1, description="目标用户ID")
+
+
+class UserFollowStatusOut(BaseModel):
+    target_user_id: int
+    is_following: bool = False
+
+
+class UserFollowActionOut(BaseModel):
+    target_user_id: int
+    is_following: bool = False

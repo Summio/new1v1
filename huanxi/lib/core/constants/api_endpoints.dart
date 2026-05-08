@@ -22,6 +22,18 @@ class ApiEndpoints {
   /// 按 user_id 获取公开用户资料
   static const String userPublic = 'app/user/public';
 
+  /// 查询用户关注状态
+  static const String userFollowStatus = 'app/user/follow/status';
+
+  /// 关注 / 取消关注
+  static const String userFollow = 'app/user/follow';
+
+  /// 我的关注列表
+  static const String userFollowingList = 'app/user/follow/list';
+
+  /// 我的粉丝列表
+  static const String userFansList = 'app/user/fans/list';
+
   // ========== 主播模块 ==========
   /// 主播推荐列表（分页）
   static const String anchorList = 'app/anchor/list';

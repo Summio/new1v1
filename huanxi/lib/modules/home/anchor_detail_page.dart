@@ -5,10 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../app/providers/anchor_provider.dart';
+import '../../app/providers/auth_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/network/api_exception.dart';
 import '../../services/moment_service.dart';
+import '../../services/user_home_service.dart';
 import 'package:huanxi/core/utils/app_toast.dart';
 import 'moment_media_grid.dart';
 import 'moment_image_preview_page.dart';
@@ -16,9 +18,10 @@ import 'moment_video_preview_page.dart';
 
 /// 主播详情页 (Momo 风格)
 class AnchorDetailPage extends ConsumerStatefulWidget {
-  final AnchorInfo anchor;
+  final AnchorInfo? anchor;
+  final int? userId;
 
-  const AnchorDetailPage({super.key, required this.anchor});
+  const AnchorDetailPage({super.key, this.anchor, this.userId});
 
   @override
   ConsumerState<AnchorDetailPage> createState() => _AnchorDetailPageState();
@@ -26,6 +29,20 @@ class AnchorDetailPage extends ConsumerStatefulWidget {
 
 class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
   int _currentPhotoIndex = 0;
+  AnchorInfo? _anchor;
+  bool _isLoading = false;
+  bool _isFollowLoading = false;
+  bool _isFollowing = false;
+  String? _error;
+
+  AnchorInfo? get _resolvedAnchor => _anchor ?? widget.anchor;
+
+  @override
+  void initState() {
+    super.initState();
+    _anchor = widget.anchor;
+    _loadProfile();
+  }
 
   Future<void> _openIm({required AnchorInfo anchor}) async {
     final result = await context.push(
@@ -101,9 +118,171 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
     AppToast.showSnackBar(context, const SnackBar(content: Text('ID已复制')));
   }
 
+  Future<void> _loadProfile() async {
+    final targetUserId = widget.userId ?? widget.anchor?.userId;
+    if (targetUserId == null || targetUserId <= 0) return;
+
+    if (_anchor == null) {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+    }
+
+    try {
+      final result = await UserHomeService.instance.getUserHome(targetUserId);
+      if (!mounted) return;
+      setState(() {
+        _anchor = result.anchor;
+        _isFollowing = result.isFollowing;
+        _isLoading = false;
+        _error = null;
+      });
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      if (_anchor == null) {
+        setState(() {
+          _error = e.message;
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      if (!mounted) return;
+      if (_anchor == null) {
+        setState(() {
+          _error = '获取主页信息失败';
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _toggleFollow(AnchorInfo anchor) async {
+    if (_isFollowLoading) return;
+
+    final authState = ref.read(authProvider);
+    if (authState.userId != null && authState.userId == anchor.userId) return;
+
+    if (_isFollowing) {
+      final name = anchor.username?.trim().isNotEmpty == true
+          ? anchor.username!.trim()
+          : '用户${anchor.userId}';
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('确认取消关注'),
+          content: Text('确定不再关注 $name 吗？'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, true),
+              style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor),
+              child: const Text('不再关注'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+    }
+
+    setState(() {
+      _isFollowLoading = true;
+    });
+
+    try {
+      final next = _isFollowing
+          ? await UserHomeService.instance.unfollowUser(anchor.userId)
+          : await UserHomeService.instance.followUser(anchor.userId);
+      if (!mounted) return;
+      setState(() {
+        _isFollowing = next;
+        _isFollowLoading = false;
+      });
+      AppToast.showSnackBar(
+        context,
+        SnackBar(content: Text(next ? '已关注' : '已取消关注')),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isFollowLoading = false;
+      });
+      AppToast.showSnackBar(context, SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isFollowLoading = false;
+      });
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('关注操作失败，请稍后重试')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final anchor = widget.anchor;
+    final anchor = _resolvedAnchor;
+    final authState = ref.watch(authProvider);
+    if (_isLoading && anchor == null) {
+      return const Scaffold(
+        backgroundColor: Colors.white,
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (anchor == null) {
+      final message = _error ?? '主播信息无效，请返回重试';
+      return Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.black),
+            onPressed: () => context.pop(),
+          ),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.error_outline,
+                  size: 48,
+                  color: AppTheme.textHint,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: AppTheme.textSecondary),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: _loadProfile,
+                  child: const Text('重试'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    final isSelf =
+        authState.userId != null && authState.userId == anchor.userId;
     final screenWidth = MediaQuery.of(context).size.width;
     final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
     final rawHeaderCacheWidth = (screenWidth * devicePixelRatio).round();
@@ -280,6 +459,15 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                                     label: zodiac ?? '星座未填',
                                     color: AppTheme.primaryColor,
                                   ),
+                                  if ((anchor.status ?? 'normal') ==
+                                      'banned') ...[
+                                    const SizedBox(width: 8),
+                                    _buildTag(
+                                      icon: Icons.block_rounded,
+                                      label: '封禁',
+                                      color: AppTheme.errorColor,
+                                    ),
+                                  ],
                                 ],
                               ),
                             ],
@@ -348,10 +536,6 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                               ? anchor.locationCity!.trim()
                               : '所在地未填',
                         ),
-                        _buildInfoChip(
-                          icon: Icons.verified_user_outlined,
-                          label: _statusText(anchor),
-                        ),
                       ],
                     ),
                     const SizedBox(height: 24),
@@ -388,94 +572,131 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
           ],
         ),
       ),
-      bottomSheet: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, -5),
-            ),
-          ],
-        ),
-        child: SafeArea(
-          child: Row(
-            children: [
-              Expanded(
-                flex: 1,
-                child: OutlinedButton(
-                  onPressed: () => _openIm(anchor: anchor),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    side: const BorderSide(color: AppTheme.dividerColor),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(28),
-                    ),
+      bottomSheet: isSelf
+          ? const SizedBox.shrink()
+          : Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, -5),
                   ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.chat_bubble_outline,
-                        size: 20,
-                        color: AppTheme.textPrimary,
+                ],
+              ),
+              child: SafeArea(
+                child: Row(
+                  children: [
+                    if (!isSelf) ...[
+                      Expanded(
+                        flex: 1,
+                        child: Tooltip(
+                          message: _isFollowing ? '取消关注' : '关注',
+                          child: OutlinedButton(
+                            onPressed: _isFollowLoading
+                                ? null
+                                : () => _toggleFollow(anchor),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              minimumSize: const Size(48, 48),
+                              side: BorderSide(
+                                color: _isFollowing
+                                    ? AppTheme.errorColor
+                                    : const Color(0xFFFF2D55),
+                              ),
+                              foregroundColor: _isFollowing
+                                  ? AppTheme.errorColor
+                                  : const Color(0xFFFF2D55),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(28),
+                              ),
+                            ),
+                            child: Icon(
+                              _isFollowLoading
+                                  ? Icons.hourglass_top_rounded
+                                  : (_isFollowing
+                                        ? Icons.favorite_rounded
+                                        : Icons.favorite_border_rounded),
+                              size: 20,
+                            ),
+                          ),
+                        ),
                       ),
-                      SizedBox(width: 8),
-                      Text(
-                        '聊一聊',
-                        style: TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontWeight: FontWeight.bold,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        flex: 1,
+                        child: Tooltip(
+                          message: '聊一聊',
+                          child: OutlinedButton(
+                            onPressed: () => _openIm(anchor: anchor),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              minimumSize: const Size(48, 48),
+                              side: const BorderSide(
+                                color: AppTheme.dividerColor,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(28),
+                              ),
+                            ),
+                            child: const Icon(
+                              Icons.chat_bubble_outline,
+                              size: 20,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
                         ),
                       ),
                     ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                flex: 2,
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: AppTheme.primaryGradient,
-                    borderRadius: BorderRadius.circular(28),
-                    boxShadow: AppTheme.elevatedShadow,
-                  ),
-                  child: ElevatedButton(
-                    onPressed: () => _openCall(anchor),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.transparent,
-                      shadowColor: Colors.transparent,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.videocam,
-                          size: 22,
-                          color: Colors.white,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '立即通话 (${anchor.callPrice?.toStringAsFixed(0) ?? '0'}/分)',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                    if (!isSelf && anchor.isAnchor) const SizedBox(width: 12),
+                    if (anchor.isAnchor)
+                      Expanded(
+                        flex: 2,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: AppTheme.primaryGradient,
+                            borderRadius: BorderRadius.circular(28),
+                            boxShadow: AppTheme.elevatedShadow,
+                          ),
+                          child: ElevatedButton(
+                            onPressed: () => _openCall(anchor),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              shadowColor: Colors.transparent,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.videocam,
+                                  size: 22,
+                                  color: Colors.white,
+                                ),
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    '立即通话 (${anchor.callPrice?.toStringAsFixed(0) ?? '0'}/分)',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
+                      ),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
+            ),
     );
   }
 
@@ -608,11 +829,6 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
     if (value == 'male') return '男';
     if (value == 'female') return '女';
     return '保密';
-  }
-
-  String _statusText(AnchorInfo anchor) {
-    if (anchor.status == 'banned') return '封禁';
-    return (anchor.isOnline ?? false) ? '在线' : '离线';
   }
 }
 

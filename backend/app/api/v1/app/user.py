@@ -3,12 +3,18 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, UploadFile
 from fastapi import Header, HTTPException, Query
+from tortoise.expressions import Q
 
 from app.core.app_auth import DependAppAuth, logout_app_user
 from app.core.ctx import CTX_APP_USER_ID, CTX_APP_USER_OBJ
-from app.models import AppUser
-from app.schemas.app_user import AppUserProfileUpdateIn
-from app.schemas.base import Fail, Success
+from app.models import AppUser, UserFollow
+from app.schemas.app_user import (
+    AppUserProfileUpdateIn,
+    UserFollowActionOut,
+    UserFollowIn,
+    UserFollowStatusOut,
+)
+from app.schemas.base import Fail, Success, SuccessExtra
 from app.services.gift_income_service import decimal_to_float_2
 from app.settings.config import settings
 from app.utils.media_url import normalize_media_list, to_relative_media_url
@@ -31,6 +37,64 @@ def _mask_phone(phone: str | None) -> str:
 
 def _normalize_album(raw_value) -> list[str]:
     return normalize_media_list(raw_value)
+
+
+def _normalize_anchor_tags(raw_value) -> list[str]:
+    if not isinstance(raw_value, list):
+        return []
+    out: list[str] = []
+    for item in raw_value:
+        if not isinstance(item, str):
+            continue
+        tag = item.strip()
+        if tag:
+            out.append(tag)
+    return out
+
+
+async def _is_following(current_user_id: int, target_user_id: int) -> bool:
+    if current_user_id <= 0 or target_user_id <= 0 or current_user_id == target_user_id:
+        return False
+    return await UserFollow.filter(
+        follower_id=current_user_id,
+        following_id=target_user_id,
+    ).exists()
+
+
+async def _serialize_user_home(app_user: AppUser, *, is_following: bool, is_online: bool) -> dict:
+    return {
+        "id": app_user.id,
+        "user_id": app_user.id,
+        "avatar": to_relative_media_url(app_user.avatar),
+        "cover_url": to_relative_media_url(app_user.cover_url),
+        "album_photos": _normalize_album(app_user.album_photos),
+        "nickname": app_user.nickname or f"用户{app_user.id}",
+        "username": app_user.nickname or f"用户{app_user.id}",
+        "gender": app_user.gender or "secret",
+        "birth_date": app_user.birth_date.isoformat() if app_user.birth_date else None,
+        "height_cm": app_user.height_cm,
+        "weight_kg": app_user.weight_kg,
+        "location_city": app_user.location_city or "",
+        "signature": app_user.signature or "",
+        "anchor_intro": app_user.anchor_intro or "",
+        "intro": app_user.anchor_intro or "",
+        "tags": _normalize_anchor_tags(app_user.anchor_tags),
+        "call_price": int(app_user.anchor_call_price or 0),
+        "is_online": is_online,
+        "last_active": app_user.last_login.isoformat() if app_user.last_login else None,
+        "status": app_user.status or "normal",
+        "is_anchor": bool(app_user.is_anchor),
+        "diamonds": int(app_user.diamonds or 0),
+        "is_following": is_following,
+    }
+
+
+def _build_follow_keyword_query(keyword: str) -> Q:
+    trimmed = keyword.strip()
+    q = Q(nickname__contains=trimmed)
+    if trimmed.isdigit():
+        q |= Q(id=int(trimmed))
+    return q
 
 
 @router.post("/user/logout", summary="登出")
@@ -203,15 +267,221 @@ async def get_user_public_profile(
     if not app_user:
         return Fail(code=404, msg="用户不存在")
 
+    from app.websocket.presence import is_online as _is_online_user
+
+    is_following = await _is_following(current_user_id, int(app_user.id))
+    is_online = await _is_online_user(int(app_user.id))
+
     return Success(
-        data={
-            "id": app_user.id,
-            "nickname": app_user.nickname or f"用户{app_user.id}",
-            "avatar": to_relative_media_url(app_user.avatar),
-            "cover_url": to_relative_media_url(app_user.cover_url),
-            "is_anchor": app_user.is_anchor,
-            "anchor_id": app_user.id if app_user.is_anchor else None,
-            "anchor_user_id": app_user.id if app_user.is_anchor else None,
-            "status": app_user.status or "normal",
-        }
+        data=await _serialize_user_home(
+            app_user,
+            is_following=is_following,
+            is_online=is_online,
+        )
+    )
+
+
+@router.get("/user/follow/status", summary="查询关注状态", dependencies=[Depends(DependAppAuth)])
+async def get_user_follow_status(
+    user_id: int = Query(..., description="目标用户ID"),
+):
+    current_user_id = int(CTX_APP_USER_ID.get() or 0)
+    if current_user_id <= 0:
+        return Fail(code=401, msg="用户不存在")
+
+    target_user = await AppUser.filter(id=user_id).first()
+    if not target_user:
+        return Fail(code=404, msg="用户不存在")
+
+    is_following = await _is_following(current_user_id, target_user.id)
+    return Success(
+        data=UserFollowStatusOut(
+            target_user_id=target_user.id,
+            is_following=is_following,
+        ).model_dump()
+    )
+
+
+@router.post("/user/follow", summary="关注用户", dependencies=[Depends(DependAppAuth)])
+async def follow_user(req_in: UserFollowIn):
+    current_user_id = int(CTX_APP_USER_ID.get() or 0)
+    if current_user_id <= 0:
+        return Fail(code=401, msg="用户不存在")
+    if current_user_id == req_in.target_user_id:
+        return Fail(code=400, msg="不能关注自己")
+
+    target_user = await AppUser.filter(id=req_in.target_user_id).first()
+    if not target_user:
+        return Fail(code=404, msg="用户不存在")
+
+    relation = await UserFollow.filter(
+        follower_id=current_user_id,
+        following_id=target_user.id,
+    ).first()
+    if not relation:
+        await UserFollow.create(
+            follower_id=current_user_id,
+            following_id=target_user.id,
+        )
+
+    return Success(
+        data=UserFollowActionOut(
+            target_user_id=target_user.id,
+            is_following=True,
+        ).model_dump()
+    )
+
+
+@router.delete("/user/follow", summary="取消关注用户", dependencies=[Depends(DependAppAuth)])
+async def unfollow_user(
+    user_id: int = Query(..., description="目标用户ID"),
+):
+    current_user_id = int(CTX_APP_USER_ID.get() or 0)
+    if current_user_id <= 0:
+        return Fail(code=401, msg="用户不存在")
+    if current_user_id == user_id:
+        return Fail(code=400, msg="不能取消关注自己")
+
+    relation = await UserFollow.filter(
+        follower_id=current_user_id,
+        following_id=user_id,
+    ).first()
+    if relation:
+        await relation.delete()
+
+    return Success(
+        data=UserFollowActionOut(
+            target_user_id=user_id,
+            is_following=False,
+        ).model_dump()
+    )
+
+
+@router.get("/user/follow/list", summary="我的关注列表", dependencies=[Depends(DependAppAuth)])
+async def list_user_following(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=50, description="每页数量"),
+    keyword: str = Query("", description="昵称或用户ID"),
+):
+    current_user_id = int(CTX_APP_USER_ID.get() or 0)
+    if current_user_id <= 0:
+        return Fail(code=401, msg="用户不存在")
+
+    relation_q = UserFollow.filter(follower_id=current_user_id)
+    trimmed_keyword = keyword.strip()
+    if trimmed_keyword:
+        matched_ids = await AppUser.filter(_build_follow_keyword_query(trimmed_keyword)).values_list("id", flat=True)
+        if not matched_ids:
+            return SuccessExtra(
+                data=None,
+                rows=[],
+                current=page,
+                total=0,
+                has_more=False,
+            )
+        relation_q &= Q(following_id__in=list(matched_ids))
+
+    total = await relation_q.count()
+    relations = await relation_q.order_by("-created_at", "-id").offset((page - 1) * page_size).limit(page_size)
+    following_ids = [relation.following_id for relation in relations]
+    if not following_ids:
+        return SuccessExtra(
+            data=None,
+            rows=[],
+            current=page,
+            total=total,
+            has_more=False,
+        )
+
+    users = await AppUser.filter(id__in=following_ids).all()
+    user_map = {int(user.id): user for user in users}
+    from app.websocket.presence import is_online as _is_online_user
+
+    rows: list[dict] = []
+    for relation in relations:
+        app_user = user_map.get(int(relation.following_id))
+        if not app_user:
+            continue
+        rows.append(
+            {
+                **await _serialize_user_home(
+                    app_user,
+                    is_following=True,
+                    is_online=await _is_online_user(int(app_user.id)),
+                ),
+                "followed_at": relation.created_at.isoformat() if relation.created_at else None,
+            }
+        )
+
+    return SuccessExtra(
+        data=None,
+        rows=rows,
+        current=page,
+        total=total,
+        has_more=page * page_size < total,
+    )
+
+
+@router.get("/user/fans/list", summary="我的粉丝列表", dependencies=[Depends(DependAppAuth)])
+async def list_user_fans(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=50, description="每页数量"),
+    keyword: str = Query("", description="昵称或用户ID"),
+):
+    current_user_id = int(CTX_APP_USER_ID.get() or 0)
+    if current_user_id <= 0:
+        return Fail(code=401, msg="用户不存在")
+
+    relation_q = UserFollow.filter(following_id=current_user_id)
+    trimmed_keyword = keyword.strip()
+    if trimmed_keyword:
+        matched_ids = await AppUser.filter(_build_follow_keyword_query(trimmed_keyword)).values_list("id", flat=True)
+        if not matched_ids:
+            return SuccessExtra(
+                data=None,
+                rows=[],
+                current=page,
+                total=0,
+                has_more=False,
+            )
+        relation_q &= Q(follower_id__in=list(matched_ids))
+
+    total = await relation_q.count()
+    relations = await relation_q.order_by("-created_at", "-id").offset((page - 1) * page_size).limit(page_size)
+    fan_ids = [relation.follower_id for relation in relations]
+    if not fan_ids:
+        return SuccessExtra(
+            data=None,
+            rows=[],
+            current=page,
+            total=total,
+            has_more=False,
+        )
+
+    users = await AppUser.filter(id__in=fan_ids).all()
+    user_map = {int(user.id): user for user in users}
+    from app.websocket.presence import is_online as _is_online_user
+
+    rows: list[dict] = []
+    for relation in relations:
+        app_user = user_map.get(int(relation.follower_id))
+        if not app_user:
+            continue
+        rows.append(
+            {
+                **await _serialize_user_home(
+                    app_user,
+                    is_following=await _is_following(current_user_id, int(app_user.id)),
+                    is_online=await _is_online_user(int(app_user.id)),
+                ),
+                "followed_at": relation.created_at.isoformat() if relation.created_at else None,
+            }
+        )
+
+    return SuccessExtra(
+        data=None,
+        rows=rows,
+        current=page,
+        total=total,
+        has_more=page * page_size < total,
     )

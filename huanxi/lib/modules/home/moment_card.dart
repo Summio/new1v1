@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:go_router/go_router.dart';
+import '../../app/routes/app_router.dart';
 import '../../services/moment_service.dart';
 import '../../app/theme/app_theme.dart';
 import 'moment_image_preview_page.dart';
@@ -38,7 +40,22 @@ class MomentCard extends StatelessWidget {
             Row(
               children: [
                 // 头像
-                _UserAvatar(avatar: moment.user?.avatar ?? '', size: 44),
+                GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: moment.userId > 0
+                      ? () {
+                          context.push(
+                            Uri(
+                              path: AppRoutes.anchorDetail,
+                              queryParameters: {
+                                'userId': moment.userId.toString(),
+                              },
+                            ).toString(),
+                          );
+                        }
+                      : null,
+                  child: _UserAvatar(avatar: moment.user?.avatar ?? '', size: 44),
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
