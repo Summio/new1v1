@@ -36,7 +36,7 @@ async def list_call_record(
     if call_id is not None:
         q &= Q(id=call_id)
     if user_id is not None:
-        q &= (Q(caller_id=user_id) | Q(callee_id=user_id))
+        q &= Q(caller_id=user_id) | Q(callee_id=user_id)
     if caller_id is not None:
         q &= Q(caller_id=caller_id)
     if callee_id is not None:
@@ -54,12 +54,7 @@ async def list_call_record(
         return Fail(code=400, msg=str(exc))
 
     total = await CallRecord.filter(q).count()
-    records = (
-        await CallRecord.filter(q)
-        .order_by("-created_at")
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    )
+    records = await CallRecord.filter(q).order_by("-created_at").offset((page - 1) * page_size).limit(page_size)
 
     user_ids = list({int(row.caller_id) for row in records} | {int(row.callee_id) for row in records})
     user_map: dict[int, AppUser] = {}

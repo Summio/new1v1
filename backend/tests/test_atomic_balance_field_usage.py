@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 TARGET_FILES = [
     Path("app/api/v1/app/gift.py"),
     Path("app/api/v1/app/wallet.py"),

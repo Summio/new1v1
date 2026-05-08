@@ -1,5 +1,6 @@
-from app.core.redis import get_redis
 from tortoise import fields
+
+from app.core.redis import get_redis
 
 from .base import BaseModel, TimestampMixin
 
@@ -9,6 +10,7 @@ SYSTEM_CONFIG_CACHE_TTL = 60  # 秒
 
 class SystemConfig(BaseModel, TimestampMixin):
     """系统配置（键值对）"""
+
     cfg_key = fields.CharField(max_length=64, unique=True, description="配置键")
     cfg_value = fields.TextField(description="配置值")
     description = fields.CharField(max_length=255, null=True, description="说明")

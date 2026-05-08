@@ -531,7 +531,7 @@ class AppInitNotifier extends StateNotifier<AppInitState> {
       final sdkAppIdRaw = im?['sdk_app_id'];
       final sdkAppId = sdkAppIdRaw is num ? sdkAppIdRaw.toInt() : null;
       final imTextPriceRaw = imTextBilling?['price'];
-      final imTextShareRaw = imTextBilling?['anchor_share_bps'];
+      final imTextShareRaw = imTextBilling?['certified_user_share_bps'];
       final tierRaw = respData['certified_call_price_tiers'];
       final tiers = tierRaw is List
           ? tierRaw
@@ -592,3 +592,4 @@ final tokenNamesProvider = Provider<TokenNamesState>((ref) {
 final isLoggedInProvider = Provider<bool>((ref) {
   return ref.watch(authProvider).isLoggedIn;
 });
+

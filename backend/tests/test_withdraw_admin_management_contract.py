@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parent
 
@@ -21,11 +20,12 @@ def test_admin_withdraw_review_is_single_step_paid_or_rejected() -> None:
 
     assert 'withdraw.status = "paid"' in text
     assert 'withdraw.status = "approved"' not in text
-    assert 'diamonds=F("diamonds") + withdraw.amount' not in text.split('if action == "reject":', 1)[-1].split(
-        'withdraw.status = "rejected"', 1
-    )[-1]
-    assert 'review_remark' in text
-    assert 'processed_by' in text
+    assert (
+        'diamonds=F("diamonds") + withdraw.amount'
+        not in text.split('if action == "reject":', 1)[-1].split('withdraw.status = "rejected"', 1)[-1]
+    )
+    assert "review_remark" in text
+    assert "processed_by" in text
 
 
 def test_withdraw_apply_has_review_audit_fields() -> None:
@@ -59,10 +59,10 @@ def test_app_withdraw_uses_wallet_transactions_for_diamond_expense() -> None:
     assert '@router.get("/withdraw/records"' not in wallet_text
     assert "class WithdrawRecordItem" not in schema_text
     assert "class WithdrawRecordListOut" not in schema_text
-    assert 'FROM withdraw_apply WHERE user_id = {placeholder}' in wallet_text
+    assert "FROM withdraw_apply WHERE user_id = {placeholder}" in wallet_text
     assert '"withdraw": "提现申请"' in wallet_text
     assert "status AS status" in wallet_text
-    assert "status: str = \"\"" in schema_text
+    assert 'status: str = ""' in schema_text
     assert "account_no AS gift_name" in wallet_text
 
 

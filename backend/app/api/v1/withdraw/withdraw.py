@@ -1,4 +1,6 @@
 from fastapi import APIRouter, Query
+from tortoise.expressions import F, Q
+from tortoise.transactions import in_transaction
 
 from app.core.ctx import CTX_USER_ID
 from app.core.time_utils import now_local_naive
@@ -6,8 +8,6 @@ from app.log import logger
 from app.models import AppUser, WithdrawApply
 from app.schemas.app_api import WithdrawListItem, WithdrawReviewIn
 from app.schemas.base import Fail, Success, SuccessExtra
-from tortoise.expressions import F, Q
-from tortoise.transactions import in_transaction
 
 router = APIRouter()
 
@@ -35,22 +35,14 @@ async def withdraw_list(
         q &= Q(account_no__contains=account_no)
 
     total = await WithdrawApply.filter(q).count()
-    records = (
-        await WithdrawApply.filter(q)
-        .order_by("-created_at")
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    )
+    records = await WithdrawApply.filter(q).order_by("-created_at").offset((page - 1) * page_size).limit(page_size)
 
     # 批量获取用户昵称
     user_ids = list({r.user_id for r in records})
     users_map = {}
     if user_ids:
         users = await AppUser.filter(id__in=user_ids).all()
-        users_map = {
-            u.id: (u.nickname or "").strip() or (u.phone or "").strip() or f"用户{u.id}"
-            for u in users
-        }
+        users_map = {u.id: (u.nickname or "").strip() or (u.phone or "").strip() or f"用户{u.id}" for u in users}
 
     items = []
     for r in records:
@@ -76,7 +68,9 @@ async def withdraw_list(
             )
         )
 
-    return SuccessExtra(data=[item.model_dump(mode="json") for item in items], total=total, page=page, page_size=page_size)
+    return SuccessExtra(
+        data=[item.model_dump(mode="json") for item in items], total=total, page=page, page_size=page_size
+    )
 
 
 @router.post("/review", summary="审核提现申请")

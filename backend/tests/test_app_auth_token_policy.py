@@ -21,14 +21,7 @@ class AppAuthTokenPolicyTests(unittest.TestCase):
         self.assertAlmostEqual(actual_minutes, expected_minutes, delta=2)
 
     def test_bootstrap_router_should_not_require_auth_dependency(self) -> None:
-        source_path = (
-            Path(__file__).resolve().parents[1]
-            / "app"
-            / "api"
-            / "v1"
-            / "app"
-            / "__init__.py"
-        )
+        source_path = Path(__file__).resolve().parents[1] / "app" / "api" / "v1" / "app" / "__init__.py"
         tree = ast.parse(source_path.read_text(encoding="utf-8"))
 
         bootstrap_call = None
@@ -52,4 +45,3 @@ class AppAuthTokenPolicyTests(unittest.TestCase):
             for kw in (bootstrap_call.keywords if bootstrap_call else [])
         )
         self.assertFalse(has_dependencies, "bootstrap_router 不应强制依赖 DependAppAuth")
-

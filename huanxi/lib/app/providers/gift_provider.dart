@@ -65,7 +65,7 @@ class GiftSendResult {
   final int? quantity;
   final int? unitPrice;
   final int? totalPrice;
-  final double? anchorIncomeDiamonds;
+  final double? certifiedUserIncomeDiamonds;
   final int? giftId;
   final String? giftName;
   final String? giftIcon;
@@ -78,7 +78,7 @@ class GiftSendResult {
     this.quantity,
     this.unitPrice,
     this.totalPrice,
-    this.anchorIncomeDiamonds,
+    this.certifiedUserIncomeDiamonds,
     this.giftId,
     this.giftName,
     this.giftIcon,
@@ -156,7 +156,7 @@ class GiftListNotifier extends StateNotifier<GiftListState> {
         quantity: resultData['quantity'] as int?,
         unitPrice: resultData['unit_price'] as int?,
         totalPrice: resultData['total_price'] as int?,
-        anchorIncomeDiamonds: _parseDouble(resultData['anchor_income_diamonds']),
+        certifiedUserIncomeDiamonds: _parseDouble(resultData['certified_user_income_diamonds']),
         giftId: resultData['gift_id'] as int?,
         giftName: resultData['gift_name'] as String?,
         giftIcon: resultData['gift_icon'] as String?,
@@ -198,3 +198,4 @@ final giftListProvider = StateNotifierProvider<GiftListNotifier, GiftListState>(
     return GiftListNotifier(DioClient.instance);
   },
 );
+

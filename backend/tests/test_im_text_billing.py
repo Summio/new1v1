@@ -1,5 +1,5 @@
-from pathlib import Path
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -7,12 +7,11 @@ from pydantic import ValidationError
 from app.schemas.app_api import IMTextChargeIn
 from app.schemas.system import IMTextBillingConfigIn
 from app.services.im_text_billing_service import (
-    DEFAULT_IM_TEXT_ANCHOR_SHARE_BPS,
+    DEFAULT_IM_TEXT_CERTIFIED_USER_SHARE_BPS,
     DEFAULT_IM_TEXT_PRICE,
-    calc_im_text_anchor_income_diamonds,
+    calc_im_text_certified_user_income_diamonds,
     parse_im_text_billing_config,
 )
-
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
@@ -26,22 +25,22 @@ def test_im_text_billing_config_defaults_are_safe() -> None:
 
     assert config.enabled is False
     assert config.price == DEFAULT_IM_TEXT_PRICE
-    assert config.anchor_share_bps == DEFAULT_IM_TEXT_ANCHOR_SHARE_BPS
+    assert config.certified_user_share_bps == DEFAULT_IM_TEXT_CERTIFIED_USER_SHARE_BPS
 
 
 def test_im_text_billing_config_rejects_enabled_zero_price() -> None:
     with pytest.raises(ValidationError):
-        IMTextBillingConfigIn(enabled=True, price=0, anchor_share_bps=5000)
+        IMTextBillingConfigIn(enabled=True, price=0, certified_user_share_bps=5000)
 
 
 def test_im_text_billing_config_rejects_invalid_share() -> None:
     with pytest.raises(ValidationError):
-        IMTextBillingConfigIn(enabled=False, price=0, anchor_share_bps=10001)
+        IMTextBillingConfigIn(enabled=False, price=0, certified_user_share_bps=10001)
 
 
-def test_im_text_anchor_income_keeps_two_decimal_precision() -> None:
-    assert calc_im_text_anchor_income_diamonds(1, 5000) == Decimal("0.50")
-    assert calc_im_text_anchor_income_diamonds(99, 5250) == Decimal("51.98")
+def test_im_text_certified_user_income_keeps_two_decimal_precision() -> None:
+    assert calc_im_text_certified_user_income_diamonds(1, 5000) == Decimal("0.50")
+    assert calc_im_text_certified_user_income_diamonds(99, 5250) == Decimal("51.98")
 
 
 def test_im_text_charge_request_requires_request_id() -> None:
@@ -67,16 +66,15 @@ def test_im_text_config_api_uses_system_config_and_clears_cache() -> None:
     assert "SYSTEM_CONFIG_CACHE_KEY" in content
     assert "im_text_message_billing_enabled" in content
     assert "im_text_message_price" in content
-    assert "im_text_message_anchor_share_bps" in content
+    assert "im_text_message_certified_user_share_bps" in content
 
 
 def test_im_text_charge_model_and_migration_exist() -> None:
     model_content = _read_backend_file("app/models/admin.py")
-    migration_content = _read_backend_file(
-        "migrations/models/23_20260507100000_im_text_message_billing.py"
-    )
-    decimal_migration_content = _read_backend_file(
-        "migrations/models/26_20260507193000_im_text_message_billing_decimal.py"
+    migration_content = _read_backend_file("migrations/models/23_20260507100000_im_text_message_billing.py")
+    decimal_migration_content = _read_backend_file("migrations/models/26_20260507231620_update.py")
+    rename_migration_content = _read_backend_file(
+        "migrations/models/39_20260509100000_certified_user_income_fields.py"
     )
 
     assert "class ImTextMessageChargeRecord" in model_content
@@ -86,6 +84,7 @@ def test_im_text_charge_model_and_migration_exist() -> None:
     assert "CREATE TABLE IF NOT EXISTS `im_text_message_charge_record`" in migration_content
     assert "im_text_message_billing_enabled" in migration_content
     assert "DECIMAL(18,2)" in decimal_migration_content
+    assert "`anchor_income_diamonds` `certified_user_income_diamonds`" in rename_migration_content
 
 
 def test_im_text_charge_service_uses_atomic_balance_updates() -> None:
@@ -93,7 +92,7 @@ def test_im_text_charge_service_uses_atomic_balance_updates() -> None:
 
     assert "async def charge_im_text_message" in content
     assert 'coins=F("coins") - price' in content
-    assert 'diamonds=F("diamonds") + anchor_income_diamonds' in content
+    assert 'diamonds=F("diamonds") + certified_user_income_diamonds' in content
     assert "in_transaction()" in content
     assert "coins__gte=price" in content
 
@@ -141,3 +140,4 @@ def test_admin_web_im_text_billing_page_removed() -> None:
     assert not page_path.exists()
     assert 'Menu.filter(path="im-text-billing", component="/system/im-text-billing").delete()' in menu_content
     assert 'component": "/system/im-text-billing"' not in menu_content
+

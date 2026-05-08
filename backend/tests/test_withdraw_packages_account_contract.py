@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 REPO = ROOT.parent
 
@@ -67,7 +66,7 @@ def test_withdraw_config_admin_route_and_web_view_exist() -> None:
 def test_system_menu_blueprint_has_withdraw_config_menu() -> None:
     text = (ROOT / "app/core/init_app.py").read_text(encoding="utf-8")
 
-    assert "name\": \"提现配置\"" in text
-    assert "component\": \"/system/withdraw-config\"" in text
+    assert 'name": "提现配置"' in text
+    assert 'component": "/system/withdraw-config"' in text
     assert "await api_controller.refresh_api()" in text
     assert "withdraw_config_menu" in text

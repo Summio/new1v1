@@ -133,6 +133,9 @@ class ApiEndpoints {
   /// 全局动态列表
   static const String momentFeed = 'app/moment/feed';
 
+  /// 排行榜
+  static const String rankingList = 'app/ranking/list';
+
   /// 我的动态列表
   static const String momentMine = 'app/moment/mine';
 

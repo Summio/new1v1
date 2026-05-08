@@ -10,4 +10,3 @@ class WebsocketHeartbeatPolicyTests(unittest.TestCase):
             _PING_INTERVAL,
             "服务端心跳超时必须大于客户端 ping 间隔，避免等值导致误判断线",
         )
-

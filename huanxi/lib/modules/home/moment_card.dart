@@ -133,15 +133,6 @@ class MomentCard extends StatelessWidget {
               ),
             ],
 
-            // 底部：时间 + 操作行（后续可扩展点赞/评论）
-            const SizedBox(height: 8),
-            Align(
-              alignment: Alignment.centerRight,
-              child: Text(
-                _formatDate(moment.createdAt),
-                style: const TextStyle(fontSize: 11, color: AppTheme.textHint),
-              ),
-            ),
           ],
         ),
       ),
@@ -159,16 +150,6 @@ class MomentCard extends StatelessWidget {
       if (diff.inHours < 24) return '${diff.inHours}小时前';
       if (diff.inDays < 7) return '${diff.inDays}天前';
       return '${dt.month}/${dt.day}';
-    } catch (_) {
-      return '';
-    }
-  }
-
-  String _formatDate(String? createdAt) {
-    if (createdAt == null || createdAt.isEmpty) return '';
-    try {
-      final dt = DateTime.parse(createdAt);
-      return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
     } catch (_) {
       return '';
     }

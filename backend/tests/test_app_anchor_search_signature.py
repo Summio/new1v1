@@ -39,4 +39,3 @@ def test_certified_user_list_returns_cover_and_profile_detail_fields() -> None:
         '"status"',
     ):
         assert field in source
-

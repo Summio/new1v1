@@ -42,9 +42,7 @@ async def test_run_call_watchdog_leader_loop_no_internal_error_when_refresh_ok()
     ):
         await call_watchdog.run_call_watchdog(stop_event)
 
-    loop_errors = [
-        c for c in fake_logger.exception.call_args_list if "call watchdog loop error" in str(c)
-    ]
+    loop_errors = [c for c in fake_logger.exception.call_args_list if "call watchdog loop error" in str(c)]
     assert loop_errors == []
 
 
@@ -198,9 +196,7 @@ async def test_refresh_watchdog_leader_reloads_script_after_noscript():
     from app.websocket import manager as manager_module
 
     mock_redis = AsyncMock()
-    mock_redis.evalsha = AsyncMock(
-        side_effect=[ResponseError("NOSCRIPT No matching script. Please use EVAL."), 1]
-    )
+    mock_redis.evalsha = AsyncMock(side_effect=[ResponseError("NOSCRIPT No matching script. Please use EVAL."), 1])
     mock_redis.script_load = AsyncMock(return_value="sha-watchdog")
 
     with (
@@ -238,10 +234,7 @@ async def test_push_failure_threshold_tracks_consecutive_failures():
             # 连续失败 3 次：触发阈值
             await manager.push_to_user(user_id=100, event="call_ended", data={}, critical=True)
 
-            threshold_logs = [
-                c for c in mock_logger.warning.call_args_list
-                if "threshold exceeded" in str(c)
-            ]
+            threshold_logs = [c for c in mock_logger.warning.call_args_list if "threshold exceeded" in str(c)]
             assert len(threshold_logs) >= 1
             assert mock_logger.warning.called
 

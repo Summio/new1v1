@@ -103,7 +103,9 @@ const columns = [
     width: 160,
     align: 'center',
     render(row) {
-      return row.certification_apply_at ? formatDate(row.certification_apply_at, 'YYYY-MM-DD HH:mm:ss') : '-'
+      return row.certification_apply_at
+        ? formatDate(row.certification_apply_at, 'YYYY-MM-DD HH:mm:ss')
+        : '-'
     },
   },
   {
@@ -136,7 +138,9 @@ const columns = [
     width: 160,
     align: 'center',
     render(row) {
-      return row.certification_reviewed_at ? formatDate(row.certification_reviewed_at, 'YYYY-MM-DD HH:mm:ss') : '-'
+      return row.certification_reviewed_at
+        ? formatDate(row.certification_reviewed_at, 'YYYY-MM-DD HH:mm:ss')
+        : '-'
     },
   },
   {
@@ -234,4 +238,3 @@ const columns = [
   margin-top: 2px;
 }
 </style>
-

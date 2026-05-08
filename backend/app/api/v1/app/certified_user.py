@@ -134,9 +134,8 @@ async def certified_user_list(
     if section_value not in {"recommend", "active", "new"}:
         section_value = "recommend"
 
-    filters = {"status": "normal"}
+    filters = {"status": "normal", "is_certified_user": True}
     if not search_keyword:
-        filters["is_certified_user"] = True
         filters["cover_url__not_isnull"] = True
         if section_value == "recommend":
             filters["is_recommended"] = True

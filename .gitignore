@@ -1,2 +1,5 @@
 .worktrees/
 backend/uploads/
+backend/.pip-tmp/
+backend/web/dist/
+backend/run-*.log

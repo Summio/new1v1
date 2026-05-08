@@ -5,13 +5,29 @@ import types
 from pathlib import Path
 
 
+STUB_MODULE_NAMES = [
+    "app.services.certification_price_service",
+    "app.services",
+    "app.models",
+    "app",
+]
+
+
+def _snapshot_modules():
+    return {name: sys.modules.get(name) for name in STUB_MODULE_NAMES}
+
+
+def _restore_modules(snapshot):
+    for name, module in snapshot.items():
+        if module is None:
+            sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = module
+
+
 def _load_service():
-    for name in [
-        "app.services.certification_price_service",
-        "app.services",
-        "app.models",
-        "app",
-    ]:
+    snapshot = _snapshot_modules()
+    for name in STUB_MODULE_NAMES:
         sys.modules.pop(name, None)
     app = types.ModuleType("app")
     app.__path__ = []
@@ -34,18 +50,11 @@ def _load_service():
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     sys.modules["app.services.certification_price_service"] = module
-    spec.loader.exec_module(module)
-    return module
-
-
-def teardown_function():
-    for name in [
-        "app.services.certification_price_service",
-        "app.services",
-        "app.models",
-        "app",
-    ]:
-        sys.modules.pop(name, None)
+    try:
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        _restore_modules(snapshot)
 
 
 def test_parse_certified_call_price_tiers_falls_back_to_default() -> None:

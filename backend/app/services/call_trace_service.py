@@ -8,6 +8,7 @@ from typing import Any, Awaitable, Callable
 from urllib.parse import urlencode
 
 from loguru import logger
+from redis.exceptions import ResponseError
 
 from app.services.gift_income_service import decimal_to_float_2
 
@@ -94,8 +95,8 @@ def build_call_trace_event(
         "ts": ts or _now_ts_seconds(),
         "duration_seconds": _safe_int(getattr(call_record, "duration", 0)),
         "total_fee_coins": decimal_to_float_2(getattr(call_record, "total_fee", 0)),
-        "income_anchor_user_id": _safe_int(getattr(call_record, "income_anchor_user_id", 0)),
-        "anchor_income_diamonds": decimal_to_float_2(getattr(call_record, "anchor_income_diamonds", 0)),
+        "income_certified_user_id": _safe_int(getattr(call_record, "income_certified_user_id", 0)),
+        "certified_user_income_diamonds": decimal_to_float_2(getattr(call_record, "certified_user_income_diamonds", 0)),
         "reason": reason,
     }
 
@@ -184,15 +185,13 @@ class CallTraceService:
 
     async def _get_im_config(self) -> dict[str, Any]:
         from app.services.tim_service import get_shared_im_config
+
         return await get_shared_im_config()
 
     async def _get_cached_usersig(self, identifier: str, sdk_app_id: int, secret_key: str) -> str:
         """获取 UserSig，带缓存，过期前 _USERSIG_CACHE_BUFFER_SECONDS 秒刷新。"""
         now = _now_ts_seconds()
-        if (
-            self._usersig_cache is not None
-            and self._usersig_cache[1] - _USERSIG_CACHE_BUFFER_SECONDS > now
-        ):
+        if self._usersig_cache is not None and self._usersig_cache[1] - _USERSIG_CACHE_BUFFER_SECONDS > now:
             return self._usersig_cache[0]
 
         from TLSSigAPIv2 import TLSSigAPIv2
@@ -212,17 +211,13 @@ class CallTraceService:
         if self._lua_sha is None:
             self._lua_sha = await redis_client.script_load(_DEDUPE_AND_SEND_LUA)
         try:
-            result = await redis_client.evalsha(
-                self._lua_sha, 1, key, self._dedupe_ttl_seconds
-            )
+            result = await redis_client.evalsha(self._lua_sha, 1, key, self._dedupe_ttl_seconds)
             return result == "send"
-        except redis.exceptions.ResponseError as e:
+        except ResponseError as e:
             # W-7 修复：NOSCRIPT 说明脚本被 Redis 清除，重新加载后重试
             if "NOSCRIPT" in str(e):
                 self._lua_sha = await redis_client.script_load(_DEDUPE_AND_SEND_LUA)
-                result = await redis_client.evalsha(
-                    self._lua_sha, 1, key, self._dedupe_ttl_seconds
-                )
+                result = await redis_client.evalsha(self._lua_sha, 1, key, self._dedupe_ttl_seconds)
                 return result == "send"
             # 其他错误回退到 SETNX
             claimed = await redis_client.set(
@@ -335,14 +330,16 @@ class CallTraceService:
             except Exception as exc:  # noqa: BLE001
                 logger.warning("call trace send failed (attempt {}/{}): {}", attempt + 1, max_retries, str(exc))
                 if attempt < max_retries - 1:
-                    await asyncio.sleep(2 ** attempt)
+                    await asyncio.sleep(2**attempt)
                     continue
                 return False
 
             if resp.status_code != 200:
-                logger.warning("call trace send failed (attempt {}/{}): http_status={}", attempt + 1, max_retries, resp.status_code)
+                logger.warning(
+                    "call trace send failed (attempt {}/{}): http_status={}", attempt + 1, max_retries, resp.status_code
+                )
                 if attempt < max_retries - 1:
-                    await asyncio.sleep(2 ** attempt)
+                    await asyncio.sleep(2**attempt)
                     continue
                 return False
 
@@ -351,17 +348,18 @@ class CallTraceService:
             except ValueError:
                 logger.warning("call trace send failed: invalid json response")
                 if attempt < max_retries - 1:
-                    await asyncio.sleep(2 ** attempt)
+                    await asyncio.sleep(2**attempt)
                     continue
                 return False
 
             if int(body.get("ErrorCode", -1)) != 0:
                 logger.warning("call trace send failed: body={}", body)
                 if attempt < max_retries - 1:
-                    await asyncio.sleep(2 ** attempt)
+                    await asyncio.sleep(2**attempt)
                     continue
                 return False
 
             return True
 
         return False
+

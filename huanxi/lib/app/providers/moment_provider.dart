@@ -1,6 +1,17 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/moment_service.dart';
-import '../../app/providers/auth_provider.dart';
+
+enum MomentFeedCategory {
+  latest('latest', '最近', '暂无动态'),
+  recommend('recommend', '推荐', '暂无推荐动态'),
+  following('following', '关注', '暂无关注用户动态');
+
+  final String apiValue;
+  final String label;
+  final String emptyTitle;
+
+  const MomentFeedCategory(this.apiValue, this.label, this.emptyTitle);
+}
 
 /// 动态列表状态
 class MomentListState {
@@ -37,14 +48,20 @@ class MomentListState {
 
 /// 全局动态列表 Notifier
 class MomentFeedNotifier extends StateNotifier<MomentListState> {
-  MomentFeedNotifier() : super(const MomentListState());
+  final MomentFeedCategory category;
+
+  MomentFeedNotifier(this.category) : super(const MomentListState());
 
   final MomentService _service = MomentService.instance;
 
   Future<void> load() async {
     state = state.copyWith(isLoading: true, error: null);
     try {
-      final result = await _service.getFeed(page: 1, pageSize: 20);
+      final result = await _service.getFeed(
+        page: 1,
+        pageSize: 20,
+        category: category.apiValue,
+      );
       state = state.copyWith(
         moments: result.rows,
         isLoading: false,
@@ -60,7 +77,11 @@ class MomentFeedNotifier extends StateNotifier<MomentListState> {
     state = state.copyWith(isLoadingMore: true);
     try {
       final page = (state.moments.length ~/ 20) + 1;
-      final result = await _service.getFeed(page: page, pageSize: 20);
+      final result = await _service.getFeed(
+        page: page,
+        pageSize: 20,
+        category: category.apiValue,
+      );
       state = state.copyWith(
         moments: [...state.moments, ...result.rows],
         isLoadingMore: false,
@@ -140,12 +161,18 @@ class MyMomentsNotifier extends StateNotifier<MomentListState> {
 }
 
 /// Provider
-final momentFeedProvider = StateNotifierProvider<MomentFeedNotifier, MomentListState>((ref) {
-  final notifier = MomentFeedNotifier();
-  return notifier;
-});
+final momentFeedProvider =
+    StateNotifierProvider.family<
+      MomentFeedNotifier,
+      MomentListState,
+      MomentFeedCategory
+    >((ref, category) {
+      final notifier = MomentFeedNotifier(category);
+      return notifier;
+    });
 
-final myMomentsProvider = StateNotifierProvider<MyMomentsNotifier, MomentListState>((ref) {
-  final notifier = MyMomentsNotifier();
-  return notifier;
-});
+final myMomentsProvider =
+    StateNotifierProvider<MyMomentsNotifier, MomentListState>((ref) {
+      final notifier = MyMomentsNotifier();
+      return notifier;
+    });

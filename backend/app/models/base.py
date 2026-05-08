@@ -8,7 +8,7 @@ from app.settings import settings
 
 
 class BaseModel(models.Model):
-    id = fields.BigIntField(pk=True, index=True)
+    id = fields.BigIntField(primary_key=True)
 
     def _normalize_datetime_fields_for_db(self) -> None:
         for field in self._meta.db_fields:
@@ -68,9 +68,9 @@ class BaseModel(models.Model):
 
 
 class UUIDModel:
-    uuid = fields.UUIDField(unique=True, pk=False, index=True)
+    uuid = fields.UUIDField(unique=True, primary_key=False, db_index=True)
 
 
 class TimestampMixin:
-    created_at = fields.DatetimeField(auto_now_add=True, index=True)
-    updated_at = fields.DatetimeField(auto_now=True, index=True)
+    created_at = fields.DatetimeField(auto_now_add=True, db_index=True)
+    updated_at = fields.DatetimeField(auto_now=True, db_index=True)

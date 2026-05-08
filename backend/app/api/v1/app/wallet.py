@@ -3,11 +3,20 @@ import json
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, UploadFile
+from tortoise.expressions import F
+from tortoise.transactions import in_transaction
 
 from app.core.app_auth import DependAppAuth
-from app.core.dependency import LimitCallback
 from app.core.ctx import CTX_APP_USER_ID, CTX_APP_USER_OBJ
-from app.models import AppUser, RechargeOrder, SystemConfig, WithdrawAccount, WithdrawApply
+from app.core.dependency import LimitCallback
+from app.core.redis import get_redis
+from app.models import (
+    AppUser,
+    RechargeOrder,
+    SystemConfig,
+    WithdrawAccount,
+    WithdrawApply,
+)
 from app.schemas.app_api import (
     BalanceOut,
     RechargeCreateIn,
@@ -20,7 +29,6 @@ from app.schemas.app_api import (
     WithdrawApplyOut,
 )
 from app.schemas.base import Fail, Success
-from app.core.redis import get_redis
 from app.services.gift_income_service import decimal_to_float_2
 from app.settings.config import settings
 from app.utils.media_url import to_relative_media_url
@@ -29,8 +37,6 @@ from app.utils.upload_files import (
     read_validated_image_upload,
     save_upload_content,
 )
-from tortoise.expressions import F
-from tortoise.transactions import in_transaction
 
 router = APIRouter()
 _ALLOWED_IMAGE_SUFFIX = {".jpg", ".jpeg", ".png", ".webp"}
@@ -160,13 +166,14 @@ async def recharge_callback(order_no: str):
     except Exception as e:  # noqa: BLE001
         # H1 修复：Redis 不可用时降级，但记录日志供监控
         from app.log import logger
+
         logger.warning("recharge callback idempotency check degraded: {}", str(e))
 
     callback_user_id = CTX_APP_USER_ID.get()
     async with in_transaction() as conn:
-        order = await RechargeOrder.filter(
-            order_no=order_no, status="pending"
-        ).using_db(conn).select_for_update().first()
+        order = (
+            await RechargeOrder.filter(order_no=order_no, status="pending").using_db(conn).select_for_update().first()
+        )
         if not order:
             return Fail(code=404, msg="订单不存在或已处理")
 
@@ -175,20 +182,20 @@ async def recharge_callback(order_no: str):
             return Fail(code=403, msg="无权操作此订单")
 
         # 加金币：同一事务内更新用户余额
-        await AppUser.filter(id=order.user_id).using_db(conn).update(
-            coins=F("coins") + order.amount
-        )
+        await AppUser.filter(id=order.user_id).using_db(conn).update(coins=F("coins") + order.amount)
         order.status = "paid"
         await order.save(using_db=conn, update_fields=["status"])
 
     # 事务已提交，获取更新后的余额并推送 WebSocket（fire-and-forget）
     updated_user = await AppUser.filter(id=order.user_id).first()
     if updated_user:
-        asyncio.create_task(_ws_push_balance_update(
-            user_id=int(order.user_id),
-            coins=decimal_to_float_2(updated_user.coins),
-            diamonds=decimal_to_float_2(updated_user.diamonds),
-        ))
+        asyncio.create_task(
+            _ws_push_balance_update(
+                user_id=int(order.user_id),
+                coins=decimal_to_float_2(updated_user.coins),
+                diamonds=decimal_to_float_2(updated_user.diamonds),
+            )
+        )
 
     return Success(data={"msg": "充值成功"})
 
@@ -266,6 +273,7 @@ async def withdraw_apply(req_in: WithdrawApplyIn):
     except Exception as e:  # noqa: BLE001
         # H1 修复：Redis 不可用时降级放行，但记录日志供监控
         from app.log import logger
+
         logger.warning("withdraw idempotency check degraded: {}", str(e))
 
     # P13-P15: 提现金额合法性校验
@@ -395,10 +403,10 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
     # call income (diamonds)
     if type in ("all", "call", "diamonds"):
         union_parts.append(
-            f"SELECT id, 'call' AS rec_type, COALESCE(anchor_income_diamonds, 0) AS amount, created_at, 1 AS is_income, "
+            f"SELECT id, 'call' AS rec_type, COALESCE(certified_user_income_diamonds, 0) AS amount, created_at, 1 AS is_income, "
             f"CASE WHEN caller_id = {placeholder} THEN callee_id ELSE caller_id END AS counterparty_user_id, "
             f"'' AS gift_name, '' AS status "
-            f"FROM call_record WHERE income_anchor_user_id = {placeholder} AND COALESCE(anchor_income_diamonds, 0) > 0"
+            f"FROM call_record WHERE income_certified_user_id = {placeholder} AND COALESCE(certified_user_income_diamonds, 0) > 0"
         )
         base_params.append(user_id)
         base_params.append(user_id)
@@ -415,7 +423,7 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
     # gift receive (diamonds income)
     if type in ("all", "diamonds"):
         union_parts.append(
-            f"SELECT id, 'gift' AS rec_type, anchor_income_diamonds AS amount, created_at, 1 AS is_income, "
+            f"SELECT id, 'gift' AS rec_type, certified_user_income_diamonds AS amount, created_at, 1 AS is_income, "
             f"sender_id AS counterparty_user_id, gift_name AS gift_name, '' AS status "
             f"FROM gift_record WHERE receiver_id = {placeholder}"
         )
@@ -433,10 +441,10 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
     # im text receive (diamonds income)
     if type in ("all", "im_text", "diamonds"):
         union_parts.append(
-            f"SELECT id, 'im_text' AS rec_type, anchor_income_diamonds AS amount, created_at, 1 AS is_income, "
+            f"SELECT id, 'im_text' AS rec_type, certified_user_income_diamonds AS amount, created_at, 1 AS is_income, "
             f"sender_id AS counterparty_user_id, '' AS gift_name, '' AS status "
             f"FROM im_text_message_charge_record WHERE receiver_id = {placeholder} "
-            f"AND status = 'charged' AND anchor_income_diamonds > 0"
+            f"AND status = 'charged' AND certified_user_income_diamonds > 0"
         )
         base_params.append(user_id)
 
@@ -544,9 +552,11 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
         title_map = {
             "recharge": "充值",
             "call": "通话收益" if is_income else "通话消费",
-            "gift": (f"收到礼物·{gift_name}" if gift_name else "收到礼物")
-            if is_income
-            else (f"送礼物·{gift_name}" if gift_name else "送礼物"),
+            "gift": (
+                (f"收到礼物·{gift_name}" if gift_name else "收到礼物")
+                if is_income
+                else (f"送礼物·{gift_name}" if gift_name else "送礼物")
+            ),
             "im_text": "文字聊天收益" if is_income else "文字聊天",
             "withdraw": "提现申请",
         }
@@ -554,27 +564,32 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
             created_at_text = created_at.strftime("%Y-%m-%d %H:%M:%S")
         else:
             created_at_text = str(created_at) if created_at else ""
-        records.append(TransactionRecord(
-            id=str(rec_id),
-            type=str(rec_type or ""),
-            title=title_map.get(rec_type, rec_type),
-            amount=decimal_to_float_2(amount),
-            is_income=bool(is_income),
-            created_at=created_at_text,
-            counterparty_name=counterparty_name,
-            status=str(status or ""),
-        ))
+        records.append(
+            TransactionRecord(
+                id=str(rec_id),
+                type=str(rec_type or ""),
+                title=title_map.get(rec_type, rec_type),
+                amount=decimal_to_float_2(amount),
+                is_income=bool(is_income),
+                created_at=created_at_text,
+                counterparty_name=counterparty_name,
+                status=str(status or ""),
+            )
+        )
 
     has_more = total > offset + page_size
-    return Success(data=TransactionListOut(
-        records=records,
-        total=total,
-        current=page,
-        has_more=has_more,
-    ).model_dump())
+    return Success(
+        data=TransactionListOut(
+            records=records,
+            total=total,
+            current=page,
+            has_more=has_more,
+        ).model_dump()
+    )
 
 
 # ===== WebSocket 推送辅助函数（fire-and-forget） =====
+
 
 async def _ws_push_balance_update(
     user_id: int,
@@ -583,6 +598,7 @@ async def _ws_push_balance_update(
 ) -> None:
     try:
         from app.websocket import events as ws_events
+
         await ws_events.push_balance_update(
             user_id=user_id,
             coins=coins,
@@ -590,3 +606,4 @@ async def _ws_push_balance_update(
         )
     except Exception:  # noqa: BLE001
         pass
+

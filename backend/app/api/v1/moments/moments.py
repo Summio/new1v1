@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Query
 from tortoise.expressions import Q
 
@@ -8,6 +10,40 @@ from app.utils.media_url import to_relative_media_url
 router = APIRouter()
 
 
+def _moment_missing() -> Fail:
+    return Fail(code=400, msg="动态不存在，请刷新后重试")
+
+
+def _effective_recommended(moment: Moment, user: AppUser | None) -> bool:
+    if moment.recommend_override is not None:
+        return bool(moment.recommend_override)
+    return bool(user.is_recommended) if user else False
+
+
+def _recommend_status_label(moment: Moment, user: AppUser | None) -> str:
+    if moment.recommend_override is True:
+        return "单条推荐"
+    if moment.recommend_override is False:
+        return "单条取消推荐"
+    if user and user.is_recommended:
+        return "推荐认证用户默认推荐"
+    return "未推荐"
+
+
+def _apply_recommend_status_filter(q: Q, recommend_status: str, recommended_user_ids: list[int]) -> Q:
+    if recommend_status == "recommended":
+        q &= Q(recommend_override=True) | (Q(recommend_override__isnull=True) & Q(user_id__in=recommended_user_ids))
+    elif recommend_status == "not_recommended":
+        q &= Q(recommend_override=False) | (Q(recommend_override__isnull=True) & ~Q(user_id__in=recommended_user_ids))
+    elif recommend_status == "override_recommended":
+        q &= Q(recommend_override=True)
+    elif recommend_status == "override_cancelled":
+        q &= Q(recommend_override=False)
+    elif recommend_status == "default":
+        q &= Q(recommend_override__isnull=True)
+    return q
+
+
 async def _serialize_moment(
     moment: Moment,
     users: dict[int, AppUser],
@@ -15,13 +51,21 @@ async def _serialize_moment(
 ) -> dict:
     user = users.get(int(moment.user_id))
     media_list = media_by_moment.get(int(moment.id), [])
+    author_is_recommended = bool(user.is_recommended) if user else False
     return {
         "id": moment.id,
         "user_id": moment.user_id,
         "nickname": user.nickname if user else "",
         "phone": user.phone if user else "",
         "avatar": to_relative_media_url(user.avatar) if user else "",
+        "author_is_certified_user": bool(user.is_certified_user) if user else False,
+        "author_is_recommended": author_is_recommended,
         "content": moment.content or "",
+        "is_pinned": bool(moment.is_pinned),
+        "pinned_at": moment.pinned_at.isoformat() if moment.pinned_at else None,
+        "recommend_override": moment.recommend_override,
+        "is_recommended": _effective_recommended(moment, user),
+        "recommend_status_label": _recommend_status_label(moment, user),
         "media_count": len(media_list),
         "media_list": [
             {
@@ -45,6 +89,8 @@ async def list_moment(
     page_size: int = Query(10, ge=1, le=100, description="每页数量"),
     user_id: str = Query("", description="用户ID"),
     keyword: str = Query("", description="关键词：昵称/手机号/动态内容"),
+    recommend_status: str = Query("all", description="推荐状态"),
+    pin_status: str = Query("all", description="置顶状态"),
 ):
     q = Q()
     target_user_id = (user_id or "").strip()
@@ -60,8 +106,34 @@ async def list_moment(
         )
         q &= Q(content__contains=keyword) | Q(user_id__in=list(user_ids))
 
+    pin_status_value = (pin_status or "all").strip().lower()
+    if pin_status_value == "pinned":
+        q &= Q(is_pinned=True)
+    elif pin_status_value == "normal":
+        q &= Q(is_pinned=False)
+
+    recommend_status_value = (recommend_status or "all").strip().lower()
+    if recommend_status_value not in {
+        "all",
+        "recommended",
+        "not_recommended",
+        "override_recommended",
+        "override_cancelled",
+        "default",
+    }:
+        recommend_status_value = "all"
+    if recommend_status_value != "all":
+        recommended_user_ids = await AppUser.filter(is_recommended=True).values_list("id", flat=True)
+        q = _apply_recommend_status_filter(q, recommend_status_value, list(recommended_user_ids))
+
     total = await Moment.filter(q).count()
-    moments = await Moment.filter(q).order_by("-created_at").offset((page - 1) * page_size).limit(page_size).all()
+    moments = (
+        await Moment.filter(q)
+        .order_by("-is_pinned", "-pinned_at", "-created_at", "-id")
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
     user_ids = list({int(item.user_id) for item in moments})
     users = {}
     if user_ids:
@@ -81,7 +153,52 @@ async def list_moment(
 async def delete_moment(moment_id: int = Query(..., ge=1, alias="id", description="动态ID")):
     moment = await Moment.filter(id=moment_id).first()
     if not moment:
-        return Fail(code=404, msg="动态不存在")
+        return _moment_missing()
     await MomentMedia.filter(moment_id=moment_id).delete()
     await moment.delete()
     return Success(msg="删除成功")
+
+
+@router.post("/pin", summary="置顶用户动态")
+async def pin_moment(moment_id: int = Query(..., ge=1, alias="id", description="动态ID")):
+    moment = await Moment.filter(id=moment_id).first()
+    if not moment:
+        return _moment_missing()
+    await Moment.filter(id=moment_id).update(is_pinned=True, pinned_at=datetime.now())
+    return Success(msg="置顶成功")
+
+
+@router.post("/unpin", summary="取消置顶用户动态")
+async def unpin_moment(moment_id: int = Query(..., ge=1, alias="id", description="动态ID")):
+    moment = await Moment.filter(id=moment_id).first()
+    if not moment:
+        return _moment_missing()
+    await Moment.filter(id=moment_id).update(is_pinned=False, pinned_at=None)
+    return Success(msg="取消置顶成功")
+
+
+@router.post("/recommend", summary="推荐用户动态")
+async def recommend_moment(moment_id: int = Query(..., ge=1, alias="id", description="动态ID")):
+    moment = await Moment.filter(id=moment_id).first()
+    if not moment:
+        return _moment_missing()
+    await Moment.filter(id=moment_id).update(recommend_override=True)
+    return Success(msg="推荐成功")
+
+
+@router.post("/unrecommend", summary="取消推荐用户动态")
+async def unrecommend_moment(moment_id: int = Query(..., ge=1, alias="id", description="动态ID")):
+    moment = await Moment.filter(id=moment_id).first()
+    if not moment:
+        return _moment_missing()
+    await Moment.filter(id=moment_id).update(recommend_override=False)
+    return Success(msg="取消推荐成功")
+
+
+@router.post("/clear-recommend-override", summary="恢复动态默认推荐规则")
+async def clear_moment_recommend_override(moment_id: int = Query(..., ge=1, alias="id", description="动态ID")):
+    moment = await Moment.filter(id=moment_id).first()
+    if not moment:
+        return _moment_missing()
+    await Moment.filter(id=moment_id).update(recommend_override=None)
+    return Success(msg="恢复默认成功")

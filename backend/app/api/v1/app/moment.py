@@ -1,10 +1,11 @@
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile, Form
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
+from tortoise.expressions import Q
 
 from app.core.app_auth import DependAppAuth
 from app.core.ctx import CTX_APP_USER_OBJ
-from app.models import Moment, MomentMedia, AppUser
+from app.models import AppUser, Moment, MomentMedia, UserFollow
 from app.schemas.base import Fail, Success, SuccessExtra
 from app.schemas.moments import MomentCreateIn
 from app.settings.config import settings
@@ -21,6 +22,7 @@ router = APIRouter()
 
 _ALLOWED_IMAGE_SUFFIX = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 _ALLOWED_VIDEO_SUFFIX = {".mp4", ".mov"}
+_MOMENT_FEED_CATEGORIES = {"recommend", "latest", "following"}
 
 
 async def _prefetch_moment_media(moments: list[Moment]) -> dict[int, list[MomentMedia]]:
@@ -50,12 +52,21 @@ async def _serialize_moment(
 ) -> dict:
     media_list = (media_by_moment or {}).get(int(moment.id), [])
     resolved_user = user or (users or {}).get(int(moment.user_id))
+    recommend_override = moment.recommend_override
+    author_is_recommended = bool(resolved_user.is_recommended) if resolved_user else False
+    is_recommended = bool(recommend_override) if recommend_override is not None else author_is_recommended
 
     return {
         "id": moment.id,
         "user_id": moment.user_id,
         "content": moment.content or "",
         "created_at": moment.created_at.isoformat() if moment.created_at else None,
+        "is_pinned": bool(moment.is_pinned),
+        "pinned_at": moment.pinned_at.isoformat() if moment.pinned_at else None,
+        "is_recommended": is_recommended,
+        "recommend_override": recommend_override,
+        "author_is_certified_user": bool(resolved_user.is_certified_user) if resolved_user else False,
+        "author_is_recommended": author_is_recommended,
         "media_list": [
             {
                 "id": m.id,
@@ -241,11 +252,38 @@ async def create_moment(req_in: MomentCreateIn):
 async def get_moment_feed(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=50, description="每页数量"),
+    category: str = Query("recommend", description="动态分类: recommend/latest/following"),
 ):
-    """获取全局动态列表，最新在上。"""
+    """获取动态列表，支持推荐/最新/关注分类。"""
+    app_user = CTX_APP_USER_OBJ.get()
+    if not app_user:
+        return Fail(code=401, msg="用户不存在")
+
+    category_value = (category or "recommend").strip().lower()
+    if category_value not in _MOMENT_FEED_CATEGORIES:
+        category_value = "recommend"
+
     offset = (page - 1) * page_size
-    total = await Moment.all().count()
-    moments = await Moment.all().order_by("-created_at").offset(offset).limit(page_size).all()
+
+    q = Q()
+
+    if category_value == "following":
+        following_ids = await UserFollow.filter(follower_id=app_user.id).values_list("following_id", flat=True)
+        q &= Q(user_id__in=list(following_ids))
+    elif category_value == "recommend":
+        recommended_user_ids = await AppUser.filter(is_recommended=True).values_list("id", flat=True)
+        q &= Q(recommend_override=True) | (
+            Q(recommend_override__isnull=True) & Q(user_id__in=list(recommended_user_ids))
+        )
+
+    total = await Moment.filter(q).count()
+    moments = (
+        await Moment.filter(q)
+        .order_by("-is_pinned", "-pinned_at", "-created_at", "-id")
+        .offset(offset)
+        .limit(page_size)
+        .all()
+    )
     users = await _prefetch_moment_users(moments)
     media_by_moment = await _prefetch_moment_media(moments)
 

@@ -21,9 +21,9 @@ from app.schemas.app_api import (
 )
 from app.schemas.base import Fail, Success
 from app.services.call_income_service import (
-    get_anchor_share_bps,
-    resolve_income_anchor_id,
-    settle_call_anchor_income_once,
+    get_certified_user_share_bps,
+    resolve_income_certified_user_id,
+    settle_call_certified_user_income_once,
 )
 from app.services.call_trace_service import CallTraceService
 from app.services.gift_income_service import decimal_to_float_2
@@ -40,7 +40,7 @@ DEFAULT_REJECT_INBOUND_PROTECT_SECONDS = 5
 DEFAULT_REJECT_PAIR_PROTECT_SECONDS = 5
 MAX_REJECT_PROTECT_SECONDS = 600
 MAX_FREE_SECONDS_BEFORE_BILLING = 600
-DEFAULT_ANCHOR_SHARE_BPS = 5000
+DEFAULT_CERTIFIED_USER_SHARE_BPS = 5000
 
 _call_trace_service = CallTraceService()
 
@@ -166,7 +166,7 @@ async def _resolve_payer_id(call_record: CallRecord) -> int:
     - 认证用户（无论主叫还是被叫）不扣费
     - 非认证用户（无论主叫还是被叫）付费
     - 双方都不是认证用户：主叫方付费（caller_id）
-    B-2 修复：使用 select_for_update 加行锁，防止在检查期间 anchor 被审批/取消时出现 TOCTOU
+    B-2 修复：使用 select_for_update 加行锁，防止在检查期间认证状态被审批/取消时出现 TOCTOU
     """
     caller_id = int(call_record.caller_id)
     callee_id = int(call_record.callee_id)
@@ -315,20 +315,20 @@ async def dialing(req_in: DialingIn):
                     return Fail(code=429, msg=f"你刚被对方拒绝，请{left}秒后再呼叫")
 
         # 创建通话记录（同一事务内，锁已持有，无竞争）
-        anchor_share_bps = await get_anchor_share_bps()
+        certified_user_share_bps = await get_certified_user_share_bps()
         if caller_is_certified_user and not callee_is_certified_user:
-            income_anchor_user_id = int(caller_id)
+            income_certified_user_id = int(caller_id)
         elif callee_is_certified_user and not caller_is_certified_user:
-            income_anchor_user_id = int(target_user.id)
+            income_certified_user_id = int(target_user.id)
         else:
-            income_anchor_user_id = None
+            income_certified_user_id = None
         call_record = await CallRecord.create(
             caller_id=caller_id,
             callee_id=target_user.id,
             call_price=call_price,
             status="pending",
-            income_anchor_user_id=income_anchor_user_id,
-            anchor_share_bps=anchor_share_bps,
+            income_certified_user_id=income_certified_user_id,
+            certified_user_share_bps=certified_user_share_bps,
             using_db=conn,
         )
 
@@ -550,7 +550,7 @@ async def call_end(req_in: CallEndIn):
 
     # 用于事务结束后推送余额更新
     _payer_id_for_balance_push: int | None = None
-    _anchor_id_for_balance_push: int | None = None
+    _certified_user_id_for_balance_push: int | None = None
     _balance_changed_for_push = False
     trace_call_record: CallRecord | None = None
     trace_reason: str | None = None
@@ -600,8 +600,8 @@ async def call_end(req_in: CallEndIn):
                 .using_db(conn)
                 .all()
             )
-            if not getattr(call_record, "income_anchor_user_id", None):
-                call_record.income_anchor_user_id = resolve_income_anchor_id(participants, payer_id) or None
+            if not getattr(call_record, "income_certified_user_id", None):
+                call_record.income_certified_user_id = resolve_income_certified_user_id(participants, payer_id) or None
 
             if actual_fee > deducted_amount and payer_id > 0:
                 top_up_amount = actual_fee - deducted_amount
@@ -647,15 +647,15 @@ async def call_end(req_in: CallEndIn):
             call_record.effective_ended_at = call_record.ended_at
             call_record.end_basis = "manual_end"
             call_record.force_exit_user_id = None
-            settlement = await settle_call_anchor_income_once(
+            settlement = await settle_call_certified_user_income_once(
                 call_record=call_record,
                 conn=conn,
                 total_fee=charged_amount,
                 payer_id=payer_id,
                 participants=participants,
             )
-            if settlement.settled and settlement.anchor_user_id > 0:
-                _anchor_id_for_balance_push = settlement.anchor_user_id
+            if settlement.settled and settlement.certified_user_id > 0:
+                _certified_user_id_for_balance_push = settlement.certified_user_id
             await call_record.save(using_db=conn)
 
             trace_call_record = call_record
@@ -684,10 +684,10 @@ async def call_end(req_in: CallEndIn):
                 payer_id=_payer_id_for_balance_push,
             )
         )
-    if _anchor_id_for_balance_push is not None:
+    if _certified_user_id_for_balance_push is not None:
         asyncio.create_task(
             _ws_push_balance_updated(
-                payer_id=_anchor_id_for_balance_push,
+                payer_id=_certified_user_id_for_balance_push,
             )
         )
     if trace_call_record:
@@ -813,3 +813,5 @@ async def _ws_push_balance_updated(payer_id: int) -> None:
             )
     except Exception:  # noqa: BLE001
         pass
+
+

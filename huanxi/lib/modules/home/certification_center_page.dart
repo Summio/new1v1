@@ -450,7 +450,7 @@ class _CertificationCenterPageState extends ConsumerState<CertificationCenterPag
           children: tiers.map((price) {
             final active = selected == price;
             return ChoiceChip(
-              label: Text(price == 0 ? '免费' : '${price ~/ 100}元/分钟'),
+              label: Text(_formatCallPrice(price)),
               selected: active,
               onSelected: isCertified
                   ? (_) {
@@ -522,6 +522,18 @@ class _CertificationCenterPageState extends ConsumerState<CertificationCenterPag
         });
       }
     }
+  }
+
+  String _formatCallPrice(int price) {
+    if (price <= 0) return '免费';
+    final yuan = price / 100;
+    final text = yuan == yuan.roundToDouble()
+        ? yuan.toStringAsFixed(0)
+        : yuan
+            .toStringAsFixed(2)
+            .replaceFirst(RegExp(r'0+$'), '')
+            .replaceFirst(RegExp(r'\.$'), '');
+    return '$text元/分钟';
   }
 
   Widget _buildCompactPhotoSection({required String facePhotoUrl}) {

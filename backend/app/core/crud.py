@@ -17,7 +17,9 @@ class CRUDBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
     async def get(self, id: int) -> ModelType:
         return await self.model.get(id=id)
 
-    async def list(self, page: int = 1, page_size: int = 20, search: Q = Q(), order: list = []) -> Tuple[Total, List[ModelType]]:
+    async def list(
+        self, page: int = 1, page_size: int = 20, search: Q = Q(), order: list = []
+    ) -> Tuple[Total, List[ModelType]]:
         # 防御性校验：page 和 page_size 必须为正整数
         page = max(1, page)
         page_size = max(1, min(page_size, 100))  # 限制最大单页条数

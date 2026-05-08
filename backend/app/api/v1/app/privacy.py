@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+
 from app.schemas.base import Success
 
 router = APIRouter()
@@ -48,6 +49,7 @@ PRIVACY_CONTENT = """
 
 最后更新：2026年4月
 """
+
 
 @router.get("/privacy", summary="获取隐私政策")
 async def get_privacy():

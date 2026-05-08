@@ -77,6 +77,11 @@ dependencies = [
 [tool.black]
 line-length = 120
 target-version = ["py310", "py311"]
+extend-exclude = '''
+/(
+  \.pip-tmp
+)/
+'''
 
 [tool.ruff]
 line-length = 120
@@ -84,6 +89,12 @@ lint.extend-select = []
 lint.ignore = [
     "F403",
     "F405",
+]
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:Please use `import python_multipart` instead.:PendingDeprecationWarning:starlette.formparsers",
+    "ignore:pkg_resources is deprecated as an API:DeprecationWarning:passlib.pwd",
 ]
 
 [tool.aerich]

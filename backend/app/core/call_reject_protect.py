@@ -1,5 +1,5 @@
-from datetime import datetime, timezone
 import math
+from datetime import datetime, timezone
 
 from app.core.time_utils import to_utc_aware
 
@@ -25,8 +25,11 @@ def should_block_rejected_call(
     *,
     now: datetime | None = None,
 ) -> bool:
-    return calc_left_seconds(
-        event_time=event_time,
-        protect_seconds=protect_seconds,
-        now=now,
-    ) > 0
+    return (
+        calc_left_seconds(
+            event_time=event_time,
+            protect_seconds=protect_seconds,
+            now=now,
+        )
+        > 0
+    )

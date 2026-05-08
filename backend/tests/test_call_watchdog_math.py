@@ -1,3 +1,5 @@
+from tortoise.expressions import CombinedExpression, F
+
 from app.core.call_watchdog import (
     _build_coins_decrement_expr,
     _calc_due_minutes,
@@ -6,7 +8,6 @@ from app.core.call_watchdog import (
     _resolve_billing_free_seconds,
     _resolve_payer_user_id,
 )
-from tortoise.expressions import CombinedExpression, F
 
 
 def test_next_due_second_first_charge_starts_at_free_boundary() -> None:

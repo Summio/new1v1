@@ -4,6 +4,7 @@ import jwt
 from fastapi import Depends, Header, HTTPException, Request
 
 from app.core.ctx import CTX_USER_ID
+from app.core.redis import get_redis, rate_limit
 from app.models import Api, User
 from app.settings import settings
 
@@ -91,10 +92,6 @@ DependAuth = Depends(AuthControl.is_authed)
 DependPermission = Depends(PermissionControl.has_permission)
 
 
-# ===== 限流依赖 =====
-from app.core.redis import get_redis, rate_limit
-
-
 def get_client_ip(request: Request) -> str:
     """获取真实客户端 IP。
 
@@ -142,7 +139,7 @@ class RateLimit:
 
 
 # 常用限流实例（可按需调整参数）
-LimitLogin = RateLimit(limit=10, window_seconds=60, key_prefix="limit:login")       # 登录：每分钟10次
-LimitRegister = RateLimit(limit=5, window_seconds=300, key_prefix="limit:register")   # 注册：每5分钟5次
+LimitLogin = RateLimit(limit=10, window_seconds=60, key_prefix="limit:login")  # 登录：每分钟10次
+LimitRegister = RateLimit(limit=5, window_seconds=300, key_prefix="limit:register")  # 注册：每5分钟5次
 LimitHeartbeat = RateLimit(limit=20, window_seconds=60, key_prefix="limit:heartbeat")  # 心跳：每分钟20次
-LimitCallback = RateLimit(limit=10, window_seconds=60, key_prefix="limit:callback")    # 支付回调：每分钟10次
+LimitCallback = RateLimit(limit=10, window_seconds=60, key_prefix="limit:callback")  # 支付回调：每分钟10次

@@ -156,9 +156,7 @@ async function fetchCertifiedCallPriceOptions() {
     const tiers = Array.isArray(res?.data?.tiers) ? res.data.tiers : []
     const normalized = Array.from(
       new Set(
-        tiers
-          .map((item) => Number(item))
-          .filter((item) => Number.isInteger(item) && item >= 0)
+        tiers.map((item) => Number(item)).filter((item) => Number.isInteger(item) && item >= 0)
       )
     ).sort((a, b) => a - b)
     if (!normalized.includes(0)) normalized.unshift(0)
@@ -414,29 +412,29 @@ const callRecordColumns = [
   { title: '总费用(金币)', key: 'total_fee', width: 100, align: 'center' },
   {
     title: '收益认证用户',
-    key: 'income_anchor_user_id',
+    key: 'income_certified_user_id',
     width: 100,
     align: 'center',
     render(row) {
-      return row.income_anchor_user_id || '-'
+      return row.income_certified_user_id || '-'
     },
   },
   {
     title: '认证用户收益(钻石)',
-    key: 'anchor_income_diamonds',
+    key: 'certified_user_income_diamonds',
     width: 130,
     align: 'center',
     render(row) {
-      return Number(row.anchor_income_diamonds || 0)
+      return Number(row.certified_user_income_diamonds || 0)
     },
   },
   {
     title: '分成比例',
-    key: 'anchor_share_bps',
+    key: 'certified_user_share_bps',
     width: 100,
     align: 'center',
     render(row) {
-      return formatSharePercent(row.anchor_share_bps)
+      return formatSharePercent(row.certified_user_share_bps)
     },
   },
   {
@@ -631,7 +629,8 @@ async function handleSave() {
       is_recommended: !!modalForm.value.is_recommended,
       recommend_weight: modalForm.value.recommend_weight ?? 0,
       certification_status: modalForm.value.certification_status || 'none',
-      certification_reject_reason: (modalForm.value.certification_reject_reason || '').trim() || null,
+      certification_reject_reason:
+        (modalForm.value.certification_reject_reason || '').trim() || null,
       certification_face_image: (modalForm.value.certification_face_image || '').trim(),
       certified_call_price: modalForm.value.is_certified_user
         ? Number(modalForm.value.certified_call_price || 0)

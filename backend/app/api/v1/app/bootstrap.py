@@ -22,12 +22,8 @@ async def get_app_bootstrap():
 
     coin_name = config_map.get("coin_name") or "金币"
     diamond_name = config_map.get("diamond_name") or "钻石"
-    call_reject_inbound_protect_seconds_raw = (
-        config_map.get("call_reject_inbound_protect_seconds") or "5"
-    ).strip()
-    call_reject_pair_protect_seconds_raw = (
-        config_map.get("call_reject_pair_protect_seconds") or "5"
-    ).strip()
+    call_reject_inbound_protect_seconds_raw = (config_map.get("call_reject_inbound_protect_seconds") or "5").strip()
+    call_reject_pair_protect_seconds_raw = (config_map.get("call_reject_pair_protect_seconds") or "5").strip()
 
     im_sdk_app_id_raw = (config_map.get("im_sdk_app_id") or "").strip()
     im_secret_key = (config_map.get("im_secret_key") or "").strip()

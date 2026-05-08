@@ -2,6 +2,7 @@
 
 提供 C2C 自定义消息发送能力，被 CallTraceService 和礼物信令模块共用。
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -67,10 +68,7 @@ class TIMService:
 
     async def _get_admin_usersig(self, sdk_app_id: int, secret_key: str, identifier: str) -> str:
         now = time.time()
-        if (
-            self._usersig_cache is not None
-            and self._usersig_cache[1] - _USERSIG_BUFFER_SECONDS > now
-        ):
+        if self._usersig_cache is not None and self._usersig_cache[1] - _USERSIG_BUFFER_SECONDS > now:
             return self._usersig_cache[0]
 
         from TLSSigAPIv2 import TLSSigAPIv2
@@ -135,14 +133,16 @@ class TIMService:
             except Exception as exc:  # noqa: BLE001
                 logger.warning("tim send failed (attempt {}/{}): {}", attempt + 1, _MAX_RETRIES, str(exc))
                 if attempt < _MAX_RETRIES - 1:
-                    await asyncio.sleep(_RETRY_BASE_DELAY * (2 ** attempt))
+                    await asyncio.sleep(_RETRY_BASE_DELAY * (2**attempt))
                     continue
                 return False
 
             if resp.status_code != 200:
-                logger.warning("tim send failed (attempt {}/{}): http_status={}", attempt + 1, _MAX_RETRIES, resp.status_code)
+                logger.warning(
+                    "tim send failed (attempt {}/{}): http_status={}", attempt + 1, _MAX_RETRIES, resp.status_code
+                )
                 if attempt < _MAX_RETRIES - 1:
-                    await asyncio.sleep(_RETRY_BASE_DELAY * (2 ** attempt))
+                    await asyncio.sleep(_RETRY_BASE_DELAY * (2**attempt))
                     continue
                 return False
 
@@ -150,14 +150,14 @@ class TIMService:
                 body = resp.json()
             except ValueError:
                 if attempt < _MAX_RETRIES - 1:
-                    await asyncio.sleep(_RETRY_BASE_DELAY * (2 ** attempt))
+                    await asyncio.sleep(_RETRY_BASE_DELAY * (2**attempt))
                     continue
                 return False
 
             if int(body.get("ErrorCode", -1)) != 0:
                 logger.warning("tim send failed (attempt {}/{}): body={}", attempt + 1, _MAX_RETRIES, body)
                 if attempt < _MAX_RETRIES - 1:
-                    await asyncio.sleep(_RETRY_BASE_DELAY * (2 ** attempt))
+                    await asyncio.sleep(_RETRY_BASE_DELAY * (2**attempt))
                     continue
                 return False
 
@@ -177,7 +177,7 @@ class TIMService:
         gift_price: int,
         quantity: int,
         total_price: int,
-        anchor_income_diamonds: str,
+        certified_user_income_diamonds: str,
         scene: str,
         call_id: int | None,
         sender_nickname: str,
@@ -227,7 +227,7 @@ class TIMService:
             "unit_price": gift_price,
             "quantity": quantity,
             "total_price": total_price,
-            "anchor_income_diamonds": anchor_income_diamonds,
+            "certified_user_income_diamonds": certified_user_income_diamonds,
             "scene": scene,
             "call_id": call_id,
             "sender_id": sender_id,
@@ -267,7 +267,7 @@ async def send_gift_notification(
     gift_price: int,
     quantity: int,
     total_price: int,
-    anchor_income_diamonds: str,
+    certified_user_income_diamonds: str,
     scene: str,
     call_id: int | None,
     sender_nickname: str,
@@ -283,8 +283,9 @@ async def send_gift_notification(
         gift_price=gift_price,
         quantity=quantity,
         total_price=total_price,
-        anchor_income_diamonds=anchor_income_diamonds,
+        certified_user_income_diamonds=certified_user_income_diamonds,
         scene=scene,
         call_id=call_id,
         sender_nickname=sender_nickname,
     )
+

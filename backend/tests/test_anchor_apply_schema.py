@@ -1,8 +1,8 @@
-import pytest
-from pydantic import ValidationError
-
 import importlib.util
 from pathlib import Path
+
+import pytest
+from pydantic import ValidationError
 
 _MODULE_PATH = Path(__file__).resolve().parents[1] / "app" / "schemas" / "app_user.py"
 _SPEC = importlib.util.spec_from_file_location("app_user_schema", _MODULE_PATH)

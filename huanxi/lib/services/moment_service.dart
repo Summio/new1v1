@@ -58,6 +58,12 @@ class Moment {
   final int userId;
   final String content;
   final String? createdAt;
+  final bool isPinned;
+  final String? pinnedAt;
+  final bool isRecommended;
+  final bool? recommendOverride;
+  final bool authorIsCertifiedUser;
+  final bool authorIsRecommended;
   final List<MomentMedia> mediaList;
   final MomentUser? user;
 
@@ -66,6 +72,12 @@ class Moment {
     required this.userId,
     this.content = '',
     this.createdAt,
+    this.isPinned = false,
+    this.pinnedAt,
+    this.isRecommended = false,
+    this.recommendOverride,
+    this.authorIsCertifiedUser = false,
+    this.authorIsRecommended = false,
     this.mediaList = const [],
     this.user,
   });
@@ -76,6 +88,12 @@ class Moment {
       userId: json['user_id'] as int? ?? 0,
       content: json['content'] as String? ?? '',
       createdAt: json['created_at'] as String?,
+      isPinned: json['is_pinned'] as bool? ?? false,
+      pinnedAt: json['pinned_at'] as String?,
+      isRecommended: json['is_recommended'] as bool? ?? false,
+      recommendOverride: json['recommend_override'] as bool?,
+      authorIsCertifiedUser: json['author_is_certified_user'] as bool? ?? false,
+      authorIsRecommended: json['author_is_recommended'] as bool? ?? false,
       mediaList:
           (json['media_list'] as List<dynamic>?)
               ?.map((e) => MomentMedia.fromJson(e as Map<String, dynamic>))
@@ -225,11 +243,15 @@ class MomentService {
   }
 
   /// 获取全局动态列表
-  Future<MomentListResult> getFeed({int page = 1, int pageSize = 20}) async {
+  Future<MomentListResult> getFeed({
+    int page = 1,
+    int pageSize = 20,
+    String category = 'recommend',
+  }) async {
     try {
       final data = await _dio.apiGet(
         ApiEndpoints.momentFeed,
-        params: {'page': page, 'page_size': pageSize},
+        params: {'page': page, 'page_size': pageSize, 'category': category},
       );
       final rows =
           (data['rows'] as List<dynamic>?)

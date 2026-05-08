@@ -38,11 +38,7 @@ async function loadConfig() {
 
 function normalizeTiers(tiers) {
   const values = Array.from(
-    new Set(
-      tiers
-        .map((item) => Number(item))
-        .filter((item) => Number.isInteger(item) && item >= 0)
-    )
+    new Set(tiers.map((item) => Number(item)).filter((item) => Number.isInteger(item) && item >= 0))
   ).sort((a, b) => a - b)
   if (!values.includes(0)) values.unshift(0)
   return values
@@ -153,11 +149,7 @@ const columns = [
           { onPositiveClick: () => deleteRow(row) },
           {
             trigger: () =>
-              h(
-                NButton,
-                { size: 'small', type: 'error', disabled: row.price === 0 },
-                () => '删除'
-              ),
+              h(NButton, { size: 'small', type: 'error', disabled: row.price === 0 }, () => '删除'),
             default: () => '确认删除该档位？',
           }
         ),

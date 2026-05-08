@@ -1,9 +1,6 @@
 from datetime import timedelta
 
-from app.core.call_watchdog import (
-    _calc_due_minutes,
-    _resolve_force_exit_decision,
-)
+from app.core.call_watchdog import _calc_due_minutes, _resolve_force_exit_decision
 from app.core.time_utils import now_local_naive
 
 

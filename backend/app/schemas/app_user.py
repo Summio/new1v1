@@ -6,12 +6,13 @@ from typing import List, Literal, Optional
 from pydantic import BaseModel, Field, field_validator
 
 # 中国手机号正则：支持纯数字、+86 前缀、00 前缀
-_PHONE_RE = re_compile(r'^(?:(?:\+|00)86)?1[3-9]\d{9}$')
+_PHONE_RE = re_compile(r"^(?:(?:\+|00)86)?1[3-9]\d{9}$")
 # 密码正则：至少8位，必须包含字母和数字
-_PASSWORD_RE = re_compile(r'^(?=.*[A-Za-z])(?=.*\d).{8,}$')
+_PASSWORD_RE = re_compile(r"^(?=.*[A-Za-z])(?=.*\d).{8,}$")
 
 
 # ===== 性别枚举 =====
+
 
 class GenderType(str, Enum):
     MALE = "male"
@@ -21,8 +22,9 @@ class GenderType(str, Enum):
 
 # ===== 登录 =====
 
+
 class AppLoginIn(BaseModel):
-    phone: str = Field(..., description="手机号", example="13800138000")
+    phone: str = Field(..., description="手机号", json_schema_extra={"example": "13800138000"})
     password: str = Field(..., description="密码")
 
     @field_validator("phone")
@@ -43,8 +45,9 @@ class AppLoginOut(BaseModel):
 
 # ===== 注册 =====
 
+
 class AppRegisterIn(BaseModel):
-    phone: str = Field(..., description="手机号", example="13800138000")
+    phone: str = Field(..., description="手机号", json_schema_extra={"example": "13800138000"})
     password: str = Field(..., min_length=8, max_length=32, description="密码(8-32位，须包含字母和数字)")
     gender: GenderType = Field(default=GenderType.SECRET, description="性别")
 
@@ -70,6 +73,7 @@ class AppRegisterOut(BaseModel):
 
 
 # ===== 用户信息 =====
+
 
 class AppUserInfoOut(BaseModel):
     id: int
@@ -160,6 +164,7 @@ class CertifiedCallPriceUpdateIn(BaseModel):
 
 
 # ===== 关注 =====
+
 
 class UserFollowIn(BaseModel):
     target_user_id: int = Field(..., ge=1, description="目标用户ID")

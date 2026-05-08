@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field, field_validator
+
 from app.core.app_auth import DependAppAuth
 from app.models import AppUser
 from app.schemas.base import Fail, Success
-from app.utils.password import verify_password, get_password_hash
+from app.utils.password import get_password_hash, verify_password
 
 router = APIRouter()
 
@@ -22,14 +23,15 @@ class ChangePasswordIn(BaseModel):
             raise ValueError("密码必须至少8位，且同时包含字母和数字")
         return v
 
-@router.post('/change_password', summary='修改密码')
+
+@router.post("/change_password", summary="修改密码")
 async def change_password(req_in: ChangePasswordIn, current_user: AppUser = Depends(DependAppAuth)):
     # 校验旧密码
-    if not verify_password(req_in.old_password, current_user.password or ''):
-        return Fail(code=401, msg='原密码错误')
-    
+    if not verify_password(req_in.old_password, current_user.password or ""):
+        return Fail(code=401, msg="原密码错误")
+
     # 更新密码
     current_user.password = get_password_hash(req_in.new_password)
     await current_user.save()
-    
-    return Success(msg='密码修改成功')
+
+    return Success(msg="密码修改成功")

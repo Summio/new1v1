@@ -35,6 +35,12 @@ export default {
   // moment manage
   getMomentList: (params = {}) => request.get('/moment/list', { params }),
   deleteMoment: (params = {}) => request.delete('/moment/delete', { params }),
+  pinMoment: (params = {}) => request.post('/moment/pin', null, { params }),
+  unpinMoment: (params = {}) => request.post('/moment/unpin', null, { params }),
+  recommendMoment: (params = {}) => request.post('/moment/recommend', null, { params }),
+  unrecommendMoment: (params = {}) => request.post('/moment/unrecommend', null, { params }),
+  clearMomentRecommendOverride: (params = {}) =>
+    request.post('/moment/clear-recommend-override', null, { params }),
   // gift manage
   getGiftList: (params = {}) => request.get('/gift/list', { params }),
   getGiftById: (params = {}) => request.get('/gift/get', { params }),
@@ -52,6 +58,11 @@ export default {
   // withdraw manage
   getWithdrawList: (params = {}) => request.get('/withdraw/list', { params }),
   reviewWithdrawApply: (data = {}) => request.post('/withdraw/review', data),
+  // ranking manage
+  getRankingList: (params = {}) => request.get('/ranking/list', { params }),
+  refreshRanking: (data = {}) => request.post('/ranking/refresh', data),
+  getRankingConfig: () => request.get('/ranking/config'),
+  updateRankingConfig: (data = {}) => request.put('/ranking/config', data),
   // role
   getRoleList: (params = {}) => request.get('/role/list', { params }),
   createRole: (data = {}) => request.post('/role/create', data),

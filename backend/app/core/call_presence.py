@@ -82,10 +82,6 @@ async def get_snapshot(*, call_id: int) -> CallPresenceSnapshot:
     return {
         "caller_last_seen_ms": _to_int_or_none(raw.get("caller_last_seen_ms")),
         "callee_last_seen_ms": _to_int_or_none(raw.get("callee_last_seen_ms")),
-        "caller_left_candidate_ms": _to_int_or_none(
-            raw.get("caller_left_candidate_ms")
-        ),
-        "callee_left_candidate_ms": _to_int_or_none(
-            raw.get("callee_left_candidate_ms")
-        ),
+        "caller_left_candidate_ms": _to_int_or_none(raw.get("caller_left_candidate_ms")),
+        "callee_left_candidate_ms": _to_int_or_none(raw.get("callee_left_candidate_ms")),
     }

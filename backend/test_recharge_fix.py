@@ -1,4 +1,5 @@
 """集成测试：验证充值列表接口的序列化修复"""
+
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -56,12 +57,12 @@ def test_recharge_list_response_serialization():
         print(f"[OK] 响应状态码: {response.status_code}")
         print(f"[OK] 响应体类型: {type(response.body)}")
         print(f"[OK] 响应体前 200 字符: {response.body[:200].decode('utf-8')}...")
-        return True
     except Exception as e:
         print(f"[FAIL] 响应创建失败: {e}")
         import traceback
+
         traceback.print_exc()
-        return False
+        raise
 
 
 def test_old_code_would_fail():
@@ -84,21 +85,20 @@ def test_old_code_would_fail():
 
     try:
         # 旧代码：不使用 mode='json'
-        response = SuccessExtra(
+        SuccessExtra(
             data=[item.model_dump() for item in items],
             total=1,
             page=1,
             page_size=10,
         )
         print("[FAIL] 旧代码意外成功了（不应该发生）")
-        return False
+        raise AssertionError("旧代码意外成功了（不应该发生）")
     except TypeError as e:
         if "datetime" in str(e) and "JSON serializable" in str(e):
             print(f"[OK] 旧代码按预期失败: {e}")
-            return True
         else:
             print(f"[FAIL] 旧代码失败但错误不符合预期: {e}")
-            return False
+            raise
 
 
 if __name__ == "__main__":

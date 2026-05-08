@@ -1,7 +1,7 @@
 <script setup>
 import { h, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { NButton, NImage, NInput, NModal, NPopconfirm } from 'naive-ui'
+import { NButton, NImage, NInput, NModal, NPopconfirm, NSelect, NSpace, NTag } from 'naive-ui'
 
 import CommonPage from '@/components/page/CommonPage.vue'
 import QueryBarItem from '@/components/query-bar/QueryBarItem.vue'
@@ -21,6 +21,19 @@ const currentVideo = ref({
   url: '',
   cover_url: '',
 })
+const pinStatusOptions = [
+  { label: '全部', value: 'all' },
+  { label: '已置顶', value: 'pinned' },
+  { label: '普通', value: 'normal' },
+]
+const recommendStatusOptions = [
+  { label: '全部', value: 'all' },
+  { label: '有效推荐', value: 'recommended' },
+  { label: '未推荐', value: 'not_recommended' },
+  { label: '单条推荐', value: 'override_recommended' },
+  { label: '单条取消推荐', value: 'override_cancelled' },
+  { label: '跟随认证用户默认', value: 'default' },
+]
 
 onMounted(() => {
   $table.value?.handleSearch()
@@ -40,8 +53,56 @@ async function handleDelete(row) {
     window.$message?.success('删除成功')
     $table.value?.handleSearch()
   } catch (error) {
-    window.$message?.error(error?.message || '删除失败')
+    $table.value?.handleSearch()
   }
+}
+
+async function runMomentAction(action, row, successMessage, fallbackMessage) {
+  try {
+    await action({ id: row.id })
+    window.$message?.success(successMessage)
+    $table.value?.handleSearch()
+  } catch (error) {
+    if (error?.code === 400) {
+      $table.value?.handleSearch()
+      return
+    }
+    window.$message?.error(error?.message || fallbackMessage)
+  }
+}
+
+function handlePin(row) {
+  return runMomentAction(api.pinMoment, row, '置顶成功', '置顶失败')
+}
+
+function handleUnpin(row) {
+  return runMomentAction(api.unpinMoment, row, '取消置顶成功', '取消置顶失败')
+}
+
+function handleRecommend(row) {
+  return runMomentAction(api.recommendMoment, row, '推荐成功', '推荐失败')
+}
+
+function handleUnrecommend(row) {
+  return runMomentAction(api.unrecommendMoment, row, '取消推荐成功', '取消推荐失败')
+}
+
+function handleClearRecommendOverride(row) {
+  return runMomentAction(api.clearMomentRecommendOverride, row, '恢复默认成功', '恢复默认失败')
+}
+
+function recommendTagType(row) {
+  if (row.recommend_override === true) return 'success'
+  if (row.recommend_override === false) return 'warning'
+  if (row.author_is_recommended) return 'info'
+  return 'default'
+}
+
+function recommendStatusLabel(row) {
+  if (row.recommend_override === true) return '单条推荐'
+  if (row.recommend_override === false) return '单条取消推荐'
+  if (row.author_is_recommended) return '推荐认证用户默认推荐'
+  return row.recommend_status_label || '未推荐'
 }
 
 const columns = [
@@ -170,27 +231,94 @@ const columns = [
     },
   },
   {
+    title: '置顶',
+    key: 'is_pinned',
+    width: 90,
+    align: 'center',
+    render(row) {
+      return h(
+        NTag,
+        { type: row.is_pinned ? 'success' : 'default', size: 'small' },
+        { default: () => (row.is_pinned ? '已置顶' : '普通') }
+      )
+    },
+  },
+  {
+    title: '推荐状态',
+    key: 'recommend_status_label',
+    width: 150,
+    align: 'center',
+    render(row) {
+      return h(
+        NTag,
+        { type: recommendTagType(row), size: 'small' },
+        { default: () => recommendStatusLabel(row) }
+      )
+    },
+  },
+  {
     title: '操作',
     key: 'actions',
-    width: 110,
+    width: 280,
     align: 'center',
     fixed: 'right',
     render(row) {
-      return h(
-        NPopconfirm,
-        {
-          onPositiveClick: () => handleDelete(row),
-        },
-        {
-          trigger: () =>
-            h(
+      return h(NSpace, { size: 6, justify: 'center' }, () => [
+        row.is_pinned
+          ? h(
               NButton,
-              { size: 'small', type: 'error', secondary: true },
-              { default: () => '删除' }
+              { size: 'small', secondary: true, onClick: () => handleUnpin(row) },
+              { default: () => '取消置顶' }
+            )
+          : h(
+              NButton,
+              { size: 'small', type: 'primary', secondary: true, onClick: () => handlePin(row) },
+              { default: () => '置顶' }
             ),
-          default: () => '确认删除这条动态？',
-        }
-      )
+        row.is_recommended
+          ? h(
+              NButton,
+              {
+                size: 'small',
+                type: 'warning',
+                secondary: true,
+                onClick: () => handleUnrecommend(row),
+              },
+              { default: () => '取消推荐' }
+            )
+          : h(
+              NButton,
+              {
+                size: 'small',
+                type: 'success',
+                secondary: true,
+                onClick: () => handleRecommend(row),
+              },
+              { default: () => '推荐' }
+            ),
+        row.recommend_override !== null && row.recommend_override !== undefined
+          ? h(
+              NButton,
+              { size: 'small', secondary: true, onClick: () => handleClearRecommendOverride(row) },
+              { default: () => '恢复默认' }
+            )
+          : null,
+        h(
+          NPopconfirm,
+          {
+            onPositiveClick: () => handleDelete(row),
+          },
+          {
+            trigger: () =>
+              h(
+                NButton,
+                { size: 'small', type: 'error', secondary: true },
+                { default: () => '删除' }
+              ),
+            default: () => '确认删除这条动态？',
+          }
+        ),
+      ])
     },
   },
 ]
@@ -220,6 +348,24 @@ const columns = [
             clearable
             placeholder="昵称/手机号/内容"
             @keypress.enter="$table?.handleSearch()"
+          />
+        </QueryBarItem>
+        <QueryBarItem label="置顶状态" :label-width="70">
+          <NSelect
+            v-model:value="queryItems.pin_status"
+            clearable
+            :options="pinStatusOptions"
+            placeholder="全部"
+            style="width: 120px"
+          />
+        </QueryBarItem>
+        <QueryBarItem label="推荐状态" :label-width="70">
+          <NSelect
+            v-model:value="queryItems.recommend_status"
+            clearable
+            :options="recommendStatusOptions"
+            placeholder="全部"
+            style="width: 170px"
           />
         </QueryBarItem>
       </template>

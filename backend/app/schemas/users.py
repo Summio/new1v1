@@ -17,9 +17,9 @@ class BaseUser(BaseModel):
 
 
 class UserCreate(BaseModel):
-    email: EmailStr = Field(example="admin@qq.com")
-    username: str = Field(example="admin")
-    password: str = Field(example="123456")
+    email: EmailStr = Field(json_schema_extra={"example": "admin@qq.com"})
+    username: str = Field(json_schema_extra={"example": "admin"})
+    password: str = Field(json_schema_extra={"example": "123456"})
     is_active: Optional[bool] = True
     is_superuser: Optional[bool] = False
     role_ids: Optional[List[int]] = []
@@ -45,6 +45,6 @@ class UpdatePassword(BaseModel):
 
 
 class UserProfileUpdate(BaseModel):
-    username: str = Field(example="admin")
-    email: EmailStr = Field(example="admin@qq.com")
+    username: str = Field(json_schema_extra={"example": "admin"})
+    email: EmailStr = Field(json_schema_extra={"example": "admin@qq.com"})
     avatar: Optional[str] = Field(default=None, max_length=500, description="头像URL")

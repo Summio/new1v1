@@ -13,8 +13,8 @@ void main() {
       'ts': 1720000000,
       'duration_seconds': 0,
       'total_fee_coins': 0,
-      'income_anchor_user_id': 2002,
-      'anchor_income_diamonds': 50,
+      'income_certified_user_id': 2002,
+      'certified_user_income_diamonds': 50,
       'reason': null,
     });
 
@@ -36,8 +36,8 @@ void main() {
       'ts': 1720000000,
       'duration_seconds': 0,
       'total_fee_coins': 0,
-      'income_anchor_user_id': 2002,
-      'anchor_income_diamonds': 50,
+      'income_certified_user_id': 2002,
+      'certified_user_income_diamonds': 50,
       'reason': null,
     });
 
@@ -55,8 +55,8 @@ void main() {
       'ts': 1720000000,
       'duration_seconds': 0,
       'total_fee_coins': 0,
-      'income_anchor_user_id': 2002,
-      'anchor_income_diamonds': 50,
+      'income_certified_user_id': 2002,
+      'certified_user_income_diamonds': 50,
       'reason': 'rejected',
     });
 
@@ -75,8 +75,8 @@ void main() {
       'ts': 1720000000,
       'duration_seconds': 90,
       'total_fee_coins': 120,
-      'income_anchor_user_id': 2002,
-      'anchor_income_diamonds': 60,
+      'income_certified_user_id': 2002,
+      'certified_user_income_diamonds': 60,
       'reason': 'ended',
     });
 
@@ -100,8 +100,8 @@ void main() {
       'ts': 1720000000,
       'duration_seconds': 90,
       'total_fee_coins': 120,
-      'income_anchor_user_id': 2002,
-      'anchor_income_diamonds': 60,
+      'income_certified_user_id': 2002,
+      'certified_user_income_diamonds': 60,
       'reason': 'ended',
     });
 
@@ -125,8 +125,8 @@ void main() {
       'ts': 1720000000,
       'duration_seconds': 90,
       'total_fee_coins': 120,
-      'income_anchor_user_id': 0,
-      'anchor_income_diamonds': 0,
+      'income_certified_user_id': 0,
+      'certified_user_income_diamonds': 0,
       'reason': 'ended',
     });
 
@@ -150,8 +150,8 @@ void main() {
       'ts': 1720000000,
       'duration_seconds': 90,
       'total_fee_coins': 120,
-      'income_anchor_user_id': 2002,
-      'anchor_income_diamonds': 60,
+      'income_certified_user_id': 2002,
+      'certified_user_income_diamonds': 60,
       'reason': 'force_exit',
     });
 
@@ -159,3 +159,4 @@ void main() {
     expect(trace!.toDisplayText(currentUserId: 1001), '你已离开，通话已结束');
   });
 }
+

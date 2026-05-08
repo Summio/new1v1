@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 APP_USER_API = Path("app/api/v1/app/user.py")
 ADMIN_USER_API = Path("app/api/v1/app_users/app_users.py")
 

@@ -1,12 +1,12 @@
 """测试充值配置功能"""
+
 import json
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.system import RechargePackageItem, RechargeConfigIn
-
+from app.schemas.system import RechargeConfigIn, RechargePackageItem
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
@@ -91,10 +91,12 @@ def test_recharge_package_item_optional_tag():
 def test_recharge_config_in_validates_packages_list():
     """测试充值配置输入验证套餐列表"""
     # 正常配置
-    config = RechargeConfigIn(packages=[
-        RechargePackageItem(amount=600, coins=600, label="6元"),
-        RechargePackageItem(amount=3000, coins=3300, label="30元", tag="热门"),
-    ])
+    config = RechargeConfigIn(
+        packages=[
+            RechargePackageItem(amount=600, coins=600, label="6元"),
+            RechargePackageItem(amount=3000, coins=3300, label="30元", tag="热门"),
+        ]
+    )
     assert len(config.packages) == 2
 
     # 套餐列表不能为空
@@ -103,10 +105,7 @@ def test_recharge_config_in_validates_packages_list():
     assert "at least 1 item" in str(exc_info.value).lower()
 
     # 套餐列表不能超过 20 个
-    too_many_packages = [
-        RechargePackageItem(amount=i*100, coins=i*100, label=f"{i}元")
-        for i in range(1, 22)
-    ]
+    too_many_packages = [RechargePackageItem(amount=i * 100, coins=i * 100, label=f"{i}元") for i in range(1, 22)]
     with pytest.raises(ValidationError) as exc_info:
         RechargeConfigIn(packages=too_many_packages)
     assert "at most 20 item" in str(exc_info.value).lower()
@@ -114,10 +113,12 @@ def test_recharge_config_in_validates_packages_list():
 
 def test_recharge_config_serialization():
     """测试充值配置序列化为 JSON"""
-    config = RechargeConfigIn(packages=[
-        RechargePackageItem(amount=600, coins=600, label="6元"),
-        RechargePackageItem(amount=3000, coins=3300, label="30元", tag="热门"),
-    ])
+    config = RechargeConfigIn(
+        packages=[
+            RechargePackageItem(amount=600, coins=600, label="6元"),
+            RechargePackageItem(amount=3000, coins=3300, label="30元", tag="热门"),
+        ]
+    )
 
     # 序列化为字典
     data = config.model_dump()

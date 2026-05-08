@@ -33,6 +33,7 @@ _PING_INTERVAL = 20  # 客户端心跳间隔（秒）
 
 # ===== WebSocket 端点 =====
 
+
 @router.websocket("/ws/app")
 async def ws_app(websocket: WebSocket) -> None:
     """App 用户 WebSocket 连接端点。
@@ -125,10 +126,11 @@ async def ws_app(websocket: WebSocket) -> None:
                 online = bool(msg.get("online", True))
                 try:
                     from app.websocket.presence import (
-                        set_manual_offline,
-                        clear_manual_offline,
                         broadcast_presence,
+                        clear_manual_offline,
+                        set_manual_offline,
                     )
+
                     if online:
                         await clear_manual_offline(user_id)
                     else:
@@ -172,6 +174,7 @@ async def ws_app(websocket: WebSocket) -> None:
 
 
 # ===== 辅助函数 =====
+
 
 def _parse_message(raw: Any) -> dict | None:
     """解析 JSON 消息，失败返回 None。"""

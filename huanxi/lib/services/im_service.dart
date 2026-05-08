@@ -20,7 +20,7 @@ class GiftNotifyMessage {
   final int unitPrice;
   final int quantity;
   final int totalPrice;
-  final double anchorIncomeDiamonds;
+  final double certifiedUserIncomeDiamonds;
   final String scene;
   final int? callId;
   final int senderId;
@@ -35,7 +35,7 @@ class GiftNotifyMessage {
     required this.unitPrice,
     required this.quantity,
     required this.totalPrice,
-    required this.anchorIncomeDiamonds,
+    required this.certifiedUserIncomeDiamonds,
     required this.scene,
     required this.callId,
     required this.senderId,
@@ -478,7 +478,7 @@ class IMService {
         unitPrice: unitPrice,
         quantity: quantity < 1 ? 1 : quantity,
         totalPrice: totalPrice < 0 ? 0 : totalPrice,
-        anchorIncomeDiamonds: _asDouble(decoded['anchor_income_diamonds']) ?? 0,
+        certifiedUserIncomeDiamonds: _asDouble(decoded['certified_user_income_diamonds']) ?? 0,
         scene: (decoded['scene'] as String?) ?? 'chat',
         callId: _asInt(decoded['call_id']),
         senderId: _asInt(decoded['sender_id']) ?? 0,
@@ -526,3 +526,4 @@ class IMService {
     return null;
   }
 }
+
