@@ -1,15 +1,17 @@
 from pathlib import Path
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+BACKEND_ROOT = REPO_ROOT / "backend"
 
-ANCHOR_API = Path("app/api/v1/app/anchor.py")
-APP_USER_MODEL = Path("app/models/app_user.py")
-APP_USER_SCHEMA = Path("app/schemas/app_user.py")
-APP_USER_ADMIN_API = Path("app/api/v1/app_users/app_users.py")
-PRESENCE = Path("app/websocket/presence.py")
-WS_MANAGER = Path("app/websocket/manager.py")
-APP_USER_VIEW = Path("../backend/web/src/views/operation/app-user/index.vue")
-ANCHOR_PROVIDER = Path("../huanxi/lib/app/providers/anchor_provider.dart")
-HOME_PAGE = Path("../huanxi/lib/modules/home/home_page.dart")
+ANCHOR_API = BACKEND_ROOT / "app/api/v1/app/anchor.py"
+APP_USER_MODEL = BACKEND_ROOT / "app/models/app_user.py"
+APP_USER_SCHEMA = BACKEND_ROOT / "app/schemas/app_user.py"
+APP_USER_ADMIN_API = BACKEND_ROOT / "app/api/v1/app_users/app_users.py"
+PRESENCE = BACKEND_ROOT / "app/websocket/presence.py"
+WS_MANAGER = BACKEND_ROOT / "app/websocket/manager.py"
+APP_USER_VIEW = BACKEND_ROOT / "web/src/views/operation/app-user/index.vue"
+ANCHOR_PROVIDER = REPO_ROOT / "huanxi/lib/app/providers/anchor_provider.dart"
+HOME_PAGE = REPO_ROOT / "huanxi/lib/modules/home/home_page.dart"
 
 
 def test_anchor_model_has_recommend_fields() -> None:
@@ -32,7 +34,8 @@ def test_anchor_list_supports_online_section_sorting() -> None:
     assert "True" in text
     assert "recommend_weight" in text
     assert "anchor_reviewed_at" in text
-    assert "get_online_since_map" in text
+    assert "get_online_user_id_page" in text
+    assert "count_online_user_ids" in text
 
 
 def test_presence_records_online_since_for_active_sorting() -> None:

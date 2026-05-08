@@ -5,6 +5,7 @@ from aerich import Command
 from fastapi import FastAPI
 from fastapi.middleware import Middleware
 from fastapi.middleware.cors import CORSMiddleware
+from tortoise import Tortoise
 from tortoise.expressions import Q
 
 from app.api import api_router
@@ -28,8 +29,11 @@ from app.models.admin import Api, Menu, Role
 from app.schemas.menus import MenuType
 from app.settings.config import settings
 
-from .middlewares import BackGroundTaskMiddleware, HttpAuditLogMiddleware
-from .middlewares import AppFriendlyStatusMiddleware
+from .middlewares import (
+    AppFriendlyStatusMiddleware,
+    BackGroundTaskMiddleware,
+    HttpAuditLogMiddleware,
+)
 
 
 def build_operation_children(parent_id: int) -> list[Menu]:
@@ -149,6 +153,7 @@ def make_middlewares():
             methods=["GET", "POST", "PUT", "DELETE"],
             exclude_paths=[
                 "/api/v1/base/access_token",
+                "/api/v1/app/",
                 "/docs",
                 "/openapi.json",
             ],
@@ -233,8 +238,20 @@ async def init_menus():
             "component": "/system/menu",
         },
         {"name": "API管理", "path": "api", "order": 4, "icon": "ant-design:api-outlined", "component": "/system/api"},
-        {"name": "部门管理", "path": "dept", "order": 5, "icon": "mingcute:department-line", "component": "/system/dept"},
-        {"name": "审计日志", "path": "auditlog", "order": 6, "icon": "ph:clipboard-text-bold", "component": "/system/auditlog"},
+        {
+            "name": "部门管理",
+            "path": "dept",
+            "order": 5,
+            "icon": "mingcute:department-line",
+            "component": "/system/dept",
+        },
+        {
+            "name": "审计日志",
+            "path": "auditlog",
+            "order": 6,
+            "icon": "ph:clipboard-text-bold",
+            "component": "/system/auditlog",
+        },
         {
             "name": "系统配置",
             "path": "config",
@@ -305,7 +322,11 @@ async def init_apis():
     await api_controller.refresh_api()
 
 
-async def init_db():
+async def init_db(*, run_migrations: bool = False):
+    if not run_migrations:
+        await Tortoise.init(config=settings.TORTOISE_ORM)
+        return
+
     command = Command(tortoise_config=settings.TORTOISE_ORM)
     try:
         await command.init_db(safe=True)
@@ -317,6 +338,7 @@ async def init_db():
         await command.migrate()
     except (AttributeError, Exception) as e:
         import asyncclick.exceptions
+
         # aerich 在部分 M2M 差异场景下会抛出 TypeError: 'bool' object is not subscriptable
         # 该异常来自迁移对比逻辑，避免阻塞服务启动，后续可通过手动 aerich migrate 处理。
         if isinstance(e, TypeError) and "bool' object is not subscriptable" in str(e):
@@ -426,7 +448,11 @@ async def init_roles():
 
 
 async def init_data():
-    await init_db()
+    await init_db(run_migrations=settings.AUTO_MIGRATE_ON_STARTUP)
+    if not settings.AUTO_SEED_ON_STARTUP:
+        logger.info("startup seed data disabled")
+        return
+
     await init_superuser()
     await init_menus()
     await init_apis()

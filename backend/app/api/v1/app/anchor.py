@@ -25,7 +25,6 @@ def _normalize_anchor_tags(raw_value) -> list[str]:
 
 def _anchor_sort_key(user, section: str, online_ids: set[int], online_since_map: dict[int, int]):
     is_online = user.id in online_ids
-    reviewed_at = user.anchor_reviewed_at
     recommend_weight = int(user.recommend_weight or 0)
 
     if section == "active":
@@ -42,9 +41,10 @@ def _offline_review_sort_key(user):
     return (reviewed_at is not None, reviewed_at, user.id)
 
 
-async def _fetch_sorted_anchor_page(
-    q, section: str, page: int, page_size: int, online_ids: set[int], online_since_map: dict[int, int]
-):
+async def _fetch_sorted_anchor_page(q, section: str, page: int, page_size: int):
+    from app.websocket.presence import count_online_user_ids, get_online_user_id_page
+    from app.websocket.presence import is_online as _is_online_user
+
     total = await q.count()
     offset = (page - 1) * page_size
     order_fields = {
@@ -53,33 +53,72 @@ async def _fetch_sorted_anchor_page(
         "new": ["-anchor_reviewed_at", "-id"],
     }[section]
 
-    if not online_ids:
-        users = await q.order_by(*order_fields).offset(offset).limit(page_size)
-        return total, list(users)
+    online_total = await count_online_user_ids()
 
-    online_q = q.filter(id__in=list(online_ids))
-    online_total = await online_q.count()
+    async def fetch_online_by_db_order() -> list[AppUser]:
+        needed = offset + page_size
+        batch_size = min(max(needed * 2, page_size), 200)
+        scan_offset = 0
+        online_users: list[AppUser] = []
+        while len(online_users) < needed and scan_offset < 1000:
+            candidates = list(await q.order_by(*order_fields).offset(scan_offset).limit(batch_size))
+            if not candidates:
+                break
+            for candidate in candidates:
+                if await _is_online_user(int(candidate.id)):
+                    online_users.append(candidate)
+                    if len(online_users) >= needed:
+                        break
+            scan_offset += len(candidates)
+            if len(candidates) < batch_size:
+                break
+        return online_users[offset : offset + page_size]
 
-    if section == "active":
-        online_users = list(await online_q)
-        online_users.sort(
-            key=lambda user: online_since_map.get(user.id, 0),
-            reverse=True,
-        )
-    else:
-        online_users = list(await online_q.order_by(*order_fields))
+    async def fetch_offline_by_db_order(offline_offset: int, limit: int) -> list[AppUser]:
+        if limit <= 0:
+            return []
+        batch_size = min(max(limit * 4, 50), 200)
+        scan_offset = 0
+        skipped = 0
+        users: list[AppUser] = []
+        while len(users) < limit and scan_offset < offline_offset + 1000:
+            candidates = list(await q.order_by(*order_fields).offset(scan_offset).limit(batch_size))
+            if not candidates:
+                break
+            for candidate in candidates:
+                if await _is_online_user(int(candidate.id)):
+                    continue
+                if skipped < offline_offset:
+                    skipped += 1
+                    continue
+                users.append(candidate)
+                if len(users) >= limit:
+                    break
+            scan_offset += len(candidates)
+            if len(candidates) < batch_size:
+                break
+        return users
+
+    if online_total <= 0:
+        users = await fetch_offline_by_db_order(offset, page_size)
+        return total, users
 
     if offset < online_total:
-        users = online_users[offset : offset + page_size]
+        if section == "active":
+            online_ids = await get_online_user_id_page(offset, page_size)
+            online_map = {int(user.id): user for user in await q.filter(id__in=online_ids)}
+            users = [online_map[user_id] for user_id in online_ids if user_id in online_map]
+        else:
+            users = await fetch_online_by_db_order()
         remaining = page_size - len(users)
         if remaining > 0:
-            offline_users = await q.exclude(id__in=list(online_ids)).order_by(*order_fields).limit(remaining)
+            offline_users = await fetch_offline_by_db_order(0, remaining)
             users.extend(list(offline_users))
         return total, users
 
     offline_offset = offset - online_total
-    users = await q.exclude(id__in=list(online_ids)).order_by(*order_fields).offset(offline_offset).limit(page_size)
-    return total, list(users)
+    users = await fetch_offline_by_db_order(offline_offset, page_size)
+    return total, users
 
 
 @router.get("/anchor/list", summary="主播推荐列表(分页)")
@@ -90,10 +129,6 @@ async def anchor_list(
     keyword: Optional[str] = Query(None, description="搜索关键字：用户ID或昵称"),
     section: str = Query("recommend", description="首页板块: recommend/active/new"),
 ):
-    from app.websocket.presence import get_online_since_map, get_online_user_ids
-
-    online_ids: set[int] = await get_online_user_ids()
-
     search_keyword = (keyword or "").strip()
     section_value = (section or "recommend").strip().lower()
     if section_value not in {"recommend", "active", "new"}:
@@ -121,18 +156,18 @@ async def anchor_list(
         total = await q.count()
         users = await q.order_by("-id").offset((page - 1) * page_size).limit(page_size)
     else:
-        online_since_map = await get_online_since_map()
         total, users = await _fetch_sorted_anchor_page(
             q=q,
             section=section_value,
             page=page,
             page_size=page_size,
-            online_ids=online_ids,
-            online_since_map=online_since_map,
         )
+
+    from app.websocket.presence import is_online as _is_online_user
 
     rows = []
     for user in users:
+        is_online = await _is_online_user(int(user.id))
         rows.append(
             {
                 "id": user.id,
@@ -150,7 +185,7 @@ async def anchor_list(
                 "intro": user.anchor_intro or "",
                 "tags": _normalize_anchor_tags(user.anchor_tags),
                 "call_price": int(user.anchor_call_price or 0),
-                "is_online": user.id in online_ids,
+                "is_online": is_online,
                 "status": user.status or "normal",
                 "is_anchor": bool(user.is_anchor),
                 "is_recommended": bool(user.is_recommended),

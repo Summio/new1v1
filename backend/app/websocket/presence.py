@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 
 _WS_ONLINE_KEY = "ws:online"
 _WS_ONLINE_SINCE_KEY = "ws:online_since"
+_WS_ONLINE_ANCHOR_SINCE_KEY = "ws:online_anchor_since"
 _MANUAL_OFFLINE_KEY_PREFIX = "ws:manual_offline:"
 _MANUAL_OFFLINE_TTL = 24 * 60 * 60  # 24 小时，手动离线状态超时自动清除
 
@@ -61,16 +62,51 @@ async def clear_manual_offline(user_id: int) -> None:
     await redis.delete(f"{_MANUAL_OFFLINE_KEY_PREFIX}{user_id}")
 
 
-async def mark_online_since(user_id: int) -> None:
+async def mark_online_since(user_id: int, *, is_anchor: bool = False) -> None:
     """记录用户本次上线时间，用于活跃主播排序。"""
     redis = await get_redis()
-    await redis.zadd(_WS_ONLINE_SINCE_KEY, {str(user_id): int(time.time() * 1000)})
+    score = int(time.time() * 1000)
+    await redis.zadd(_WS_ONLINE_SINCE_KEY, {str(user_id): score})
+    if is_anchor:
+        await redis.zadd(_WS_ONLINE_ANCHOR_SINCE_KEY, {str(user_id): score})
+    else:
+        await redis.zrem(_WS_ONLINE_ANCHOR_SINCE_KEY, user_id)
 
 
 async def clear_online_since(user_id: int) -> None:
     """清理用户上线时间。"""
     redis = await get_redis()
     await redis.zrem(_WS_ONLINE_SINCE_KEY, user_id)
+    await redis.zrem(_WS_ONLINE_ANCHOR_SINCE_KEY, user_id)
+
+
+async def count_online_user_ids() -> int:
+    """获取当前在线主播数量，用于首页分页计算。"""
+    redis = await get_redis()
+    return int(await redis.zcard(_WS_ONLINE_ANCHOR_SINCE_KEY))
+
+
+async def get_online_user_id_page(offset: int, limit: int) -> list[int]:
+    """分页获取在线主播 ID，避免读取全量在线集合。"""
+    if limit <= 0:
+        return []
+
+    redis = await get_redis()
+    start = max(0, int(offset))
+    stop = start + int(limit) - 1
+    members = await redis.zrevrange(_WS_ONLINE_ANCHOR_SINCE_KEY, start, stop)
+    ids: list[int] = []
+    for member in members:
+        try:
+            ids.append(int(member.decode("utf-8") if isinstance(member, bytes) else member))
+        except (TypeError, ValueError):
+            continue
+    if not ids:
+        return []
+
+    manual_offline_keys = [f"{_MANUAL_OFFLINE_KEY_PREFIX}{user_id}" for user_id in ids]
+    flags = await redis.mget(manual_offline_keys)
+    return [user_id for user_id, flag in zip(ids, flags) if flag is None]
 
 
 async def get_online_since_map() -> dict[int, int]:
@@ -109,13 +145,7 @@ async def get_online_user_ids() -> set[int]:
         return set()
 
     online_id_list = list(online_ids)
-    manual_offline_keys = [
-        f"{_MANUAL_OFFLINE_KEY_PREFIX}{user_id}" for user_id in online_id_list
-    ]
+    manual_offline_keys = [f"{_MANUAL_OFFLINE_KEY_PREFIX}{user_id}" for user_id in online_id_list]
     flags = await redis.mget(manual_offline_keys)
-    offline_ids = {
-        user_id
-        for user_id, flag in zip(online_id_list, flags)
-        if flag is not None
-    }
+    offline_ids = {user_id for user_id, flag in zip(online_id_list, flags) if flag is not None}
     return online_ids - offline_ids

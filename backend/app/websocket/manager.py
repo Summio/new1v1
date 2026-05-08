@@ -90,7 +90,15 @@ class ConnectionManager:
             await redis.sadd(_WS_ONLINE_KEY, user_id)
             await redis.set(_user_pid_key(user_id), self._pid)
             await redis.sadd(_pid_users_key(self._pid), user_id)
-            await mark_online_since(user_id)
+            is_anchor = False
+            try:
+                from app.models import AppUser
+
+                user = await AppUser.filter(id=user_id).first()
+                is_anchor = bool(user and user.status == "normal" and user.is_anchor)
+            except Exception:
+                is_anchor = False
+            await mark_online_since(user_id, is_anchor=is_anchor)
             logger.info(f"[WS] user {user_id} connected on pid {self._pid}, total={len(self._ws_conns)}")
         except Exception as e:
             logger.warning(f"[WS] Redis update failed on connect: {e}")
@@ -98,7 +106,8 @@ class ConnectionManager:
         # 广播上线事件（异步，不阻塞连接建立）
         try:
             from app.websocket.presence import broadcast_presence
-            broadcast_presence(manager=self, user_id=user_id, online=True)
+
+            await broadcast_presence(manager=self, user_id=user_id, online=True)
         except Exception as e:
             logger.warning(f"[WS] presence broadcast on connect failed: {e}")
 
@@ -157,6 +166,7 @@ class ConnectionManager:
         if removed_global_online:
             try:
                 from app.websocket.presence import broadcast_presence
+
                 broadcast_presence(manager=self, user_id=user_id, online=False)
             except Exception as e:
                 logger.warning(f"[WS] presence broadcast on disconnect failed: {e}")
@@ -181,15 +191,21 @@ class ConnectionManager:
     # ===== 跨实例推送 =====
 
     # ===== 关键事件标记 =====
-    _CRITICAL_EVENTS = frozenset({
-        "call_ended",
-        "call_timeout",
-        "call_balance_empty",
-        "balance_updated",
-    })
+    _CRITICAL_EVENTS = frozenset(
+        {
+            "call_ended",
+            "call_timeout",
+            "call_balance_empty",
+            "balance_updated",
+        }
+    )
 
     async def push_to_user(
-        self, user_id: int, event: str, data: dict, critical: bool = False,
+        self,
+        user_id: int,
+        event: str,
+        data: dict,
+        critical: bool = False,
     ) -> bool:
         """通过 Redis Pub/Sub 推送事件给目标用户。
 
@@ -228,7 +244,9 @@ class ConnectionManager:
             if fail_count >= self._PUSH_FAIL_THRESHOLD:
                 logger.warning(
                     "[WS] push failure threshold exceeded: user_id={} event={} consecutive_failures={}",
-                    user_id, event, fail_count,
+                    user_id,
+                    event,
+                    fail_count,
                 )
             # 常规失败日志
             if critical or event in self._CRITICAL_EVENTS:
@@ -330,6 +348,7 @@ def get_manager() -> ConnectionManager:
 
 # ===== Watchdog Leader Election =====
 
+
 async def try_acquire_watchdog_leader() -> bool:
     """尝试成为 watchdog leader。
 
@@ -349,9 +368,7 @@ async def _get_watchdog_refresh_script_sha(redis_client: Any) -> str:
     global _watchdog_refresh_script_sha
 
     if _watchdog_refresh_script_sha is None:
-        _watchdog_refresh_script_sha = await redis_client.script_load(
-            _WATCHDOG_REFRESH_LEADER_SCRIPT
-        )
+        _watchdog_refresh_script_sha = await redis_client.script_load(_WATCHDOG_REFRESH_LEADER_SCRIPT)
     return _watchdog_refresh_script_sha
 
 
@@ -364,19 +381,13 @@ async def refresh_watchdog_leader() -> bool:
 
         try:
             script_sha = await _get_watchdog_refresh_script_sha(redis_client)
-            result = await redis_client.evalsha(
-                script_sha, 1, _WATCHDOG_LEADER_KEY, pid, ttl_seconds
-            )
+            result = await redis_client.evalsha(script_sha, 1, _WATCHDOG_LEADER_KEY, pid, ttl_seconds)
         except ResponseError as e:
             if "NOSCRIPT" not in str(e).upper():
                 raise
             global _watchdog_refresh_script_sha
-            _watchdog_refresh_script_sha = await redis_client.script_load(
-                _WATCHDOG_REFRESH_LEADER_SCRIPT
-            )
-            result = await redis_client.evalsha(
-                _watchdog_refresh_script_sha, 1, _WATCHDOG_LEADER_KEY, pid, ttl_seconds
-            )
+            _watchdog_refresh_script_sha = await redis_client.script_load(_WATCHDOG_REFRESH_LEADER_SCRIPT)
+            result = await redis_client.evalsha(_watchdog_refresh_script_sha, 1, _WATCHDOG_LEADER_KEY, pid, ttl_seconds)
 
         return int(result or 0) == 1
     except Exception as e:

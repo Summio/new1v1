@@ -24,7 +24,9 @@ class Settings(BaseSettings):
     CORS_ORIGINS: typing.List = (
         [origin.strip() for origin in _cors_origins.split(",") if origin.strip()]
         if _cors_origins
-        else (["http://localhost:3000", "http://localhost:8080"] if os.getenv("DEBUG", "false").lower() == "true" else [])
+        else (
+            ["http://localhost:3000", "http://localhost:8080"] if os.getenv("DEBUG", "false").lower() == "true" else []
+        )
     )
     CORS_ALLOW_CREDENTIALS: bool = True
     CORS_ALLOW_METHODS: typing.List = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
@@ -32,6 +34,9 @@ class Settings(BaseSettings):
 
     # DEBUG 默认关闭，生产环境必须通过环境变量 DEBUG=true 开启
     DEBUG: bool = False
+    # 生产多进程启动时禁止默认自动改库；迁移/种子应由发布流水线或一次性任务显式执行。
+    AUTO_MIGRATE_ON_STARTUP: bool = os.getenv("AUTO_MIGRATE_ON_STARTUP", "false").lower() == "true"
+    AUTO_SEED_ON_STARTUP: bool = os.getenv("AUTO_SEED_ON_STARTUP", "false").lower() == "true"
 
     PROJECT_ROOT: str = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
     BASE_DIR: str = os.path.abspath(os.path.join(PROJECT_ROOT, os.pardir))
@@ -73,9 +78,7 @@ class Settings(BaseSettings):
     # 示例：TRUSTED_PROXY_IPS=10.0.0.1,10.0.0.2
     _trusted_proxy_ips = os.getenv("TRUSTED_PROXY_IPS", "")
     TRUSTED_PROXY_IPS: typing.List[str] = (
-        [ip.strip() for ip in _trusted_proxy_ips.split(",") if ip.strip()]
-        if _trusted_proxy_ips
-        else []
+        [ip.strip() for ip in _trusted_proxy_ips.split(",") if ip.strip()] if _trusted_proxy_ips else []
     )
 
     # 通话心跳配置
@@ -109,11 +112,12 @@ class Settings(BaseSettings):
     }
     DATETIME_FORMAT: str = "%Y-%m-%d %H:%M:%S"
 
-
     # 腾讯 IM 配置
     # 充值回调 Mock 开关：仅在本地开发/测试环境启用（DEBUG=true 且 ENABLE_MOCK_CALLBACK=true）
     # 生产环境必须接入微信支付/支付宝真实回调，禁用此 Mock
     ENABLE_MOCK_CALLBACK: bool = os.getenv("ENABLE_MOCK_CALLBACK", "false").lower() == "true"
+
+
 try:
     from app.settings.im import im_settings as im_settings
 except ImportError:

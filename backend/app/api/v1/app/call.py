@@ -1,36 +1,36 @@
-from datetime import datetime, timedelta
 import asyncio
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends
+from tortoise.expressions import F, Q
+from tortoise.transactions import in_transaction
 
 from app.core.app_auth import DependAppAuth
-from app.core.ctx import CTX_APP_USER_ID, CTX_APP_USER_OBJ
-from app.log import logger
 from app.core.call_reject_protect import calc_left_seconds, should_block_rejected_call
+from app.core.ctx import CTX_APP_USER_ID, CTX_APP_USER_OBJ
 from app.core.time_utils import now_local_naive, to_utc_aware
+from app.log import logger
 from app.models import AppUser, CallRecord
-from app.services.call_trace_service import CallTraceService
-from app.services.call_income_service import (
-    get_anchor_share_bps,
-    resolve_income_anchor_id,
-    settle_call_anchor_income_once,
-)
-from app.services.gift_income_service import decimal_to_float_2
 from app.schemas.app_api import (
-    CallActionOut,
     CallActionIn,
+    CallActionOut,
     CallEndIn,
     CallEndOut,
     DialingIn,
     DialingOut,
 )
 from app.schemas.base import Fail, Success
-from app.utils.media_url import to_relative_media_url
-from app.utils.parse import safe_parse_int, clamp_int
+from app.services.call_income_service import (
+    get_anchor_share_bps,
+    resolve_income_anchor_id,
+    settle_call_anchor_income_once,
+)
+from app.services.call_trace_service import CallTraceService
+from app.services.gift_income_service import decimal_to_float_2
 from app.utils.billing import calc_due_minutes as _calc_due_minutes_with_free
+from app.utils.media_url import to_relative_media_url
+from app.utils.parse import clamp_int, safe_parse_int
 from app.websocket import events as ws_events
-from tortoise.expressions import F, Q
-from tortoise.transactions import in_transaction
 
 router = APIRouter()
 
@@ -85,6 +85,39 @@ async def _append_call_trace(
     )
 
 
+async def _append_call_trace_safely(
+    call_record: CallRecord,
+    *,
+    phase: str,
+    actor_user_id: int,
+    reason: str | None = None,
+) -> None:
+    try:
+        await _append_call_trace(
+            call_record,
+            phase=phase,
+            actor_user_id=actor_user_id,
+            reason=reason,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("call trace background append failed: {}", str(exc))
+
+
+def _schedule_call_trace(
+    call_record: CallRecord,
+    *,
+    phase: str,
+    actor_user_id: int,
+    reason: str | None = None,
+) -> None:
+    asyncio.create_task(
+        _append_call_trace_safely(
+            call_record,
+            phase=phase,
+            actor_user_id=actor_user_id,
+            reason=reason,
+        )
+    )
 
 
 async def _get_reject_inbound_protect_seconds() -> int:
@@ -125,8 +158,6 @@ async def _get_free_seconds_before_billing() -> int:
     )
     seconds = safe_parse_int(raw, DEFAULT_FREE_SECONDS_BEFORE_BILLING)
     return clamp_int(seconds, 0, MAX_FREE_SECONDS_BEFORE_BILLING)
-
-
 
 
 async def _resolve_payer_id(call_record: CallRecord) -> int:
@@ -198,6 +229,7 @@ async def dialing(req_in: DialingIn):
 
     # 使用 Redis 在线状态检查（WebSocket 方式）
     from app.websocket.presence import is_online as check_online
+
     if not await check_online(target_user.id):
         return Fail(code=400, msg="对方当前不在线，请稍后再试")
 
@@ -314,15 +346,17 @@ async def dialing(req_in: DialingIn):
         actor_user_id=int(caller_id),
     )
     # 推送 WebSocket 来电通知给被叫方（fire-and-forget）
-    asyncio.create_task(_ws_push_call_incoming(
-        callee_id=int(target_user.id),
-        call_id=int(call_record.id),
-        caller_id=int(caller_id),
-        caller_name=app_user.nickname or f"用户{caller_id}",
-        caller_avatar=to_relative_media_url(app_user.avatar),
-        call_price=int(call_price or 0),
-        left_seconds=CALL_RING_TIMEOUT_SECONDS,
-    ))
+    asyncio.create_task(
+        _ws_push_call_incoming(
+            callee_id=int(target_user.id),
+            call_id=int(call_record.id),
+            caller_id=int(caller_id),
+            caller_name=app_user.nickname or f"用户{caller_id}",
+            caller_avatar=to_relative_media_url(app_user.avatar),
+            call_price=int(call_price or 0),
+            left_seconds=CALL_RING_TIMEOUT_SECONDS,
+        )
+    )
 
     return Success(
         data=DialingOut(
@@ -343,15 +377,11 @@ async def dialing(req_in: DialingIn):
 @router.post("/call/accept", summary="接听通话", dependencies=[Depends(DependAppAuth)])
 async def accept_call(req_in: CallActionIn):
     user_id = CTX_APP_USER_ID.get()
+    trace_call_record: CallRecord | None = None
 
     # 事务包裹 + SELECT FOR UPDATE：防止并发接听导致多重计费
     async with in_transaction() as conn:
-        call_record = (
-            await CallRecord.filter(id=req_in.call_id)
-            .using_db(conn)
-            .select_for_update()
-            .first()
-        )
+        call_record = await CallRecord.filter(id=req_in.call_id).using_db(conn).select_for_update().first()
         if not call_record:
             return Fail(code=404, msg="通话不存在")
 
@@ -398,16 +428,21 @@ async def accept_call(req_in: CallActionIn):
         call_record.end_basis = None
         call_record.force_exit_user_id = None
         await call_record.save(using_db=conn)
-        await _append_call_trace(
-            call_record,
+        trace_call_record = call_record
+        # 推送 WebSocket 事件给主叫方（fire-and-forget）
+        asyncio.create_task(
+            _ws_push_call_accepted(
+                caller_id=int(call_record.caller_id),
+                call_id=int(call_record.id),
+            )
+        )
+
+    if trace_call_record:
+        _schedule_call_trace(
+            trace_call_record,
             phase="accepted",
             actor_user_id=int(user_id),
         )
-        # 推送 WebSocket 事件给主叫方（fire-and-forget）
-        asyncio.create_task(_ws_push_call_accepted(
-            caller_id=int(call_record.caller_id),
-            call_id=int(call_record.id),
-        ))
 
     return Success(
         data=CallActionOut(next_status="ongoing", msg="已接听").model_dump(),
@@ -418,14 +453,10 @@ async def accept_call(req_in: CallActionIn):
 @router.post("/call/reject", summary="拒绝通话", dependencies=[Depends(DependAppAuth)])
 async def reject_call(req_in: CallActionIn):
     user_id = CTX_APP_USER_ID.get()
+    trace_call_record: CallRecord | None = None
 
     async with in_transaction() as conn:
-        call_record = (
-            await CallRecord.filter(id=req_in.call_id)
-            .using_db(conn)
-            .select_for_update()
-            .first()
-        )
+        call_record = await CallRecord.filter(id=req_in.call_id).using_db(conn).select_for_update().first()
         if not call_record:
             return Fail(code=404, msg="通话不存在")
 
@@ -442,18 +473,23 @@ async def reject_call(req_in: CallActionIn):
         call_record.end_basis = "manual_end"
         call_record.force_exit_user_id = None
         await call_record.save(using_db=conn)
-        await _append_call_trace(
-            call_record,
+        trace_call_record = call_record
+        # 推送 WebSocket 事件给主叫方（fire-and-forget）
+        asyncio.create_task(
+            _ws_push_call_rejected(
+                caller_id=int(call_record.caller_id),
+                call_id=int(call_record.id),
+                reason="rejected",
+            )
+        )
+
+    if trace_call_record:
+        _schedule_call_trace(
+            trace_call_record,
             phase="rejected",
             actor_user_id=int(user_id),
             reason="rejected",
         )
-        # 推送 WebSocket 事件给主叫方（fire-and-forget）
-        asyncio.create_task(_ws_push_call_rejected(
-            caller_id=int(call_record.caller_id),
-            call_id=int(call_record.id),
-            reason="rejected",
-        ))
 
     return Success(
         data=CallActionOut(next_status="ended", msg="已拒绝").model_dump(),
@@ -464,14 +500,10 @@ async def reject_call(req_in: CallActionIn):
 @router.post("/call/cancel", summary="取消呼叫", dependencies=[Depends(DependAppAuth)])
 async def cancel_call(req_in: CallActionIn):
     user_id = CTX_APP_USER_ID.get()
+    trace_call_record: CallRecord | None = None
 
     async with in_transaction() as conn:
-        call_record = (
-            await CallRecord.filter(id=req_in.call_id)
-            .using_db(conn)
-            .select_for_update()
-            .first()
-        )
+        call_record = await CallRecord.filter(id=req_in.call_id).using_db(conn).select_for_update().first()
         if not call_record:
             return Fail(code=404, msg="通话不存在")
 
@@ -488,18 +520,23 @@ async def cancel_call(req_in: CallActionIn):
         call_record.end_basis = "manual_end"
         call_record.force_exit_user_id = None
         await call_record.save(using_db=conn)
-        await _append_call_trace(
-            call_record,
+        trace_call_record = call_record
+        # 推送 WebSocket 事件给被叫方（fire-and-forget）
+        asyncio.create_task(
+            _ws_push_call_cancelled(
+                callee_id=int(call_record.callee_id),
+                call_id=int(call_record.id),
+                reason="cancelled",
+            )
+        )
+
+    if trace_call_record:
+        _schedule_call_trace(
+            trace_call_record,
             phase="cancelled",
             actor_user_id=int(user_id),
             reason="cancelled",
         )
-        # 推送 WebSocket 事件给被叫方（fire-and-forget）
-        asyncio.create_task(_ws_push_call_cancelled(
-            callee_id=int(call_record.callee_id),
-            call_id=int(call_record.id),
-            reason="cancelled",
-        ))
 
     return Success(
         data=CallActionOut(next_status="ended", msg="已取消呼叫").model_dump(),
@@ -515,14 +552,11 @@ async def call_end(req_in: CallEndIn):
     _payer_id_for_balance_push: int | None = None
     _anchor_id_for_balance_push: int | None = None
     _balance_changed_for_push = False
+    trace_call_record: CallRecord | None = None
+    trace_reason: str | None = None
 
     async with in_transaction() as conn:
-        call_record = (
-            await CallRecord.filter(id=req_in.call_id)
-            .using_db(conn)
-            .select_for_update()
-            .first()
-        )
+        call_record = await CallRecord.filter(id=req_in.call_id).using_db(conn).select_for_update().first()
         if not call_record:
             return Fail(code=404, msg="通话不存在或已结束")
 
@@ -561,22 +595,24 @@ async def call_end(req_in: CallEndIn):
                 charged_amount = 0
 
             payer_id = await _resolve_payer_id_with_snapshot(call_record)
-            participants = await AppUser.filter(
-                id__in=[int(call_record.caller_id), int(call_record.callee_id)]
-            ).using_db(conn).all()
+            participants = (
+                await AppUser.filter(id__in=[int(call_record.caller_id), int(call_record.callee_id)])
+                .using_db(conn)
+                .all()
+            )
             if not getattr(call_record, "income_anchor_user_id", None):
-                call_record.income_anchor_user_id = (
-                    resolve_income_anchor_id(participants, payer_id) or None
-                )
+                call_record.income_anchor_user_id = resolve_income_anchor_id(participants, payer_id) or None
 
             if actual_fee > deducted_amount and payer_id > 0:
                 top_up_amount = actual_fee - deducted_amount
                 await AppUser.filter(id=payer_id).using_db(conn).select_for_update().first()
-                updated = await AppUser.filter(
-                    id=payer_id,
-                    coins__gte=top_up_amount,
-                ).using_db(conn).update(
-                    coins=F("coins") - top_up_amount
+                updated = (
+                    await AppUser.filter(
+                        id=payer_id,
+                        coins__gte=top_up_amount,
+                    )
+                    .using_db(conn)
+                    .update(coins=F("coins") - top_up_amount)
                 )
                 if updated > 0:
                     charged_amount += top_up_amount
@@ -597,9 +633,7 @@ async def call_end(req_in: CallEndIn):
                 refund_amount = deducted_amount - actual_fee
                 # 加行锁：防止并发退款导致重复到账
                 await AppUser.filter(id=payer_id).using_db(conn).select_for_update().first()
-                await AppUser.filter(id=payer_id).using_db(conn).update(
-                    coins=F("coins") + refund_amount
-                )
+                await AppUser.filter(id=payer_id).using_db(conn).update(coins=F("coins") + refund_amount)
                 charged_amount -= refund_amount
                 _payer_id_for_balance_push = payer_id
                 _balance_changed_for_push = True
@@ -624,38 +658,45 @@ async def call_end(req_in: CallEndIn):
                 _anchor_id_for_balance_push = settlement.anchor_user_id
             await call_record.save(using_db=conn)
 
-            await _append_call_trace(
-                call_record,
-                phase="ended",
-                actor_user_id=int(user_id),
-                reason=call_record.end_reason,
-            )
+            trace_call_record = call_record
+            trace_reason = call_record.end_reason
             # W-2 修复：仅在本地处理结束流程时通知对方，避免 watchdog 已推送后重复推送
             peer_id = (
-                int(call_record.callee_id)
-                if int(user_id) == int(call_record.caller_id)
-                else int(call_record.caller_id)
+                int(call_record.callee_id) if int(user_id) == int(call_record.caller_id) else int(call_record.caller_id)
             )
-            asyncio.create_task(_ws_push_call_ended_to_peer(
-                peer_id=peer_id,
-                caller_id=int(call_record.caller_id),
-                callee_id=int(call_record.callee_id),
-                call_id=int(call_record.id),
-                end_reason=call_record.end_reason,
-            ))
+            asyncio.create_task(
+                _ws_push_call_ended_to_peer(
+                    peer_id=peer_id,
+                    caller_id=int(call_record.caller_id),
+                    callee_id=int(call_record.callee_id),
+                    call_id=int(call_record.id),
+                    end_reason=call_record.end_reason,
+                )
+            )
 
         user = await AppUser.filter(id=user_id).using_db(conn).first()
         final_coins = decimal_to_float_2(user.coins) if user else 0.0
 
     # 事务结束后，如余额发生变化则推送余额更新给付费方
     if _payer_id_for_balance_push is not None and _balance_changed_for_push:
-        asyncio.create_task(_ws_push_balance_updated(
-            payer_id=_payer_id_for_balance_push,
-        ))
+        asyncio.create_task(
+            _ws_push_balance_updated(
+                payer_id=_payer_id_for_balance_push,
+            )
+        )
     if _anchor_id_for_balance_push is not None:
-        asyncio.create_task(_ws_push_balance_updated(
-            payer_id=_anchor_id_for_balance_push,
-        ))
+        asyncio.create_task(
+            _ws_push_balance_updated(
+                payer_id=_anchor_id_for_balance_push,
+            )
+        )
+    if trace_call_record:
+        _schedule_call_trace(
+            trace_call_record,
+            phase="ended",
+            actor_user_id=int(user_id),
+            reason=trace_reason,
+        )
 
     return Success(
         data=CallEndOut(
@@ -669,6 +710,7 @@ async def call_end(req_in: CallEndIn):
 
 
 # ===== WebSocket 推送辅助函数（fire-and-forget） =====
+
 
 async def _ws_push_call_incoming(
     callee_id: int,
