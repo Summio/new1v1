@@ -208,7 +208,7 @@ class HttpAuditLogMiddleware(BaseHTTPMiddleware):
         ctx_user_id = CTX_APP_USER_ID.get()
         ctx_user = CTX_APP_USER_OBJ.get()
         if ctx_user:
-            # App 用户（主播/普通用户）
+            # App 用户（认证用户/普通用户）
             data["user_id"] = ctx_user_id or 0
             data["username"] = ctx_user.nickname if hasattr(ctx_user, "nickname") and ctx_user.nickname else (
                 ctx_user.phone if hasattr(ctx_user, "phone") and ctx_user.phone else str(ctx_user.id)

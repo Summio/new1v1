@@ -35,7 +35,7 @@ async def app_login(req_in: AppLoginIn):
             "user_id": app_user.id,
             "nickname": app_user.nickname or app_user.phone,
             "avatar": to_relative_media_url(app_user.avatar),
-            "is_anchor": app_user.is_anchor,
+            "is_certified_user": app_user.is_certified_user,
         }
     )
 

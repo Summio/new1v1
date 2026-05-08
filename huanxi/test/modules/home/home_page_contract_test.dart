@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   test('home keeps PageView mounted while category data is loading', () {
     final text = File('lib/modules/home/home_page.dart').readAsStringSync();
-    final expandedStart = text.indexOf('// 主播列表 - PageView 支持左右滑动');
+    final expandedStart = text.indexOf('// 认证用户列表 - PageView 支持左右滑动');
     final pageViewStart = text.indexOf('PageView.builder', expandedStart);
     final firstLoadingBeforePageView = text.indexOf(
       'StatusView.loading(message:',
@@ -28,11 +28,11 @@ void main() {
     expect(text, contains('_selectCategory(index, animatePage: true)'));
   });
 
-  test('home aligns provider section before initial anchor refresh', () {
+  test('home aligns provider section before initial certified user refresh', () {
     final text = File('lib/modules/home/home_page.dart').readAsStringSync();
 
     expect(text, contains('notifier.setSection(_sectionForIndex(_currentIndex));'));
-    expect(text, contains('notifier.fetchAnchors(refresh: true);'));
+    expect(text, contains('notifier.fetchCertifiedUsers(refresh: true);'));
   });
 
   test(
@@ -50,30 +50,38 @@ void main() {
     },
   );
 
-  test('home does not render stale anchors on inactive category pages', () {
+  test('home does not render stale certified users on inactive category pages', () {
     final text = File('lib/modules/home/home_page.dart').readAsStringSync();
 
     expect(text, contains('final expectedSection = _sectionForIndex(widget.pageIndex);'));
-    expect(text, contains('final isCurrentSection = anchorState.section == expectedSection;'));
+    expect(
+      text,
+      contains(
+        'final isCurrentSection = certifiedUserState.section == expectedSection;',
+      ),
+    );
     expect(text, contains('if (!isCurrentSection)'));
   });
 
-  test('home gives anchor cards and cover images stable identity', () {
+  test('home gives certified user cards and cover images stable identity', () {
     final text = File('lib/modules/home/home_page.dart').readAsStringSync();
 
-    expect(text, contains('anchor_card_\${anchor.userId}_'));
-    expect(text, contains('anchor_cover_\${anchor.userId}_\$coverUrl'));
+    expect(text, contains('certified_user_card_\${certifiedUser.userId}_'));
+    expect(text, contains('certified_user_cover_\${certifiedUser.userId}_\$coverUrl'));
   });
 
-  test('anchor refresh clears stale anchors before loading new section data', () {
-    final text = File('lib/app/providers/anchor_provider.dart').readAsStringSync();
+  test('certified user refresh clears stale entries before loading new section data', () {
+    final text = File('lib/app/providers/certified_user_provider.dart').readAsStringSync();
 
     expect(text, contains('if (state.isLoading && !refresh) return;'));
-    expect(text, contains('anchors: refresh ? const [] : state.anchors'));
+    expect(
+      text,
+      contains('certifiedUsers: refresh ? const [] : state.certifiedUsers'),
+    );
   });
 
-  test('anchor provider ignores stale in-flight responses', () {
-    final text = File('lib/app/providers/anchor_provider.dart').readAsStringSync();
+  test('certified user provider ignores stale in-flight responses', () {
+    final text = File('lib/app/providers/certified_user_provider.dart').readAsStringSync();
 
     expect(text, contains('int _requestSerial = 0;'));
     expect(text, contains('final requestId = ++_requestSerial;'));

@@ -182,7 +182,7 @@ class TIMService:
         call_id: int | None,
         sender_nickname: str,
     ) -> bool:
-        """发送礼物通知 IM 信令给收礼方（主播）。
+        """发送礼物通知 IM 信令给收礼方（认证用户）。
 
         信令内容：
           {

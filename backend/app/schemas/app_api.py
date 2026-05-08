@@ -4,9 +4,9 @@ from typing import List, Optional
 from pydantic import BaseModel, Field, model_validator
 
 
-# ===== 主播 =====
+# ===== 认证用户 =====
 
-class AnchorOut(BaseModel):
+class CertifiedUserOut(BaseModel):
     id: int
     user_id: int
     nickname: str
@@ -19,7 +19,7 @@ class AnchorOut(BaseModel):
     diamonds: int = 0
 
 
-class AnchorListOut(BaseModel):
+class CertifiedUserListOut(BaseModel):
     id: int
     user_id: int
     nickname: str
@@ -37,24 +37,13 @@ class AnchorListOut(BaseModel):
 class DialingIn(BaseModel):
     target_user_id: Optional[int] = Field(default=None, description="目标用户ID(app_user.id)")
     target_id: Optional[int] = Field(default=None, description="兼容字段: 目标用户ID")
-    anchor_user_id: Optional[int] = Field(default=None, description="兼容旧字段: 目标用户ID")
-    anchor_id: Optional[int] = Field(default=None, description="兼容旧字段: 目标用户ID")
 
     @model_validator(mode="after")
-    def validate_anchor_user_id(self):
-        if (
-            self.target_user_id is None
-            and self.target_id is None
-            and self.anchor_user_id is None
-            and self.anchor_id is None
-        ):
+    def validate_target_user_id(self):
+        if self.target_user_id is None and self.target_id is None:
             raise ValueError("target_user_id is required")
         if self.target_user_id is None:
-            self.target_user_id = (
-                self.target_id
-                if self.target_id is not None
-                else (self.anchor_user_id if self.anchor_user_id is not None else self.anchor_id)
-            )
+            self.target_user_id = self.target_id
         return self
 
 
@@ -117,8 +106,6 @@ class GiftOut(BaseModel):
 class GiftSendIn(BaseModel):
     target_user_id: Optional[int] = Field(default=None, description="目标用户ID(app_user.id)")
     target_id: Optional[int] = Field(default=None, description="兼容字段: 目标用户ID")
-    anchor_user_id: Optional[int] = Field(default=None, description="兼容旧字段: 目标用户ID")
-    anchor_id: Optional[int] = Field(default=None, description="兼容旧字段: 目标用户ID")
     gift_id: int = Field(..., description="礼物ID")
     quantity: int = Field(default=1, ge=1, le=999, description="赠送数量")
     scene: str = Field(default="chat", description="送礼场景: chat/call")
@@ -126,20 +113,11 @@ class GiftSendIn(BaseModel):
     request_id: Optional[str] = Field(default=None, min_length=8, max_length=64, description="客户端请求幂等ID")
 
     @model_validator(mode="after")
-    def validate_anchor_user_id(self):
-        if (
-            self.target_user_id is None
-            and self.target_id is None
-            and self.anchor_user_id is None
-            and self.anchor_id is None
-        ):
+    def validate_target_user_id(self):
+        if self.target_user_id is None and self.target_id is None:
             raise ValueError("target_user_id is required")
         if self.target_user_id is None:
-            self.target_user_id = (
-                self.target_id
-                if self.target_id is not None
-                else (self.anchor_user_id if self.anchor_user_id is not None else self.anchor_id)
-            )
+            self.target_user_id = self.target_id
         scene = (self.scene or "").strip()
         if scene not in {"chat", "call"}:
             raise ValueError("scene must be chat or call")

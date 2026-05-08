@@ -24,7 +24,9 @@ class AuthState {
   final String? locationCity;
   final List<String> albumPhotos;
   final String? coverUrl;
-  final String? appRole;
+  final bool isCertifiedUser;
+  final String certificationStatus;
+  final int certifiedCallPrice;
   final double coins;
   final double diamonds;
   final bool isLoading;
@@ -43,7 +45,9 @@ class AuthState {
     this.locationCity,
     this.albumPhotos = const [],
     this.coverUrl,
-    this.appRole,
+    this.isCertifiedUser = false,
+    this.certificationStatus = 'none',
+    this.certifiedCallPrice = 0,
     this.coins = 0,
     this.diamonds = 0,
     this.isLoading = false,
@@ -63,7 +67,9 @@ class AuthState {
     String? locationCity,
     List<String>? albumPhotos,
     String? coverUrl,
-    String? appRole,
+    bool? isCertifiedUser,
+    String? certificationStatus,
+    int? certifiedCallPrice,
     double? coins,
     double? diamonds,
     bool? isLoading,
@@ -82,7 +88,9 @@ class AuthState {
       locationCity: locationCity ?? this.locationCity,
       albumPhotos: albumPhotos ?? this.albumPhotos,
       coverUrl: coverUrl ?? this.coverUrl,
-      appRole: appRole ?? this.appRole,
+      isCertifiedUser: isCertifiedUser ?? this.isCertifiedUser,
+      certificationStatus: certificationStatus ?? this.certificationStatus,
+      certifiedCallPrice: certifiedCallPrice ?? this.certifiedCallPrice,
       coins: coins ?? this.coins,
       diamonds: diamonds ?? this.diamonds,
       isLoading: isLoading ?? this.isLoading,
@@ -117,6 +125,7 @@ class AppInitState {
   final bool imTextBillingEnabled;
   final int imTextBillingPrice;
   final int imTextBillingAnchorShareBps;
+  final List<int> certifiedCallPriceTiers;
 
   const AppInitState({
     this.isLoading = false,
@@ -128,6 +137,7 @@ class AppInitState {
     this.imTextBillingEnabled = false,
     this.imTextBillingPrice = 0,
     this.imTextBillingAnchorShareBps = 5000,
+    this.certifiedCallPriceTiers = const [0, 100, 200, 300, 500],
   });
 
   AppInitState copyWith({
@@ -140,6 +150,7 @@ class AppInitState {
     bool? imTextBillingEnabled,
     int? imTextBillingPrice,
     int? imTextBillingAnchorShareBps,
+    List<int>? certifiedCallPriceTiers,
   }) {
     return AppInitState(
       isLoading: isLoading ?? this.isLoading,
@@ -152,6 +163,8 @@ class AppInitState {
       imTextBillingPrice: imTextBillingPrice ?? this.imTextBillingPrice,
       imTextBillingAnchorShareBps:
           imTextBillingAnchorShareBps ?? this.imTextBillingAnchorShareBps,
+      certifiedCallPriceTiers:
+          certifiedCallPriceTiers ?? this.certifiedCallPriceTiers,
     );
   }
 }
@@ -219,7 +232,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
           albumPhotos: _parseAlbum(cachedInfo['album_photos']),
           coverUrl: (normalizeMediaPayload(cachedInfo['cover_url']) as String?)
               ?.trim(),
-          appRole: cachedInfo['is_anchor'] == true ? 'anchor' : 'user',
+          isCertifiedUser: cachedInfo['is_certified_user'] == true,
+          certificationStatus:
+              (cachedInfo['certification_status'] as String?) ?? 'none',
+          certifiedCallPrice:
+              _parseNullableInt(cachedInfo['certified_call_price']) ?? 0,
           coins: _parseDouble(cachedInfo['coins']),
           diamonds: _parseDouble(cachedInfo['diamonds']),
         );
@@ -288,7 +305,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
         locationCity: respData['location_city'] as String?,
         albumPhotos: _parseAlbum(respData['album_photos']),
         coverUrl: (respData['cover_url'] as String?)?.trim(),
-        appRole: respData['is_anchor'] == true ? 'anchor' : 'user',
+        isCertifiedUser: respData['is_certified_user'] == true,
+        certificationStatus:
+            (respData['certification_status'] as String?) ?? 'none',
+        certifiedCallPrice:
+            _parseNullableInt(respData['certified_call_price']) ?? 0,
         coins: _parseDouble(respData['coins']),
         diamonds: _parseDouble(respData['diamonds']),
         isLoading: false,
@@ -343,7 +364,11 @@ class AuthNotifier extends StateNotifier<AuthState> {
         locationCity: respData['location_city'] as String?,
         albumPhotos: _parseAlbum(respData['album_photos']),
         coverUrl: (respData['cover_url'] as String?)?.trim(),
-        appRole: respData['is_anchor'] == true ? 'anchor' : 'user',
+        isCertifiedUser: respData['is_certified_user'] == true,
+        certificationStatus:
+            (respData['certification_status'] as String?) ?? 'none',
+        certifiedCallPrice:
+            _parseNullableInt(respData['certified_call_price']) ?? 0,
         coins: _parseDouble(respData['coins']),
         diamonds: _parseDouble(respData['diamonds']),
       );
@@ -507,6 +532,17 @@ class AppInitNotifier extends StateNotifier<AppInitState> {
       final sdkAppId = sdkAppIdRaw is num ? sdkAppIdRaw.toInt() : null;
       final imTextPriceRaw = imTextBilling?['price'];
       final imTextShareRaw = imTextBilling?['anchor_share_bps'];
+      final tierRaw = respData['certified_call_price_tiers'];
+      final tiers = tierRaw is List
+          ? tierRaw
+                .map((item) => item is num ? item.toInt() : int.tryParse('$item'))
+                .whereType<int>()
+                .where((item) => item >= 0)
+                .toSet()
+                .toList()
+          : <int>[0, 100, 200, 300, 500];
+      tiers.sort();
+      if (!tiers.contains(0)) tiers.insert(0, 0);
 
       state = state.copyWith(
         isLoading: false,
@@ -522,6 +558,7 @@ class AppInitNotifier extends StateNotifier<AppInitState> {
         imTextBillingAnchorShareBps: imTextShareRaw is num
             ? imTextShareRaw.toInt()
             : int.tryParse('${imTextShareRaw ?? 5000}') ?? 5000,
+        certifiedCallPriceTiers: tiers,
       );
     } catch (e) {
       AppLogger.debug('appInit.init error: $e');

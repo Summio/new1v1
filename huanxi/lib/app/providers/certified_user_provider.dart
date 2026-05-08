@@ -4,8 +4,8 @@ import '../../core/network/dio_client.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/utils/app_logger.dart';
 
-/// 主播信息
-class AnchorInfo {
+/// 认证用户信息
+class CertifiedUserInfo {
   final int id;
   final int userId;
   final String? avatar;
@@ -18,15 +18,15 @@ class AnchorInfo {
   final int? weightKg;
   final String? locationCity;
   final String? signature;
-  final String? anchorIntro;
+  final String? certifiedIntro;
   final double? callPrice;
   final bool? isOnline;
   final String? lastActive;
   final String? status;
-  final bool isAnchor;
+  final bool isCertifiedUser;
   final int? diamonds;
 
-  const AnchorInfo({
+  const CertifiedUserInfo({
     required this.id,
     required this.userId,
     this.avatar,
@@ -39,16 +39,16 @@ class AnchorInfo {
     this.weightKg,
     this.locationCity,
     this.signature,
-    this.anchorIntro,
+    this.certifiedIntro,
     this.callPrice,
     this.isOnline,
     this.lastActive,
     this.status,
-    this.isAnchor = true,
+    this.isCertifiedUser = true,
     this.diamonds,
   });
 
-  factory AnchorInfo.fromJson(Map<String, dynamic> json) {
+  factory CertifiedUserInfo.fromJson(Map<String, dynamic> json) {
     final rawAlbum = json['album_photos'];
     final album = rawAlbum is List
         ? rawAlbum
@@ -57,7 +57,7 @@ class AnchorInfo {
               .where((item) => item.isNotEmpty)
               .toList()
         : const <String>[];
-    return AnchorInfo(
+    return CertifiedUserInfo(
       id: json['id'] as int,
       userId: json['user_id'] as int,
       avatar: (json['avatar'] as String?)?.trim(),
@@ -70,28 +70,28 @@ class AnchorInfo {
       weightKg: (json['weight_kg'] as num?)?.toInt(),
       locationCity: json['location_city'] as String?,
       signature: (json['signature'] as String?)?.trim(),
-      anchorIntro: (json['intro'] ?? json['anchor_intro']) as String?,
+      certifiedIntro: (json['intro'] ?? json['certified_intro']) as String?,
       callPrice: (json['call_price'] as num?)?.toDouble(),
       isOnline: json['is_online'] as bool?,
       lastActive: json['last_active'] as String?,
       status: json['status'] as String?,
-      isAnchor: json['is_anchor'] as bool? ?? true,
+      isCertifiedUser: json['is_certified_user'] as bool? ?? true,
       diamonds: (json['diamonds'] as num?)?.toInt(),
     );
   }
 }
 
-/// 主播列表状态
-class AnchorListState {
-  final List<AnchorInfo> anchors;
+/// 认证用户列表状态
+class CertifiedUserListState {
+  final List<CertifiedUserInfo> certifiedUsers;
   final bool isLoading;
   final bool hasMore;
   final int currentPage;
   final String section;
   final String? error;
 
-  const AnchorListState({
-    this.anchors = const [],
+  const CertifiedUserListState({
+    this.certifiedUsers = const [],
     this.isLoading = false,
     this.hasMore = true,
     this.currentPage = 1,
@@ -99,16 +99,16 @@ class AnchorListState {
     this.error,
   });
 
-  AnchorListState copyWith({
-    List<AnchorInfo>? anchors,
+  CertifiedUserListState copyWith({
+    List<CertifiedUserInfo>? certifiedUsers,
     bool? isLoading,
     bool? hasMore,
     int? currentPage,
     String? section,
     String? error,
   }) {
-    return AnchorListState(
-      anchors: anchors ?? this.anchors,
+    return CertifiedUserListState(
+      certifiedUsers: certifiedUsers ?? this.certifiedUsers,
       isLoading: isLoading ?? this.isLoading,
       hasMore: hasMore ?? this.hasMore,
       currentPage: currentPage ?? this.currentPage,
@@ -118,21 +118,21 @@ class AnchorListState {
   }
 }
 
-/// 主播列表 Provider
-class AnchorListNotifier extends StateNotifier<AnchorListState> {
+/// 认证用户列表 Provider
+class CertifiedUserListNotifier extends StateNotifier<CertifiedUserListState> {
   final DioClient _dio;
   int _requestSerial = 0;
 
-  AnchorListNotifier(this._dio) : super(const AnchorListState());
+  CertifiedUserListNotifier(this._dio) : super(const CertifiedUserListState());
 
   void setSection(String section) {
     if (state.section == section) return;
-    state = AnchorListState(section: section);
-    fetchAnchors(refresh: true);
+    state = CertifiedUserListState(section: section);
+    fetchCertifiedUsers(refresh: true);
   }
 
-  /// 获取主播列表
-  Future<void> fetchAnchors({bool refresh = false}) async {
+  /// 获取认证用户列表
+  Future<void> fetchCertifiedUsers({bool refresh = false}) async {
     if (state.isLoading && !refresh) return;
     if (!refresh && !state.hasMore) return;
 
@@ -141,14 +141,14 @@ class AnchorListNotifier extends StateNotifier<AnchorListState> {
     final page = refresh ? 1 : state.currentPage;
 
     state = state.copyWith(
-      anchors: refresh ? const [] : state.anchors,
+      certifiedUsers: refresh ? const [] : state.certifiedUsers,
       isLoading: true,
       error: null,
     );
 
     try {
       final data = await _dio.apiGet(
-        ApiEndpoints.anchorList,
+        ApiEndpoints.certifiedUserList,
         params: {'page': page, 'page_size': 20, 'section': requestSection},
       );
 
@@ -159,13 +159,13 @@ class AnchorListNotifier extends StateNotifier<AnchorListState> {
       final rows = data['rows'] as List<dynamic>? ?? [];
       final hasMore = data['has_more'] as bool? ?? false;
 
-      final newAnchors = rows.map((e) {
-        return AnchorInfo.fromJson(Map<String, dynamic>.from(e));
+      final newCertifiedUsers = rows.map((e) {
+        return CertifiedUserInfo.fromJson(Map<String, dynamic>.from(e));
       }).toList();
 
       if (refresh) {
         // 后台更新头像但 URL 不变时，主动清理对应缓存，避免首页列表显示旧图
-        for (final item in newAnchors) {
+        for (final item in newCertifiedUsers) {
           final cover = item.coverUrl?.trim();
           if (cover == null || cover.isEmpty) continue;
           imageCache.evict(NetworkImage(cover));
@@ -173,7 +173,7 @@ class AnchorListNotifier extends StateNotifier<AnchorListState> {
       }
 
       state = state.copyWith(
-        anchors: refresh ? newAnchors : [...state.anchors, ...newAnchors],
+        certifiedUsers: refresh ? newCertifiedUsers : [...state.certifiedUsers, ...newCertifiedUsers],
         isLoading: false,
         hasMore: hasMore,
         currentPage: page + 1,
@@ -182,20 +182,21 @@ class AnchorListNotifier extends StateNotifier<AnchorListState> {
       if (requestId != _requestSerial || state.section != requestSection) {
         return;
       }
-      AppLogger.debug('anchor.fetchAnchors error: $e');
-      state = state.copyWith(isLoading: false, error: '主播列表加载失败，请稍后重试');
+      AppLogger.debug('certifiedUser.fetchCertifiedUsers error: $e');
+      state = state.copyWith(isLoading: false, error: '认证用户列表加载失败，请稍后重试');
     }
   }
 
   /// 下拉刷新
-  Future<void> refresh() => fetchAnchors(refresh: true);
+  Future<void> refresh() => fetchCertifiedUsers(refresh: true);
 
   /// 加载更多
-  Future<void> loadMore() => fetchAnchors(refresh: false);
+  Future<void> loadMore() => fetchCertifiedUsers(refresh: false);
 }
 
-/// 主播列表 Provider
-final anchorListProvider =
-    StateNotifierProvider<AnchorListNotifier, AnchorListState>((ref) {
-      return AnchorListNotifier(DioClient.instance);
+/// 认证用户列表 Provider
+final certifiedUserListProvider =
+    StateNotifierProvider<CertifiedUserListNotifier, CertifiedUserListState>((ref) {
+      return CertifiedUserListNotifier(DioClient.instance);
     });
+

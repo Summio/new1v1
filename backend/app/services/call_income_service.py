@@ -45,7 +45,7 @@ def resolve_income_anchor_id(users: list[AppUser], payer_id: int | None) -> int:
         (
             int(user.id)
             for user in users
-            if bool(user.is_anchor) and int(user.id) != int(payer_id)
+            if bool(user.is_certified_user) and int(user.id) != int(payer_id)
         ),
         0,
     )

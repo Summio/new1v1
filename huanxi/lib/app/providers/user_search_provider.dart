@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/utils/app_logger.dart';
-import 'anchor_provider.dart';
+import 'certified_user_provider.dart';
 
 Map<String, dynamic> buildUserSearchQueryParams({
   required int page,
@@ -17,7 +17,7 @@ Map<String, dynamic> buildUserSearchQueryParams({
 }
 
 class UserSearchState {
-  final List<AnchorInfo> users;
+  final List<CertifiedUserInfo> users;
   final bool isLoading;
   final bool hasMore;
   final int currentPage;
@@ -34,7 +34,7 @@ class UserSearchState {
   });
 
   UserSearchState copyWith({
-    List<AnchorInfo>? users,
+    List<CertifiedUserInfo>? users,
     bool? isLoading,
     bool? hasMore,
     int? currentPage,
@@ -89,7 +89,7 @@ class UserSearchNotifier extends StateNotifier<UserSearchState> {
 
     try {
       final data = await _dio.apiGet(
-        ApiEndpoints.anchorList,
+        ApiEndpoints.certifiedUserList,
         params: buildUserSearchQueryParams(
           page: page,
           pageSize: 20,
@@ -98,7 +98,7 @@ class UserSearchNotifier extends StateNotifier<UserSearchState> {
       );
       final rows = data['rows'] as List<dynamic>? ?? [];
       final newUsers = rows
-          .map((e) => AnchorInfo.fromJson(Map<String, dynamic>.from(e)))
+          .map((e) => CertifiedUserInfo.fromJson(Map<String, dynamic>.from(e)))
           .toList();
 
       state = state.copyWith(

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
-import '../../app/providers/anchor_provider.dart';
+import '../../app/providers/certified_user_provider.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
@@ -16,38 +16,42 @@ import 'moment_media_grid.dart';
 import 'moment_image_preview_page.dart';
 import 'moment_video_preview_page.dart';
 
-/// 主播详情页 (Momo 风格)
-class AnchorDetailPage extends ConsumerStatefulWidget {
-  final AnchorInfo? anchor;
+/// 认证用户详情页 (Momo 风格)
+class CertifiedUserDetailPage extends ConsumerStatefulWidget {
+  final CertifiedUserInfo? certifiedUser;
   final int? userId;
 
-  const AnchorDetailPage({super.key, this.anchor, this.userId});
+  const CertifiedUserDetailPage({super.key, this.certifiedUser, this.userId});
 
   @override
-  ConsumerState<AnchorDetailPage> createState() => _AnchorDetailPageState();
+  ConsumerState<CertifiedUserDetailPage> createState() => _CertifiedUserDetailPageState();
 }
 
-class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
+class _CertifiedUserDetailPageState extends ConsumerState<CertifiedUserDetailPage> {
   int _currentPhotoIndex = 0;
-  AnchorInfo? _anchor;
+  CertifiedUserInfo? _certifiedUser;
   bool _isLoading = false;
   bool _isFollowLoading = false;
   bool _isFollowing = false;
   String? _error;
 
-  AnchorInfo? get _resolvedAnchor => _anchor ?? widget.anchor;
+  CertifiedUserInfo? get _resolvedCertifiedUser =>
+      _certifiedUser ?? widget.certifiedUser;
 
   @override
   void initState() {
     super.initState();
-    _anchor = widget.anchor;
+    _certifiedUser = widget.certifiedUser;
     _loadProfile();
   }
 
-  Future<void> _openIm({required AnchorInfo anchor}) async {
+  Future<void> _openIm({required CertifiedUserInfo certifiedUser}) async {
     final result = await context.push(
-      '${AppRoutes.im}/${anchor.userId}',
-      extra: {'peerNickname': anchor.username, 'peerAvatarUrl': anchor.avatar},
+      '${AppRoutes.im}/${certifiedUser.userId}',
+      extra: {
+        'peerNickname': certifiedUser.username,
+        'peerAvatarUrl': certifiedUser.avatar,
+      },
     );
     _handleImPageResult(result);
   }
@@ -59,7 +63,7 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
     AppToast.showSnackBar(context, SnackBar(content: Text(message)));
   }
 
-  Future<void> _openCall(AnchorInfo anchor) async {
+  Future<void> _openCall(CertifiedUserInfo certifiedUser) async {
     try {
       unawaited(
         context
@@ -67,11 +71,12 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
               Uri(
                 path: AppRoutes.callOutgoing,
                 queryParameters: {
-                  'peerUserId': anchor.userId.toString(),
-                  'anchorId': anchor.userId.toString(),
-                  'peerName': anchor.username ?? '主播',
-                  'peerAvatar': anchor.avatar ?? '',
-                  'callPrice': '0',
+                  'peerUserId': certifiedUser.userId.toString(),
+                  'targetUserId': certifiedUser.userId.toString(),
+                  'peerName': certifiedUser.username ?? '认证用户',
+                  'peerAvatar': certifiedUser.avatar ?? '',
+                  'callPrice':
+                      certifiedUser.callPrice?.toStringAsFixed(0) ?? '0',
                 },
               ).toString(),
             )
@@ -119,10 +124,10 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
   }
 
   Future<void> _loadProfile() async {
-    final targetUserId = widget.userId ?? widget.anchor?.userId;
+    final targetUserId = widget.userId ?? widget.certifiedUser?.userId;
     if (targetUserId == null || targetUserId <= 0) return;
 
-    if (_anchor == null) {
+    if (_certifiedUser == null) {
       setState(() {
         _isLoading = true;
         _error = null;
@@ -133,14 +138,14 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
       final result = await UserHomeService.instance.getUserHome(targetUserId);
       if (!mounted) return;
       setState(() {
-        _anchor = result.anchor;
+        _certifiedUser = result.certifiedUser;
         _isFollowing = result.isFollowing;
         _isLoading = false;
         _error = null;
       });
     } on ApiException catch (e) {
       if (!mounted) return;
-      if (_anchor == null) {
+      if (_certifiedUser == null) {
         setState(() {
           _error = e.message;
           _isLoading = false;
@@ -152,7 +157,7 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
       }
     } catch (_) {
       if (!mounted) return;
-      if (_anchor == null) {
+      if (_certifiedUser == null) {
         setState(() {
           _error = '获取主页信息失败';
           _isLoading = false;
@@ -165,16 +170,16 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
     }
   }
 
-  Future<void> _toggleFollow(AnchorInfo anchor) async {
+  Future<void> _toggleFollow(CertifiedUserInfo certifiedUser) async {
     if (_isFollowLoading) return;
 
     final authState = ref.read(authProvider);
-    if (authState.userId != null && authState.userId == anchor.userId) return;
+    if (authState.userId != null && authState.userId == certifiedUser.userId) return;
 
     if (_isFollowing) {
-      final name = anchor.username?.trim().isNotEmpty == true
-          ? anchor.username!.trim()
-          : '用户${anchor.userId}';
+      final name = certifiedUser.username?.trim().isNotEmpty == true
+          ? certifiedUser.username!.trim()
+          : '用户${certifiedUser.userId}';
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
@@ -202,8 +207,8 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
 
     try {
       final next = _isFollowing
-          ? await UserHomeService.instance.unfollowUser(anchor.userId)
-          : await UserHomeService.instance.followUser(anchor.userId);
+          ? await UserHomeService.instance.unfollowUser(certifiedUser.userId)
+          : await UserHomeService.instance.followUser(certifiedUser.userId);
       if (!mounted) return;
       setState(() {
         _isFollowing = next;
@@ -233,16 +238,16 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
 
   @override
   Widget build(BuildContext context) {
-    final anchor = _resolvedAnchor;
+    final certifiedUser = _resolvedCertifiedUser;
     final authState = ref.watch(authProvider);
-    if (_isLoading && anchor == null) {
+    if (_isLoading && certifiedUser == null) {
       return const Scaffold(
         backgroundColor: Colors.white,
         body: Center(child: CircularProgressIndicator()),
       );
     }
-    if (anchor == null) {
-      final message = _error ?? '主播信息无效，请返回重试';
+    if (certifiedUser == null) {
+      final message = _error ?? '认证用户信息无效，请返回重试';
       return Scaffold(
         backgroundColor: Colors.white,
         appBar: AppBar(
@@ -282,17 +287,17 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
       );
     }
     final isSelf =
-        authState.userId != null && authState.userId == anchor.userId;
+        authState.userId != null && authState.userId == certifiedUser.userId;
     final screenWidth = MediaQuery.of(context).size.width;
     final devicePixelRatio = MediaQuery.of(context).devicePixelRatio;
     final rawHeaderCacheWidth = (screenWidth * devicePixelRatio).round();
     final headerCacheWidth = rawHeaderCacheWidth > 1080
         ? 1080
         : rawHeaderCacheWidth;
-    final photos = _detailPhotos(anchor);
+    final photos = _detailPhotos(certifiedUser);
     final hasPhotos = photos.isNotEmpty;
-    final age = _ageFromBirthDate(anchor.birthDate);
-    final zodiac = _zodiacFromBirthDate(anchor.birthDate);
+    final age = _ageFromBirthDate(certifiedUser.birthDate);
+    final zodiac = _zodiacFromBirthDate(certifiedUser.birthDate);
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -332,7 +337,7 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                       itemBuilder: (context, index) {
                         final photoUrl = photos[index];
                         return GestureDetector(
-                          key: ValueKey('anchor_album_photo_$index'),
+                          key: ValueKey('certified_user_album_photo_$index'),
                           behavior: HitTestBehavior.opaque,
                           onTap: () => _previewPhoto(photos, index),
                           child: Image.network(
@@ -403,8 +408,8 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                anchor.username ??
-                                    (anchor.isAnchor ? '主播' : '用户'),
+                                certifiedUser.username ??
+                                    (certifiedUser.isCertifiedUser ? '认证用户' : '用户'),
                                 style: const TextStyle(
                                   fontSize: 26,
                                   fontWeight: FontWeight.bold,
@@ -416,7 +421,7 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Text(
-                                    'ID: ${anchor.userId}',
+                                    'ID: ${certifiedUser.userId}',
                                     style: const TextStyle(
                                       fontSize: 13,
                                       color: AppTheme.textSecondary,
@@ -426,10 +431,10 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                                   const SizedBox(width: 4),
                                   InkWell(
                                     key: const ValueKey(
-                                      'anchor_user_id_copy_button',
+                                      'certified_user_id_copy_button',
                                     ),
                                     borderRadius: BorderRadius.circular(12),
-                                    onTap: () => _copyUserId(anchor.userId),
+                                    onTap: () => _copyUserId(certifiedUser.userId),
                                     child: const Padding(
                                       padding: EdgeInsets.all(3),
                                       child: Icon(
@@ -445,11 +450,11 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                               Row(
                                 children: [
                                   _buildTag(
-                                    icon: anchor.gender == 'male'
+                                    icon: certifiedUser.gender == 'male'
                                         ? Icons.male
                                         : Icons.female,
                                     label: age == null
-                                        ? _genderText(anchor.gender)
+                                        ? _genderText(certifiedUser.gender)
                                         : '$age岁',
                                     color: const Color(0xFFFF69B4),
                                   ),
@@ -459,7 +464,7 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                                     label: zodiac ?? '星座未填',
                                     color: AppTheme.primaryColor,
                                   ),
-                                  if ((anchor.status ?? 'normal') ==
+                                  if ((certifiedUser.status ?? 'normal') ==
                                       'banned') ...[
                                     const SizedBox(width: 8),
                                     _buildTag(
@@ -479,7 +484,7 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: (anchor.isOnline ?? false)
+                            color: (certifiedUser.isOnline ?? false)
                                 ? AppTheme.onlineGreen.withValues(alpha: 0.1)
                                 : AppTheme.offlineGray.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(20),
@@ -490,7 +495,7 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                                 width: 8,
                                 height: 8,
                                 decoration: BoxDecoration(
-                                  color: (anchor.isOnline ?? false)
+                                  color: (certifiedUser.isOnline ?? false)
                                       ? AppTheme.onlineGreen
                                       : AppTheme.offlineGray,
                                   shape: BoxShape.circle,
@@ -498,9 +503,9 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                (anchor.isOnline ?? false) ? '在线' : '离线',
+                                (certifiedUser.isOnline ?? false) ? '在线' : '离线',
                                 style: TextStyle(
-                                  color: (anchor.isOnline ?? false)
+                                  color: (certifiedUser.isOnline ?? false)
                                       ? AppTheme.onlineGreen
                                       : AppTheme.textSecondary,
                                   fontSize: 13,
@@ -519,21 +524,21 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                       children: [
                         _buildInfoChip(
                           icon: Icons.height,
-                          label: anchor.heightCm == null
+                          label: certifiedUser.heightCm == null
                               ? '身高未填'
-                              : '${anchor.heightCm}cm',
+                              : '${certifiedUser.heightCm}cm',
                         ),
                         _buildInfoChip(
                           icon: Icons.monitor_weight_outlined,
-                          label: anchor.weightKg == null
+                          label: certifiedUser.weightKg == null
                               ? '体重未填'
-                              : '${anchor.weightKg}kg',
+                              : '${certifiedUser.weightKg}kg',
                         ),
                         _buildInfoChip(
                           icon: Icons.location_on_outlined,
                           label:
-                              (anchor.locationCity?.trim().isNotEmpty ?? false)
-                              ? anchor.locationCity!.trim()
+                              (certifiedUser.locationCity?.trim().isNotEmpty ?? false)
+                              ? certifiedUser.locationCity!.trim()
                               : '所在地未填',
                         ),
                       ],
@@ -551,9 +556,9 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      (anchor.signature?.trim().isNotEmpty ?? false)
-                          ? anchor.signature!.trim()
-                          : '这个主播很懒，还没有填写个性签名哦~',
+                      (certifiedUser.signature?.trim().isNotEmpty ?? false)
+                          ? certifiedUser.signature!.trim()
+                          : '这个用户很懒，还没有填写个性签名哦~',
                       style: const TextStyle(
                         fontSize: 15,
                         color: AppTheme.textSecondary,
@@ -563,7 +568,7 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                     const SizedBox(height: 24),
                     const Divider(color: AppTheme.dividerColor),
                     const SizedBox(height: 24),
-                    _AnchorMomentsSection(userId: anchor.userId),
+                    _CertifiedUserMomentsSection(userId: certifiedUser.userId),
                     const SizedBox(height: 100),
                   ],
                 ),
@@ -597,7 +602,7 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                           child: OutlinedButton(
                             onPressed: _isFollowLoading
                                 ? null
-                                : () => _toggleFollow(anchor),
+                                : () => _toggleFollow(certifiedUser),
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               minimumSize: const Size(48, 48),
@@ -630,7 +635,7 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                         child: Tooltip(
                           message: '聊一聊',
                           child: OutlinedButton(
-                            onPressed: () => _openIm(anchor: anchor),
+                            onPressed: () => _openIm(certifiedUser: certifiedUser),
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               minimumSize: const Size(48, 48),
@@ -650,8 +655,8 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                         ),
                       ),
                     ],
-                    if (!isSelf && anchor.isAnchor) const SizedBox(width: 12),
-                    if (anchor.isAnchor)
+                    if (!isSelf && certifiedUser.isCertifiedUser) const SizedBox(width: 12),
+                    if (certifiedUser.isCertifiedUser)
                       Expanded(
                         flex: 2,
                         child: Container(
@@ -661,7 +666,7 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                             boxShadow: AppTheme.elevatedShadow,
                           ),
                           child: ElevatedButton(
-                            onPressed: () => _openCall(anchor),
+                            onPressed: () => _openCall(certifiedUser),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.transparent,
                               shadowColor: Colors.transparent,
@@ -678,7 +683,7 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
                                 const SizedBox(width: 8),
                                 Flexible(
                                   child: Text(
-                                    '立即通话 (${anchor.callPrice?.toStringAsFixed(0) ?? '0'}/分)',
+                                    '立即通话 (${certifiedUser.callPrice?.toStringAsFixed(0) ?? '0'}/分)',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
@@ -715,7 +720,7 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
       children: List.generate(count, (index) {
         final active = index == _currentPhotoIndex;
         return AnimatedContainer(
-          key: ValueKey('anchor_album_dot_$index'),
+          key: ValueKey('certified_user_album_dot_$index'),
           duration: const Duration(milliseconds: 180),
           margin: const EdgeInsets.symmetric(horizontal: 3),
           width: active ? 7 : 6,
@@ -782,10 +787,10 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
     );
   }
 
-  List<String> _detailPhotos(AnchorInfo anchor) {
+  List<String> _detailPhotos(CertifiedUserInfo certifiedUser) {
     final seen = <String>{};
     final photos = <String>[];
-    for (final item in anchor.albumPhotos) {
+    for (final item in certifiedUser.albumPhotos) {
       final url = item.trim();
       if (url.isEmpty || seen.contains(url)) continue;
       seen.add(url);
@@ -832,16 +837,18 @@ class _AnchorDetailPageState extends ConsumerState<AnchorDetailPage> {
   }
 }
 
-class _AnchorMomentsSection extends StatefulWidget {
+class _CertifiedUserMomentsSection extends StatefulWidget {
   final int userId;
 
-  const _AnchorMomentsSection({required this.userId});
+  const _CertifiedUserMomentsSection({required this.userId});
 
   @override
-  State<_AnchorMomentsSection> createState() => _AnchorMomentsSectionState();
+  State<_CertifiedUserMomentsSection> createState() =>
+      _CertifiedUserMomentsSectionState();
 }
 
-class _AnchorMomentsSectionState extends State<_AnchorMomentsSection> {
+class _CertifiedUserMomentsSectionState
+    extends State<_CertifiedUserMomentsSection> {
   late Future<MomentListResult> _future;
 
   @override
@@ -935,7 +942,7 @@ class _AnchorMomentsSectionState extends State<_AnchorMomentsSection> {
     return Column(
       children: [
         for (var i = 0; i < moments.length; i++) ...[
-          _AnchorMomentItem(moment: moments[i]),
+          _CertifiedUserMomentItem(moment: moments[i]),
           if (i != moments.length - 1)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 12),
@@ -947,10 +954,10 @@ class _AnchorMomentsSectionState extends State<_AnchorMomentsSection> {
   }
 }
 
-class _AnchorMomentItem extends StatelessWidget {
+class _CertifiedUserMomentItem extends StatelessWidget {
   final Moment moment;
 
-  const _AnchorMomentItem({required this.moment});
+  const _CertifiedUserMomentItem({required this.moment});
 
   @override
   Widget build(BuildContext context) {
@@ -1016,3 +1023,6 @@ class _AnchorMomentItem extends StatelessWidget {
     return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }
 }
+
+
+

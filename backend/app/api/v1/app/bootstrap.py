@@ -7,8 +7,10 @@ from app.services.im_text_billing_service import (
     dump_im_text_billing_config,
     parse_im_text_billing_config,
 )
+from app.services.certification_price_service import parse_certified_call_price_tiers
 
 router = APIRouter()
+_DEFAULT_CERTIFIED_CALL_PRICE_TIERS = [0, 100, 200, 300, 500]
 
 
 @router.get("/init/bootstrap", summary="获取 App 初始化配置")
@@ -68,6 +70,12 @@ async def get_app_bootstrap():
     except (json.JSONDecodeError, ValueError):
         withdraw_packages = []
 
+    certified_call_price_tiers_raw = config_map.get("certified_call_price_tiers") or json.dumps(
+        _DEFAULT_CERTIFIED_CALL_PRICE_TIERS,
+        ensure_ascii=False,
+    )
+    certified_call_price_tiers = parse_certified_call_price_tiers(certified_call_price_tiers_raw)
+
     return Success(
         data={
             "token_names": {
@@ -87,6 +95,7 @@ async def get_app_bootstrap():
             },
             "recharge_packages": recharge_packages,
             "withdraw_packages": withdraw_packages,
+            "certified_call_price_tiers": certified_call_price_tiers,
             "im_text_billing": dump_im_text_billing_config(
                 parse_im_text_billing_config(config_map)
             ),

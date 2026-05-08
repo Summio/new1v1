@@ -8,36 +8,37 @@ import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 
 import '../../app/theme/app_theme.dart';
+import '../../app/providers/auth_provider.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/media/image_upload_preprocessor.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/utils/app_toast.dart';
 
-/// 主播申请状态
-enum AnchorApplyStatus { none, pending, approved, rejected }
+/// 真人认证状态
+enum CertificationApplyStatus { none, pending, approved, rejected }
 
-/// 主播申请状态数据
-class AnchorApplyState {
-  final AnchorApplyStatus status;
+/// 真人认证状态数据
+class CertificationApplyState {
+  final CertificationApplyStatus status;
   final String? rejectReason;
   final String? facePhotoUrl;
   final bool isLoading;
 
-  const AnchorApplyState({
-    this.status = AnchorApplyStatus.none,
+  const CertificationApplyState({
+    this.status = CertificationApplyStatus.none,
     this.rejectReason,
     this.facePhotoUrl,
     this.isLoading = false,
   });
 
-  AnchorApplyState copyWith({
-    AnchorApplyStatus? status,
+  CertificationApplyState copyWith({
+    CertificationApplyStatus? status,
     String? rejectReason,
     String? facePhotoUrl,
     bool? isLoading,
   }) {
-    return AnchorApplyState(
+    return CertificationApplyState(
       status: status ?? this.status,
       rejectReason: rejectReason ?? this.rejectReason,
       facePhotoUrl: facePhotoUrl ?? this.facePhotoUrl,
@@ -46,32 +47,32 @@ class AnchorApplyState {
   }
 }
 
-/// 主播申请 Provider
-class AnchorApplyNotifier extends StateNotifier<AnchorApplyState> {
+/// 真人认证 Provider
+class CertificationApplyNotifier extends StateNotifier<CertificationApplyState> {
   final DioClient _dio;
 
-  AnchorApplyNotifier(this._dio) : super(const AnchorApplyState());
+  CertificationApplyNotifier(this._dio) : super(const CertificationApplyState());
 
   /// 查询申请状态
   Future<void> fetchStatus() async {
     state = state.copyWith(isLoading: true);
     try {
-      final data = await _dio.apiGet(ApiEndpoints.anchorApplyStatus);
+      final data = await _dio.apiGet(ApiEndpoints.certificationApplyStatus);
       final respData = data['data'] as Map<String, dynamic>?;
       if (respData == null) {
-        state = const AnchorApplyState();
+        state = const CertificationApplyState();
         return;
       }
 
       final statusStr = respData['status'] as String? ?? 'none';
-      state = AnchorApplyState(
+      state = CertificationApplyState(
         status: _parseStatus(statusStr),
         rejectReason: respData['reject_reason'] as String?,
         facePhotoUrl: (respData['face_photo_url'] as String?)?.trim(),
         isLoading: false,
       );
     } catch (_) {
-      state = const AnchorApplyState();
+      state = const CertificationApplyState();
     }
   }
 
@@ -93,7 +94,7 @@ class AnchorApplyNotifier extends StateNotifier<AnchorApplyState> {
         ),
       });
       final resp = await _dio.post<Map<String, dynamic>>(
-        ApiEndpoints.anchorApplyUploadFacePhoto,
+        ApiEndpoints.certificationApplyUploadFacePhoto,
         data: formData,
       );
       final body = resp.data ?? {};
@@ -110,13 +111,13 @@ class AnchorApplyNotifier extends StateNotifier<AnchorApplyState> {
     state = state.copyWith(isLoading: true);
     try {
       final data = await _dio.apiPost(
-        ApiEndpoints.anchorApply,
+        ApiEndpoints.certificationApply,
         data: {'face_photo_url': facePhotoUrl},
       );
       final code = data['code'] as int?;
       if (code == 200) {
-        state = AnchorApplyState(
-          status: AnchorApplyStatus.pending,
+        state = CertificationApplyState(
+          status: CertificationApplyStatus.pending,
           rejectReason: null,
           facePhotoUrl: facePhotoUrl,
           isLoading: false,
@@ -131,88 +132,127 @@ class AnchorApplyNotifier extends StateNotifier<AnchorApplyState> {
     }
   }
 
-  AnchorApplyStatus _parseStatus(String status) {
+  CertificationApplyStatus _parseStatus(String status) {
     switch (status) {
       case 'pending':
-        return AnchorApplyStatus.pending;
+        return CertificationApplyStatus.pending;
       case 'approved':
-        return AnchorApplyStatus.approved;
+        return CertificationApplyStatus.approved;
       case 'rejected':
-        return AnchorApplyStatus.rejected;
+        return CertificationApplyStatus.rejected;
       default:
-        return AnchorApplyStatus.none;
+        return CertificationApplyStatus.none;
     }
   }
 
   /// 重置为可申请状态（驳回后点击"重新申请"）
   void resetToForm() {
-    state = const AnchorApplyState();
+    state = const CertificationApplyState();
   }
 }
 
-/// 主播申请 Provider
-final anchorApplyProvider =
-    StateNotifierProvider<AnchorApplyNotifier, AnchorApplyState>((ref) {
-      return AnchorApplyNotifier(DioClient.instance);
+/// 真人认证 Provider
+final certificationApplyProvider =
+    StateNotifierProvider<CertificationApplyNotifier, CertificationApplyState>((ref) {
+      return CertificationApplyNotifier(DioClient.instance);
     });
 
-/// 主播申请页
-class AnchorApplyPage extends ConsumerStatefulWidget {
-  const AnchorApplyPage({super.key});
+/// 认证中心页
+class CertificationCenterPage extends ConsumerStatefulWidget {
+  const CertificationCenterPage({super.key});
 
   @override
-  ConsumerState<AnchorApplyPage> createState() => _AnchorApplyPageState();
+  ConsumerState<CertificationCenterPage> createState() => _CertificationCenterPageState();
 }
 
-class _AnchorApplyPageState extends ConsumerState<AnchorApplyPage> {
+class _CertificationCenterPageState extends ConsumerState<CertificationCenterPage> {
   static const String _exampleImageAsset =
-      'assets/images/anchor_apply_example.jpg';
+      'assets/images/certification_apply_example.jpg';
 
   String? _localFacePhotoUrl;
   bool _uploading = false;
+  int? _selectedPrice;
+  bool _savingPrice = false;
 
   @override
   void initState() {
     super.initState();
     Future.microtask(
-      () => ref.read(anchorApplyProvider.notifier).fetchStatus(),
+      () => ref.read(certificationApplyProvider.notifier).fetchStatus(),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final applyState = ref.watch(anchorApplyProvider);
+    final applyState = ref.watch(certificationApplyProvider);
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
-        title: const Text('申请成为主播'),
+        title: const Text('认证中心'),
         backgroundColor: Colors.white,
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
       ),
       body: applyState.isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _buildContent(applyState),
+          : SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSectionTitle('真人认证'),
+                  const SizedBox(height: 10),
+                  _buildPanel(child: _buildContent(applyState)),
+                  const SizedBox(height: 16),
+                  _buildSectionTitle('通话价格'),
+                  const SizedBox(height: 10),
+                  _buildPanel(child: _buildCallPriceContent()),
+                ],
+              ),
+            ),
     );
   }
 
-  Widget _buildContent(AnchorApplyState state) {
+  Widget _buildSectionTitle(String text) {
+    return Text(
+      text,
+      style: const TextStyle(
+        fontSize: 17,
+        fontWeight: FontWeight.w700,
+        color: AppTheme.textPrimary,
+      ),
+    );
+  }
+
+  Widget _buildPanel({required Widget child}) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE7EBF2)),
+      ),
+      child: child,
+    );
+  }
+
+  Widget _buildContent(CertificationApplyState state) {
     switch (state.status) {
-      case AnchorApplyStatus.pending:
+      case CertificationApplyStatus.pending:
         return _buildPendingView(state);
-      case AnchorApplyStatus.approved:
+      case CertificationApplyStatus.approved:
         return _buildApprovedView();
-      case AnchorApplyStatus.rejected:
+      case CertificationApplyStatus.rejected:
         return _buildRejectedView(state);
-      case AnchorApplyStatus.none:
+      case CertificationApplyStatus.none:
         return _buildApplyForm(state);
     }
   }
 
-  Widget _buildPendingView(AnchorApplyState state) {
-    return Center(
-      child: Padding(
+  Widget _buildPendingView(CertificationApplyState state) {
+    return Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -255,13 +295,11 @@ class _AnchorApplyPageState extends ConsumerState<AnchorApplyPage> {
             ),
           ],
         ),
-      ),
     );
   }
 
   Widget _buildApprovedView() {
-    return Center(
-      child: Padding(
+    return Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -278,7 +316,7 @@ class _AnchorApplyPageState extends ConsumerState<AnchorApplyPage> {
             ),
             const SizedBox(height: 12),
             const Text(
-              '您已成为认证主播',
+              '您已通过真人认证',
               style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 40),
@@ -296,13 +334,11 @@ class _AnchorApplyPageState extends ConsumerState<AnchorApplyPage> {
             ),
           ],
         ),
-      ),
     );
   }
 
-  Widget _buildRejectedView(AnchorApplyState state) {
-    return Center(
-      child: Padding(
+  Widget _buildRejectedView(CertificationApplyState state) {
+    return Padding(
         padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -338,7 +374,7 @@ class _AnchorApplyPageState extends ConsumerState<AnchorApplyPage> {
                 setState(() {
                   _localFacePhotoUrl = null;
                 });
-                ref.read(anchorApplyProvider.notifier).resetToForm();
+                ref.read(certificationApplyProvider.notifier).resetToForm();
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppTheme.primaryColor,
@@ -352,17 +388,14 @@ class _AnchorApplyPageState extends ConsumerState<AnchorApplyPage> {
             ),
           ],
         ),
-      ),
     );
   }
 
-  Widget _buildApplyForm(AnchorApplyState state) {
+  Widget _buildApplyForm(CertificationApplyState state) {
     final facePhotoUrl = (_localFacePhotoUrl ?? state.facePhotoUrl ?? '').trim();
     final canSubmit = facePhotoUrl.isNotEmpty && !_uploading && !state.isLoading;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 20),
-      child: Column(
+    return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildCompactPhotoSection(facePhotoUrl: facePhotoUrl),
@@ -387,8 +420,108 @@ class _AnchorApplyPageState extends ConsumerState<AnchorApplyPage> {
             ),
           ),
         ],
-      ),
     );
+  }
+
+  Widget _buildCallPriceContent() {
+    final authState = ref.watch(authProvider);
+    final initState = ref.watch(appInitProvider);
+    final isCertified = authState.isCertifiedUser;
+    final configuredTiers = initState.certifiedCallPriceTiers.isEmpty
+        ? const [0, 100, 200, 300, 500]
+        : initState.certifiedCallPriceTiers;
+    final tiers = isCertified ? configuredTiers : const [0];
+    final currentPrice = isCertified ? authState.certifiedCallPrice : 0;
+    final selected = tiers.contains(_selectedPrice)
+        ? _selectedPrice!
+        : (tiers.contains(currentPrice) ? currentPrice : tiers.first);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          isCertified ? '选择每分钟通话价格' : '未通过真人认证时只能设置免费通话',
+          style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: tiers.map((price) {
+            final active = selected == price;
+            return ChoiceChip(
+              label: Text(price == 0 ? '免费' : '${price ~/ 100}元/分钟'),
+              selected: active,
+              onSelected: isCertified
+                  ? (_) {
+                      setState(() {
+                        _selectedPrice = price;
+                      });
+                    }
+                  : null,
+              selectedColor: AppTheme.primaryColor.withValues(alpha: 0.14),
+              labelStyle: TextStyle(
+                color: active ? AppTheme.primaryColor : AppTheme.textPrimary,
+                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+              ),
+            );
+          }).toList(),
+        ),
+        const SizedBox(height: 14),
+        SizedBox(
+          width: double.infinity,
+          height: 44,
+          child: ElevatedButton(
+            onPressed: isCertified && !_savingPrice
+                ? () => _saveCallPrice(selected)
+                : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: const Color(0xFFD2D7DF),
+            ),
+            child: Text(_savingPrice ? '保存中...' : '保存通话价格'),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _saveCallPrice(int price) async {
+    setState(() {
+      _savingPrice = true;
+    });
+    try {
+      final data = await DioClient.instance.apiPost(
+        ApiEndpoints.certifiedCallPriceUpdate,
+        data: {'price': price},
+      );
+      if ((data['code'] as int?) != 200) {
+        throw ApiException(
+          code: data['code'] as int? ?? -1,
+          message: data['msg'] as String? ?? '保存失败',
+        );
+      }
+      await ref.read(authProvider.notifier).fetchUserInfo();
+      if (!mounted) return;
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(
+          content: Text('通话价格已保存'),
+          backgroundColor: Color(0xFF34C759),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (mounted) AppToast.error(context, e.message);
+    } catch (_) {
+      if (mounted) AppToast.error(context, '保存失败，请重试');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _savingPrice = false;
+        });
+      }
+    }
   }
 
   Widget _buildCompactPhotoSection({required String facePhotoUrl}) {
@@ -565,7 +698,7 @@ class _AnchorApplyPageState extends ConsumerState<AnchorApplyPage> {
         _uploading = true;
       });
 
-      final url = await ref.read(anchorApplyProvider.notifier).uploadFacePhoto(
+      final url = await ref.read(certificationApplyProvider.notifier).uploadFacePhoto(
         bytes: captured.bytes,
         filename: captured.filename,
       );
@@ -607,7 +740,7 @@ class _AnchorApplyPageState extends ConsumerState<AnchorApplyPage> {
     }
 
     final success = await ref
-        .read(anchorApplyProvider.notifier)
+        .read(certificationApplyProvider.notifier)
         .apply(facePhotoUrl: facePhotoUrl);
 
     if (success && mounted) {
@@ -797,7 +930,8 @@ class _FrontCameraCapturePageState extends State<_FrontCameraCapturePage> {
       Navigator.of(context).pop(
         _CapturedPhoto(
           bytes: bytes,
-          filename: 'anchor_face_${DateTime.now().millisecondsSinceEpoch}.jpg',
+          filename:
+              'certification_face_${DateTime.now().millisecondsSinceEpoch}.jpg',
         ),
       );
     } catch (_) {
@@ -921,3 +1055,4 @@ class _FrontCameraCapturePageState extends State<_FrontCameraCapturePage> {
     );
   }
 }
+

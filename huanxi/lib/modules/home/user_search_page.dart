@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../app/providers/anchor_provider.dart';
+import '../../app/providers/certified_user_provider.dart';
 import '../../app/providers/user_search_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
@@ -126,7 +126,7 @@ class _UserSearchPageState extends ConsumerState<UserSearchPage> {
 }
 
 class _UserSearchTile extends StatelessWidget {
-  final AnchorInfo user;
+  final CertifiedUserInfo user;
 
   const _UserSearchTile({required this.user});
 
@@ -138,7 +138,7 @@ class _UserSearchTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(18),
       child: InkWell(
         borderRadius: BorderRadius.circular(18),
-        onTap: () => context.push(AppRoutes.anchorDetail, extra: user),
+        onTap: () => context.push(AppRoutes.certifiedUserDetail, extra: user),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Row(
@@ -172,7 +172,7 @@ class _UserSearchTile extends StatelessWidget {
                             ),
                           ),
                         ),
-                        _UserTypeBadge(isAnchor: user.isAnchor),
+                        _UserTypeBadge(isCertifiedUser: user.isCertifiedUser),
                       ],
                     ),
                     const SizedBox(height: 6),
@@ -197,24 +197,24 @@ class _UserSearchTile extends StatelessWidget {
 }
 
 class _UserTypeBadge extends StatelessWidget {
-  final bool isAnchor;
+  final bool isCertifiedUser;
 
-  const _UserTypeBadge({required this.isAnchor});
+  const _UserTypeBadge({required this.isCertifiedUser});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: isAnchor
+        color: isCertifiedUser
             ? AppTheme.primaryColor.withValues(alpha: 0.12)
             : AppTheme.textSecondary.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        isAnchor ? '主播' : '用户',
+        isCertifiedUser ? '认证用户' : '用户',
         style: TextStyle(
-          color: isAnchor ? AppTheme.primaryColor : AppTheme.textSecondary,
+          color: isCertifiedUser ? AppTheme.primaryColor : AppTheme.textSecondary,
           fontSize: 11,
           fontWeight: FontWeight.w700,
         ),

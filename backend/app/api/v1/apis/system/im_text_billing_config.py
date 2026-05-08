@@ -14,7 +14,7 @@ router = APIRouter()
 CONFIG_ITEMS = {
     "im_text_message_billing_enabled": "文字聊天扣费开关",
     "im_text_message_price": "文字聊天每条扣费金币数",
-    "im_text_message_anchor_share_bps": "文字聊天主播分成比例",
+    "im_text_message_anchor_share_bps": "文字聊天认证用户分成比例",
 }
 
 

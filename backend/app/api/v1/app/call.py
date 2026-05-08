@@ -162,10 +162,10 @@ async def _get_free_seconds_before_billing() -> int:
 
 async def _resolve_payer_id(call_record: CallRecord) -> int:
     """
-    视频通话扣费方规则：非主播方永远付费。
-    - 主播（无论主叫还是被叫）不扣费
-    - 非主播用户（无论主叫还是被叫）付费
-    - 双方都不是主播：主叫方付费（caller_id）
+    视频通话扣费方规则：非认证用户方永远付费。
+    - 认证用户（无论主叫还是被叫）不扣费
+    - 非认证用户（无论主叫还是被叫）付费
+    - 双方都不是认证用户：主叫方付费（caller_id）
     B-2 修复：使用 select_for_update 加行锁，防止在检查期间 anchor 被审批/取消时出现 TOCTOU
     """
     caller_id = int(call_record.caller_id)
@@ -173,21 +173,21 @@ async def _resolve_payer_id(call_record: CallRecord) -> int:
 
     # 单次 IN 查询 + FOR UPDATE，避免并发状态变化导致 TOCTOU
     users = {
-        int(u.id): bool(u.is_anchor)
+        int(u.id): bool(u.is_certified_user)
         for u in await AppUser.filter(id__in=[caller_id, callee_id]).select_for_update().all()
     }
-    caller_is_anchor = users.get(caller_id, False)
-    callee_is_anchor = users.get(callee_id, False)
+    caller_is_certified_user = users.get(caller_id, False)
+    callee_is_certified_user = users.get(callee_id, False)
 
-    # 主播不承担通话费用
-    if caller_is_anchor and not callee_is_anchor:
-        # 主播是主叫，非主播是被叫 → 被叫付费
+    # 认证用户不承担通话费用
+    if caller_is_certified_user and not callee_is_certified_user:
+        # 认证用户是主叫，非认证用户是被叫 → 被叫付费
         return callee_id
-    if callee_is_anchor and not caller_is_anchor:
-        # 主播是被叫，非主播是主叫 → 主叫付费
+    if callee_is_certified_user and not caller_is_certified_user:
+        # 认证用户是被叫，非认证用户是主叫 → 主叫付费
         return caller_id
 
-    # 双方都是主播 → 不计费，返回 0（与 watchdog 规则一致）
+    # 双方都是认证用户 → 不计费，返回 0（与 watchdog 规则一致）
     return 0
 
 
@@ -233,17 +233,17 @@ async def dialing(req_in: DialingIn):
     if not await check_online(target_user.id):
         return Fail(code=400, msg="对方当前不在线，请稍后再试")
 
-    caller_is_anchor = bool(app_user.is_anchor)
-    callee_is_anchor = bool(target_user.is_anchor)
-    if caller_is_anchor and not callee_is_anchor:
-        call_price = int(app_user.anchor_call_price or 0)
-    elif callee_is_anchor and not caller_is_anchor:
-        call_price = int(target_user.anchor_call_price or 0)
+    caller_is_certified_user = bool(app_user.is_certified_user)
+    callee_is_certified_user = bool(target_user.is_certified_user)
+    if caller_is_certified_user and not callee_is_certified_user:
+        call_price = int(app_user.certified_call_price or 0)
+    elif callee_is_certified_user and not caller_is_certified_user:
+        call_price = int(target_user.certified_call_price or 0)
     else:
         call_price = 0
 
     # 仅在主叫方是实际扣费方时做余额门槛检查，不预扣。
-    if callee_is_anchor and not caller_is_anchor and app_user.coins < call_price:
+    if callee_is_certified_user and not caller_is_certified_user and app_user.coins < call_price:
         return Fail(code=501, msg="余额不足，请先充值")
 
     # 事务包裹忙线检查 + 记录创建：防止 TOCTOU 竞态
@@ -316,9 +316,9 @@ async def dialing(req_in: DialingIn):
 
         # 创建通话记录（同一事务内，锁已持有，无竞争）
         anchor_share_bps = await get_anchor_share_bps()
-        if caller_is_anchor and not callee_is_anchor:
+        if caller_is_certified_user and not callee_is_certified_user:
             income_anchor_user_id = int(caller_id)
-        elif callee_is_anchor and not caller_is_anchor:
+        elif callee_is_certified_user and not caller_is_certified_user:
             income_anchor_user_id = int(target_user.id)
         else:
             income_anchor_user_id = None

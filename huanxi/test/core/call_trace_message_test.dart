@@ -64,7 +64,7 @@ void main() {
     expect(trace!.toDisplayText(currentUserId: 1001), '对方已拒绝视频通话');
   });
 
-  test('detailText shows income for anchor view', () {
+  test('detailText shows income for certified user view', () {
     final trace = CallTraceMessage.fromJsonMap({
       'protocol': 'call_trace.v1',
       'event_id': 'call:trace:101:ended',
@@ -82,11 +82,11 @@ void main() {
 
     final text = trace!.detailText(
       currentUserId: 2002,
-      isCurrentUserAnchor: true,
+      isCurrentUserCertified: true,
       coinName: '金币',
       diamondName: '钻石',
     );
-    expect(text, '时长 01:30 · 收入 60 钻石');
+    expect(text, '时长 01:30 · 收入 60.00 钻石');
   });
 
   test('detailText shows expense for user view', () {
@@ -107,14 +107,14 @@ void main() {
 
     final text = trace!.detailText(
       currentUserId: 1001,
-      isCurrentUserAnchor: false,
+      isCurrentUserCertified: false,
       coinName: '金币',
       diamondName: '钻石',
     );
-    expect(text, '时长 01:30 · 消费 120 金币');
+    expect(text, '时长 01:30 · 消费 120.00 金币');
   });
 
-  test('detailText does not fallback to income when anchor income is absent', () {
+  test('detailText does not fallback to income when certified user income is absent', () {
     final trace = CallTraceMessage.fromJsonMap({
       'protocol': 'call_trace.v1',
       'event_id': 'call:trace:101:ended',
@@ -132,7 +132,7 @@ void main() {
 
     final text = trace!.detailText(
       currentUserId: 2002,
-      isCurrentUserAnchor: true,
+      isCurrentUserCertified: true,
       coinName: '金币',
       diamondName: '钻石',
     );

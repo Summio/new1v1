@@ -47,10 +47,37 @@ call_income_service = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = call_income_service
 SPEC.loader.exec_module(call_income_service)
 
+for name in [
+    "app.core.time_utils",
+    "app.core",
+    "app.models",
+    "app.utils.parse",
+    "app.utils",
+    "app",
+    "tortoise.expressions",
+    "tortoise",
+]:
+    sys.modules.pop(name, None)
+
 DEFAULT_ANCHOR_SHARE_BPS = call_income_service.DEFAULT_ANCHOR_SHARE_BPS
 calc_anchor_income_diamonds = call_income_service.calc_anchor_income_diamonds
 get_anchor_share_bps = call_income_service.get_anchor_share_bps
 resolve_income_anchor_id = call_income_service.resolve_income_anchor_id
+
+
+def teardown_module(_module):
+    for name in [
+        SPEC.name,
+        "app.core.time_utils",
+        "app.core",
+        "app.models",
+        "app.utils.parse",
+        "app.utils",
+        "app",
+        "tortoise.expressions",
+        "tortoise",
+    ]:
+        sys.modules.pop(name, None)
 
 
 def test_calc_anchor_income_uses_bps_and_rounds_down() -> None:
@@ -81,8 +108,8 @@ async def test_get_anchor_share_bps_falls_back_and_clamps(monkeypatch: pytest.Mo
 
 
 def test_resolve_income_anchor_id_only_returns_non_payer_anchor() -> None:
-    user = SimpleNamespace(id=1001, is_anchor=False)
-    anchor = SimpleNamespace(id=2002, is_anchor=True)
+    user = SimpleNamespace(id=1001, is_certified_user=False)
+    anchor = SimpleNamespace(id=2002, is_certified_user=True)
 
     assert resolve_income_anchor_id([user, anchor], payer_id=1001) == 2002
     assert resolve_income_anchor_id([user, anchor], payer_id=2002) == 0

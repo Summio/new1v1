@@ -62,12 +62,12 @@ async def clear_manual_offline(user_id: int) -> None:
     await redis.delete(f"{_MANUAL_OFFLINE_KEY_PREFIX}{user_id}")
 
 
-async def mark_online_since(user_id: int, *, is_anchor: bool = False) -> None:
-    """记录用户本次上线时间，用于活跃主播排序。"""
+async def mark_online_since(user_id: int, *, is_certified_user: bool = False) -> None:
+    """记录用户本次上线时间，用于活跃认证用户排序。"""
     redis = await get_redis()
     score = int(time.time() * 1000)
     await redis.zadd(_WS_ONLINE_SINCE_KEY, {str(user_id): score})
-    if is_anchor:
+    if is_certified_user:
         await redis.zadd(_WS_ONLINE_ANCHOR_SINCE_KEY, {str(user_id): score})
     else:
         await redis.zrem(_WS_ONLINE_ANCHOR_SINCE_KEY, user_id)
@@ -81,13 +81,13 @@ async def clear_online_since(user_id: int) -> None:
 
 
 async def count_online_user_ids() -> int:
-    """获取当前在线主播数量，用于首页分页计算。"""
+    """获取当前在线认证用户数量，用于首页分页计算。"""
     redis = await get_redis()
     return int(await redis.zcard(_WS_ONLINE_ANCHOR_SINCE_KEY))
 
 
 async def get_online_user_id_page(offset: int, limit: int) -> list[int]:
-    """分页获取在线主播 ID，避免读取全量在线集合。"""
+    """分页获取在线认证用户 ID，避免读取全量在线集合。"""
     if limit <= 0:
         return []
 

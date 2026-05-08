@@ -105,7 +105,7 @@ class Gift(BaseModel):
 class CallRecord(BaseModel, TimestampMixin):
     """通话记录"""
     caller_id = fields.BigIntField(description="主叫用户ID", index=True)
-    callee_id = fields.BigIntField(description="被叫用户ID(主播)", index=True)
+    callee_id = fields.BigIntField(description="被叫用户ID(认证用户)", index=True)
     call_price = fields.BigIntField(default=0, description="通话单价(分/分钟)，以发起时价格固定计费")
     status = fields.CharField(max_length=20, default="pending", description="pending/ongoing/ended/failed/timeout", index=True)
     duration = fields.IntField(default=0, description="通话时长(秒)")
@@ -128,10 +128,10 @@ class CallRecord(BaseModel, TimestampMixin):
     last_renew_at = fields.DatetimeField(null=True, description="最后一次续租时间")
     billing_free_seconds = fields.BigIntField(default=10, description="本次通话免费秒数快照")
     payer_user_id = fields.BigIntField(null=True, description="本次通话付费用户ID快照")
-    income_anchor_user_id = fields.BigIntField(null=True, description="本次通话收益主播ID快照")
-    anchor_share_bps = fields.IntField(default=5000, description="本次通话主播分成比例快照（万分比）")
-    anchor_income_diamonds = fields.BigIntField(default=0, description="本次通话主播收益钻石")
-    income_settled_at = fields.DatetimeField(null=True, description="主播收益结算时间")
+    income_anchor_user_id = fields.BigIntField(null=True, description="本次通话收益认证用户ID快照")
+    anchor_share_bps = fields.IntField(default=5000, description="本次通话认证用户分成比例快照（万分比）")
+    anchor_income_diamonds = fields.BigIntField(default=0, description="本次通话认证用户收益钻石")
+    income_settled_at = fields.DatetimeField(null=True, description="认证用户收益结算时间")
 
     class Meta:
         table = "call_record"
@@ -146,8 +146,8 @@ class GiftRecord(BaseModel, TimestampMixin):
     price = fields.BigIntField(description="礼物单价(分)")
     quantity = fields.IntField(default=1, description="礼物数量")
     total_price = fields.BigIntField(default=0, description="礼物总价(分)")
-    anchor_share_bps = fields.IntField(default=10000, description="主播分成比例快照(万分比)")
-    anchor_income_diamonds = fields.DecimalField(max_digits=18, decimal_places=2, default=0, description="主播礼物收益钻石")
+    anchor_share_bps = fields.IntField(default=10000, description="认证用户分成比例快照(万分比)")
+    anchor_income_diamonds = fields.DecimalField(max_digits=18, decimal_places=2, default=0, description="认证用户礼物收益钻石")
 
     class Meta:
         table = "gift_record"
@@ -159,12 +159,12 @@ class ImTextMessageChargeRecord(BaseModel, TimestampMixin):
     receiver_id = fields.BigIntField(description="接收方用户ID", index=True)
     request_id = fields.CharField(max_length=64, description="客户端请求幂等ID")
     price = fields.BigIntField(default=0, description="文字消息扣费金币数")
-    anchor_share_bps = fields.IntField(default=5000, description="主播分成比例快照(万分比)")
+    anchor_share_bps = fields.IntField(default=5000, description="认证用户分成比例快照(万分比)")
     anchor_income_diamonds = fields.DecimalField(
         max_digits=18,
         decimal_places=2,
         default=0,
-        description="主播收益钻石",
+        description="认证用户收益钻石",
     )
     status = fields.CharField(max_length=20, default="charged", description="charged", index=True)
 

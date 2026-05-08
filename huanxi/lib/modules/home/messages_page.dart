@@ -369,7 +369,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    '和主播互动后将在此处收到消息',
+                    '和认证用户互动后将在此处收到消息',
                     style: TextStyle(
                       fontSize: 14,
                       color: AppTheme.textSecondary,

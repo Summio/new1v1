@@ -12,7 +12,7 @@ import 'package:huanxi/core/utils/app_toast.dart';
 /// 礼物面板
 /// 全屏底部弹窗，显示礼物列表，支持发送礼物
 class GiftPanel extends ConsumerStatefulWidget {
-  final String anchorId;
+  final String targetUserId;
   final String scene;
   final int? callId;
   final ValueChanged<GiftSendResult>? onGiftSent;
@@ -20,7 +20,7 @@ class GiftPanel extends ConsumerStatefulWidget {
 
   const GiftPanel({
     super.key,
-    required this.anchorId,
+    required this.targetUserId,
     this.scene = 'chat',
     this.callId,
     this.onGiftSent,
@@ -114,7 +114,7 @@ class _GiftPanelState extends ConsumerState<GiftPanel> {
         .read(giftListProvider.notifier)
         .sendGift(
           giftId: gift.id,
-          anchorId: int.tryParse(widget.anchorId) ?? 0,
+          targetUserId: int.tryParse(widget.targetUserId) ?? 0,
           quantity: 1,
           scene: widget.scene,
           callId: widget.callId,

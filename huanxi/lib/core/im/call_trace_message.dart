@@ -123,7 +123,7 @@ class CallTraceMessage {
 
   String detailText({
     required int currentUserId,
-    required bool isCurrentUserAnchor,
+    required bool isCurrentUserCertified,
     String coinName = '金币',
     String diamondName = '钻石',
   }) {
@@ -131,10 +131,10 @@ class CallTraceMessage {
     if (durationSeconds > 0) {
       parts.add('时长 ${_formatDuration(durationSeconds)}');
     }
-    final shouldShowIncome = isCurrentUserAnchor &&
+    final shouldShowIncome = isCurrentUserCertified &&
         incomeAnchorUserId == currentUserId &&
         anchorIncomeDiamonds > 0;
-    final shouldShowExpense = totalFeeCoins > 0 && !isCurrentUserAnchor;
+    final shouldShowExpense = totalFeeCoins > 0 && !isCurrentUserCertified;
     if (shouldShowIncome) {
       parts.add('收入 ${anchorIncomeDiamonds.toStringAsFixed(2)} $diamondName');
     } else if (shouldShowExpense) {

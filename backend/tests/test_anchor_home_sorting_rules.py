@@ -1,7 +1,7 @@
 from datetime import datetime
 from types import SimpleNamespace
 
-from app.api.v1.app.anchor import _anchor_sort_key
+from app.api.v1.app.certified_user import _certified_user_sort_key
 
 
 def _user(
@@ -12,7 +12,7 @@ def _user(
 ):
     return SimpleNamespace(
         id=user_id,
-        anchor_reviewed_at=reviewed_at,
+        certification_reviewed_at=reviewed_at,
         recommend_weight=recommend_weight,
     )
 
@@ -24,7 +24,7 @@ def test_active_section_keeps_online_sorted_by_online_since() -> None:
 
     users = [offline, old_online, new_online]
     users.sort(
-        key=lambda user: _anchor_sort_key(
+        key=lambda user: _certified_user_sort_key(
             user,
             "active",
             online_ids={1, 2},
@@ -42,7 +42,7 @@ def test_active_section_sorts_offline_by_latest_reviewed_at() -> None:
 
     users = [old_offline_with_high_id, new_offline_with_low_id]
     users.sort(
-        key=lambda user: _anchor_sort_key(
+        key=lambda user: _certified_user_sort_key(
             user,
             "active",
             online_ids=set(),
@@ -60,7 +60,7 @@ def test_recommend_section_sorts_offline_by_recommend_weight() -> None:
 
     users = [low_weight, high_weight]
     users.sort(
-        key=lambda user: _anchor_sort_key(
+        key=lambda user: _certified_user_sort_key(
             user,
             "recommend",
             online_ids=set(),
@@ -78,7 +78,7 @@ def test_new_section_sorts_offline_by_latest_reviewed_at() -> None:
 
     users = [old_offline_with_high_id, new_offline_with_low_id]
     users.sort(
-        key=lambda user: _anchor_sort_key(
+        key=lambda user: _certified_user_sort_key(
             user,
             "new",
             online_ids=set(),
@@ -97,12 +97,12 @@ def test_active_and_new_use_same_offline_review_sorting() -> None:
 
     active_order = sorted(
         users,
-        key=lambda user: _anchor_sort_key(user, "active", set(), {}),
+        key=lambda user: _certified_user_sort_key(user, "active", set(), {}),
         reverse=True,
     )
     new_order = sorted(
         users,
-        key=lambda user: _anchor_sort_key(user, "new", set(), {}),
+        key=lambda user: _certified_user_sort_key(user, "new", set(), {}),
         reverse=True,
     )
 

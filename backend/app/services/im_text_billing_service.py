@@ -121,7 +121,7 @@ async def charge_im_text_message(
         )
 
     config = await load_im_text_billing_config()
-    should_charge = config.enabled and config.price > 0 and bool(receiver.is_anchor) and not bool(sender.is_anchor)
+    should_charge = config.enabled and config.price > 0 and bool(receiver.is_certified_user) and not bool(sender.is_certified_user)
     if not should_charge:
         return IMTextChargeResult(
             charged=False,

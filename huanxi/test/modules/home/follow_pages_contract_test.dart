@@ -79,13 +79,13 @@ void main() {
     final followingPage = File(
       'lib/modules/home/my_following_page.dart',
     ).readAsStringSync();
-    final anchorDetailPage = File(
-      'lib/modules/home/anchor_detail_page.dart',
+    final certifiedUserDetailPage = File(
+      'lib/modules/home/certified_user_detail_page.dart',
     ).readAsStringSync();
 
     expect(followingPage, contains('确认取消关注'));
     expect(followingPage, contains('确定不再关注'));
-    expect(anchorDetailPage, contains('确认取消关注'));
-    expect(anchorDetailPage, contains('确定不再关注'));
+    expect(certifiedUserDetailPage, contains('确认取消关注'));
+    expect(certifiedUserDetailPage, contains('确定不再关注'));
   });
 }
