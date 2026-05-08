@@ -13,6 +13,7 @@ from .call_records import call_records_router
 from .depts import depts_router
 from .gift import gift_router
 from .menus import menus_router
+from .moments import moments_router
 from .recharge import router as recharge_router
 from .roles import roles_router
 from .system_config import system_config_router, system_config_spec_router
@@ -37,4 +38,5 @@ v1_router.include_router(app_users_router, prefix="/app_user", dependencies=[Dep
 v1_router.include_router(call_records_router, prefix="/call_record", dependencies=[DependPermission])
 v1_router.include_router(gift_router, prefix="/gift", dependencies=[DependPermission])
 v1_router.include_router(recharge_router, prefix="/recharge", dependencies=[DependPermission])
+v1_router.include_router(moments_router, prefix="/moment", dependencies=[DependPermission])
 v1_router.include_router(system_router, prefix="/apis/system", dependencies=[DependPermission])

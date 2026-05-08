@@ -16,6 +16,7 @@ async def test_get_user_info_serializes_decimal_balances() -> None:
         phone="13800138000",
         nickname="test",
         avatar=None,
+        signature="保持开心",
         gender="secret",
         birth_date=None,
         height_cm=None,
@@ -44,3 +45,4 @@ async def test_get_user_info_serializes_decimal_balances() -> None:
     assert payload["data"]["coins"] == 12.3
     assert payload["data"]["diamonds"] == 4.5
     assert payload["data"]["frozen_diamonds"] == 1.2
+    assert payload["data"]["signature"] == "保持开心"

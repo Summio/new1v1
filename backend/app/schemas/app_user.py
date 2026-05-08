@@ -76,6 +76,7 @@ class AppUserInfoOut(BaseModel):
     phone: str
     nickname: Optional[str] = None
     avatar: Optional[str] = None
+    signature: Optional[str] = None
     gender: str = "secret"
     birth_date: Optional[date] = None
     height_cm: Optional[int] = None
@@ -95,6 +96,7 @@ class AppUserInfoOut(BaseModel):
 class AppUserProfileUpdateIn(BaseModel):
     nickname: Optional[str] = Field(default=None, max_length=30, description="昵称")
     avatar: Optional[str] = Field(default=None, max_length=500, description="头像URL")
+    signature: Optional[str] = Field(default=None, max_length=500, description="个性签名")
     gender: Optional[GenderType] = Field(default=None, description="性别")
     birth_date: Optional[date] = Field(default=None, description="出生日期")
     height_cm: Optional[int] = Field(default=None, ge=50, le=260, description="身高(cm)")
@@ -108,6 +110,7 @@ class AppUserAdminUpdateIn(BaseModel):
     id: int = Field(..., ge=1, description="用户ID")
     nickname: Optional[str] = Field(default=None, max_length=30, description="昵称")
     avatar: Optional[str] = Field(default=None, max_length=500, description="头像URL")
+    signature: Optional[str] = Field(default=None, max_length=500, description="个性签名")
     gender: Optional[GenderType] = Field(default=None, description="性别")
     birth_date: Optional[date] = Field(default=None, description="出生日期")
     height_cm: Optional[int] = Field(default=None, ge=50, le=260, description="身高(cm)")
@@ -117,6 +120,8 @@ class AppUserAdminUpdateIn(BaseModel):
     cover_url: Optional[str] = Field(default=None, max_length=500, description="封面URL")
     status: Optional[Literal["normal", "banned"]] = Field(default=None, description="状态")
     is_anchor: Optional[bool] = Field(default=None, description="是否主播")
+    is_recommended: Optional[bool] = Field(default=None, description="是否首页推荐主播")
+    recommend_weight: Optional[int] = Field(default=None, ge=0, le=999999, description="主播推荐值")
     anchor_intro: Optional[str] = Field(default=None, max_length=500, description="主播简介")
     anchor_tags: Optional[List[str]] = Field(default=None, description="主播标签")
     anchor_call_price: Optional[int] = Field(default=None, ge=10, le=1000, description="主播通话价格(分/分钟)")

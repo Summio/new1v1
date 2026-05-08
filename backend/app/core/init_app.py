@@ -69,9 +69,20 @@ def build_operation_children(parent_id: int) -> list[Menu]:
         ),
         Menu(
             menu_type=MenuType.MENU,
+            name="动态管理",
+            path="moment",
+            order=4,
+            parent_id=parent_id,
+            icon="material-symbols:dynamic-feed-rounded",
+            is_hidden=False,
+            component="/operation/moment",
+            keepalive=False,
+        ),
+        Menu(
+            menu_type=MenuType.MENU,
             name="充值管理",
             path="recharge",
-            order=4,
+            order=5,
             parent_id=parent_id,
             icon="material-symbols:account-balance-wallet-outline-rounded",
             is_hidden=False,
@@ -82,7 +93,7 @@ def build_operation_children(parent_id: int) -> list[Menu]:
             menu_type=MenuType.MENU,
             name="提现管理",
             path="withdraw",
-            order=5,
+            order=6,
             parent_id=parent_id,
             icon="material-symbols:payments-outline-rounded",
             is_hidden=False,
@@ -352,7 +363,7 @@ async def init_roles():
     # 兼容存量环境：为所有历史角色补齐运营中心菜单与通话记录查询权限（幂等）
     all_roles = await Role.all()
     operation_menus = await Menu.filter(
-        path__in=["/operation", "app-user", "call-record", "gift", "recharge", "withdraw"]
+        path__in=["/operation", "app-user", "call-record", "gift", "moment", "recharge", "withdraw"]
     ).all()
     if all_roles and operation_menus:
         for role in all_roles:
@@ -366,6 +377,15 @@ async def init_roles():
     if gift_list_api and all_roles:
         for role in all_roles:
             await role.apis.add(gift_list_api)
+    moment_apis = await Api.filter(
+        path__in=[
+            "/api/v1/moment/list",
+            "/api/v1/moment/delete",
+        ],
+    ).all()
+    if moment_apis and all_roles:
+        for role in all_roles:
+            await role.apis.add(*moment_apis)
     recharge_list_api = await Api.filter(method="GET", path="/api/v1/recharge/list").first()
     if recharge_list_api and all_roles:
         for role in all_roles:

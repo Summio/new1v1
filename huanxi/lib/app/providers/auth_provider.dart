@@ -16,6 +16,7 @@ class AuthState {
   final int? userId;
   final String? username;
   final String? avatar;
+  final String? signature;
   final String gender;
   final String? birthDate;
   final int? heightCm;
@@ -34,6 +35,7 @@ class AuthState {
     this.userId,
     this.username,
     this.avatar,
+    this.signature,
     this.gender = 'secret',
     this.birthDate,
     this.heightCm,
@@ -53,6 +55,7 @@ class AuthState {
     int? userId,
     String? username,
     String? avatar,
+    String? signature,
     String? gender,
     String? birthDate,
     int? heightCm,
@@ -71,6 +74,7 @@ class AuthState {
       userId: userId ?? this.userId,
       username: username ?? this.username,
       avatar: avatar ?? this.avatar,
+      signature: signature ?? this.signature,
       gender: gender ?? this.gender,
       birthDate: birthDate ?? this.birthDate,
       heightCm: heightCm ?? this.heightCm,
@@ -144,8 +148,7 @@ class AppInitState {
       diamondName: diamondName ?? this.diamondName,
       imSdkAppId: imSdkAppId ?? this.imSdkAppId,
       imConfigured: imConfigured ?? this.imConfigured,
-      imTextBillingEnabled:
-          imTextBillingEnabled ?? this.imTextBillingEnabled,
+      imTextBillingEnabled: imTextBillingEnabled ?? this.imTextBillingEnabled,
       imTextBillingPrice: imTextBillingPrice ?? this.imTextBillingPrice,
       imTextBillingAnchorShareBps:
           imTextBillingAnchorShareBps ?? this.imTextBillingAnchorShareBps,
@@ -207,6 +210,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
               cachedInfo['username'] as String?,
           avatar: (normalizeMediaPayload(cachedInfo['avatar']) as String?)
               ?.trim(),
+          signature: cachedInfo['signature'] as String?,
           gender: (cachedInfo['gender'] as String?) ?? 'secret',
           birthDate: cachedInfo['birth_date'] as String?,
           heightCm: _parseNullableInt(cachedInfo['height_cm']),
@@ -276,6 +280,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         username:
             respData['nickname'] as String? ?? respData['username'] as String?,
         avatar: (respData['avatar'] as String?)?.trim(),
+        signature: respData['signature'] as String?,
         gender: (respData['gender'] as String?) ?? 'secret',
         birthDate: respData['birth_date'] as String?,
         heightCm: _parseNullableInt(respData['height_cm']),
@@ -330,6 +335,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
         username:
             respData['nickname'] as String? ?? respData['username'] as String?,
         avatar: nextAvatar,
+        signature: respData['signature'] as String?,
         gender: (respData['gender'] as String?) ?? 'secret',
         birthDate: respData['birth_date'] as String?,
         heightCm: _parseNullableInt(respData['height_cm']),
@@ -438,7 +444,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
       if (respData == null) return;
 
       final coins = _parseDouble(respData['coins'], fallback: state.coins);
-      final diamonds = _parseDouble(respData['diamonds'], fallback: state.diamonds);
+      final diamonds = _parseDouble(
+        respData['diamonds'],
+        fallback: state.diamonds,
+      );
       syncBalance(coins: coins, diamonds: diamonds);
     } catch (e) {
       AppLogger.debug('auth.refreshBalance error: $e');

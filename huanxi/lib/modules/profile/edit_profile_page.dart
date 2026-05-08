@@ -18,6 +18,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   final ImagePicker _imagePicker = ImagePicker();
   late TextEditingController _nicknameController;
   late TextEditingController _avatarController;
+  late TextEditingController _signatureController;
   late TextEditingController _heightController;
   late TextEditingController _weightController;
 
@@ -34,6 +35,9 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
     final authState = ref.read(authProvider);
     _nicknameController = TextEditingController(text: authState.username ?? '');
     _avatarController = TextEditingController(text: authState.avatar ?? '');
+    _signatureController = TextEditingController(
+      text: authState.signature ?? '',
+    );
     _heightController = TextEditingController(
       text: authState.heightCm == null ? '' : authState.heightCm.toString(),
     );
@@ -56,6 +60,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   void dispose() {
     _nicknameController.dispose();
     _avatarController.dispose();
+    _signatureController.dispose();
     _heightController.dispose();
     _weightController.dispose();
     super.dispose();
@@ -191,6 +196,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
     final payload = <String, dynamic>{
       'nickname': nickname,
       'avatar': _avatarController.text.trim(),
+      'signature': _signatureController.text.trim(),
       'gender': _gender,
       'birth_date': _birthDate == null ? null : _dateText(_birthDate),
       'height_cm': heightCm,
@@ -318,6 +324,18 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                         prefixIcon: Icon(Icons.person_outline),
                       ),
                       maxLength: 30,
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _signatureController,
+                      decoration: const InputDecoration(
+                        labelText: '个性签名',
+                        hintText: '写一句关于自己的介绍',
+                        prefixIcon: Icon(Icons.edit_note_outlined),
+                      ),
+                      minLines: 2,
+                      maxLines: 4,
+                      maxLength: 500,
                     ),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(

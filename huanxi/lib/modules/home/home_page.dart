@@ -1,10 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'dart:typed_data';
 import '../../app/routes/app_router.dart';
 import '../../app/providers/anchor_provider.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/widgets/status_view.dart';
+
+String _sectionForIndex(int index) {
+  switch (index) {
+    case 1:
+      return 'active';
+    case 2:
+      return 'new';
+    default:
+      return 'recommend';
+  }
+}
 
 /// 首页 - 主播列表 + 分类 Tab
 class HomePage extends ConsumerStatefulWidget {
@@ -28,7 +40,9 @@ class _HomePageState extends ConsumerState<HomePage>
     _tabController = TabController(length: _categories.length, vsync: this);
     _tabController.addListener(_onTabChanged);
     Future.microtask(() {
-      ref.read(anchorListProvider.notifier).fetchAnchors(refresh: true);
+      final notifier = ref.read(anchorListProvider.notifier);
+      notifier.setSection(_sectionForIndex(_currentIndex));
+      notifier.fetchAnchors(refresh: true);
     });
   }
 
@@ -41,11 +55,23 @@ class _HomePageState extends ConsumerState<HomePage>
   }
 
   void _onTabChanged() {
-    // 只有 Tab 被直接点击（由 TabController 动画触发）时才同步 PageView
-    // PageView 滑动触发的 Tab 动画期间 indexIsChanging=true，这里会跳过，避免循环
-    if (_tabController.indexIsChanging) {
+    if (!_tabController.indexIsChanging) return;
+    _selectCategory(_tabController.index, animatePage: true);
+  }
+
+  void _selectCategory(int index, {required bool animatePage}) {
+    if (_currentIndex != index) {
+      setState(() => _currentIndex = index);
+      ref.read(anchorListProvider.notifier).setSection(_sectionForIndex(index));
+    }
+
+    if (_tabController.index != index) {
+      _tabController.animateTo(index);
+    }
+
+    if (animatePage && _pageController.hasClients) {
       _pageController.animateToPage(
-        _tabController.index,
+        index,
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
       );
@@ -53,27 +79,16 @@ class _HomePageState extends ConsumerState<HomePage>
   }
 
   void _onPageChanged(int index) {
-    if (_currentIndex != index) {
-      setState(() => _currentIndex = index);
-      // PageView 滑动后同步 Tab（此时 indexIsChanging 为 false，不会触发 _onTabChanged 中的动画）
-      _tabController.animateTo(index);
-    }
+    _selectCategory(index, animatePage: false);
   }
 
   void _onTabTap(int index) {
     if (_currentIndex == index) return;
-    setState(() => _currentIndex = index);
-    _pageController.animateToPage(
-      index,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeInOut,
-    );
+    _selectCategory(index, animatePage: true);
   }
 
   @override
   Widget build(BuildContext context) {
-    final anchorState = ref.watch(anchorListProvider);
-
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -143,25 +158,17 @@ class _HomePageState extends ConsumerState<HomePage>
 
           // 主播列表 - PageView 支持左右滑动
           Expanded(
-            child: anchorState.isLoading && anchorState.anchors.isEmpty
-                ? StatusView.loading(message: '加载中...')
-                : anchorState.error != null && anchorState.anchors.isEmpty
-                ? StatusView.error(
-                    message: anchorState.error!,
-                    onRetry: () =>
-                        ref.read(anchorListProvider.notifier).refresh(),
-                  )
-                : PageView.builder(
-                    controller: _pageController,
-                    onPageChanged: _onPageChanged,
-                    itemCount: _categories.length,
-                    itemBuilder: (context, index) {
-                      return _AnchorListPage(
-                        pageIndex: index,
-                        pageController: _pageController,
-                      );
-                    },
-                  ),
+            child: PageView.builder(
+              controller: _pageController,
+              onPageChanged: _onPageChanged,
+              itemCount: _categories.length,
+              itemBuilder: (context, index) {
+                return _AnchorListPage(
+                  pageIndex: index,
+                  pageController: _pageController,
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -184,6 +191,8 @@ class _AnchorListPage extends ConsumerStatefulWidget {
 }
 
 class _AnchorListPageState extends ConsumerState<_AnchorListPage> {
+  static const Duration _contentFadeDuration = Duration(milliseconds: 180);
+
   late ScrollController _scrollController;
 
   @override
@@ -211,36 +220,57 @@ class _AnchorListPageState extends ConsumerState<_AnchorListPage> {
   @override
   Widget build(BuildContext context) {
     final anchorState = ref.watch(anchorListProvider);
+    final expectedSection = _sectionForIndex(widget.pageIndex);
+    final isCurrentSection = anchorState.section == expectedSection;
 
-    if (anchorState.isLoading && anchorState.anchors.isEmpty) {
-      return StatusView.loading();
-    }
-    if (anchorState.error != null && anchorState.anchors.isEmpty) {
-      return StatusView.error(
+    Widget content;
+    if (!isCurrentSection) {
+      content = StatusView.loading();
+    } else if (anchorState.isLoading && anchorState.anchors.isEmpty) {
+      content = StatusView.loading();
+    } else if (anchorState.error != null && anchorState.anchors.isEmpty) {
+      content = StatusView.error(
         message: anchorState.error!,
         onRetry: () => ref.read(anchorListProvider.notifier).refresh(),
       );
+    } else {
+      // RefreshIndicator 包裹 GridView，每个 PageView 页面独立支持下拉刷新
+      content = RefreshIndicator(
+        onRefresh: () => ref.read(anchorListProvider.notifier).refresh(),
+        child: GridView.builder(
+          controller: _scrollController,
+          physics:
+              const AlwaysScrollableScrollPhysics(), // 确保可以 overscroll 触发下拉刷新
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            childAspectRatio: 0.75,
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+          ),
+          itemCount: anchorState.anchors.length,
+          itemBuilder: (context, idx) {
+            final anchor = anchorState.anchors[idx];
+            return _AnchorCard(
+              key: ValueKey(
+                'anchor_card_${anchor.userId}_${anchor.coverUrl ?? ''}',
+              ),
+              anchor: anchor,
+            );
+          },
+        ),
+      );
     }
 
-    // RefreshIndicator 包裹 GridView，每个 PageView 页面独立支持下拉刷新
-    return RefreshIndicator(
-      onRefresh: () => ref.read(anchorListProvider.notifier).refresh(),
-      child: GridView.builder(
-        controller: _scrollController,
-        physics:
-            const AlwaysScrollableScrollPhysics(), // 确保可以 overscroll 触发下拉刷新
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          childAspectRatio: 0.75,
-          crossAxisSpacing: 12,
-          mainAxisSpacing: 12,
+    return AnimatedSwitcher(
+      duration: _contentFadeDuration,
+      switchInCurve: Curves.easeOut,
+      switchOutCurve: Curves.easeOut,
+      child: KeyedSubtree(
+        key: ValueKey(
+          '${widget.pageIndex}_${anchorState.section}_${anchorState.isLoading}_${anchorState.anchors.length}',
         ),
-        itemCount: anchorState.anchors.length,
-        itemBuilder: (context, idx) {
-          final anchor = anchorState.anchors[idx];
-          return _AnchorCard(anchor: anchor);
-        },
+        child: content,
       ),
     );
   }
@@ -249,13 +279,84 @@ class _AnchorListPageState extends ConsumerState<_AnchorListPage> {
 class _AnchorCard extends StatefulWidget {
   final AnchorInfo anchor;
 
-  const _AnchorCard({required this.anchor});
+  const _AnchorCard({super.key, required this.anchor});
 
   @override
   State<_AnchorCard> createState() => _AnchorCardState();
 }
 
 class _AnchorCardState extends State<_AnchorCard> {
+  static final Uint8List _transparentImage = Uint8List.fromList([
+    0x89,
+    0x50,
+    0x4E,
+    0x47,
+    0x0D,
+    0x0A,
+    0x1A,
+    0x0A,
+    0x00,
+    0x00,
+    0x00,
+    0x0D,
+    0x49,
+    0x48,
+    0x44,
+    0x52,
+    0x00,
+    0x00,
+    0x00,
+    0x01,
+    0x00,
+    0x00,
+    0x00,
+    0x01,
+    0x08,
+    0x06,
+    0x00,
+    0x00,
+    0x00,
+    0x1F,
+    0x15,
+    0xC4,
+    0x89,
+    0x00,
+    0x00,
+    0x00,
+    0x0A,
+    0x49,
+    0x44,
+    0x41,
+    0x54,
+    0x78,
+    0x9C,
+    0x63,
+    0x00,
+    0x01,
+    0x00,
+    0x00,
+    0x05,
+    0x00,
+    0x01,
+    0x0D,
+    0x0A,
+    0x2D,
+    0xB4,
+    0x00,
+    0x00,
+    0x00,
+    0x00,
+    0x49,
+    0x45,
+    0x4E,
+    0x44,
+    0xAE,
+    0x42,
+    0x60,
+    0x82,
+  ]);
+  static const Duration _coverFadeDuration = Duration(milliseconds: 180);
+
   bool _isNavigating = false;
 
   Future<void> _openDetail() async {
@@ -274,6 +375,7 @@ class _AnchorCardState extends State<_AnchorCard> {
   Widget build(BuildContext context) {
     final anchor = widget.anchor;
     final isOnline = anchor.isOnline ?? false;
+    final coverUrl = anchor.coverUrl?.trim() ?? '';
 
     return GestureDetector(
       onTap: _openDetail,
@@ -298,18 +400,20 @@ class _AnchorCardState extends State<_AnchorCard> {
                 // 照片
                 Hero(
                   tag: 'anchor_avatar_${anchor.userId}',
-                  child: anchor.avatar != null && anchor.avatar!.isNotEmpty
-                      ? Image.network(
-                          anchor.avatar!,
+                  child: coverUrl.isNotEmpty
+                      ? FadeInImage.memoryNetwork(
+                          key: ValueKey(
+                            'anchor_cover_${anchor.userId}_$coverUrl',
+                          ),
+                          placeholder: _transparentImage,
+                          image: coverUrl,
                           fit: BoxFit.cover,
+                          fadeInDuration: _coverFadeDuration,
+                          fadeOutDuration: const Duration(milliseconds: 1),
                           filterQuality: FilterQuality.low,
-                          cacheWidth: cacheWidth,
-                          cacheHeight: cacheHeight,
-                          loadingBuilder: (context, child, loadingProgress) {
-                            if (loadingProgress == null) return child;
-                            return Container(color: AppTheme.placeholderColor);
-                          },
-                          errorBuilder: (context, error, stackTrace) {
+                          imageCacheWidth: cacheWidth,
+                          imageCacheHeight: cacheHeight,
+                          imageErrorBuilder: (context, error, stackTrace) {
                             return const Center(
                               child: Icon(
                                 Icons.person,
@@ -417,15 +521,6 @@ class _AnchorCardState extends State<_AnchorCard> {
                             ),
                           ),
                         ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${anchor.diamonds ?? 0} 钻石',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.white.withValues(alpha: 0.8),
-                          fontWeight: FontWeight.w500,
-                        ),
                       ),
                     ],
                   ),

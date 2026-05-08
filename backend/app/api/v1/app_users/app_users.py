@@ -127,6 +127,9 @@ async def update_app_user(req_in: AppUserAdminUpdateIn):
     if req_in.avatar is not None:
         v = to_relative_media_url(req_in.avatar)
         update_data["avatar"] = v or None
+    if req_in.signature is not None:
+        v = req_in.signature.strip()
+        update_data["signature"] = v or None
     if req_in.gender is not None:
         update_data["gender"] = str(req_in.gender.value)
     if req_in.birth_date is not None:
@@ -147,6 +150,10 @@ async def update_app_user(req_in: AppUserAdminUpdateIn):
         if req_in.is_anchor:
             update_data["anchor_apply_status"] = "approved"
             update_data["anchor_reviewed_at"] = datetime.now()
+    if req_in.is_recommended is not None:
+        update_data["is_recommended"] = req_in.is_recommended
+    if req_in.recommend_weight is not None:
+        update_data["recommend_weight"] = req_in.recommend_weight
     if req_in.anchor_intro is not None:
         v = req_in.anchor_intro.strip()
         update_data["anchor_intro"] = v or None
@@ -199,7 +206,7 @@ async def update_app_user(req_in: AppUserAdminUpdateIn):
             return Fail(code=400, msg="封面必须从相册中选择")
         update_data["cover_url"] = cover or None
     elif req_in.album_photos is not None:
-        current_cover = (app_user.cover_url or "").strip()
+        current_cover = to_relative_media_url(app_user.cover_url)
         if current_cover and current_cover in target_album:
             update_data["cover_url"] = current_cover
         else:

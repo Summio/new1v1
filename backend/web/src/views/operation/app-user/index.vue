@@ -1,5 +1,6 @@
 <script setup>
 import { h, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import {
   NButton,
   NDataTable,
@@ -25,6 +26,7 @@ import { formatDate } from '@/utils'
 defineOptions({ name: 'App用户管理' })
 
 const $table = ref(null)
+const router = useRouter()
 const queryItems = ref({})
 const editModalVisible = ref(false)
 const saving = ref(false)
@@ -34,6 +36,7 @@ const modalForm = ref({
   phone: '',
   nickname: '',
   avatar: '',
+  signature: '',
   gender: 'secret',
   birth_date: '',
   height_cm: null,
@@ -41,6 +44,8 @@ const modalForm = ref({
   location_city: '',
   status: 'normal',
   is_anchor: false,
+  is_recommended: false,
+  recommend_weight: 0,
   anchor_apply_status: 'none',
   anchor_reject_reason: '',
   anchor_apply_face_image: '',
@@ -239,6 +244,7 @@ function openEditModal(row) {
     phone: row.phone || '',
     nickname: row.nickname || '',
     avatar: row.avatar || '',
+    signature: row.signature || '',
     gender: row.gender || 'secret',
     birth_date: row.birth_date || '',
     height_cm: row.height_cm ?? null,
@@ -246,6 +252,8 @@ function openEditModal(row) {
     location_city: row.location_city || '',
     status: row.status || 'normal',
     is_anchor: !!row.is_anchor,
+    is_recommended: !!row.is_recommended,
+    recommend_weight: row.recommend_weight ?? 0,
     anchor_apply_status: row.anchor_apply_status || 'none',
     anchor_reject_reason: row.anchor_reject_reason || '',
     anchor_apply_face_image: row.anchor_apply_face_image || '',
@@ -277,6 +285,11 @@ function openEditModal(row) {
 
 function handleViewEdit(row) {
   openEditModal(row)
+}
+
+function handleOpenUserMoments() {
+  if (!modalForm.value.id) return
+  router.push({ path: '/operation/moment', query: { user_id: modalForm.value.id } })
 }
 
 function formatDuration(seconds) {
@@ -582,6 +595,7 @@ async function handleSave() {
       id: modalForm.value.id,
       nickname: (modalForm.value.nickname || '').trim(),
       avatar: (modalForm.value.avatar || '').trim(),
+      signature: (modalForm.value.signature || '').trim(),
       gender: modalForm.value.gender || 'secret',
       birth_date: (modalForm.value.birth_date || '').trim() || null,
       height_cm: modalForm.value.height_cm ?? null,
@@ -589,6 +603,8 @@ async function handleSave() {
       location_city: (modalForm.value.location_city || '').trim(),
       status: modalForm.value.status || 'normal',
       is_anchor: !!modalForm.value.is_anchor,
+      is_recommended: !!modalForm.value.is_recommended,
+      recommend_weight: modalForm.value.recommend_weight ?? 0,
       anchor_apply_status: modalForm.value.anchor_apply_status || 'none',
       anchor_reject_reason: (modalForm.value.anchor_reject_reason || '').trim() || null,
       anchor_apply_face_image: (modalForm.value.anchor_apply_face_image || '').trim(),
@@ -974,6 +990,14 @@ const columns = [
             <NFormItem label="昵称">
               <NInput v-model:value="modalForm.nickname" />
             </NFormItem>
+            <NFormItem label="个性签名" class="full-span">
+              <NInput
+                v-model:value="modalForm.signature"
+                type="textarea"
+                :autosize="{ minRows: 2, maxRows: 4 }"
+                placeholder="用于App主播详情页“关于我”展示"
+              />
+            </NFormItem>
             <NFormItem label="性别">
               <NSelect v-model:value="modalForm.gender" :options="genderOptions" />
             </NFormItem>
@@ -994,6 +1018,17 @@ const columns = [
             </NFormItem>
             <NFormItem label="主播">
               <NSwitch v-model:value="modalForm.is_anchor" />
+            </NFormItem>
+            <NFormItem label="首页推荐">
+              <NSwitch v-model:value="modalForm.is_recommended" />
+            </NFormItem>
+            <NFormItem label="推荐值">
+              <NInputNumber
+                v-model:value="modalForm.recommend_weight"
+                style="width: 100%"
+                :min="0"
+                :precision="0"
+              />
             </NFormItem>
             <NFormItem label="申请状态">
               <NSelect
@@ -1216,6 +1251,16 @@ const columns = [
             :single-line="false"
           />
         </NTabPane>
+
+        <NTabPane name="moments" tab="动态">
+          <div class="moment-entry">
+            <div>
+              <div class="moment-entry-title">查看该用户动态</div>
+              <div class="hint">跳转到动态管理，并按当前用户ID筛选。</div>
+            </div>
+            <NButton type="primary" @click="handleOpenUserMoments">打开动态管理</NButton>
+          </div>
+        </NTabPane>
       </NTabs>
 
       <template #action>
@@ -1407,6 +1452,22 @@ const columns = [
   align-items: center;
   gap: 10px;
   margin-bottom: 12px;
+}
+
+.moment-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid #edf0f5;
+  border-radius: 8px;
+}
+
+.moment-entry-title {
+  color: #242933;
+  font-weight: 600;
+  margin-bottom: 4px;
 }
 
 .bill-summary {

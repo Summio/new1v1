@@ -96,11 +96,20 @@ class MomentCard extends StatelessWidget {
               MomentMediaGrid(
                 mediaList: moment.mediaList,
                 onTap: (index, media) {
+                  final imageUrls = moment.mediaList
+                      .where((item) => item.mediaType == 1)
+                      .map((item) => item.url)
+                      .toList();
+                  final imageIndex = imageUrls.indexOf(media.url);
                   Navigator.of(context, rootNavigator: true).push(
                     MaterialPageRoute(
                       builder: (_) => media.mediaType == 2
                           ? MomentVideoPreviewPage(videoUrl: media.url)
-                          : MomentImagePreviewPage(imageUrl: media.url),
+                          : MomentImagePreviewPage(
+                              imageUrl: media.url,
+                              imageUrls: imageUrls,
+                              initialIndex: imageIndex < 0 ? 0 : imageIndex,
+                            ),
                     ),
                   );
                 },

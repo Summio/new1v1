@@ -58,6 +58,7 @@ async def get_user_info():
             "phone": _mask_phone(app_user.phone),
             "nickname": app_user.nickname or app_user.phone,
             "avatar": to_relative_media_url(app_user.avatar),
+            "signature": app_user.signature or "",
             "gender": app_user.gender or "secret",
             "birth_date": app_user.birth_date.isoformat() if app_user.birth_date else None,
             "height_cm": app_user.height_cm,
@@ -102,6 +103,10 @@ async def update_user_profile(req_in: AppUserProfileUpdateIn):
         avatar = to_relative_media_url(req_in.avatar)
         update_data["avatar"] = avatar or None
 
+    if req_in.signature is not None:
+        signature = req_in.signature.strip()
+        update_data["signature"] = signature or None
+
     if req_in.gender is not None:
         update_data["gender"] = str(req_in.gender.value)
 
@@ -129,8 +134,7 @@ async def update_user_profile(req_in: AppUserProfileUpdateIn):
             return Fail(code=400, msg="封面必须从相册中选择")
         update_data["cover_url"] = cover or None
     elif req_in.album_photos is not None:
-        # 相册发生变化时，自动修复无效封面
-        current_cover = (app_user.cover_url or "").strip()
+        current_cover = to_relative_media_url(app_user.cover_url)
         if current_cover and current_cover in target_album:
             update_data["cover_url"] = current_cover
         else:
@@ -149,6 +153,7 @@ async def update_user_profile(req_in: AppUserProfileUpdateIn):
             "id": refreshed.id,
             "nickname": refreshed.nickname or refreshed.phone,
             "avatar": to_relative_media_url(refreshed.avatar),
+            "signature": refreshed.signature or "",
             "gender": refreshed.gender or "secret",
             "birth_date": refreshed.birth_date.isoformat() if refreshed.birth_date else None,
             "height_cm": refreshed.height_cm,

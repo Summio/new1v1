@@ -32,6 +32,9 @@ export default {
     }),
   // call record
   getCallRecordList: (params = {}) => request.get('/call_record/list', { params }),
+  // moment manage
+  getMomentList: (params = {}) => request.get('/moment/list', { params }),
+  deleteMoment: (params = {}) => request.delete('/moment/delete', { params }),
   // gift manage
   getGiftList: (params = {}) => request.get('/gift/list', { params }),
   getGiftById: (params = {}) => request.get('/gift/get', { params }),

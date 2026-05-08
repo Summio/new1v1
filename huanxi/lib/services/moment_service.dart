@@ -277,6 +277,35 @@ class MomentService {
     }
   }
 
+  /// 获取指定用户动态列表
+  Future<MomentListResult> getUserMoments({
+    required int userId,
+    int page = 1,
+    int pageSize = 3,
+  }) async {
+    try {
+      final data = await _dio.apiGet(
+        ApiEndpoints.momentUser,
+        params: {'user_id': userId, 'page': page, 'page_size': pageSize},
+      );
+      final rows =
+          (data['rows'] as List<dynamic>?)
+              ?.map((e) => Moment.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          [];
+      final total = data['total'] as int? ?? 0;
+      final hasMore = data['has_more'] as bool? ?? false;
+      return MomentListResult(rows: rows, total: total, hasMore: hasMore);
+    } on ApiException {
+      rethrow;
+    } on NetworkException {
+      rethrow;
+    } catch (e) {
+      AppLogger.debug('MomentService.getUserMoments error: $e');
+      throw ApiException(code: 500, message: '获取用户动态失败');
+    }
+  }
+
   /// 删除动态
   Future<bool> deleteMoment(int momentId) async {
     try {

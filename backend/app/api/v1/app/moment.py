@@ -23,6 +23,60 @@ _ALLOWED_IMAGE_SUFFIX = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 _ALLOWED_VIDEO_SUFFIX = {".mp4", ".mov"}
 
 
+async def _prefetch_moment_media(moments: list[Moment]) -> dict[int, list[MomentMedia]]:
+    moment_ids = [int(moment.id) for moment in moments]
+    if not moment_ids:
+        return {}
+    rows = await MomentMedia.filter(moment_id__in=moment_ids).order_by("sort_order").all()
+    media_by_moment: dict[int, list[MomentMedia]] = {}
+    for row in rows:
+        media_by_moment.setdefault(int(row.moment_id), []).append(row)
+    return media_by_moment
+
+
+async def _prefetch_moment_users(moments: list[Moment]) -> dict[int, AppUser]:
+    user_ids = list({int(moment.user_id) for moment in moments})
+    if not user_ids:
+        return {}
+    users = await AppUser.filter(id__in=user_ids).all()
+    return {int(user.id): user for user in users}
+
+
+async def _serialize_moment(
+    moment: Moment,
+    user: AppUser | None = None,
+    users: dict[int, AppUser] | None = None,
+    media_by_moment: dict[int, list[MomentMedia]] | None = None,
+) -> dict:
+    media_list = (media_by_moment or {}).get(int(moment.id), [])
+    resolved_user = user or (users or {}).get(int(moment.user_id))
+
+    return {
+        "id": moment.id,
+        "user_id": moment.user_id,
+        "content": moment.content or "",
+        "created_at": moment.created_at.isoformat() if moment.created_at else None,
+        "media_list": [
+            {
+                "id": m.id,
+                "url": to_relative_media_url(m.url),
+                "media_type": m.media_type,
+                "sort_order": m.sort_order,
+                "cover_url": to_relative_media_url(m.cover_url) if m.cover_url else None,
+                "duration": m.duration,
+            }
+            for m in media_list
+        ],
+        "user": {
+            "id": resolved_user.id if resolved_user else moment.user_id,
+            "nickname": (
+                (resolved_user.nickname or f"用户{resolved_user.id}") if resolved_user else f"用户{moment.user_id}"
+            ),
+            "avatar": to_relative_media_url(resolved_user.avatar) if resolved_user else "",
+        },
+    }
+
+
 @router.post("/moment/upload", summary="上传动态媒体", dependencies=[Depends(DependAppAuth)])
 async def upload_moment_media(
     file: UploadFile = File(...),
@@ -192,36 +246,36 @@ async def get_moment_feed(
     offset = (page - 1) * page_size
     total = await Moment.all().count()
     moments = await Moment.all().order_by("-created_at").offset(offset).limit(page_size).all()
+    users = await _prefetch_moment_users(moments)
+    media_by_moment = await _prefetch_moment_media(moments)
 
     rows = []
     for moment in moments:
-        user = await AppUser.filter(id=moment.user_id).first()
-        media_list = await MomentMedia.filter(moment_id=moment.id).order_by("sort_order").all()
+        rows.append(await _serialize_moment(moment, users=users, media_by_moment=media_by_moment))
 
-        rows.append(
-            {
-                "id": moment.id,
-                "user_id": moment.user_id,
-                "content": moment.content or "",
-                "created_at": moment.created_at.isoformat() if moment.created_at else None,
-                "media_list": [
-                    {
-                        "id": m.id,
-                        "url": to_relative_media_url(m.url),
-                        "media_type": m.media_type,
-                        "sort_order": m.sort_order,
-                        "cover_url": to_relative_media_url(m.cover_url) if m.cover_url else None,
-                        "duration": m.duration,
-                    }
-                    for m in media_list
-                ],
-                "user": {
-                    "id": user.id if user else moment.user_id,
-                    "nickname": (user.nickname or f"用户{user.id}") if user else f"用户{moment.user_id}",
-                    "avatar": to_relative_media_url(user.avatar) if user else "",
-                },
-            }
-        )
+    return SuccessExtra(
+        rows=rows,
+        total=total,
+        has_more=(offset + len(moments)) < total,
+    )
+
+
+@router.get("/moment/user", summary="指定用户动态列表", dependencies=[Depends(DependAppAuth)])
+async def get_user_moments(
+    user_id: int = Query(..., ge=1, description="目标用户ID"),
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(3, ge=1, le=20, description="每页数量"),
+):
+    """获取指定用户的动态列表，供个人详情页展示。"""
+    offset = (page - 1) * page_size
+    user = await AppUser.filter(id=user_id).first()
+    if not user:
+        return Fail(code=404, msg="用户不存在")
+
+    total = await Moment.filter(user_id=user_id).count()
+    moments = await Moment.filter(user_id=user_id).order_by("-created_at").offset(offset).limit(page_size).all()
+    media_by_moment = await _prefetch_moment_media(moments)
+    rows = [await _serialize_moment(moment, user=user, media_by_moment=media_by_moment) for moment in moments]
 
     return SuccessExtra(
         rows=rows,
@@ -243,35 +297,11 @@ async def get_my_moments(
     offset = (page - 1) * page_size
     total = await Moment.filter(user_id=app_user.id).count()
     moments = await Moment.filter(user_id=app_user.id).order_by("-created_at").offset(offset).limit(page_size).all()
+    media_by_moment = await _prefetch_moment_media(moments)
 
     rows = []
     for moment in moments:
-        media_list = await MomentMedia.filter(moment_id=moment.id).order_by("sort_order").all()
-
-        rows.append(
-            {
-                "id": moment.id,
-                "user_id": moment.user_id,
-                "content": moment.content or "",
-                "created_at": moment.created_at.isoformat() if moment.created_at else None,
-                "media_list": [
-                    {
-                        "id": m.id,
-                        "url": to_relative_media_url(m.url),
-                        "media_type": m.media_type,
-                        "sort_order": m.sort_order,
-                        "cover_url": to_relative_media_url(m.cover_url) if m.cover_url else None,
-                        "duration": m.duration,
-                    }
-                    for m in media_list
-                ],
-                "user": {
-                    "id": app_user.id,
-                    "nickname": app_user.nickname or app_user.phone,
-                    "avatar": to_relative_media_url(app_user.avatar),
-                },
-            }
-        )
+        rows.append(await _serialize_moment(moment, user=app_user, media_by_moment=media_by_moment))
 
     return SuccessExtra(
         rows=rows,

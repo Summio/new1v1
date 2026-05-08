@@ -12,8 +12,10 @@ class ApiEndpoints {
 
   /// 获取当前用户信息
   static const String userInfo = 'app/user/info';
+
   /// 更新当前用户资料
   static const String userProfileUpdate = 'app/user/profile/update';
+
   /// 上传资料图片
   static const String userUploadImage = 'app/user/upload-image';
 
@@ -28,7 +30,8 @@ class ApiEndpoints {
   static const String anchorApply = 'app/anchor/apply';
 
   /// 上传主播申请正面照
-  static const String anchorApplyUploadFacePhoto = 'app/anchor/apply/upload-face-photo';
+  static const String anchorApplyUploadFacePhoto =
+      'app/anchor/apply/upload-face-photo';
 
   /// 查询主播申请状态
   static const String anchorApplyStatus = 'app/anchor/apply/status';
@@ -71,8 +74,10 @@ class ApiEndpoints {
 
   /// 申请提现
   static const String withdrawApply = 'app/withdraw/apply';
+
   /// 获取提现账户
   static const String withdrawAccount = 'app/withdraw/account';
+
   /// 上传提现收款码
   static const String withdrawUploadQrCode = 'app/withdraw/upload-qr-code';
 
@@ -100,12 +105,19 @@ class ApiEndpoints {
   // ========== 动态模块 ==========
   /// 上传动态媒体（图片/视频）
   static const String momentUpload = 'app/moment/upload';
+
   /// 发布动态
   static const String momentCreate = 'app/moment/create';
+
   /// 全局动态列表
   static const String momentFeed = 'app/moment/feed';
+
   /// 我的动态列表
   static const String momentMine = 'app/moment/mine';
+
+  /// 指定用户动态列表
+  static const String momentUser = 'app/moment/user';
+
   /// 删除动态
-  static const String momentDelete = 'app/moment';  // DELETE /app/moment/{id}
+  static const String momentDelete = 'app/moment'; // DELETE /app/moment/{id}
 }
