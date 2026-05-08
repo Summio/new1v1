@@ -34,19 +34,28 @@ class ApiEndpoints {
   /// 我的粉丝列表
   static const String userFansList = 'app/user/fans/list';
 
-  // ========== 主播模块 ==========
-  /// 主播推荐列表（分页）
-  static const String anchorList = 'app/anchor/list';
+  // ========== 认证用户模块 ==========
+  /// 认证用户推荐列表（分页）
+  static const String certifiedUserList = 'app/certified-user/list';
 
-  /// 申请成为主播
-  static const String anchorApply = 'app/anchor/apply';
+  /// 提交真人认证
+  static const String certificationApply = 'app/certification/apply';
 
-  /// 上传主播申请正面照
-  static const String anchorApplyUploadFacePhoto =
-      'app/anchor/apply/upload-face-photo';
+  /// 上传真人认证正面照
+  static const String certificationApplyUploadFacePhoto =
+      'app/certification/apply/upload-face-photo';
 
-  /// 查询主播申请状态
-  static const String anchorApplyStatus = 'app/anchor/apply/status';
+  /// 查询真人认证状态
+  static const String certificationApplyStatus =
+      'app/certification/apply/status';
+
+  /// 获取认证用户通话价格档位
+  static const String certifiedCallPriceTiers =
+      'app/certification/call-price/tiers';
+
+  /// 更新认证用户通话价格
+  static const String certifiedCallPriceUpdate =
+      'app/certification/call-price';
 
   // ========== 通话模块 ==========
   /// 发起呼叫（余额预检）

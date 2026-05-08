@@ -46,7 +46,7 @@ class MomentCard extends StatelessWidget {
                       ? () {
                           context.push(
                             Uri(
-                              path: AppRoutes.anchorDetail,
+                              path: AppRoutes.certifiedUserDetail,
                               queryParameters: {
                                 'userId': moment.userId.toString(),
                               },

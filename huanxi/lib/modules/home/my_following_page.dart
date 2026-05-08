@@ -271,7 +271,7 @@ class _MyFollowingPageState extends ConsumerState<MyFollowingPage> {
           return _FollowingTile(
             item: item,
             isProcessing: _processingUserId == item.user.userId,
-            onTap: () => context.push(AppRoutes.anchorDetail, extra: item.user),
+            onTap: () => context.push(AppRoutes.certifiedUserDetail, extra: item.user),
             onCancel: widget.fansMode ? null : () => _cancelFollowing(item),
           );
         },
@@ -354,7 +354,7 @@ class _FollowingTile extends StatelessWidget {
                             ),
                           ),
                         ),
-                        _UserTypeBadge(isAnchor: user.isAnchor),
+                        _UserTypeBadge(isCertifiedUser: user.isCertifiedUser),
                       ],
                     ),
                     const SizedBox(height: 6),
@@ -446,24 +446,24 @@ class _FollowingTile extends StatelessWidget {
 }
 
 class _UserTypeBadge extends StatelessWidget {
-  final bool isAnchor;
+  final bool isCertifiedUser;
 
-  const _UserTypeBadge({required this.isAnchor});
+  const _UserTypeBadge({required this.isCertifiedUser});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: isAnchor
+        color: isCertifiedUser
             ? AppTheme.primaryColor.withValues(alpha: 0.12)
             : AppTheme.textSecondary.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        isAnchor ? '主播' : '用户',
+        isCertifiedUser ? '认证用户' : '用户',
         style: TextStyle(
-          color: isAnchor ? AppTheme.primaryColor : AppTheme.textSecondary,
+          color: isCertifiedUser ? AppTheme.primaryColor : AppTheme.textSecondary,
           fontSize: 11,
           fontWeight: FontWeight.w700,
         ),

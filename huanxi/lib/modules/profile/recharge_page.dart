@@ -229,7 +229,7 @@ class _RechargePageState extends ConsumerState<RechargePage> {
                         SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            '1元 = $_tokenRate$dynamicCoinName，$dynamicCoinName用于拨打主播电话',
+                            '1元 = $_tokenRate$dynamicCoinName，$dynamicCoinName用于拨打认证用户电话',
                             style: TextStyle(
                               fontSize: 13,
                               color: AppTheme.secondaryDark,

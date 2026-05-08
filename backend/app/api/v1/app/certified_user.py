@@ -10,7 +10,7 @@ from app.utils.media_url import normalize_media_list, to_relative_media_url
 router = APIRouter()
 
 
-def _normalize_anchor_tags(raw_value) -> list[str]:
+def _normalize_certified_tags(raw_value) -> list[str]:
     if not isinstance(raw_value, list):
         return []
     out: list[str] = []
@@ -23,7 +23,7 @@ def _normalize_anchor_tags(raw_value) -> list[str]:
     return out
 
 
-def _anchor_sort_key(user, section: str, online_ids: set[int], online_since_map: dict[int, int]):
+def _certified_user_sort_key(user, section: str, online_ids: set[int], online_since_map: dict[int, int]):
     is_online = user.id in online_ids
     recommend_weight = int(user.recommend_weight or 0)
 
@@ -37,20 +37,20 @@ def _anchor_sort_key(user, section: str, online_ids: set[int], online_since_map:
 
 
 def _offline_review_sort_key(user):
-    reviewed_at = user.anchor_reviewed_at
+    reviewed_at = user.certification_reviewed_at
     return (reviewed_at is not None, reviewed_at, user.id)
 
 
-async def _fetch_sorted_anchor_page(q, section: str, page: int, page_size: int):
+async def _fetch_sorted_certified_user_page(q, section: str, page: int, page_size: int):
     from app.websocket.presence import count_online_user_ids, get_online_user_id_page
     from app.websocket.presence import is_online as _is_online_user
 
     total = await q.count()
     offset = (page - 1) * page_size
     order_fields = {
-        "recommend": ["-recommend_weight", "-anchor_reviewed_at", "-id"],
-        "active": ["-anchor_reviewed_at", "-id"],
-        "new": ["-anchor_reviewed_at", "-id"],
+        "recommend": ["-recommend_weight", "-certification_reviewed_at", "-id"],
+        "active": ["-certification_reviewed_at", "-id"],
+        "new": ["-certification_reviewed_at", "-id"],
     }[section]
 
     online_total = await count_online_user_ids()
@@ -121,8 +121,8 @@ async def _fetch_sorted_anchor_page(q, section: str, page: int, page_size: int):
     return total, users
 
 
-@router.get("/anchor/list", summary="主播推荐列表(分页)")
-async def anchor_list(
+@router.get("/certified-user/list", summary="认证用户推荐列表(分页)")
+async def certified_user_list(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=50, description="每页数量"),
     gender: Optional[str] = Query(None, description="性别过滤: male/female"),
@@ -136,7 +136,7 @@ async def anchor_list(
 
     filters = {"status": "normal"}
     if not search_keyword:
-        filters["is_anchor"] = True
+        filters["is_certified_user"] = True
         filters["cover_url__not_isnull"] = True
         if section_value == "recommend":
             filters["is_recommended"] = True
@@ -156,7 +156,7 @@ async def anchor_list(
         total = await q.count()
         users = await q.order_by("-id").offset((page - 1) * page_size).limit(page_size)
     else:
-        total, users = await _fetch_sorted_anchor_page(
+        total, users = await _fetch_sorted_certified_user_page(
             q=q,
             section=section_value,
             page=page,
@@ -182,12 +182,12 @@ async def anchor_list(
                 "weight_kg": user.weight_kg,
                 "location_city": user.location_city or "",
                 "signature": user.signature or "",
-                "intro": user.anchor_intro or "",
-                "tags": _normalize_anchor_tags(user.anchor_tags),
-                "call_price": int(user.anchor_call_price or 0),
+                "intro": user.certified_intro or "",
+                "tags": _normalize_certified_tags(user.certified_tags),
+                "call_price": int(user.certified_call_price or 0),
                 "is_online": is_online,
                 "status": user.status or "normal",
-                "is_anchor": bool(user.is_anchor),
+                "is_certified_user": bool(user.is_certified_user),
                 "is_recommended": bool(user.is_recommended),
                 "recommend_weight": int(user.recommend_weight or 0),
             }

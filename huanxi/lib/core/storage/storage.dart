@@ -115,14 +115,16 @@ class StorageService {
     );
   }
 
-  /// 保存主播列表缓存
-  static Future<void> saveAnchorList(List<Map<String, dynamic>> anchors) async {
-    await _cacheBox?.put(AppConstants.storageAnchorList, anchors);
+  /// 保存认证用户列表缓存
+  static Future<void> saveCertifiedUserList(
+    List<Map<String, dynamic>> certifiedUsers,
+  ) async {
+    await _cacheBox?.put(AppConstants.storageCertifiedUserList, certifiedUsers);
   }
 
-  /// 获取主播列表缓存
-  static List<Map<String, dynamic>>? getAnchorList() {
-    final data = _cacheBox?.get(AppConstants.storageAnchorList);
+  /// 获取认证用户列表缓存
+  static List<Map<String, dynamic>>? getCertifiedUserList() {
+    final data = _cacheBox?.get(AppConstants.storageCertifiedUserList);
     if (data == null) return null;
     return List<Map<String, dynamic>>.from(
       (data as List).map((e) => Map<String, dynamic>.from(e)),

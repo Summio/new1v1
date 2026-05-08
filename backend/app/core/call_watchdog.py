@@ -316,7 +316,7 @@ async def _close_stale_ongoing(config: WatchdogConfig) -> None:
     ended_records: list[CallRecord] = []
     anchor_balance_pushes: list[int] = []
 
-    # 预加载主播状态（跨批次复用，避免重复查询）
+    # 预加载认证用户状态（跨批次复用，避免重复查询）
     raw_records = (
         await CallRecord.filter(id__in=list(ids), status="ongoing")
         .order_by("id")
@@ -331,7 +331,7 @@ async def _close_stale_ongoing(config: WatchdogConfig) -> None:
     anchor_user_ids = set(
         await AppUser.filter(
             id__in=list(all_user_ids),
-            is_anchor=True,
+            is_certified_user=True,
         ).values_list("id", flat=True)
     )
 
@@ -394,13 +394,13 @@ async def _process_stale_batch(
 
         caller_id = int(raw["caller_id"])
         callee_id = int(raw["callee_id"])
-        caller_is_anchor = caller_id in anchor_user_ids
-        callee_is_anchor = callee_id in anchor_user_ids
-        if caller_is_anchor and not callee_is_anchor:
+        caller_is_certified_user = caller_id in anchor_user_ids
+        callee_is_certified_user = callee_id in anchor_user_ids
+        if caller_is_certified_user and not callee_is_certified_user:
             return callee_id
-        if callee_is_anchor and not caller_is_anchor:
+        if callee_is_certified_user and not caller_is_certified_user:
             return caller_id
-        if not caller_is_anchor and not callee_is_anchor:
+        if not caller_is_certified_user and not callee_is_certified_user:
             return caller_id
         return None
 

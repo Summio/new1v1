@@ -5,7 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/providers/auth_provider.dart';
-import '../../app/providers/anchor_provider.dart';
+import '../../app/providers/certified_user_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/constants/api_endpoints.dart';
@@ -57,7 +57,7 @@ class _MainShellState extends ConsumerState<MainShell>
   StreamSubscription<WsEvent>? _wsSubscription;
 
   bool _shouldGuardIncomingRouteByRole() {
-    // 与主播策略保持一致：不按角色做来电路由互斥拦截。
+    // 与认证用户策略保持一致：不按角色做来电路由互斥拦截。
     return false;
   }
 
@@ -84,7 +84,7 @@ class _MainShellState extends ConsumerState<MainShell>
     if (state == AppLifecycleState.resumed) {
       ref.read(authProvider.notifier).refreshBalance();
       ref.read(authProvider.notifier).fetchUserInfo();
-      ref.read(anchorListProvider.notifier).refresh();
+      ref.read(certifiedUserListProvider.notifier).refresh();
       _openPendingIncomingOnResume();
       WsService.instance.connect();
       if (_imService.isInitialized) {

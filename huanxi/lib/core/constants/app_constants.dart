@@ -22,7 +22,7 @@ class AppConstants {
   static const String storageUserId = 'user_id';
   static const String storageUserInfo = 'user_info';
   static const String storageGiftList = 'gift_list';
-  static const String storageAnchorList = 'anchor_list';
+  static const String storageCertifiedUserList = 'certified_user_list';
   static const String storageFirstLaunch = 'first_launch';
   static const String storageDarkMode = 'dark_mode';
 

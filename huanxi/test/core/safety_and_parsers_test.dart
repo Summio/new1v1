@@ -1,19 +1,19 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:huanxi/app/routes/app_router.dart';
-import 'package:huanxi/app/providers/anchor_provider.dart';
+import 'package:huanxi/app/providers/certified_user_provider.dart';
 import 'package:huanxi/core/network/response_parsers.dart';
 import 'package:huanxi/core/utils/conversation_refresh_throttler.dart';
 
 void main() {
   group('AppRoutes', () {
-    test('tryGetAnchorInfo returns null for invalid extra', () {
-      expect(AppRoutes.tryGetAnchorInfo(null), isNull);
-      expect(AppRoutes.tryGetAnchorInfo({'id': 1}), isNull);
+    test('tryGetCertifiedUserInfo returns null for invalid extra', () {
+      expect(AppRoutes.tryGetCertifiedUserInfo(null), isNull);
+      expect(AppRoutes.tryGetCertifiedUserInfo({'id': 1}), isNull);
     });
 
-    test('tryGetAnchorInfo returns anchor for valid extra', () {
-      const anchor = AnchorInfo(id: 1, userId: 2);
-      expect(AppRoutes.tryGetAnchorInfo(anchor), anchor);
+    test('tryGetCertifiedUserInfo returns certified user for valid extra', () {
+      const certifiedUser = CertifiedUserInfo(id: 1, userId: 2);
+      expect(AppRoutes.tryGetCertifiedUserInfo(certifiedUser), certifiedUser);
     });
   });
 

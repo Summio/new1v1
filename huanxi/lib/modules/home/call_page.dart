@@ -330,7 +330,7 @@ class _CallPageState extends ConsumerState<CallPage> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
     final tokenNames = ref.watch(tokenNamesProvider);
-    final isCurrentUserAnchor = authState.appRole == 'anchor';
+    final isCurrentUserCertified = authState.isCertifiedUser;
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: widget.embedded
@@ -377,7 +377,7 @@ class _CallPageState extends ConsumerState<CallPage> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    '去首页找一个主播开始通话吧',
+                    '去首页找一个认证用户开始通话吧',
                     style: TextStyle(
                       fontSize: 14,
                       color: AppTheme.textSecondary,
@@ -387,7 +387,7 @@ class _CallPageState extends ConsumerState<CallPage> {
                   OutlinedButton.icon(
                     onPressed: () => context.go(AppRoutes.index),
                     icon: const Icon(Icons.explore),
-                    label: const Text('去首页找主播'),
+                    label: const Text('去首页找认证用户'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppTheme.primaryColor,
                       side: const BorderSide(color: AppTheme.primaryColor),
@@ -416,7 +416,7 @@ class _CallPageState extends ConsumerState<CallPage> {
                   final (icon, iconColor) = _phaseIcon(trace);
                   final detail = trace.detailText(
                     currentUserId: _myAppUserId,
-                    isCurrentUserAnchor: isCurrentUserAnchor,
+                    isCurrentUserCertified: isCurrentUserCertified,
                     coinName: tokenNames.coinName,
                     diamondName: tokenNames.diamondName,
                   );

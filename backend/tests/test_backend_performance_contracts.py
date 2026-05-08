@@ -10,22 +10,22 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
-from app.api.v1.app import anchor, call  # noqa: E402
+from app.api.v1.app import call, certified_user  # noqa: E402
 from app.core import init_app  # noqa: E402
 from app.websocket import presence  # noqa: E402
 
-ANCHOR_API = BACKEND_ROOT / "app/api/v1/app/anchor.py"
+CERTIFIED_USER_API = BACKEND_ROOT / "app/api/v1/app/certified_user.py"
 PRESENCE = BACKEND_ROOT / "app/websocket/presence.py"
 INIT_APP = BACKEND_ROOT / "app/core/init_app.py"
 CALL_API = BACKEND_ROOT / "app/api/v1/app/call.py"
 MIGRATIONS_DIR = BACKEND_ROOT / "migrations/models"
 
 
-def test_anchor_list_uses_bounded_online_page_helpers() -> None:
-    anchor_text = ANCHOR_API.read_text(encoding="utf-8")
+def test_certified_user_list_uses_bounded_online_page_helpers() -> None:
+    certified_user_text = CERTIFIED_USER_API.read_text(encoding="utf-8")
     presence_text = PRESENCE.read_text(encoding="utf-8")
-    source = inspect.getsource(anchor.anchor_list)
-    fetch_source = inspect.getsource(anchor._fetch_sorted_anchor_page)
+    source = inspect.getsource(certified_user.certified_user_list)
+    fetch_source = inspect.getsource(certified_user._fetch_sorted_certified_user_page)
     page_helper_source = inspect.getsource(presence.get_online_user_id_page)
 
     assert "get_online_user_ids" not in source
@@ -36,7 +36,7 @@ def test_anchor_list_uses_bounded_online_page_helpers() -> None:
     assert "zrange(_WS_ONLINE_SINCE_KEY, 0, -1" not in page_helper_source
     assert "get_online_user_id_page" in presence_text
     assert "count_online_user_ids" in presence_text
-    assert "_is_online_user" in anchor_text
+    assert "_is_online_user" in certified_user_text
 
 
 def test_audit_log_excludes_app_business_routes() -> None:

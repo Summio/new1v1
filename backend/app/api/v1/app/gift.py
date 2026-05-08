@@ -132,11 +132,11 @@ async def gift_send(req_in: GiftSendIn):
     if not sender or decimal_to_float_2(sender.coins) < decimal_to_float_2(total_price):
         return Fail(code=501, msg="余额不足，请先充值")
 
-    receiver_is_anchor = bool(target_user.is_anchor)
+    receiver_is_certified_user = bool(target_user.is_certified_user)
     anchor_share_bps = await get_gift_anchor_share_bps()
     anchor_income_diamonds = (
         calc_gift_anchor_income_diamonds(total_price, anchor_share_bps)
-        if receiver_is_anchor
+        if receiver_is_certified_user
         else calc_gift_anchor_income_diamonds(0, anchor_share_bps)
     )
     current_coins = 0.0
@@ -212,7 +212,7 @@ async def gift_send(req_in: GiftSendIn):
     )
     asyncio.create_task(
         _ws_push_gift_received(
-            anchor_id=int(target_user.id),
+            target_user_id=int(target_user.id),
             sender_id=int(sender_id),
             sender_nickname=sender_nickname,
             sender_avatar=sender_avatar,
@@ -285,7 +285,7 @@ async def _ws_push_gift_sent(
 
 async def _ws_push_gift_received(
     *,
-    anchor_id: int,
+    target_user_id: int,
     sender_id: int,
     sender_nickname: str,
     sender_avatar: str | None,
@@ -304,7 +304,7 @@ async def _ws_push_gift_received(
         from app.websocket import events as ws_events
 
         await ws_events.push_gift_received(
-            anchor_id=anchor_id,
+            target_user_id=target_user_id,
             sender_id=sender_id,
             sender_nickname=sender_nickname,
             sender_avatar=sender_avatar,

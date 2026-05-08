@@ -6,11 +6,11 @@ from app.models import AppUser, CallRecord
 async def resolve_payer_id(call_record: CallRecord) -> int:
     """统一付费方判断逻辑。
 
-    视频通话扣费方规则：非主播方永远付费。
-    - 主播（无论主叫还是被叫）不扣费
-    - 非主播用户（无论主叫还是被叫）付费
-    - 双方都不是主播：主叫方付费（caller_id）
-    - 双方都是主播：不计费，返回 0
+    视频通话扣费方规则：非认证用户方永远付费。
+    - 认证用户（无论主叫还是被叫）不扣费
+    - 非认证用户（无论主叫还是被叫）付费
+    - 双方都不是认证用户：主叫方付费（caller_id）
+    - 双方都是认证用户：不计费，返回 0
 
     注意：此函数在事务外调用，需要确保调用方处理 TOCTOU 问题。
 
@@ -23,23 +23,23 @@ async def resolve_payer_id(call_record: CallRecord) -> int:
     caller_id = int(call_record.caller_id)
     callee_id = int(call_record.callee_id)
 
-    # 单次 IN 查询获取主播状态
+    # 单次 IN 查询获取认证用户状态
     users = {
-        int(u.id): bool(u.is_anchor)
+        int(u.id): bool(u.is_certified_user)
         for u in await AppUser.filter(id__in=[caller_id, callee_id]).all()
     }
-    caller_is_anchor = users.get(caller_id, False)
-    callee_is_anchor = users.get(callee_id, False)
+    caller_is_certified_user = users.get(caller_id, False)
+    callee_is_certified_user = users.get(callee_id, False)
 
-    # 主播不承担通话费用
-    if caller_is_anchor and not callee_is_anchor:
-        # 主播是主叫，非主播是被叫 -> 被叫付费
+    # 认证用户不承担通话费用
+    if caller_is_certified_user and not callee_is_certified_user:
+        # 认证用户是主叫，非认证用户是被叫 -> 被叫付费
         return callee_id
-    if callee_is_anchor and not caller_is_anchor:
-        # 主播是被叫，非主播是主叫 -> 主叫付费
+    if callee_is_certified_user and not caller_is_certified_user:
+        # 认证用户是被叫，非认证用户是主叫 -> 主叫付费
         return caller_id
 
-    # 双方都是主播 -> 不计费
+    # 双方都是认证用户 -> 不计费
     return 0
 
 

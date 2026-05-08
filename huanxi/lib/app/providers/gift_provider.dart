@@ -128,20 +128,20 @@ class GiftListNotifier extends StateNotifier<GiftListState> {
   /// 发送礼物（内部调用）
   Future<GiftSendResult> _sendGiftInternal({
     required int giftId,
-    required int anchorId,
+    required int targetUserId,
     required int quantity,
     required String scene,
     int? callId,
   }) async {
     _requestSeq++;
     final requestId =
-        '${DateTime.now().microsecondsSinceEpoch}_${_requestSeq}_${_random.nextInt(1 << 31)}_${giftId}_${anchorId}_${quantity}_${scene}_${callId ?? 0}';
+        '${DateTime.now().microsecondsSinceEpoch}_${_requestSeq}_${_random.nextInt(1 << 31)}_${giftId}_${targetUserId}_${quantity}_${scene}_${callId ?? 0}';
     try {
       final data = await _dio.apiPost(
         ApiEndpoints.giftSend,
         data: {
           'gift_id': giftId,
-          'anchor_user_id': anchorId,
+          'target_user_id': targetUserId,
           'quantity': quantity,
           'scene': scene,
           'call_id': callId,
@@ -177,14 +177,14 @@ class GiftListNotifier extends StateNotifier<GiftListState> {
   /// 发送礼物（公开方法，供外部调用）
   Future<GiftSendResult> sendGift({
     required int giftId,
-    required int anchorId,
+    required int targetUserId,
     int quantity = 1,
     String scene = 'chat',
     int? callId,
   }) {
     return _sendGiftInternal(
       giftId: giftId,
-      anchorId: anchorId,
+      targetUserId: targetUserId,
       quantity: quantity,
       scene: scene,
       callId: callId,

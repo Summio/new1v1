@@ -8,11 +8,11 @@ import CrudTable from '@/components/table/CrudTable.vue'
 import api from '@/api'
 import { formatDate } from '@/utils'
 
-defineOptions({ name: '主播申请审核' })
+defineOptions({ name: '真人认证审核' })
 
 const $table = ref(null)
 const queryItems = ref({
-  anchor_apply_status: 'pending',
+  certification_status: 'pending',
 })
 
 const statusOptions = [
@@ -31,14 +31,14 @@ onMounted(() => {
   $table.value?.handleSearch()
 })
 
-async function getAnchorApplyReviewList(params = {}) {
+async function getCertificationReviewList(params = {}) {
   const query = { ...params }
-  if (!query.anchor_apply_status) {
-    query.anchor_apply_status = 'pending'
+  if (!query.certification_status) {
+    query.certification_status = 'pending'
   }
   const res = await api.getAppUserList(query)
   const rows = Array.isArray(res?.data) ? res.data : []
-  const filtered = rows.filter((item) => (item?.anchor_apply_status || 'none') !== 'none')
+  const filtered = rows.filter((item) => (item?.certification_status || 'none') !== 'none')
   return {
     ...res,
     data: filtered,
@@ -48,21 +48,21 @@ async function getAnchorApplyReviewList(params = {}) {
 async function handleQuickReview(row, status) {
   if (!row?.id) return
   if (status === 'approved') {
-    const ok = window.confirm('确认通过该主播申请？')
+    const ok = window.confirm('确认通过该真人认证申请？')
     if (!ok) return
-    await api.reviewAnchorApply({ id: row.id, status: 'approved' })
+    await api.reviewCertification({ id: row.id, status: 'approved' })
     window.$message?.success('审核通过')
     $table.value?.handleSearch()
     return
   }
-  const reason = window.prompt('请输入驳回原因（必填）', row.anchor_reject_reason || '')
+  const reason = window.prompt('请输入驳回原因（必填）', row.certification_reject_reason || '')
   if (reason === null) return
   const trimmed = reason.trim()
   if (!trimmed) {
     window.$message?.warning('驳回原因不能为空')
     return
   }
-  await api.reviewAnchorApply({
+  await api.reviewCertification({
     id: row.id,
     status: 'rejected',
     reject_reason: trimmed,
@@ -86,35 +86,35 @@ const columns = [
   },
   {
     title: '申请状态',
-    key: 'anchor_apply_status',
+    key: 'certification_status',
     width: 100,
     align: 'center',
     render(row) {
-      const target = statusMap[row.anchor_apply_status] || {
+      const target = statusMap[row.certification_status] || {
         type: 'default',
-        text: row.anchor_apply_status || '-',
+        text: row.certification_status || '-',
       }
       return h(NTag, { type: target.type }, { default: () => target.text })
     },
   },
   {
     title: '申请时间',
-    key: 'anchor_apply_at',
+    key: 'certification_apply_at',
     width: 160,
     align: 'center',
     render(row) {
-      return row.anchor_apply_at ? formatDate(row.anchor_apply_at, 'YYYY-MM-DD HH:mm:ss') : '-'
+      return row.certification_apply_at ? formatDate(row.certification_apply_at, 'YYYY-MM-DD HH:mm:ss') : '-'
     },
   },
   {
     title: '正面照',
-    key: 'anchor_apply_face_image',
+    key: 'certification_face_image',
     width: 120,
     align: 'center',
     render(row) {
-      if (!row.anchor_apply_face_image) return '-'
+      if (!row.certification_face_image) return '-'
       return h(NImage, {
-        src: row.anchor_apply_face_image,
+        src: row.certification_face_image,
         width: 64,
         height: 84,
         objectFit: 'cover',
@@ -124,19 +124,19 @@ const columns = [
   },
   {
     title: '驳回原因',
-    key: 'anchor_reject_reason',
+    key: 'certification_reject_reason',
     minWidth: 220,
     render(row) {
-      return row.anchor_reject_reason || '-'
+      return row.certification_reject_reason || '-'
     },
   },
   {
     title: '审核时间',
-    key: 'anchor_reviewed_at',
+    key: 'certification_reviewed_at',
     width: 160,
     align: 'center',
     render(row) {
-      return row.anchor_reviewed_at ? formatDate(row.anchor_reviewed_at, 'YYYY-MM-DD HH:mm:ss') : '-'
+      return row.certification_reviewed_at ? formatDate(row.certification_reviewed_at, 'YYYY-MM-DD HH:mm:ss') : '-'
     },
   },
   {
@@ -146,7 +146,7 @@ const columns = [
     align: 'center',
     fixed: 'right',
     render(row) {
-      if (row.anchor_apply_status !== 'pending') return '-'
+      if (row.certification_status !== 'pending') return '-'
       return h('div', { style: 'display:flex;gap:8px;justify-content:center;' }, [
         h(
           NButton,
@@ -187,12 +187,12 @@ const columns = [
 </script>
 
 <template>
-  <CommonPage show-footer title="主播申请审核">
+  <CommonPage show-footer title="真人认证审核">
     <CrudTable
       ref="$table"
       v-model:query-items="queryItems"
       :columns="columns"
-      :get-data="getAnchorApplyReviewList"
+      :get-data="getCertificationReviewList"
       :scroll-x="1250"
     >
       <template #queryBar>
@@ -216,7 +216,7 @@ const columns = [
         </QueryBarItem>
         <QueryBarItem label="申请状态" :label-width="70">
           <NSelect
-            v-model:value="queryItems.anchor_apply_status"
+            v-model:value="queryItems.certification_status"
             style="width: 160px"
             :options="statusOptions"
             placeholder="请选择状态"
@@ -234,3 +234,4 @@ const columns = [
   margin-top: 2px;
 }
 </style>
+

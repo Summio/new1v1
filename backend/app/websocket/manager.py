@@ -90,15 +90,15 @@ class ConnectionManager:
             await redis.sadd(_WS_ONLINE_KEY, user_id)
             await redis.set(_user_pid_key(user_id), self._pid)
             await redis.sadd(_pid_users_key(self._pid), user_id)
-            is_anchor = False
+            is_certified_user = False
             try:
                 from app.models import AppUser
 
                 user = await AppUser.filter(id=user_id).first()
-                is_anchor = bool(user and user.status == "normal" and user.is_anchor)
+                is_certified_user = bool(user and user.status == "normal" and user.is_certified_user)
             except Exception:
-                is_anchor = False
-            await mark_online_since(user_id, is_anchor=is_anchor)
+                is_certified_user = False
+            await mark_online_since(user_id, is_certified_user=is_certified_user)
             logger.info(f"[WS] user {user_id} connected on pid {self._pid}, total={len(self._ws_conns)}")
         except Exception as e:
             logger.warning(f"[WS] Redis update failed on connect: {e}")
