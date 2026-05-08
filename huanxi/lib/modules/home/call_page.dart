@@ -18,7 +18,11 @@ import '../../services/im_service.dart';
 /// 通话记录页面（我的页入口）
 /// 数据源：IM 通话留痕消息（custom message: call_trace.v1）
 class CallPage extends ConsumerStatefulWidget {
-  const CallPage({super.key});
+  final bool embedded;
+
+  const CallPage({super.key}) : embedded = false;
+
+  const CallPage.embedded({super.key}) : embedded = true;
 
   @override
   ConsumerState<CallPage> createState() => _CallPageState();
@@ -329,7 +333,9 @@ class _CallPageState extends ConsumerState<CallPage> {
     final isCurrentUserAnchor = authState.appRole == 'anchor';
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(backgroundColor: Colors.white, title: const Text('通话记录')),
+      appBar: widget.embedded
+          ? null
+          : AppBar(backgroundColor: Colors.white, title: const Text('通话记录')),
       body: _isLoading
           ? StatusView.loading(message: '正在加载通话记录...')
           : (_errorMessage != null && _records.isEmpty)

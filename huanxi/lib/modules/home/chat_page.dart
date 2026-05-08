@@ -1,0 +1,221 @@
+import 'package:flutter/material.dart';
+
+import '../../app/theme/app_theme.dart';
+import '../../app/widgets/status_view.dart';
+import 'call_page.dart';
+import 'messages_page.dart';
+import 'my_following_page.dart';
+
+class ChatPage extends StatefulWidget {
+  final int initialTabIndex;
+  final int initialRelationTabIndex;
+
+  const ChatPage({
+    super.key,
+    this.initialTabIndex = 0,
+    this.initialRelationTabIndex = 0,
+  });
+
+  static int tabIndexFromQuery(String? value) {
+    switch (value) {
+      case 'call':
+        return 1;
+      case 'relations':
+        return 2;
+      case 'messages':
+      default:
+        return 0;
+    }
+  }
+
+  static int relationTabIndexFromQuery(String? value) {
+    switch (value) {
+      case 'fans':
+        return 1;
+      case 'blacklist':
+        return 2;
+      case 'following':
+      default:
+        return 0;
+    }
+  }
+
+  @override
+  State<ChatPage> createState() => _ChatPageState();
+}
+
+class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
+  late final TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(
+      length: 3,
+      initialIndex: widget.initialTabIndex.clamp(0, 2),
+      vsync: this,
+    );
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppTheme.backgroundColor,
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        scrolledUnderElevation: 0,
+        elevation: 0,
+        centerTitle: false,
+        title: const Text(
+          '聊天',
+          style: TextStyle(
+            fontSize: 32,
+            fontWeight: FontWeight.w900,
+            color: Colors.black,
+          ),
+        ),
+      ),
+      body: Column(
+        children: [
+          _ChatCategorySegment(
+            labels: const ['消息', '通话', '关系'],
+            controller: _tabController,
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: TabBarView(
+              controller: _tabController,
+              children: [
+                const MessagesPage.embedded(),
+                const CallPage.embedded(),
+                _RelationTabs(initialIndex: widget.initialRelationTabIndex),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RelationTabs extends StatefulWidget {
+  final int initialIndex;
+
+  const _RelationTabs({required this.initialIndex});
+
+  @override
+  State<_RelationTabs> createState() => _RelationTabsState();
+}
+
+class _RelationTabsState extends State<_RelationTabs>
+    with SingleTickerProviderStateMixin {
+  late final TabController _relationTabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _relationTabController = TabController(
+      length: 3,
+      initialIndex: widget.initialIndex.clamp(0, 2),
+      vsync: this,
+    );
+  }
+
+  @override
+  void dispose() {
+    _relationTabController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        const SizedBox(height: 4),
+        _ChatCategorySegment(
+          labels: const ['关注', '粉丝', '黑名单'],
+          controller: _relationTabController,
+        ),
+        const SizedBox(height: 8),
+        Expanded(
+          child: TabBarView(
+            controller: _relationTabController,
+            children: const [
+              MyFollowingPage.embedded(),
+              MyFansPage.embedded(),
+              _BlacklistPlaceholder(),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ChatCategorySegment extends StatelessWidget {
+  final List<String> labels;
+  final TabController controller;
+
+  const _ChatCategorySegment({required this.labels, required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    final animation = controller.animation;
+    return AnimatedBuilder(
+      animation: animation ?? controller,
+      builder: (context, _) {
+        final selectedIndex = controller.index;
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF2F2F7),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: List.generate(labels.length, (index) {
+              final active = selectedIndex == index;
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () => controller.animateTo(index),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 160),
+                    height: 36,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: active ? Colors.black : Colors.transparent,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      labels[index],
+                      style: TextStyle(
+                        color: active ? Colors.white : AppTheme.textSecondary,
+                        fontSize: 14,
+                        fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _BlacklistPlaceholder extends StatelessWidget {
+  const _BlacklistPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return StatusView.empty(message: '黑名单功能开发中');
+  }
+}

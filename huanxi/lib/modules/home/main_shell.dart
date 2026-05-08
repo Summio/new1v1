@@ -443,7 +443,7 @@ class _MainShellState extends ConsumerState<MainShell>
                 _NavItem(
                   icon: Icons.chat_bubble_outline_rounded,
                   activeIcon: Icons.chat_bubble_rounded,
-                  label: '消息',
+                  label: '聊天',
                   isActive: currentIndex == 2,
                   badgeCount: _imUnreadCount,
                   onTap: () => _onTap(context, 2),

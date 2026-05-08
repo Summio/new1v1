@@ -195,30 +195,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               ),
               child: Column(
                 children: [
-                  _buildMenuTile(
-                    icon: Icons.currency_exchange_rounded,
-                    title: '充值',
-                    iconColor: const Color(0xFFFF9500),
-                    onTap: () => context.push(AppRoutes.recharge),
-                  ),
-                  _buildMenuTile(
-                    icon: Icons.history_rounded,
-                    title: '通话记录',
-                    iconColor: const Color(0xFF5856D6),
-                    onTap: () => context.push(AppRoutes.callHistory),
-                  ),
-                  _buildMenuTile(
-                    icon: Icons.favorite_rounded,
-                    title: '我的关注',
-                    iconColor: const Color(0xFFFF2D55),
-                    onTap: () => context.push(AppRoutes.myFollowing),
-                  ),
-                  _buildMenuTile(
-                    icon: Icons.people_alt_rounded,
-                    title: '我的粉丝',
-                    iconColor: const Color(0xFF34C759),
-                    onTap: () => context.push(AppRoutes.myFans),
-                  ),
                   if (!isAnchor)
                     _buildMenuTile(
                       icon: Icons.live_tv_rounded,

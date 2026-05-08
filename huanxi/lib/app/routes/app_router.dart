@@ -5,7 +5,7 @@ import '../../modules/auth/login_page.dart';
 import '../../modules/auth/register_page.dart';
 import '../../modules/home/home_page.dart';
 import '../../modules/home/discover_page.dart';
-import '../../modules/home/messages_page.dart';
+import '../../modules/home/chat_page.dart';
 import '../../modules/home/profile_page.dart';
 import '../../modules/home/main_shell.dart';
 import '../../modules/home/anchor_apply_page.dart';
@@ -118,8 +118,16 @@ final appRouter = GoRouter(
         ),
         GoRoute(
           path: AppRoutes.messages,
-          pageBuilder: (context, state) =>
-              NoTransitionPage(child: MessagesPage()),
+          pageBuilder: (context, state) => NoTransitionPage(
+            child: ChatPage(
+              initialTabIndex: ChatPage.tabIndexFromQuery(
+                state.uri.queryParameters['tab'],
+              ),
+              initialRelationTabIndex: ChatPage.relationTabIndexFromQuery(
+                state.uri.queryParameters['relation'],
+              ),
+            ),
+          ),
         ),
         GoRoute(
           path: AppRoutes.profile,

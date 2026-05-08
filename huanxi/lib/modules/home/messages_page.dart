@@ -19,7 +19,11 @@ import 'package:huanxi/core/utils/app_toast.dart';
 
 /// 消息页
 class MessagesPage extends ConsumerStatefulWidget {
-  const MessagesPage({super.key});
+  final bool embedded;
+
+  const MessagesPage({super.key}) : embedded = false;
+
+  const MessagesPage.embedded({super.key}) : embedded = true;
 
   @override
   ConsumerState<MessagesPage> createState() => _MessagesPageState();
@@ -312,21 +316,23 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        scrolledUnderElevation: 0,
-        elevation: 0,
-        centerTitle: false,
-        title: const Text(
-          '消息',
-          style: TextStyle(
-            fontSize: 32,
-            fontWeight: FontWeight.w900,
-            color: Colors.black,
-            letterSpacing: -1.0,
-          ),
-        ),
-      ),
+      appBar: widget.embedded
+          ? null
+          : AppBar(
+              backgroundColor: Colors.white,
+              scrolledUnderElevation: 0,
+              elevation: 0,
+              centerTitle: false,
+              title: const Text(
+                '消息',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.black,
+                  letterSpacing: -1.0,
+                ),
+              ),
+            ),
       body: _isLoading
           ? StatusView.loading()
           : _conversations.isEmpty
