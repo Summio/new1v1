@@ -8,6 +8,7 @@ from app.services.im_text_billing_service import (
     parse_im_text_billing_config,
 )
 from app.services.certification_price_service import parse_certified_call_price_tiers
+from app.services.customer_service import load_customer_service_config
 
 router = APIRouter()
 _DEFAULT_CERTIFIED_CALL_PRICE_TIERS = [0, 100, 200, 300, 500]
@@ -71,6 +72,7 @@ async def get_app_bootstrap():
         ensure_ascii=False,
     )
     certified_call_price_tiers = parse_certified_call_price_tiers(certified_call_price_tiers_raw)
+    customer_service = await load_customer_service_config(config_map)
 
     return Success(
         data={
@@ -92,8 +94,12 @@ async def get_app_bootstrap():
             "recharge_packages": recharge_packages,
             "withdraw_packages": withdraw_packages,
             "certified_call_price_tiers": certified_call_price_tiers,
-            "im_text_billing": dump_im_text_billing_config(
-                parse_im_text_billing_config(config_map)
-            ),
+            "customer_service": {
+                "enabled": customer_service.enabled,
+                "user_id": customer_service.user_id,
+                "nickname": customer_service.nickname,
+                "avatar": customer_service.avatar,
+            },
+            "im_text_billing": dump_im_text_billing_config(parse_im_text_billing_config(config_map)),
         }
     )

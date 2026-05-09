@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../app/theme/app_theme.dart';
+import '../../core/utils/app_toast.dart';
 
 class ProfilePage extends ConsumerStatefulWidget {
   const ProfilePage({super.key});
@@ -25,8 +26,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
+    final appInitState = ref.watch(appInitProvider);
     final tokenNames = ref.watch(tokenNamesProvider);
     final isCertifiedUser = authState.isCertifiedUser;
+    final customerServiceEnabled =
+        appInitState.customerServiceEnabled &&
+        (appInitState.customerServiceUserId?.trim().isNotEmpty ?? false);
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
@@ -154,6 +159,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               child: Column(
                 children: [
                   _buildMenuTile(
+                    icon: Icons.headset_mic_outlined,
+                    title: '在线客服',
+                    iconColor: customerServiceEnabled
+                        ? AppTheme.primaryColor
+                        : AppTheme.textHint,
+                    onTap: () => _openCustomerService(context, ref),
+                  ),
+                  _buildMenuTile(
                     icon: Icons.verified_user_rounded,
                     title: '认证中心',
                     iconColor: AppTheme.secondaryColor,
@@ -252,6 +265,28 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           ],
         ),
       ],
+    );
+  }
+
+  Future<void> _openCustomerService(BuildContext context, WidgetRef ref) async {
+    await ref.read(appInitProvider.notifier).init();
+    if (!context.mounted) return;
+    final initState = ref.read(appInitProvider);
+    final userId = initState.customerServiceUserId?.trim() ?? '';
+    if (!initState.customerServiceEnabled || userId.isEmpty) {
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('客服暂未配置，请稍后再试')),
+      );
+      return;
+    }
+    await context.push(
+      '${AppRoutes.im}/$userId',
+      extra: {
+        'peerNickname': initState.customerServiceNickname,
+        'peerAvatarUrl': initState.customerServiceAvatar,
+        'isCustomerService': true,
+      },
     );
   }
 

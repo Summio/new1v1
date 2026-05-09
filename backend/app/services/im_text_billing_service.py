@@ -6,6 +6,7 @@ from tortoise.transactions import in_transaction
 
 from app.models import AppUser, ImTextMessageChargeRecord, SystemConfig
 from app.schemas.system import IMTextBillingConfigOut
+from app.services.customer_service import load_customer_service_config
 from app.services.gift_income_service import decimal_to_float_2, quantize_decimal_2
 from app.utils.parse import clamp_int, safe_parse_int
 
@@ -72,8 +73,14 @@ def should_charge_im_text_message(
     price: int,
     sender_is_certified_user: bool,
     receiver_is_certified_user: bool,
+    receiver_is_customer_service: bool = False,
 ) -> bool:
-    return bool(enabled) and int(price or 0) > 0 and not bool(sender_is_certified_user)
+    return (
+        bool(enabled)
+        and int(price or 0) > 0
+        and not bool(sender_is_certified_user)
+        and not bool(receiver_is_customer_service)
+    )
 
 
 def should_credit_im_text_receiver(*, receiver_is_certified_user: bool) -> bool:
@@ -118,6 +125,13 @@ async def charge_im_text_message(
     if not receiver:
         raise IMTextBillingError(404, "目标用户不存在或状态异常")
 
+    customer_service_config = await load_customer_service_config()
+    receiver_is_customer_service = (
+        customer_service_config.enabled
+        and customer_service_config.user_id is not None
+        and int(receiver_user_id) == int(customer_service_config.user_id)
+    )
+
     existing = await ImTextMessageChargeRecord.filter(
         sender_id=sender_id,
         request_id=request_id,
@@ -140,6 +154,7 @@ async def charge_im_text_message(
         price=config.price,
         sender_is_certified_user=bool(sender.is_certified_user),
         receiver_is_certified_user=bool(receiver.is_certified_user),
+        receiver_is_customer_service=receiver_is_customer_service,
     )
     if not should_charge:
         return IMTextChargeResult(

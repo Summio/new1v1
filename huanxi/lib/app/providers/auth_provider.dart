@@ -122,6 +122,10 @@ class AppInitState {
   final String diamondName;
   final int? imSdkAppId;
   final bool imConfigured;
+  final bool customerServiceEnabled;
+  final String? customerServiceUserId;
+  final String customerServiceNickname;
+  final String? customerServiceAvatar;
   final bool imTextBillingEnabled;
   final int imTextBillingPrice;
   final int imTextBillingAnchorShareBps;
@@ -134,6 +138,10 @@ class AppInitState {
     this.diamondName = '钻石',
     this.imSdkAppId,
     this.imConfigured = false,
+    this.customerServiceEnabled = false,
+    this.customerServiceUserId,
+    this.customerServiceNickname = '在线客服',
+    this.customerServiceAvatar,
     this.imTextBillingEnabled = false,
     this.imTextBillingPrice = 0,
     this.imTextBillingAnchorShareBps = 5000,
@@ -147,6 +155,10 @@ class AppInitState {
     String? diamondName,
     int? imSdkAppId,
     bool? imConfigured,
+    bool? customerServiceEnabled,
+    String? customerServiceUserId,
+    String? customerServiceNickname,
+    String? customerServiceAvatar,
     bool? imTextBillingEnabled,
     int? imTextBillingPrice,
     int? imTextBillingAnchorShareBps,
@@ -159,6 +171,14 @@ class AppInitState {
       diamondName: diamondName ?? this.diamondName,
       imSdkAppId: imSdkAppId ?? this.imSdkAppId,
       imConfigured: imConfigured ?? this.imConfigured,
+      customerServiceEnabled:
+          customerServiceEnabled ?? this.customerServiceEnabled,
+      customerServiceUserId:
+          customerServiceUserId ?? this.customerServiceUserId,
+      customerServiceNickname:
+          customerServiceNickname ?? this.customerServiceNickname,
+      customerServiceAvatar:
+          customerServiceAvatar ?? this.customerServiceAvatar,
       imTextBillingEnabled: imTextBillingEnabled ?? this.imTextBillingEnabled,
       imTextBillingPrice: imTextBillingPrice ?? this.imTextBillingPrice,
       imTextBillingAnchorShareBps:
@@ -166,6 +186,94 @@ class AppInitState {
       certifiedCallPriceTiers:
           certifiedCallPriceTiers ?? this.certifiedCallPriceTiers,
     );
+  }
+
+  static AppInitState fromBootstrapMap(Map<String, dynamic> respData) {
+    final tokenNames = respData['token_names'] as Map<String, dynamic>?;
+    final im = respData['im'] as Map<String, dynamic>?;
+    final imTextBilling = respData['im_text_billing'] as Map<String, dynamic>?;
+    final customerService =
+        respData['customer_service'] as Map<String, dynamic>?;
+    final sdkAppIdRaw = im?['sdk_app_id'];
+    final sdkAppId = sdkAppIdRaw is num ? sdkAppIdRaw.toInt() : null;
+    final imTextPriceRaw = imTextBilling?['price'];
+    final imTextShareRaw = imTextBilling?['certified_user_share_bps'];
+    final customerServiceUserId = _parseCustomerServiceUserId(
+      customerService?['user_id'],
+    );
+    final tierRaw = respData['certified_call_price_tiers'];
+    final tiers = tierRaw is List
+        ? tierRaw
+              .map((item) => item is num ? item.toInt() : int.tryParse('$item'))
+              .whereType<int>()
+              .where((item) => item >= 0)
+              .toSet()
+              .toList()
+        : <int>[];
+    tiers.sort();
+    if (!tiers.contains(0)) tiers.insert(0, 0);
+
+    return AppInitState(
+      isLoading: false,
+      loaded: true,
+      coinName: tokenNames?['coin_name'] as String? ?? '金币',
+      diamondName: tokenNames?['diamond_name'] as String? ?? '钻石',
+      imConfigured: im?['configured'] == true,
+      imSdkAppId: sdkAppId,
+      customerServiceEnabled:
+          customerService?['enabled'] == true && customerServiceUserId != null,
+      customerServiceUserId: customerServiceUserId,
+      customerServiceNickname: _parseCustomerServiceNickname(
+        customerService?['nickname'],
+      ),
+      customerServiceAvatar: _parseCustomerServiceAvatar(
+        customerService?['avatar'],
+      ),
+      imTextBillingEnabled: imTextBilling?['enabled'] == true,
+      imTextBillingPrice: imTextPriceRaw is num
+          ? imTextPriceRaw.toInt()
+          : int.tryParse('${imTextPriceRaw ?? 0}') ?? 0,
+      imTextBillingAnchorShareBps: imTextShareRaw is num
+          ? imTextShareRaw.toInt()
+          : int.tryParse('${imTextShareRaw ?? 5000}') ?? 5000,
+      certifiedCallPriceTiers: tiers,
+    );
+  }
+
+  static String? _parseCustomerServiceUserId(dynamic raw) {
+    if (raw is int) {
+      return raw > 0 ? raw.toString() : null;
+    }
+    if (raw is num) {
+      final value = raw.toInt();
+      return value > 0 ? value.toString() : null;
+    }
+    if (raw is String) {
+      final value = raw.trim();
+      if (value.isEmpty) return null;
+      if (value.startsWith('chat_')) {
+        final numeric = value.substring('chat_'.length);
+        return int.tryParse(numeric)?.toString();
+      }
+      return int.tryParse(value)?.toString();
+    }
+    return null;
+  }
+
+  static String? _parseCustomerServiceAvatar(dynamic raw) {
+    if (raw is String) {
+      final value = raw.trim();
+      if (value.isNotEmpty) return value;
+    }
+    return null;
+  }
+
+  static String _parseCustomerServiceNickname(dynamic raw) {
+    if (raw is String) {
+      final value = raw.trim();
+      if (value.isNotEmpty) return value;
+    }
+    return '在线客服';
   }
 }
 
@@ -523,43 +631,7 @@ class AppInitNotifier extends StateNotifier<AppInitState> {
         state = state.copyWith(isLoading: false, loaded: true);
         return;
       }
-
-      final tokenNames = respData['token_names'] as Map<String, dynamic>?;
-      final im = respData['im'] as Map<String, dynamic>?;
-      final imTextBilling =
-          respData['im_text_billing'] as Map<String, dynamic>?;
-      final sdkAppIdRaw = im?['sdk_app_id'];
-      final sdkAppId = sdkAppIdRaw is num ? sdkAppIdRaw.toInt() : null;
-      final imTextPriceRaw = imTextBilling?['price'];
-      final imTextShareRaw = imTextBilling?['certified_user_share_bps'];
-      final tierRaw = respData['certified_call_price_tiers'];
-      final tiers = tierRaw is List
-          ? tierRaw
-                .map((item) => item is num ? item.toInt() : int.tryParse('$item'))
-                .whereType<int>()
-                .where((item) => item >= 0)
-                .toSet()
-                .toList()
-          : <int>[];
-      tiers.sort();
-      if (!tiers.contains(0)) tiers.insert(0, 0);
-
-      state = state.copyWith(
-        isLoading: false,
-        loaded: true,
-        coinName: tokenNames?['coin_name'] as String? ?? '金币',
-        diamondName: tokenNames?['diamond_name'] as String? ?? '钻石',
-        imConfigured: im?['configured'] == true,
-        imSdkAppId: sdkAppId,
-        imTextBillingEnabled: imTextBilling?['enabled'] == true,
-        imTextBillingPrice: imTextPriceRaw is num
-            ? imTextPriceRaw.toInt()
-            : int.tryParse('${imTextPriceRaw ?? 0}') ?? 0,
-        imTextBillingAnchorShareBps: imTextShareRaw is num
-            ? imTextShareRaw.toInt()
-            : int.tryParse('${imTextShareRaw ?? 5000}') ?? 5000,
-        certifiedCallPriceTiers: tiers,
-      );
+      state = AppInitState.fromBootstrapMap(respData);
     } catch (e) {
       AppLogger.debug('appInit.init error: $e');
       state = state.copyWith(isLoading: false, loaded: true);
@@ -592,4 +664,3 @@ final tokenNamesProvider = Provider<TokenNamesState>((ref) {
 final isLoggedInProvider = Provider<bool>((ref) {
   return ref.watch(authProvider).isLoggedIn;
 });
-

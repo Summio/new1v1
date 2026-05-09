@@ -107,6 +107,17 @@ const configDefs = [
     description: '文字聊天扣费后认证用户获得钻石的分成比例',
   },
   {
+    group: 'IM 配置',
+    name: '在线客服账号',
+    key: 'customer_service_user_id',
+    type: 'number',
+    unit: '用户ID',
+    min: 1,
+    max: 999999999999,
+    defaultValue: '',
+    description: '在线客服对应的 App 用户 ID',
+  },
+  {
     group: 'RTC 配置',
     name: 'RTC App ID',
     key: 'rtc_app_id',

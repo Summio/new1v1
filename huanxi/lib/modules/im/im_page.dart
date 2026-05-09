@@ -49,6 +49,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
   bool _isLoading = false;
   bool _isLoadingMore = false;
   String? _myUserId;
+  bool _isCustomerServiceConversation = false;
   String? _peerUserId;
   String? _peerNickname;
   String? _peerAvatarUrl;
@@ -124,15 +125,29 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
       final sdkAppId = appInitState.imConfigured
           ? (appInitState.imSdkAppId ?? usersigData.sdkAppId)
           : usersigData.sdkAppId;
+      final customerServiceUserId =
+          appInitState.customerServiceUserId?.trim() ?? '';
+      _isCustomerServiceConversation = _matchesCustomerServiceConversation(
+        widget.userId,
+        customerServiceUserId,
+      );
 
       // 3. 获取当前用户ID
       _myUserId = '${_chatPrefix}_$myUserId';
       _myAvatarUrl = authState.avatar;
       _peerUserId = _normalizeIMUserId(widget.userId);
-      _peerNickname = widget.initialPeerNickname;
-      _peerAvatarUrl = _imService.normalizeMediaUrl(
-        widget.initialPeerAvatarUrl,
-      );
+      if (_isCustomerServiceConversation) {
+        _peerNickname = appInitState.customerServiceNickname;
+        final customerAvatar = _imService.normalizeMediaUrl(
+          appInitState.customerServiceAvatar,
+        );
+        _peerAvatarUrl = customerAvatar.isNotEmpty ? customerAvatar : null;
+      } else {
+        _peerNickname = widget.initialPeerNickname;
+        _peerAvatarUrl = _imService.normalizeMediaUrl(
+          widget.initialPeerAvatarUrl,
+        );
+      }
 
       // 4. 初始化并登录 IM（全局会话）
       await _imService.ensureReady(
@@ -232,6 +247,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
   }
 
   Future<void> _loadPeerProfile() async {
+    if (_isCustomerServiceConversation) return;
     if (_peerUserId == null) return;
     try {
       final profiles = await _imService.getUsersProfile(
@@ -252,6 +268,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
   }
 
   Future<void> _loadPeerProfileFromApp() async {
+    if (_isCustomerServiceConversation) return;
     final peer = _peerUserId;
     if (peer == null || peer.isEmpty) return;
     final peerNumId = _extractAppUserId(peer);
@@ -393,27 +410,28 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
 
     final receiverUserId = _extractAppUserId(_peerUserId ?? widget.userId);
     if (receiverUserId == null || receiverUserId <= 0) {
-      AppToast.showSnackBar(
-        context,
-        const SnackBar(content: Text('聊天对象异常')),
-      );
+      AppToast.showSnackBar(context, const SnackBar(content: Text('聊天对象异常')));
       return;
     }
 
     try {
       _isSendingText = true;
-      final requestId = _newTextChargeRequestId(
-        receiverUserId: receiverUserId,
-        text: text,
-      );
-      final charge = await _chargeTextMessageIfNeeded(
-        receiverUserId: receiverUserId,
-        requestId: requestId,
-      );
-      ref.read(authProvider.notifier).syncBalance(
-            coins: charge.coins.toDouble(),
-            diamonds: charge.diamonds.toDouble(),
-          );
+      if (!_isCustomerServiceConversation) {
+        final requestId = _newTextChargeRequestId(
+          receiverUserId: receiverUserId,
+          text: text,
+        );
+        final charge = await _chargeTextMessageIfNeeded(
+          receiverUserId: receiverUserId,
+          requestId: requestId,
+        );
+        ref
+            .read(authProvider.notifier)
+            .syncBalance(
+              coins: charge.coins.toDouble(),
+              diamonds: charge.diamonds.toDouble(),
+            );
+      }
 
       final sentMsg = await _imService.sendTextMessage(
         receiver: _peerUserId ?? _normalizeIMUserId(widget.userId),
@@ -461,10 +479,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
   }) async {
     final data = await DioClient.instance.apiPost(
       ApiEndpoints.imTextCharge,
-      data: {
-        'receiver_user_id': receiverUserId,
-        'request_id': requestId,
-      },
+      data: {'receiver_user_id': receiverUserId, 'request_id': requestId},
     );
     return ResponseParsers.parseIMTextChargePayload(data);
   }
@@ -497,6 +512,13 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
   }
 
   void _openGiftPanel() {
+    if (_isCustomerServiceConversation) {
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('客服会话不支持送礼物')),
+      );
+      return;
+    }
     final targetUserId = _resolveGiftTargetUserId();
     if (targetUserId == null || targetUserId <= 0) {
       AppToast.showSnackBar(
@@ -611,9 +633,33 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
   }
 
   String _peerDisplayName() {
+    if (_isCustomerServiceConversation) {
+      return '在线客服';
+    }
     final nick = _peerNickname?.trim() ?? '';
     if (nick.isNotEmpty) return nick;
     return '';
+  }
+
+  bool _matchesCustomerServiceConversation(
+    String rawUserId,
+    String customerServiceUserId,
+  ) {
+    final current = _normalizeComparableUserId(rawUserId);
+    final support = _normalizeComparableUserId(customerServiceUserId);
+    if (current == null || support == null) return false;
+    return current == support;
+  }
+
+  String? _normalizeComparableUserId(String rawUserId) {
+    final trimmed = rawUserId.trim();
+    if (trimmed.isEmpty) return null;
+    final normalized = trimmed.startsWith('chat_')
+        ? trimmed.substring('chat_'.length)
+        : trimmed;
+    final parsed = int.tryParse(normalized);
+    if (parsed == null || parsed <= 0) return null;
+    return parsed.toString();
   }
 
   int? _extractAppUserId(String imUserId) {
@@ -634,6 +680,13 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
   }
 
   Future<void> _startVideoCall() async {
+    if (_isCustomerServiceConversation) {
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('客服会话不支持视频通话')),
+      );
+      return;
+    }
     _dismissKeyboard();
     if (_isStartingCall) return;
     final peerNumId = _extractAppUserId(_peerUserId ?? widget.userId);
@@ -716,30 +769,32 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        actions: [
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_horiz),
-            onSelected: (value) {
-              if (value == 'block') {
-                AppToast.showSnackBar(
-                  context,
-                  const SnackBar(content: Text('拉黑功能开发中')),
-                );
-                return;
-              }
-              if (value == 'report') {
-                AppToast.showSnackBar(
-                  context,
-                  const SnackBar(content: Text('投诉功能开发中')),
-                );
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem<String>(value: 'block', child: Text('拉黑')),
-              PopupMenuItem<String>(value: 'report', child: Text('投诉')),
-            ],
-          ),
-        ],
+        actions: _isCustomerServiceConversation
+            ? const []
+            : [
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_horiz),
+                  onSelected: (value) {
+                    if (value == 'block') {
+                      AppToast.showSnackBar(
+                        context,
+                        const SnackBar(content: Text('拉黑功能开发中')),
+                      );
+                      return;
+                    }
+                    if (value == 'report') {
+                      AppToast.showSnackBar(
+                        context,
+                        const SnackBar(content: Text('投诉功能开发中')),
+                      );
+                    }
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem<String>(value: 'block', child: Text('拉黑')),
+                    PopupMenuItem<String>(value: 'report', child: Text('投诉')),
+                  ],
+                ),
+              ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
@@ -789,7 +844,8 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
                                       message: msg,
                                       maxBubbleWidth: maxBubbleWidth,
                                       currentUserId: currentUserId,
-                                      isCurrentUserCertified: isCurrentUserCertified,
+                                      isCurrentUserCertified:
+                                          isCurrentUserCertified,
                                       coinName: tokenNames.coinName,
                                       diamondName: tokenNames.diamondName,
                                       avatarUrl: msg.isMe
@@ -809,22 +865,24 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
                           minimum: const EdgeInsets.fromLTRB(12, 8, 12, 8),
                           child: Row(
                             children: [
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.videocam_outlined,
-                                  color: AppTheme.textSecondary,
+                              if (!_isCustomerServiceConversation)
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.videocam_outlined,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                  onPressed: _isStartingCall
+                                      ? null
+                                      : _startVideoCall,
                                 ),
-                                onPressed: _isStartingCall
-                                    ? null
-                                    : _startVideoCall,
-                              ),
-                              IconButton(
-                                icon: const Icon(
-                                  Icons.card_giftcard,
-                                  color: AppTheme.textSecondary,
+                              if (!_isCustomerServiceConversation)
+                                IconButton(
+                                  icon: const Icon(
+                                    Icons.card_giftcard,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                  onPressed: _openGiftPanel,
                                 ),
-                                onPressed: _openGiftPanel,
-                              ),
                               Expanded(
                                 child: TextField(
                                   focusNode: _inputFocusNode,

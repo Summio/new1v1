@@ -51,8 +51,19 @@ def test_im_text_charges_normal_sender_to_normal_receiver_without_income() -> No
         price=1,
         sender_is_certified_user=False,
         receiver_is_certified_user=False,
+        receiver_is_customer_service=False,
     )
     assert not should_credit_im_text_receiver(receiver_is_certified_user=False)
+
+
+def test_im_text_does_not_charge_customer_service_receiver() -> None:
+    assert not should_charge_im_text_message(
+        enabled=True,
+        price=1,
+        sender_is_certified_user=False,
+        receiver_is_certified_user=False,
+        receiver_is_customer_service=True,
+    )
 
 
 def test_im_text_charge_request_requires_request_id() -> None:
@@ -122,6 +133,20 @@ def test_bootstrap_returns_im_text_billing_config() -> None:
 
     assert "parse_im_text_billing_config" in content
     assert '"im_text_billing"' in content or "'im_text_billing'" in content
+
+
+def test_bootstrap_returns_customer_service_config() -> None:
+    content = _read_backend_file("app/api/v1/app/bootstrap.py")
+
+    assert "customer_service" in content
+    assert "load_customer_service_config" in content
+
+
+def test_admin_system_config_page_exposes_customer_service_config() -> None:
+    content = _read_backend_file("web/src/views/system/config/index.vue")
+
+    assert "customer_service_user_id" in content
+    assert "在线客服" in content or "客服" in content
 
 
 def test_wallet_transactions_include_im_text_records() -> None:
