@@ -10,7 +10,7 @@ class AppUser(BaseModel, TimestampMixin):
     nickname = fields.CharField(max_length=30, null=True, description="昵称")
     avatar = fields.CharField(max_length=500, null=True, description="头像URL")
     signature = fields.CharField(max_length=500, null=True, description="个性签名")
-    gender = fields.CharField(max_length=10, null=True, default="secret", description="male/female/secret")
+    gender = fields.CharField(max_length=10, null=True, default="male", description="male/female")
     birth_date = fields.DateField(null=True, description="出生日期")
     height_cm = fields.IntField(null=True, description="身高(cm)")
     weight_kg = fields.IntField(null=True, description="体重(kg)")

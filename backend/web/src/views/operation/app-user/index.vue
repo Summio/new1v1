@@ -35,7 +35,7 @@ const modalForm = ref({
   nickname: '',
   avatar: '',
   signature: '',
-  gender: 'secret',
+  gender: 'male',
   birth_date: '',
   height_cm: null,
   weight_kg: null,
@@ -145,7 +145,6 @@ const statusOptions = [
 const genderOptions = [
   { label: '男', value: 'male' },
   { label: '女', value: 'female' },
-  { label: '保密', value: 'secret' },
 ]
 
 const certificationOptions = [
@@ -294,7 +293,7 @@ function openEditModal(row) {
     nickname: row.nickname || '',
     avatar: row.avatar || '',
     signature: row.signature || '',
-    gender: row.gender || 'secret',
+    gender: row.gender || 'male',
     birth_date: row.birth_date || '',
     height_cm: row.height_cm ?? null,
     weight_kg: row.weight_kg ?? null,
@@ -651,7 +650,7 @@ async function handleSave() {
       nickname: (modalForm.value.nickname || '').trim(),
       avatar: (modalForm.value.avatar || '').trim(),
       signature: (modalForm.value.signature || '').trim(),
-      gender: modalForm.value.gender || 'secret',
+      gender: modalForm.value.gender || 'male',
       birth_date: (modalForm.value.birth_date || '').trim() || null,
       height_cm: modalForm.value.height_cm ?? null,
       weight_kg: modalForm.value.weight_kg ?? null,
@@ -807,7 +806,7 @@ const columns = [
     key: 'profile',
     width: 260,
     render(row) {
-      const genderMap = { male: '男', female: '女', secret: '保密' }
+      const genderMap = { male: '男', female: '女' }
       const hw = [
         row.height_cm ? `${row.height_cm}cm` : '',
         row.weight_kg ? `${row.weight_kg}kg` : '',
@@ -815,7 +814,7 @@ const columns = [
         .filter(Boolean)
         .join(' / ')
       return h('div', { class: 'meta-wrap' }, [
-        infoLine('性别', genderMap[row.gender] || '保密'),
+        infoLine('性别', genderMap[row.gender] || '男'),
         infoLine('生日', row.birth_date || '-'),
         infoLine('身高体重', hw || '-'),
         infoLine('所在地', row.location_city || '-'),

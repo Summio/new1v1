@@ -833,7 +833,7 @@ class _CertifiedUserDetailPageState extends ConsumerState<CertifiedUserDetailPag
   String _genderText(String? value) {
     if (value == 'male') return '男';
     if (value == 'female') return '女';
-    return '保密';
+    return '男';
   }
 }
 

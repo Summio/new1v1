@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, File, Query, UploadFile
 from tortoise.expressions import Q
@@ -60,7 +61,7 @@ async def list_app_user(
     status: str = Query("", description="状态 normal/banned"),
     is_certified_user: bool | None = Query(None, description="是否真人认证用户"),
     certification_status: str = Query("", description="真人认证状态 none/pending/approved/rejected"),
-    gender: str = Query("", description="性别 male/female/secret"),
+    gender: Literal["", "male", "female"] = Query("", description="性别 male/female"),
     location_city: str = Query("", description="所在地(省-市)"),
 ):
     q = Q()

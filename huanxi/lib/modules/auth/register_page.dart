@@ -63,7 +63,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     try {
       final data = await DioClient.instance.apiPost(
         ApiEndpoints.appRegister,
-        data: {'phone': phone, 'password': password, 'gender': 'secret'},
+        data: {'phone': phone, 'password': password, 'gender': 'male'},
       );
       if (!mounted) return;
 

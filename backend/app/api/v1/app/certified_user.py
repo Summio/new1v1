@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Query
 from tortoise.expressions import Q
@@ -125,7 +125,7 @@ async def _fetch_sorted_certified_user_page(q, section: str, page: int, page_siz
 async def certified_user_list(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=50, description="每页数量"),
-    gender: Optional[str] = Query(None, description="性别过滤: male/female"),
+    gender: Optional[Literal["male", "female"]] = Query(None, description="性别过滤: male/female"),
     keyword: Optional[str] = Query(None, description="搜索关键字：用户ID或昵称"),
     section: str = Query("recommend", description="首页板块: recommend/active/new"),
 ):
@@ -176,7 +176,7 @@ async def certified_user_list(
                 "avatar": to_relative_media_url(user.avatar),
                 "cover_url": to_relative_media_url(user.cover_url),
                 "album_photos": normalize_media_list(user.album_photos),
-                "gender": user.gender or "secret",
+                "gender": user.gender or "male",
                 "birth_date": user.birth_date.isoformat() if user.birth_date else None,
                 "height_cm": user.height_cm,
                 "weight_kg": user.weight_kg,

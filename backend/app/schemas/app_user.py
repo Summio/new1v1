@@ -17,7 +17,6 @@ _PASSWORD_RE = re_compile(r"^(?=.*[A-Za-z])(?=.*\d).{8,}$")
 class GenderType(str, Enum):
     MALE = "male"
     FEMALE = "female"
-    SECRET = "secret"
 
 
 # ===== 登录 =====
@@ -49,7 +48,7 @@ class AppLoginOut(BaseModel):
 class AppRegisterIn(BaseModel):
     phone: str = Field(..., description="手机号", json_schema_extra={"example": "13800138000"})
     password: str = Field(..., min_length=8, max_length=32, description="密码(8-32位，须包含字母和数字)")
-    gender: GenderType = Field(default=GenderType.SECRET, description="性别")
+    gender: GenderType = Field(default=GenderType.MALE, description="性别")
 
     @field_validator("phone")
     @classmethod
@@ -81,7 +80,7 @@ class AppUserInfoOut(BaseModel):
     nickname: Optional[str] = None
     avatar: Optional[str] = None
     signature: Optional[str] = None
-    gender: str = "secret"
+    gender: str = "male"
     birth_date: Optional[date] = None
     height_cm: Optional[int] = None
     weight_kg: Optional[int] = None

@@ -23,7 +23,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   late TextEditingController _weightController;
 
   bool _isSaving = false;
-  String _gender = 'secret';
+  String _gender = 'male';
   DateTime? _birthDate;
   String _locationCity = '';
   List<String> _albumPhotos = <String>[];
@@ -347,7 +347,6 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                       items: const [
                         DropdownMenuItem(value: 'male', child: Text('男')),
                         DropdownMenuItem(value: 'female', child: Text('女')),
-                        DropdownMenuItem(value: 'secret', child: Text('保密')),
                       ],
                       onChanged: (value) {
                         if (value == null) return;

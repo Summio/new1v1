@@ -11,7 +11,7 @@ class CertifiedUserOut(BaseModel):
     user_id: int
     nickname: str
     avatar: Optional[str] = None
-    gender: str = "secret"
+    gender: str = "male"
     intro: Optional[str] = None
     tags: Optional[List[str]] = None
     call_price: int = 0
@@ -24,7 +24,7 @@ class CertifiedUserListOut(BaseModel):
     user_id: int
     nickname: str
     avatar: Optional[str] = None
-    gender: str = "secret"
+    gender: str = "male"
     intro: Optional[str] = None
     tags: Optional[List[str]] = None
     call_price: int = 0
