@@ -42,13 +42,28 @@ def resolve_income_certified_user_id(users: list[AppUser], payer_id: int | None)
     if payer_id is None or int(payer_id) <= 0:
         return 0
     return next(
-        (
-            int(user.id)
-            for user in users
-            if bool(user.is_certified_user) and int(user.id) != int(payer_id)
-        ),
+        (int(user.id) for user in users if bool(user.is_certified_user) and int(user.id) != int(payer_id)),
         0,
     )
+
+
+def resolve_income_certified_user_id_for_call(
+    users: list[AppUser],
+    payer_id: int | None,
+    caller_id: int,
+    callee_id: int,
+) -> int:
+    if payer_id is None or int(payer_id) <= 0:
+        return 0
+
+    certified_user_ids = {int(user.id) for user in users if bool(user.is_certified_user)}
+    caller_id = int(caller_id)
+    callee_id = int(callee_id)
+    payer_id = int(payer_id)
+
+    if caller_id in certified_user_ids and callee_id in certified_user_ids:
+        return callee_id if payer_id == caller_id else caller_id
+    return resolve_income_certified_user_id(users, payer_id)
 
 
 def _resolve_snapshot_share_bps(call_record: Any) -> int:
@@ -77,7 +92,12 @@ async def settle_call_certified_user_income_once(
     certified_user_share_bps = _resolve_snapshot_share_bps(call_record)
     income_certified_user_id = int(getattr(call_record, "income_certified_user_id", 0) or 0)
     if income_certified_user_id <= 0 and participants is not None:
-        income_certified_user_id = resolve_income_certified_user_id(participants, payer_id)
+        income_certified_user_id = resolve_income_certified_user_id_for_call(
+            participants,
+            payer_id,
+            caller_id=int(getattr(call_record, "caller_id", 0) or 0),
+            callee_id=int(getattr(call_record, "callee_id", 0) or 0),
+        )
 
     call_record.income_certified_user_id = income_certified_user_id or None
     call_record.certified_user_share_bps = certified_user_share_bps
@@ -94,7 +114,9 @@ async def settle_call_certified_user_income_once(
     if not certified_user:
         return CallIncomeSettlement(certified_user_id=income_certified_user_id)
 
-    await AppUser.filter(id=income_certified_user_id).using_db(conn).update(diamonds=F("diamonds") + certified_user_income)
+    await AppUser.filter(id=income_certified_user_id).using_db(conn).update(
+        diamonds=F("diamonds") + certified_user_income
+    )
     call_record.certified_user_income_diamonds = certified_user_income
     call_record.income_settled_at = now_local_naive()
     return CallIncomeSettlement(
@@ -102,5 +124,3 @@ async def settle_call_certified_user_income_once(
         certified_user_income_diamonds=certified_user_income,
         settled=True,
     )
-
-

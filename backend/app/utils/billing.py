@@ -6,11 +6,10 @@ from app.models import AppUser, CallRecord
 async def resolve_payer_id(call_record: CallRecord) -> int:
     """统一付费方判断逻辑。
 
-    视频通话扣费方规则：非认证用户方永远付费。
-    - 认证用户（无论主叫还是被叫）不扣费
-    - 非认证用户（无论主叫还是被叫）付费
-    - 双方都不是认证用户：主叫方付费（caller_id）
-    - 双方都是认证用户：不计费，返回 0
+    视频通话扣费方规则：
+    - 认证用户与非认证用户通话：非认证用户付费
+    - 双方都是认证用户：主叫方付费
+    - 双方都不是认证用户：不计费，返回 0
 
     注意：此函数在事务外调用，需要确保调用方处理 TOCTOU 问题。
 
@@ -24,10 +23,7 @@ async def resolve_payer_id(call_record: CallRecord) -> int:
     callee_id = int(call_record.callee_id)
 
     # 单次 IN 查询获取认证用户状态
-    users = {
-        int(u.id): bool(u.is_certified_user)
-        for u in await AppUser.filter(id__in=[caller_id, callee_id]).all()
-    }
+    users = {int(u.id): bool(u.is_certified_user) for u in await AppUser.filter(id__in=[caller_id, callee_id]).all()}
     caller_is_certified_user = users.get(caller_id, False)
     callee_is_certified_user = users.get(callee_id, False)
 
@@ -38,8 +34,11 @@ async def resolve_payer_id(call_record: CallRecord) -> int:
     if callee_is_certified_user and not caller_is_certified_user:
         # 认证用户是被叫，非认证用户是主叫 -> 主叫付费
         return caller_id
+    if caller_is_certified_user and callee_is_certified_user:
+        # 双方都是认证用户 -> 主叫方付费，被叫方获得收益
+        return caller_id
 
-    # 双方都是认证用户 -> 不计费
+    # 双方都不是认证用户 -> 不计费
     return 0
 
 

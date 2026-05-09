@@ -16,7 +16,7 @@ def test_moment_model_has_operation_fields() -> None:
     assert "recommend_override" in Moment._meta.fields_map
 
 
-def test_app_moment_feed_accepts_categories_without_anchor_filter() -> None:
+def test_app_moment_feed_accepts_categories_without_certification_filter() -> None:
     source = inspect.getsource(app_moment.get_moment_feed)
 
     assert "category: str" in source

@@ -20,6 +20,8 @@ def parse_certified_call_price_tiers(raw_value: str | None) -> list[int]:
             continue
         if item not in tiers:
             tiers.append(item)
+    if not any(tier > 0 for tier in tiers):
+        return DEFAULT_CERTIFIED_CALL_PRICE_TIERS.copy()
     if 0 not in tiers:
         tiers.insert(0, 0)
     return sorted(tiers) if tiers else DEFAULT_CERTIFIED_CALL_PRICE_TIERS.copy()
@@ -38,9 +40,9 @@ async def normalize_certified_call_price(*, price: int, is_certified_user: bool)
         return 0
     tiers = await get_certified_call_price_tiers()
     price_value = int(price)
-    if price_value in tiers:
-        return price_value
-    if 100 in tiers:
-        return 100
     paid_tiers = [tier for tier in tiers if tier > 0]
+    if price_value > 0 and price_value in paid_tiers:
+        return price_value
+    if 100 in paid_tiers:
+        return 100
     return paid_tiers[0] if paid_tiers else 0

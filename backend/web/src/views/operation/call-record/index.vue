@@ -81,7 +81,7 @@ const columns = [
       ])
     },
   },
-  { title: '单价(分/分钟)', key: 'call_price', width: 120, align: 'center' },
+  { title: '单价(金币/分钟)', key: 'call_price', width: 120, align: 'center' },
   {
     title: '时长',
     key: 'duration',

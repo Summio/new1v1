@@ -1,6 +1,5 @@
 <script setup>
-import { h, onMounted, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, h, onMounted, reactive, ref, watch } from 'vue'
 import {
   NButton,
   NDataTable,
@@ -26,7 +25,6 @@ import { formatDate } from '@/utils'
 defineOptions({ name: 'App用户管理' })
 
 const $table = ref(null)
-const router = useRouter()
 const queryItems = ref({})
 const editModalVisible = ref(false)
 const saving = ref(false)
@@ -63,7 +61,16 @@ const callRecordRows = ref([])
 const peerJumpLoading = ref(false)
 const billLoading = ref(false)
 const billRows = ref([])
-const certifiedCallPriceOptions = ref([{ label: '免费', value: 0 }])
+const certifiedCallPriceAllOptions = ref([{ label: '免费', value: 0 }])
+const certifiedCallPriceFreeOptions = computed(() => [{ label: '免费', value: 0 }])
+const certifiedCallPricePaidOptions = computed(() =>
+  certifiedCallPriceAllOptions.value.filter((option) => option.value > 0)
+)
+const certifiedCallPriceOptions = computed(() =>
+  modalForm.value.is_certified_user
+    ? certifiedCallPricePaidOptions.value
+    : certifiedCallPriceFreeOptions.value
+)
 const billSummary = reactive({
   income_coins_total: 0,
   income_diamonds_total: 0,
@@ -122,6 +129,14 @@ onMounted(() => {
   $table.value?.handleSearch()
 })
 
+watch(
+  () => [
+    modalForm.value.is_certified_user,
+    certifiedCallPricePaidOptions.value.map((option) => option.value).join(','),
+  ],
+  () => normalizeModalCallPrice()
+)
+
 const statusOptions = [
   { label: '正常', value: 'normal' },
   { label: '封禁', value: 'banned' },
@@ -143,12 +158,6 @@ const certificationStatusOptions = [
   { label: '已通过', value: 'approved' },
   { label: '已驳回', value: 'rejected' },
 ]
-const certificationStatusMap = {
-  none: { type: 'default', text: '未申请' },
-  pending: { type: 'warning', text: '待审核' },
-  approved: { type: 'success', text: '已通过' },
-  rejected: { type: 'error', text: '已驳回' },
-}
 
 async function fetchCertifiedCallPriceOptions() {
   try {
@@ -160,12 +169,30 @@ async function fetchCertifiedCallPriceOptions() {
       )
     ).sort((a, b) => a - b)
     if (!normalized.includes(0)) normalized.unshift(0)
-    certifiedCallPriceOptions.value = normalized.map((value) => ({
-      label: value === 0 ? '免费' : `${value / 100}元/分钟`,
+    certifiedCallPriceAllOptions.value = normalized.map((value) => ({
+      label: value === 0 ? '免费' : `${value}金币/分钟`,
       value,
     }))
+    normalizeModalCallPrice()
   } catch (error) {
-    certifiedCallPriceOptions.value = [{ label: '免费', value: 0 }]
+    certifiedCallPriceAllOptions.value = [{ label: '免费', value: 0 }]
+    normalizeModalCallPrice()
+  }
+}
+
+function normalizeModalCallPrice() {
+  if (!modalForm.value.is_certified_user) {
+    modalForm.value.certified_call_price = 0
+    return
+  }
+  const paidOptions = certifiedCallPricePaidOptions.value
+  if (!paidOptions.length) {
+    modalForm.value.certified_call_price = 0
+    return
+  }
+  const currentPrice = Number(modalForm.value.certified_call_price || 0)
+  if (!paidOptions.some((option) => option.value === currentPrice)) {
+    modalForm.value.certified_call_price = paidOptions[0].value
   }
 }
 const callRecordStatusOptions = [
@@ -303,16 +330,12 @@ function openEditModal(row) {
   billSummary.income_diamonds_total = 0
   billSummary.expense_coins_total = 0
   billSummary.expense_diamonds_total = 0
+  normalizeModalCallPrice()
   editModalVisible.value = true
 }
 
 function handleViewEdit(row) {
   openEditModal(row)
-}
-
-function handleOpenUserMoments() {
-  if (!modalForm.value.id) return
-  router.push({ path: '/operation/moment', query: { user_id: modalForm.value.id } })
 }
 
 function formatDuration(seconds) {
@@ -611,6 +634,15 @@ async function handleEditTabChange(name) {
 
 async function handleSave() {
   if (!modalForm.value.id) return
+  normalizeModalCallPrice()
+  if (modalForm.value.is_certified_user && !certifiedCallPricePaidOptions.value.length) {
+    $message?.warning('请先配置至少一个收费通话价格档位')
+    return
+  }
+  if (modalForm.value.is_certified_user && Number(modalForm.value.certified_call_price || 0) <= 0) {
+    $message?.warning('真人认证用户不能设置免费通话价格')
+    return
+  }
   saving.value = true
   try {
     const album = normalizeAlbum(modalForm.value.album_photos)
@@ -848,50 +880,6 @@ const columns = [
       )
     },
   },
-  {
-    title: '认证状态',
-    key: 'certification_status',
-    width: 100,
-    align: 'center',
-    render(row) {
-      const item = certificationStatusMap[row.certification_status] || {
-        type: 'default',
-        text: row.certification_status || '-',
-      }
-      return h(NTag, { type: item.type }, { default: () => item.text })
-    },
-  },
-  {
-    title: '认证正面照',
-    key: 'certification_face_image',
-    width: 100,
-    align: 'center',
-    render(row) {
-      if (!row.certification_face_image) return '-'
-      return h(NImage, {
-        src: row.certification_face_image,
-        width: 44,
-        height: 44,
-        objectFit: 'cover',
-        previewDisabled: false,
-        imgProps: {
-          class: 'avatar-thumb',
-          style: avatarImgStyle,
-          alt: 'certification-face',
-        },
-      })
-    },
-  },
-  {
-    title: '通话价格',
-    key: 'certified_call_price',
-    width: 110,
-    align: 'center',
-    render(row) {
-      const price = Number(row.certified_call_price || 0)
-      return price > 0 ? `${price / 100}元/分钟` : '免费'
-    },
-  },
   { title: '金币', key: 'coins', width: 90, align: 'center' },
   { title: '钻石', key: 'diamonds', width: 90, align: 'center' },
   { title: '冻结钻石', key: 'frozen_diamonds', width: 100, align: 'center' },
@@ -997,15 +985,6 @@ const columns = [
             placeholder="请选择类型"
           />
         </QueryBarItem>
-        <QueryBarItem label="认证状态" :label-width="70">
-          <NSelect
-            v-model:value="queryItems.certification_status"
-            clearable
-            style="width: 160px"
-            :options="certificationStatusOptions"
-            placeholder="请选择状态"
-          />
-        </QueryBarItem>
       </template>
     </CrudTable>
 
@@ -1060,7 +1039,7 @@ const columns = [
               <NSelect
                 v-model:value="modalForm.certified_call_price"
                 :options="certifiedCallPriceOptions"
-                :disabled="!modalForm.is_certified_user"
+                :disabled="!modalForm.is_certified_user || !certifiedCallPricePaidOptions.length"
               />
             </NFormItem>
             <NFormItem label="首页推荐">
@@ -1185,40 +1164,6 @@ const columns = [
           </NForm>
         </NTabPane>
 
-        <NTabPane name="assets" tab="资产信息">
-          <NForm label-placement="left" label-width="100" class="edit-form-grid">
-            <NFormItem label="金币">
-              <NInput :value="String(modalForm.coins ?? 0)" readonly />
-            </NFormItem>
-            <NFormItem label="钻石">
-              <NInput :value="String(modalForm.diamonds ?? 0)" readonly />
-            </NFormItem>
-            <NFormItem label="冻结钻石">
-              <NInput :value="String(modalForm.frozen_diamonds ?? 0)" readonly />
-            </NFormItem>
-            <NFormItem label="创建时间">
-              <NInput
-                :value="
-                  modalForm.created_at
-                    ? formatDate(modalForm.created_at, 'YYYY-MM-DD HH:mm:ss')
-                    : '-'
-                "
-                readonly
-              />
-            </NFormItem>
-            <NFormItem label="最后登录">
-              <NInput
-                :value="
-                  modalForm.last_login
-                    ? formatDate(modalForm.last_login, 'YYYY-MM-DD HH:mm:ss')
-                    : '-'
-                "
-                readonly
-              />
-            </NFormItem>
-          </NForm>
-        </NTabPane>
-
         <NTabPane name="call_records" tab="通话记录">
           <div class="call-record-query">
             <NSelect
@@ -1294,16 +1239,6 @@ const columns = [
             :bordered="false"
             :single-line="false"
           />
-        </NTabPane>
-
-        <NTabPane name="moments" tab="动态">
-          <div class="moment-entry">
-            <div>
-              <div class="moment-entry-title">查看该用户动态</div>
-              <div class="hint">跳转到动态管理，并按当前用户ID筛选。</div>
-            </div>
-            <NButton type="primary" @click="handleOpenUserMoments">打开动态管理</NButton>
-          </div>
         </NTabPane>
       </NTabs>
 
@@ -1496,22 +1431,6 @@ const columns = [
   align-items: center;
   gap: 10px;
   margin-bottom: 12px;
-}
-
-.moment-entry {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 16px;
-  border: 1px solid #edf0f5;
-  border-radius: 8px;
-}
-
-.moment-entry-title {
-  color: #242933;
-  font-weight: 600;
-  margin-bottom: 4px;
 }
 
 .bill-summary {

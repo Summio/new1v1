@@ -1,3 +1,4 @@
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -24,6 +25,20 @@ def test_calc_due_minutes_with_free_rounds_up_by_total_duration_after_gate() -> 
     assert call_api._calc_due_minutes_with_free(duration_seconds=61, free_seconds_before_billing=10) == 2
 
 
+def test_dialing_recomputes_billing_snapshot_after_user_locks() -> None:
+    content = call_api.__file__
+    assert content is not None
+    source = Path(content).read_text(encoding="utf-8")
+
+    assert "locked_caller = await AppUser.filter" in source
+    assert "locked_target_user = await AppUser.filter" in source
+    assert "caller_is_certified_user = bool(locked_caller.is_certified_user)" in source
+    assert "callee_is_certified_user = bool(locked_target_user.is_certified_user)" in source
+    assert "call_price = int(locked_caller.certified_call_price or 0)" in source
+    assert "call_price = int(locked_target_user.certified_call_price or 0)" in source
+    assert "locked_caller.coins < call_price" in source
+
+
 @pytest.mark.asyncio
 async def test_resolve_payer_id_with_snapshot_prefers_snapshot() -> None:
     record = SimpleNamespace(payer_user_id=2001)
@@ -40,3 +55,28 @@ async def test_resolve_payer_id_with_snapshot_fallback_dynamic(monkeypatch: pyte
     record = SimpleNamespace(payer_user_id=None)
     payer_id = await call_api._resolve_payer_id_with_snapshot(record)
     assert payer_id == 3002
+
+
+@pytest.mark.asyncio
+async def test_resolve_payer_id_for_certified_pair_returns_caller(monkeypatch: pytest.MonkeyPatch) -> None:
+    users = [
+        SimpleNamespace(id=1001, is_certified_user=True),
+        SimpleNamespace(id=2002, is_certified_user=True),
+    ]
+
+    class FakeQuery:
+        def select_for_update(self) -> "FakeQuery":
+            return self
+
+        async def all(self) -> list[SimpleNamespace]:
+            return users
+
+    class FakeAppUser:
+        @staticmethod
+        def filter(**_kwargs: object) -> FakeQuery:
+            return FakeQuery()
+
+    monkeypatch.setattr(call_api, "AppUser", FakeAppUser)
+
+    payer_id = await call_api._resolve_payer_id(SimpleNamespace(caller_id=1001, callee_id=2002))
+    assert payer_id == 1001

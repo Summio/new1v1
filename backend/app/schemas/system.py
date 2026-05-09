@@ -74,7 +74,7 @@ class CertifiedCallPriceConfigIn(BaseModel):
     tiers: List[int] = Field(
         min_length=1,
         max_length=50,
-        description="认证用户通话价格档位（分/分钟）",
+        description="认证用户通话价格档位（金币/分钟）",
     )
 
     @model_validator(mode="after")
@@ -85,6 +85,8 @@ class CertifiedCallPriceConfigIn(BaseModel):
                 raise ValueError("tiers must be greater than or equal to 0")
             if tier not in cleaned:
                 cleaned.append(tier)
+        if not any(tier > 0 for tier in cleaned):
+            raise ValueError("请至少保留一个收费档位")
         if 0 not in cleaned:
             cleaned.insert(0, 0)
         self.tiers = sorted(cleaned)

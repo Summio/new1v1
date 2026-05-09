@@ -72,6 +72,11 @@ def test_normalize_certified_call_price_forces_unverified_users_to_free() -> Non
     assert asyncio.run(service.normalize_certified_call_price(price=100, is_certified_user=False)) == 0
 
 
+def test_normalize_certified_call_price_maps_free_verified_price_to_paid_tier() -> None:
+    service = _load_service()
+    assert asyncio.run(service.normalize_certified_call_price(price=0, is_certified_user=True)) == 100
+
+
 def test_normalize_certified_call_price_maps_unknown_verified_price_to_100() -> None:
     service = _load_service()
     assert asyncio.run(service.normalize_certified_call_price(price=666, is_certified_user=True)) == 100

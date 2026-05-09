@@ -23,7 +23,7 @@ class AppUser(BaseModel, TimestampMixin):
     recommend_weight = fields.IntField(default=0, description="认证用户推荐值", db_index=True)
     certified_intro = fields.CharField(max_length=500, null=True, description="认证用户简介")
     certified_tags = fields.JSONField(null=True, description="认证用户标签列表")
-    certified_call_price = fields.BigIntField(default=0, description="认证用户通话价格(分/分钟)")
+    certified_call_price = fields.BigIntField(default=0, description="认证用户通话价格(金币/分钟)")
     certification_status = fields.CharField(
         max_length=20,
         default="none",

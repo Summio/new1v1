@@ -5,6 +5,7 @@ import {
   NDataTable,
   NInput,
   NInputNumber,
+  NPopconfirm,
   NSpace,
   NSwitch,
   NTag,
@@ -21,6 +22,8 @@ const loading = ref(false)
 const savingKey = ref('')
 const allConfigRows = ref([])
 const editValues = ref({})
+const priceTierLoading = ref(false)
+const priceTierRows = ref([])
 
 const configDefs = [
   {
@@ -75,7 +78,7 @@ const configDefs = [
   },
   {
     group: 'IM 配置',
-    name: '文字聊天扣费',
+    name: '文字聊天普通用户扣费',
     key: 'im_text_message_billing_enabled',
     type: 'bool',
     defaultValue: 'false',
@@ -83,7 +86,7 @@ const configDefs = [
   },
   {
     group: 'IM 配置',
-    name: '文字聊天每条扣费',
+    name: '文字聊天普通用户每条扣费',
     key: 'im_text_message_price',
     type: 'number',
     unit: '金币',
@@ -239,6 +242,72 @@ const configDefs = [
   },
 ]
 
+const priceTierColumns = [
+  { title: '序号', key: 'index', width: 80, align: 'center', render: (_row, index) => index + 1 },
+  {
+    title: '价格(金币/分钟)',
+    key: 'price',
+    width: 220,
+    render(row) {
+      if (row.editable) {
+        return h(NInputNumber, {
+          value: row.price,
+          min: 0,
+          precision: 0,
+          style: { width: '100%' },
+          onUpdateValue: (value) => {
+            row.price = value
+          },
+        })
+      }
+      return row.price
+    },
+  },
+  {
+    title: '展示',
+    key: 'display',
+    width: 160,
+    render(row) {
+      const price = Number(row.price || 0)
+      return price === 0 ? '免费' : `${price}金币/分钟`
+    },
+  },
+  {
+    title: '操作',
+    key: 'actions',
+    width: 220,
+    align: 'center',
+    render(row) {
+      if (row.editable) {
+        return h(NSpace, { justify: 'center' }, () => [
+          h(
+            NButton,
+            { size: 'small', type: 'primary', onClick: () => savePriceTier(row) },
+            () => '保存'
+          ),
+          h(NButton, { size: 'small', onClick: loadCertifiedCallPriceConfig }, () => '取消'),
+        ])
+      }
+      return h(NSpace, { justify: 'center' }, () => [
+        h(
+          NButton,
+          { size: 'small', disabled: row.price === 0, onClick: () => editPriceTier(row) },
+          () => '编辑'
+        ),
+        h(
+          NPopconfirm,
+          { onPositiveClick: () => deletePriceTier(row) },
+          {
+            trigger: () =>
+              h(NButton, { size: 'small', type: 'error', disabled: row.price === 0 }, () => '删除'),
+            default: () => '确认删除该档位？',
+          }
+        ),
+      ])
+    },
+  },
+]
+
 const tableRows = computed(() =>
   configDefs.map((def) => {
     const row = findRow(def.key)
@@ -316,7 +385,7 @@ const columns = [
 ]
 
 onMounted(async () => {
-  await loadAllConfigs()
+  await Promise.all([loadAllConfigs(), loadCertifiedCallPriceConfig()])
 })
 
 async function loadAllConfigs() {
@@ -335,6 +404,29 @@ async function loadAllConfigs() {
     console.error(error)
   } finally {
     loading.value = false
+  }
+}
+
+async function loadCertifiedCallPriceConfig() {
+  priceTierLoading.value = true
+  try {
+    const res = await api.getCertifiedCallPriceConfig()
+    const tiers = Array.isArray(res?.data?.tiers) ? res.data.tiers : [0, 100, 200, 300, 500]
+    priceTierRows.value = normalizePriceTiers(tiers).map((price) => ({
+      key: `tier-${price}`,
+      price,
+      editable: false,
+    }))
+  } catch (error) {
+    priceTierRows.value = normalizePriceTiers([0, 100, 200, 300, 500]).map((price) => ({
+      key: `tier-${price}`,
+      price,
+      editable: false,
+    }))
+    message.error('加载通话价格档位失败')
+    console.error(error)
+  } finally {
+    priceTierLoading.value = false
   }
 }
 
@@ -483,6 +575,80 @@ async function saveConfig(row) {
     savingKey.value = ''
   }
 }
+
+function normalizePriceTiers(tiers) {
+  const values = Array.from(
+    new Set(tiers.map((item) => Number(item)).filter((item) => Number.isInteger(item) && item >= 0))
+  ).sort((a, b) => a - b)
+  if (!values.includes(0)) values.unshift(0)
+  return values
+}
+
+function hasPaidPriceTier(tiers) {
+  return tiers.some((price) => Number(price) > 0)
+}
+
+function addPriceTier() {
+  priceTierRows.value.push({
+    key: `tier-new-${Date.now()}`,
+    price: 100,
+    editable: true,
+  })
+}
+
+function editPriceTier(row) {
+  if (row.price === 0) return
+  row.editable = true
+}
+
+async function savePriceTier(row) {
+  const price = Number(row.price)
+  if (!Number.isInteger(price) || price < 0) {
+    message.warning('价格必须是非负整数')
+    return
+  }
+  row.price = price
+  row.editable = false
+  await saveCertifiedCallPriceConfig()
+}
+
+async function deletePriceTier(row) {
+  if (row.price === 0) {
+    message.warning('免费档不能删除')
+    return
+  }
+  const nextRows = priceTierRows.value.filter((item) => item.key !== row.key)
+  if (!hasPaidPriceTier(nextRows.map((item) => item.price))) {
+    message.warning('请至少保留一个收费档位')
+    return
+  }
+  priceTierRows.value = nextRows
+  await saveCertifiedCallPriceConfig()
+}
+
+async function saveCertifiedCallPriceConfig() {
+  priceTierLoading.value = true
+  try {
+    const tiers = normalizePriceTiers(priceTierRows.value.map((item) => item.price))
+    if (!hasPaidPriceTier(tiers)) {
+      message.warning('请至少保留一个收费档位')
+      return
+    }
+    await api.updateCertifiedCallPriceConfig({ tiers })
+    message.success('保存成功')
+    priceTierRows.value = tiers.map((price) => ({
+      key: `tier-${price}`,
+      price,
+      editable: false,
+    }))
+  } catch (error) {
+    message.error(error?.message || '保存失败')
+    console.error(error)
+    await loadCertifiedCallPriceConfig()
+  } finally {
+    priceTierLoading.value = false
+  }
+}
 </script>
 
 <template>
@@ -500,6 +666,25 @@ async function saveConfig(row) {
         :single-line="false"
         :scroll-x="1320"
       />
+      <NSpace justify="space-between" align="center" class="mt-20">
+        <div class="section-title">认证用户通话价格档位</div>
+        <NButton type="primary" @click="addPriceTier">新增档位</NButton>
+      </NSpace>
+      <NDataTable
+        :columns="priceTierColumns"
+        :data="priceTierRows"
+        :loading="priceTierLoading"
+        :pagination="false"
+        :bordered="true"
+        :single-line="false"
+      />
     </NSpace>
   </CommonPage>
 </template>
+
+<style scoped>
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+}
+</style>

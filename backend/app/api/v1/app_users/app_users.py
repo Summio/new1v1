@@ -202,10 +202,17 @@ async def update_app_user(req_in: AppUserAdminUpdateIn):
     if "is_certified_user" in update_data or "certified_call_price" in update_data:
         target_certified = bool(update_data.get("is_certified_user", app_user.is_certified_user))
         target_price = int(update_data.get("certified_call_price", app_user.certified_call_price or 0))
-        update_data["certified_call_price"] = await normalize_certified_call_price(
+        normalized_price = await normalize_certified_call_price(
             price=target_price,
             is_certified_user=target_certified,
         )
+        if (
+            target_certified
+            and req_in.certified_call_price is not None
+            and normalized_price != target_price
+        ):
+            return Fail(code=400, msg="请选择后台配置的通话价格档位")
+        update_data["certified_call_price"] = normalized_price
     if req_in.album_photos is not None:
         update_data["album_photos"] = target_album
     if req_in.cover_url is not None:

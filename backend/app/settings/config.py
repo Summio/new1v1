@@ -68,9 +68,9 @@ class Settings(BaseSettings):
     DB_POOL_MAX: int = int(os.getenv("DB_POOL_MAX", "10"))
 
     # Redis 配置
-    REDIS_HOST: str = "localhost"
-    REDIS_PORT: int = 6379
-    REDIS_DB: int = 0
+    REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
+    REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
+    REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
     REDIS_PASSWORD: typing.Optional[str] = os.getenv("REDIS_PASSWORD") or None
 
     # 可信代理 IP 列表（逗号分隔），仅当请求来自这些 IP 时才读取 X-Forwarded-For 头

@@ -16,6 +16,14 @@ def test_certified_user_list_keyword_keeps_gender_filter_available() -> None:
     assert "gender" in params
 
 
+def test_certified_user_list_keyword_searches_all_normal_users() -> None:
+    source = inspect.getsource(certified_user_list)
+
+    assert 'filters = {"status": "normal"}' in source
+    assert 'filters["is_certified_user"] = True' in source
+    assert '"is_certified_user": True' not in source
+
+
 def test_profile_update_accepts_signature() -> None:
     assert "signature" in AppUserProfileUpdateIn.model_fields
 

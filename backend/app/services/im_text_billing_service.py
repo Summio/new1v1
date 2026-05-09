@@ -66,6 +66,20 @@ def dump_im_text_billing_config(config: IMTextBillingConfig) -> dict[str, int | 
     ).model_dump()
 
 
+def should_charge_im_text_message(
+    *,
+    enabled: bool,
+    price: int,
+    sender_is_certified_user: bool,
+    receiver_is_certified_user: bool,
+) -> bool:
+    return bool(enabled) and int(price or 0) > 0 and not bool(sender_is_certified_user)
+
+
+def should_credit_im_text_receiver(*, receiver_is_certified_user: bool) -> bool:
+    return bool(receiver_is_certified_user)
+
+
 @dataclass(frozen=True)
 class IMTextChargeResult:
     charged: bool
@@ -121,7 +135,12 @@ async def charge_im_text_message(
         )
 
     config = await load_im_text_billing_config()
-    should_charge = config.enabled and config.price > 0 and bool(receiver.is_certified_user) and not bool(sender.is_certified_user)
+    should_charge = should_charge_im_text_message(
+        enabled=config.enabled,
+        price=config.price,
+        sender_is_certified_user=bool(sender.is_certified_user),
+        receiver_is_certified_user=bool(receiver.is_certified_user),
+    )
     if not should_charge:
         return IMTextChargeResult(
             charged=False,
@@ -134,7 +153,12 @@ async def charge_im_text_message(
         )
 
     price = int(config.price)
-    certified_user_income_diamonds = calc_im_text_certified_user_income_diamonds(price, config.certified_user_share_bps)
+    should_credit_receiver = should_credit_im_text_receiver(receiver_is_certified_user=bool(receiver.is_certified_user))
+    certified_user_income_diamonds = (
+        calc_im_text_certified_user_income_diamonds(price, config.certified_user_share_bps)
+        if should_credit_receiver
+        else calc_im_text_certified_user_income_diamonds(0, config.certified_user_share_bps)
+    )
     async with in_transaction() as conn:
         updated = (
             await AppUser.filter(
@@ -171,4 +195,3 @@ async def charge_im_text_message(
         receiver_user_id=receiver_user_id,
         request_id=request_id,
     )
-

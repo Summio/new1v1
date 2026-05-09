@@ -95,7 +95,7 @@ class Gift(BaseModel):
 
     name = fields.CharField(max_length=50, description="礼物名称", db_index=True)
     icon = fields.CharField(max_length=500, description="礼物图标URL")
-    price = fields.BigIntField(description="价格(分)", db_index=True)
+    price = fields.BigIntField(description="价格(金币)", db_index=True)
     svga_url = fields.CharField(max_length=500, null=True, description="SVGA动画URL")
     is_active = fields.BooleanField(default=True, description="是否上架")
 
@@ -108,12 +108,12 @@ class CallRecord(BaseModel, TimestampMixin):
 
     caller_id = fields.BigIntField(description="主叫用户ID", db_index=True)
     callee_id = fields.BigIntField(description="被叫用户ID(认证用户)", db_index=True)
-    call_price = fields.BigIntField(default=0, description="通话单价(分/分钟)，以发起时价格固定计费")
+    call_price = fields.BigIntField(default=0, description="通话单价(金币/分钟)，以发起时价格固定计费")
     status = fields.CharField(
         max_length=20, default="pending", description="pending/ongoing/ended/failed/timeout", db_index=True
     )
     duration = fields.IntField(default=0, description="通话时长(秒)")
-    total_fee = fields.BigIntField(default=0, description="总费用(分)")
+    total_fee = fields.BigIntField(default=0, description="总费用(金币)")
     end_reason = fields.CharField(max_length=50, null=True, description="结束原因")
     connected_at = fields.DatetimeField(null=True, description="实际接通时间")
     ended_at = fields.DatetimeField(null=True, description="结束时间")
@@ -127,7 +127,7 @@ class CallRecord(BaseModel, TimestampMixin):
         description="manual_end/force_exit/timeout/balance_empty",
     )
     force_exit_user_id = fields.BigIntField(null=True, description="先离场用户ID")
-    deducted_amount = fields.BigIntField(default=0, description="已扣费总额(分)")
+    deducted_amount = fields.BigIntField(default=0, description="已扣费总额(金币)")
     deducted_minutes = fields.BigIntField(default=0, description="已扣费分钟数")
     last_renew_at = fields.DatetimeField(null=True, description="最后一次续租时间")
     billing_free_seconds = fields.BigIntField(default=10, description="本次通话免费秒数快照")
@@ -148,9 +148,9 @@ class GiftRecord(BaseModel, TimestampMixin):
     receiver_id = fields.BigIntField(description="接收者ID", db_index=True)
     gift_id = fields.BigIntField(description="礼物ID")
     gift_name = fields.CharField(max_length=50, description="礼物名称")
-    price = fields.BigIntField(description="礼物单价(分)")
+    price = fields.BigIntField(description="礼物单价(金币)")
     quantity = fields.IntField(default=1, description="礼物数量")
-    total_price = fields.BigIntField(default=0, description="礼物总价(分)")
+    total_price = fields.BigIntField(default=0, description="礼物总价(金币)")
     certified_user_share_bps = fields.IntField(default=10000, description="认证用户分成比例快照(万分比)")
     certified_user_income_diamonds = fields.DecimalField(max_digits=18, decimal_places=2, default=0, description="认证用户礼物收益钻石")
 

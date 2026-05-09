@@ -15,6 +15,7 @@ DEFAULT_CERTIFIED_USER_SHARE_BPS = call_income_service.DEFAULT_CERTIFIED_USER_SH
 calc_certified_user_income_diamonds = call_income_service.calc_certified_user_income_diamonds
 get_certified_user_share_bps = call_income_service.get_certified_user_share_bps
 resolve_income_certified_user_id = call_income_service.resolve_income_certified_user_id
+resolve_income_certified_user_id_for_call = call_income_service.resolve_income_certified_user_id_for_call
 
 
 def test_calc_certified_user_income_uses_bps_and_rounds_down() -> None:
@@ -53,13 +54,32 @@ def test_resolve_income_certified_user_id_only_returns_non_payer_certified_user(
     assert resolve_income_certified_user_id([user], payer_id=1001) == 0
 
 
+def test_resolve_income_certified_user_id_for_certified_pair_uses_callee() -> None:
+    caller = SimpleNamespace(id=1001, is_certified_user=True)
+    callee = SimpleNamespace(id=2002, is_certified_user=True)
+
+    assert (
+        resolve_income_certified_user_id_for_call(
+            [caller, callee],
+            payer_id=1001,
+            caller_id=1001,
+            callee_id=2002,
+        )
+        == 2002
+    )
+
+
 def test_snapshot_share_bps_falls_back_for_dirty_value() -> None:
     assert (
         call_income_service._resolve_snapshot_share_bps(SimpleNamespace(certified_user_share_bps="bad"))  # noqa: SLF001
         == DEFAULT_CERTIFIED_USER_SHARE_BPS
     )
-    assert call_income_service._resolve_snapshot_share_bps(SimpleNamespace(certified_user_share_bps="-1")) == 0  # noqa: SLF001
     assert (
-        call_income_service._resolve_snapshot_share_bps(SimpleNamespace(certified_user_share_bps="10001"))  # noqa: SLF001
+        call_income_service._resolve_snapshot_share_bps(SimpleNamespace(certified_user_share_bps="-1")) == 0
+    )  # noqa: SLF001
+    assert (
+        call_income_service._resolve_snapshot_share_bps(
+            SimpleNamespace(certified_user_share_bps="10001")
+        )  # noqa: SLF001
         == 10000
     )

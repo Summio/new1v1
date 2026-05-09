@@ -157,6 +157,25 @@ def _resolve_income_certified_user_id(
     return 0
 
 
+def _resolve_income_certified_user_id_for_call(
+    *,
+    caller_id: int,
+    callee_id: int,
+    payer_id: int | None,
+    certified_user_ids: set[int],
+) -> int:
+    if payer_id is None or payer_id <= 0:
+        return 0
+    if caller_id in certified_user_ids and callee_id in certified_user_ids:
+        return callee_id if payer_id == caller_id else caller_id
+    return _resolve_income_certified_user_id(
+        caller_id=caller_id,
+        callee_id=callee_id,
+        payer_id=payer_id,
+        certified_user_ids=certified_user_ids,
+    )
+
+
 def _now_ms() -> int:
     return int(now_local_naive().timestamp() * 1000)
 
@@ -408,7 +427,7 @@ async def _process_stale_batch(
             return callee_id
         if callee_is_certified_user and not caller_is_certified_user:
             return caller_id
-        if not caller_is_certified_user and not callee_is_certified_user:
+        if caller_is_certified_user and callee_is_certified_user:
             return caller_id
         return None
 
@@ -497,7 +516,7 @@ async def _process_stale_batch(
                 call_record.force_exit_user_id = force_exit_decision.force_exit_user_id
                 if not getattr(call_record, "income_certified_user_id", None):
                     call_record.income_certified_user_id = (
-                        _resolve_income_certified_user_id(
+                        _resolve_income_certified_user_id_for_call(
                             caller_id=int(call_record.caller_id),
                             callee_id=int(call_record.callee_id),
                             payer_id=payer_id,
@@ -555,7 +574,7 @@ async def _process_stale_batch(
                 call_record.force_exit_user_id = None
                 if not getattr(call_record, "income_certified_user_id", None):
                     call_record.income_certified_user_id = (
-                        _resolve_income_certified_user_id(
+                        _resolve_income_certified_user_id_for_call(
                             caller_id=int(call_record.caller_id),
                             callee_id=int(call_record.callee_id),
                             payer_id=payer_id,
@@ -602,7 +621,7 @@ async def _process_stale_batch(
                 call_record.force_exit_user_id = None
                 if not getattr(call_record, "income_certified_user_id", None):
                     call_record.income_certified_user_id = (
-                        _resolve_income_certified_user_id(
+                        _resolve_income_certified_user_id_for_call(
                             caller_id=int(call_record.caller_id),
                             callee_id=int(call_record.callee_id),
                             payer_id=payer_id,
@@ -773,5 +792,3 @@ async def run_call_watchdog(stop_event: asyncio.Event) -> None:
                 pass
     finally:
         logger.info("call watchdog stopped")
-
-

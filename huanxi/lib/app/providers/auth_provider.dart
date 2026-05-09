@@ -137,7 +137,7 @@ class AppInitState {
     this.imTextBillingEnabled = false,
     this.imTextBillingPrice = 0,
     this.imTextBillingAnchorShareBps = 5000,
-    this.certifiedCallPriceTiers = const [0, 100, 200, 300, 500],
+    this.certifiedCallPriceTiers = const [],
   });
 
   AppInitState copyWith({
@@ -540,7 +540,7 @@ class AppInitNotifier extends StateNotifier<AppInitState> {
                 .where((item) => item >= 0)
                 .toSet()
                 .toList()
-          : <int>[0, 100, 200, 300, 500];
+          : <int>[];
       tiers.sort();
       if (!tiers.contains(0)) tiers.insert(0, 0);
 

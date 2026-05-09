@@ -11,6 +11,8 @@
 Redis 键：
   ws:online                    - SET，所有在线用户 ID（WS 连接时 sadd，断开时 srem）
   ws:online_since              - ZSET，用户上线时间戳（用于首页活跃排序）
+  ws:online_certified_user_since - ZSET，认证用户上线时间戳（用于首页在线认证用户排序）
+  ws:online_anchor_since       - ZSET，旧认证用户排序 key，兼容历史 Redis 数据
   ws:manual_offline:{user_id}  - STRING，手动离线标记（设值=离线，清除=恢复在线）
 
 is_online(user_id) 逻辑：
@@ -31,9 +33,18 @@ if TYPE_CHECKING:
 
 _WS_ONLINE_KEY = "ws:online"
 _WS_ONLINE_SINCE_KEY = "ws:online_since"
-_WS_ONLINE_ANCHOR_SINCE_KEY = "ws:online_anchor_since"
+_WS_ONLINE_CERTIFIED_USER_SINCE_KEY = "ws:online_certified_user_since"
+_WS_ONLINE_ANCHOR_SINCE_KEY = "ws:online_anchor_since"  # legacy key
 _MANUAL_OFFLINE_KEY_PREFIX = "ws:manual_offline:"
 _MANUAL_OFFLINE_TTL = 24 * 60 * 60  # 24 小时，手动离线状态超时自动清除
+
+
+async def _sync_legacy_certified_online_since(redis) -> None:
+    await redis.zunionstore(
+        _WS_ONLINE_CERTIFIED_USER_SINCE_KEY,
+        [_WS_ONLINE_CERTIFIED_USER_SINCE_KEY, _WS_ONLINE_ANCHOR_SINCE_KEY],
+        aggregate="MAX",
+    )
 
 
 async def is_online(user_id: int) -> bool:
@@ -68,8 +79,10 @@ async def mark_online_since(user_id: int, *, is_certified_user: bool = False) ->
     score = int(time.time() * 1000)
     await redis.zadd(_WS_ONLINE_SINCE_KEY, {str(user_id): score})
     if is_certified_user:
+        await redis.zadd(_WS_ONLINE_CERTIFIED_USER_SINCE_KEY, {str(user_id): score})
         await redis.zadd(_WS_ONLINE_ANCHOR_SINCE_KEY, {str(user_id): score})
     else:
+        await redis.zrem(_WS_ONLINE_CERTIFIED_USER_SINCE_KEY, user_id)
         await redis.zrem(_WS_ONLINE_ANCHOR_SINCE_KEY, user_id)
 
 
@@ -77,13 +90,15 @@ async def clear_online_since(user_id: int) -> None:
     """清理用户上线时间。"""
     redis = await get_redis()
     await redis.zrem(_WS_ONLINE_SINCE_KEY, user_id)
+    await redis.zrem(_WS_ONLINE_CERTIFIED_USER_SINCE_KEY, user_id)
     await redis.zrem(_WS_ONLINE_ANCHOR_SINCE_KEY, user_id)
 
 
 async def count_online_user_ids() -> int:
     """获取当前在线认证用户数量，用于首页分页计算。"""
     redis = await get_redis()
-    return int(await redis.zcard(_WS_ONLINE_ANCHOR_SINCE_KEY))
+    await _sync_legacy_certified_online_since(redis)
+    return int(await redis.zcard(_WS_ONLINE_CERTIFIED_USER_SINCE_KEY))
 
 
 async def get_online_user_id_page(offset: int, limit: int) -> list[int]:
@@ -92,9 +107,10 @@ async def get_online_user_id_page(offset: int, limit: int) -> list[int]:
         return []
 
     redis = await get_redis()
+    await _sync_legacy_certified_online_since(redis)
     start = max(0, int(offset))
     stop = start + int(limit) - 1
-    members = await redis.zrevrange(_WS_ONLINE_ANCHOR_SINCE_KEY, start, stop)
+    members = await redis.zrevrange(_WS_ONLINE_CERTIFIED_USER_SINCE_KEY, start, stop)
     ids: list[int] = []
     for member in members:
         try:

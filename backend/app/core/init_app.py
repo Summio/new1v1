@@ -264,6 +264,8 @@ async def init_menus():
         redirect="/system/user",
     )
     await Menu.filter(path="im-text-billing", component="/system/im-text-billing").delete()
+    await Menu.filter(path="certified-call-price-config").delete()
+    await Menu.filter(component="/system/certified-call-price-config").delete()
     system_children = [
         {
             "name": "用户管理",
@@ -308,13 +310,6 @@ async def init_menus():
             "order": 9,
             "icon": "material-symbols:payments-outline-rounded",
             "component": "/system/withdraw-config",
-        },
-        {
-            "name": "认证用户通话价格档位",
-            "path": "certified-call-price-config",
-            "order": 10,
-            "icon": "material-symbols:price-change-outline-rounded",
-            "component": "/system/certified-call-price-config",
         },
     ]
     for child in system_children:
@@ -502,7 +497,6 @@ async def init_roles():
         for role in all_roles:
             await role.apis.add(*ranking_apis)
     withdraw_config_menu = await Menu.filter(path="withdraw-config").first()
-    certified_call_price_config_menu = await Menu.filter(path="certified-call-price-config").first()
     withdraw_config_apis = await Api.filter(
         path__in=[
             "/api/v1/apis/system/withdraw-config",
@@ -515,8 +509,6 @@ async def init_roles():
     if admin_role:
         if withdraw_config_menu:
             await admin_role.menus.add(withdraw_config_menu)
-        if certified_call_price_config_menu:
-            await admin_role.menus.add(certified_call_price_config_menu)
         if withdraw_config_apis:
             await admin_role.apis.add(*withdraw_config_apis)
         all_apis = await Api.all()

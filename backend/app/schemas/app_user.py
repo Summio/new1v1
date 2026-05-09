@@ -130,7 +130,7 @@ class AppUserAdminUpdateIn(BaseModel):
     recommend_weight: Optional[int] = Field(default=None, ge=0, le=999999, description="认证用户推荐值")
     certified_intro: Optional[str] = Field(default=None, max_length=500, description="认证用户简介")
     certified_tags: Optional[List[str]] = Field(default=None, description="认证用户标签")
-    certified_call_price: Optional[int] = Field(default=None, ge=0, le=1000000, description="认证用户通话价格(分/分钟)")
+    certified_call_price: Optional[int] = Field(default=None, ge=0, le=1000000, description="认证用户通话价格(金币/分钟)")
     certification_status: Optional[Literal["none", "pending", "approved", "rejected"]] = Field(
         default=None,
         description="真人认证状态",
@@ -160,7 +160,7 @@ class CertificationReviewIn(BaseModel):
 
 
 class CertifiedCallPriceUpdateIn(BaseModel):
-    price: int = Field(..., ge=0, le=1000000, description="认证用户通话价格(分/分钟)")
+    price: int = Field(..., ge=0, le=1000000, description="认证用户通话价格(金币/分钟)")
 
 
 # ===== 关注 =====

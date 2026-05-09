@@ -51,6 +51,26 @@ def test_income_business_code_uses_certified_user_naming() -> None:
     assert offenders == []
 
 
+def test_tests_do_not_use_legacy_anchor_as_current_domain_name() -> None:
+    offenders: list[str] = []
+    tests_dir = ROOT / "backend/tests"
+
+    for path in sorted(tests_dir.glob("test_*.py")):
+        if "anchor" in path.name.lower():
+            offenders.append(f"{path.relative_to(ROOT)} uses anchor in filename")
+
+        for line in path.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if not stripped.startswith("def test_"):
+                continue
+            test_name = stripped.split("(", 1)[0].removeprefix("def ")
+            lowered = test_name.lower()
+            if "anchor" in lowered and "legacy" not in lowered:
+                offenders.append(f"{path.relative_to(ROOT)}::{test_name}")
+
+    assert offenders == []
+
+
 def test_income_migration_renames_legacy_anchor_columns() -> None:
     migration = (
         ROOT / "backend/migrations/models/39_20260509100000_certified_user_income_fields.py"

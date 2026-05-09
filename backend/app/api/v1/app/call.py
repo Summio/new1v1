@@ -22,7 +22,7 @@ from app.schemas.app_api import (
 from app.schemas.base import Fail, Success
 from app.services.call_income_service import (
     get_certified_user_share_bps,
-    resolve_income_certified_user_id,
+    resolve_income_certified_user_id_for_call,
     settle_call_certified_user_income_once,
 )
 from app.services.call_trace_service import CallTraceService
@@ -162,10 +162,10 @@ async def _get_free_seconds_before_billing() -> int:
 
 async def _resolve_payer_id(call_record: CallRecord) -> int:
     """
-    视频通话扣费方规则：非认证用户方永远付费。
-    - 认证用户（无论主叫还是被叫）不扣费
-    - 非认证用户（无论主叫还是被叫）付费
-    - 双方都不是认证用户：主叫方付费（caller_id）
+    视频通话扣费方规则：
+    - 认证用户与非认证用户通话：非认证用户付费
+    - 双方都是认证用户：主叫方付费
+    - 双方都不是认证用户：不计费，返回 0
     B-2 修复：使用 select_for_update 加行锁，防止在检查期间认证状态被审批/取消时出现 TOCTOU
     """
     caller_id = int(call_record.caller_id)
@@ -186,8 +186,11 @@ async def _resolve_payer_id(call_record: CallRecord) -> int:
     if callee_is_certified_user and not caller_is_certified_user:
         # 认证用户是被叫，非认证用户是主叫 → 主叫付费
         return caller_id
+    if caller_is_certified_user and callee_is_certified_user:
+        # 双方都是认证用户 → 主叫方付费，被叫方获得收益
+        return caller_id
 
-    # 双方都是认证用户 → 不计费，返回 0（与 watchdog 规则一致）
+    # 双方都不是认证用户 → 不计费
     return 0
 
 
@@ -233,24 +236,39 @@ async def dialing(req_in: DialingIn):
     if not await check_online(target_user.id):
         return Fail(code=400, msg="对方当前不在线，请稍后再试")
 
-    caller_is_certified_user = bool(app_user.is_certified_user)
-    callee_is_certified_user = bool(target_user.is_certified_user)
-    if caller_is_certified_user and not callee_is_certified_user:
-        call_price = int(app_user.certified_call_price or 0)
-    elif callee_is_certified_user and not caller_is_certified_user:
-        call_price = int(target_user.certified_call_price or 0)
-    else:
-        call_price = 0
-
-    # 仅在主叫方是实际扣费方时做余额门槛检查，不预扣。
-    if callee_is_certified_user and not caller_is_certified_user and app_user.coins < call_price:
-        return Fail(code=501, msg="余额不足，请先充值")
-
     # 事务包裹忙线检查 + 记录创建：防止 TOCTOU 竞态
     async with in_transaction() as conn:
         # 加行锁：锁住主叫和被叫用户行，防止并发创建冲突的通话记录
-        await AppUser.filter(id=caller_id).using_db(conn).select_for_update().first()
-        await AppUser.filter(id=target_user.id).using_db(conn).select_for_update().first()
+        locked_caller = await AppUser.filter(
+            id=caller_id,
+            status="normal",
+        ).using_db(conn).select_for_update().first()
+        locked_target_user = await AppUser.filter(
+            id=target_user.id,
+            status="normal",
+        ).using_db(conn).select_for_update().first()
+        if not locked_caller:
+            return Fail(code=403, msg="账号状态异常")
+        if not locked_target_user:
+            return Fail(code=404, msg="目标用户不存在或状态异常")
+
+        caller_is_certified_user = bool(locked_caller.is_certified_user)
+        callee_is_certified_user = bool(locked_target_user.is_certified_user)
+        if caller_is_certified_user and not callee_is_certified_user:
+            call_price = int(locked_caller.certified_call_price or 0)
+        elif callee_is_certified_user and not caller_is_certified_user:
+            call_price = int(locked_target_user.certified_call_price or 0)
+        elif caller_is_certified_user and callee_is_certified_user:
+            call_price = int(locked_target_user.certified_call_price or 0)
+        else:
+            call_price = 0
+
+        # 仅在主叫方是实际扣费方时做余额门槛检查，不预扣。
+        if (
+            (callee_is_certified_user and not caller_is_certified_user)
+            or (caller_is_certified_user and callee_is_certified_user)
+        ) and locked_caller.coins < call_price:
+            return Fail(code=501, msg="余额不足，请先充值")
 
         # 主叫忙线检测
         caller_busy = (
@@ -267,7 +285,7 @@ async def dialing(req_in: DialingIn):
         # 被叫忙线检测
         callee_busy = (
             await CallRecord.filter(
-                (Q(caller_id=target_user.id) | Q(callee_id=target_user.id)),
+                (Q(caller_id=locked_target_user.id) | Q(callee_id=locked_target_user.id)),
                 status__in=["pending", "ongoing"],
             )
             .using_db(conn)
@@ -281,7 +299,7 @@ async def dialing(req_in: DialingIn):
             protect_since_inbound = now_local_naive() - timedelta(seconds=reject_inbound_protect_seconds)
             all_rejected_for_callee = (
                 await CallRecord.filter(
-                    callee_id=target_user.id,
+                    callee_id=locked_target_user.id,
                     status="ended",
                     end_reason="rejected",
                     updated_at__gte=protect_since_inbound,
@@ -300,7 +318,7 @@ async def dialing(req_in: DialingIn):
             all_rejected_for_pair = (
                 await CallRecord.filter(
                     caller_id=caller_id,
-                    callee_id=target_user.id,
+                    callee_id=locked_target_user.id,
                     status="ended",
                     end_reason="rejected",
                     updated_at__gte=protect_since_pair,
@@ -319,12 +337,14 @@ async def dialing(req_in: DialingIn):
         if caller_is_certified_user and not callee_is_certified_user:
             income_certified_user_id = int(caller_id)
         elif callee_is_certified_user and not caller_is_certified_user:
-            income_certified_user_id = int(target_user.id)
+            income_certified_user_id = int(locked_target_user.id)
+        elif caller_is_certified_user and callee_is_certified_user:
+            income_certified_user_id = int(locked_target_user.id)
         else:
             income_certified_user_id = None
         call_record = await CallRecord.create(
             caller_id=caller_id,
-            callee_id=target_user.id,
+            callee_id=locked_target_user.id,
             call_price=call_price,
             status="pending",
             income_certified_user_id=income_certified_user_id,
@@ -601,7 +621,15 @@ async def call_end(req_in: CallEndIn):
                 .all()
             )
             if not getattr(call_record, "income_certified_user_id", None):
-                call_record.income_certified_user_id = resolve_income_certified_user_id(participants, payer_id) or None
+                call_record.income_certified_user_id = (
+                    resolve_income_certified_user_id_for_call(
+                        participants,
+                        payer_id,
+                        caller_id=int(call_record.caller_id),
+                        callee_id=int(call_record.callee_id),
+                    )
+                    or None
+                )
 
             if actual_fee > deducted_amount and payer_id > 0:
                 top_up_amount = actual_fee - deducted_amount
@@ -813,5 +841,3 @@ async def _ws_push_balance_updated(payer_id: int) -> None:
             )
     except Exception:  # noqa: BLE001
         pass
-
-

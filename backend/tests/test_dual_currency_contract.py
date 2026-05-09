@@ -29,7 +29,7 @@ def test_gift_send_credits_receiver_diamonds() -> None:
     assert 'diamonds=F("diamonds") + certified_user_income_diamonds' in content
 
 
-def test_call_end_credits_anchor_diamonds() -> None:
+def test_call_end_credits_certified_user_diamonds() -> None:
     content = _read_backend_file("app/api/v1/app/call.py")
 
     assert "settle_call_certified_user_income_once(" in content
@@ -126,7 +126,7 @@ def test_call_income_migration_is_idempotent_for_existing_columns() -> None:
     assert "PREPARE stmt FROM @sql" in rename_migration_text
 
 
-def test_income_service_is_idempotent_and_locks_anchor_row() -> None:
+def test_income_service_is_idempotent_and_locks_certified_user_row() -> None:
     content = _read_backend_file("app/services/call_income_service.py")
 
     assert "async def settle_call_certified_user_income_once" in content

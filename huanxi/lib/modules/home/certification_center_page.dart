@@ -48,10 +48,12 @@ class CertificationApplyState {
 }
 
 /// 真人认证 Provider
-class CertificationApplyNotifier extends StateNotifier<CertificationApplyState> {
+class CertificationApplyNotifier
+    extends StateNotifier<CertificationApplyState> {
   final DioClient _dio;
 
-  CertificationApplyNotifier(this._dio) : super(const CertificationApplyState());
+  CertificationApplyNotifier(this._dio)
+    : super(const CertificationApplyState());
 
   /// 查询申请状态
   Future<void> fetchStatus() async {
@@ -153,7 +155,9 @@ class CertificationApplyNotifier extends StateNotifier<CertificationApplyState> 
 
 /// 真人认证 Provider
 final certificationApplyProvider =
-    StateNotifierProvider<CertificationApplyNotifier, CertificationApplyState>((ref) {
+    StateNotifierProvider<CertificationApplyNotifier, CertificationApplyState>((
+      ref,
+    ) {
       return CertificationApplyNotifier(DioClient.instance);
     });
 
@@ -162,10 +166,12 @@ class CertificationCenterPage extends ConsumerStatefulWidget {
   const CertificationCenterPage({super.key});
 
   @override
-  ConsumerState<CertificationCenterPage> createState() => _CertificationCenterPageState();
+  ConsumerState<CertificationCenterPage> createState() =>
+      _CertificationCenterPageState();
 }
 
-class _CertificationCenterPageState extends ConsumerState<CertificationCenterPage> {
+class _CertificationCenterPageState
+    extends ConsumerState<CertificationCenterPage> {
   static const String _exampleImageAsset =
       'assets/images/certification_apply_example.jpg';
 
@@ -253,186 +259,181 @@ class _CertificationCenterPageState extends ConsumerState<CertificationCenterPag
 
   Widget _buildPendingView(CertificationApplyState state) {
     return Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.hourglass_empty,
-              size: 80,
-              color: AppTheme.secondaryColor,
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(
+            Icons.hourglass_empty,
+            size: 80,
+            color: AppTheme.secondaryColor,
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            '申请已提交',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimary,
             ),
-            const SizedBox(height: 24),
-            const Text(
-              '申请已提交',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              '请耐心等待审核，预计1-3个工作日',
-              style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
-            ),
-            if ((state.facePhotoUrl ?? '').isNotEmpty) ...[
-              const SizedBox(height: 16),
-              _buildNetworkPhotoBox(state.facePhotoUrl!),
-            ],
-            const SizedBox(height: 40),
-            ElevatedButton(
-              onPressed: () => context.pop(),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryColor,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 40,
-                  vertical: 12,
-                ),
-              ),
-              child: const Text('返回'),
-            ),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            '请耐心等待审核，预计1-3个工作日',
+            style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
+          ),
+          if ((state.facePhotoUrl ?? '').isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _buildNetworkPhotoBox(state.facePhotoUrl!),
           ],
-        ),
+          const SizedBox(height: 40),
+          ElevatedButton(
+            onPressed: () => context.pop(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 12),
+            ),
+            child: const Text('返回'),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildApprovedView() {
     return Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.check_circle, size: 80, color: Color(0xFF34C759)),
-            const SizedBox(height: 24),
-            const Text(
-              '审核通过',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textPrimary,
-              ),
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.check_circle, size: 80, color: Color(0xFF34C759)),
+          const SizedBox(height: 24),
+          const Text(
+            '审核通过',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimary,
             ),
-            const SizedBox(height: 12),
-            const Text(
-              '您已通过真人认证',
-              style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            '您已通过真人认证',
+            style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
+          ),
+          const SizedBox(height: 40),
+          ElevatedButton(
+            onPressed: () => context.pop(),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 12),
             ),
-            const SizedBox(height: 40),
-            ElevatedButton(
-              onPressed: () => context.pop(),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryColor,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 40,
-                  vertical: 12,
-                ),
-              ),
-              child: const Text('完成'),
-            ),
-          ],
-        ),
+            child: const Text('完成'),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildRejectedView(CertificationApplyState state) {
     return Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.cancel, size: 80, color: AppTheme.errorColor),
-            const SizedBox(height: 24),
-            const Text(
-              '申请被拒绝',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.textPrimary,
-              ),
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.cancel, size: 80, color: AppTheme.errorColor),
+          const SizedBox(height: 24),
+          const Text(
+            '申请被拒绝',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.textPrimary,
             ),
-            if ((state.rejectReason ?? '').trim().isNotEmpty) ...[
-              const SizedBox(height: 12),
-              Text(
-                state.rejectReason!.trim(),
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: AppTheme.textSecondary,
-                ),
-                textAlign: TextAlign.center,
+          ),
+          if ((state.rejectReason ?? '').trim().isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Text(
+              state.rejectReason!.trim(),
+              style: const TextStyle(
+                fontSize: 14,
+                color: AppTheme.textSecondary,
               ),
-            ],
-            if ((state.facePhotoUrl ?? '').isNotEmpty) ...[
-              const SizedBox(height: 16),
-              _buildNetworkPhotoBox(state.facePhotoUrl!),
-            ],
-            const SizedBox(height: 40),
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _localFacePhotoUrl = null;
-                });
-                ref.read(certificationApplyProvider.notifier).resetToForm();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryColor,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 40,
-                  vertical: 12,
-                ),
-              ),
-              child: const Text('重新申请'),
+              textAlign: TextAlign.center,
             ),
           ],
-        ),
+          if ((state.facePhotoUrl ?? '').isNotEmpty) ...[
+            const SizedBox(height: 16),
+            _buildNetworkPhotoBox(state.facePhotoUrl!),
+          ],
+          const SizedBox(height: 40),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _localFacePhotoUrl = null;
+              });
+              ref.read(certificationApplyProvider.notifier).resetToForm();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 12),
+            ),
+            child: const Text('重新申请'),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildApplyForm(CertificationApplyState state) {
-    final facePhotoUrl = (_localFacePhotoUrl ?? state.facePhotoUrl ?? '').trim();
-    final canSubmit = facePhotoUrl.isNotEmpty && !_uploading && !state.isLoading;
+    final facePhotoUrl = (_localFacePhotoUrl ?? state.facePhotoUrl ?? '')
+        .trim();
+    final canSubmit =
+        facePhotoUrl.isNotEmpty && !_uploading && !state.isLoading;
 
     return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildCompactPhotoSection(facePhotoUrl: facePhotoUrl),
-          const SizedBox(height: 18),
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton(
-              onPressed: canSubmit ? _handleSubmit : null,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryColor,
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: const Color(0xFFD2D7DF),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(25),
-                ),
-              ),
-              child: const Text(
-                '提交审核',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildCompactPhotoSection(facePhotoUrl: facePhotoUrl),
+        const SizedBox(height: 18),
+        SizedBox(
+          width: double.infinity,
+          height: 48,
+          child: ElevatedButton(
+            onPressed: canSubmit ? _handleSubmit : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+              disabledBackgroundColor: const Color(0xFFD2D7DF),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(25),
               ),
             ),
+            child: const Text(
+              '提交审核',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+            ),
           ),
-        ],
+        ),
+      ],
     );
   }
 
   Widget _buildCallPriceContent() {
     final authState = ref.watch(authProvider);
     final initState = ref.watch(appInitProvider);
+    final coinName = ref.watch(tokenNamesProvider).coinName;
     final isCertified = authState.isCertifiedUser;
-    final configuredTiers = initState.certifiedCallPriceTiers.isEmpty
-        ? const [0, 100, 200, 300, 500]
-        : initState.certifiedCallPriceTiers;
-    final tiers = isCertified ? configuredTiers : const [0];
+    final configuredTiers = initState.certifiedCallPriceTiers;
+    final paidTiers = configuredTiers.where((tier) => tier > 0).toList();
+    final tiers = isCertified ? paidTiers : const [0];
     final currentPrice = isCertified ? authState.certifiedCallPrice : 0;
-    final selected = tiers.contains(_selectedPrice)
+    final selected = tiers.isEmpty
+        ? 0
+        : tiers.contains(_selectedPrice)
         ? _selectedPrice!
         : (tiers.contains(currentPrice) ? currentPrice : tiers.first);
 
@@ -444,35 +445,41 @@ class _CertificationCenterPageState extends ConsumerState<CertificationCenterPag
           style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
         ),
         const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: tiers.map((price) {
-            final active = selected == price;
-            return ChoiceChip(
-              label: Text(_formatCallPrice(price)),
-              selected: active,
-              onSelected: isCertified
-                  ? (_) {
-                      setState(() {
-                        _selectedPrice = price;
-                      });
-                    }
-                  : null,
-              selectedColor: AppTheme.primaryColor.withValues(alpha: 0.14),
-              labelStyle: TextStyle(
-                color: active ? AppTheme.primaryColor : AppTheme.textPrimary,
-                fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-              ),
-            );
-          }).toList(),
-        ),
+        if (tiers.isEmpty)
+          const Text(
+            '暂无可用通话价格，请联系平台配置',
+            style: TextStyle(fontSize: 13, color: AppTheme.errorColor),
+          )
+        else
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: tiers.map((price) {
+              final active = selected == price;
+              return ChoiceChip(
+                label: Text(_formatCallPrice(price, coinName)),
+                selected: active,
+                onSelected: isCertified
+                    ? (_) {
+                        setState(() {
+                          _selectedPrice = price;
+                        });
+                      }
+                    : null,
+                selectedColor: AppTheme.primaryColor.withValues(alpha: 0.14),
+                labelStyle: TextStyle(
+                  color: active ? AppTheme.primaryColor : AppTheme.textPrimary,
+                  fontWeight: active ? FontWeight.w700 : FontWeight.w500,
+                ),
+              );
+            }).toList(),
+          ),
         const SizedBox(height: 14),
         SizedBox(
           width: double.infinity,
           height: 44,
           child: ElevatedButton(
-            onPressed: isCertified && !_savingPrice
+            onPressed: isCertified && tiers.isNotEmpty && !_savingPrice
                 ? () => _saveCallPrice(selected)
                 : null,
             style: ElevatedButton.styleFrom(
@@ -524,16 +531,9 @@ class _CertificationCenterPageState extends ConsumerState<CertificationCenterPag
     }
   }
 
-  String _formatCallPrice(int price) {
+  String _formatCallPrice(int price, String coinName) {
     if (price <= 0) return '免费';
-    final yuan = price / 100;
-    final text = yuan == yuan.roundToDouble()
-        ? yuan.toStringAsFixed(0)
-        : yuan
-            .toStringAsFixed(2)
-            .replaceFirst(RegExp(r'0+$'), '')
-            .replaceFirst(RegExp(r'\.$'), '');
-    return '$text元/分钟';
+    return '$price$coinName/分钟';
   }
 
   Widget _buildCompactPhotoSection({required String facePhotoUrl}) {
@@ -686,12 +686,7 @@ class _CertificationCenterPageState extends ConsumerState<CertificationCenterPag
   Widget _buildNetworkPhotoBox(String url) {
     return ClipRRect(
       borderRadius: BorderRadius.circular(12),
-      child: Image.network(
-        url,
-        width: 180,
-        height: 220,
-        fit: BoxFit.cover,
-      ),
+      child: Image.network(url, width: 180, height: 220, fit: BoxFit.cover),
     );
   }
 
@@ -710,10 +705,9 @@ class _CertificationCenterPageState extends ConsumerState<CertificationCenterPag
         _uploading = true;
       });
 
-      final url = await ref.read(certificationApplyProvider.notifier).uploadFacePhoto(
-        bytes: captured.bytes,
-        filename: captured.filename,
-      );
+      final url = await ref
+          .read(certificationApplyProvider.notifier)
+          .uploadFacePhoto(bytes: captured.bytes, filename: captured.filename);
       if (url == null || url.isEmpty) {
         throw const ApiException(code: -1, message: '上传失败，请重试');
       }
@@ -771,10 +765,7 @@ class _CapturedPhoto {
   final Uint8List bytes;
   final String filename;
 
-  const _CapturedPhoto({
-    required this.bytes,
-    required this.filename,
-  });
+  const _CapturedPhoto({required this.bytes, required this.filename});
 }
 
 class _CameraInitException implements Exception {
@@ -788,7 +779,8 @@ class _FrontCameraCapturePage extends StatefulWidget {
   const _FrontCameraCapturePage();
 
   @override
-  State<_FrontCameraCapturePage> createState() => _FrontCameraCapturePageState();
+  State<_FrontCameraCapturePage> createState() =>
+      _FrontCameraCapturePageState();
 }
 
 class _FrontCameraCapturePageState extends State<_FrontCameraCapturePage> {
@@ -1067,4 +1059,3 @@ class _FrontCameraCapturePageState extends State<_FrontCameraCapturePage> {
     );
   }
 }
-
