@@ -603,8 +603,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   /// 注册成功后设置登录状态（token已保存）
-  void setLoggedInAfterRegister({required int userId}) {
-    state = state.copyWith(isLoggedIn: true, userId: userId);
+  void setLoggedInAfterRegister({required int userId, required String gender}) {
+    state = state.copyWith(isLoggedIn: true, userId: userId, gender: gender);
   }
 
   /// 退出登录

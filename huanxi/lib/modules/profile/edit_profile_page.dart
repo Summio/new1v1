@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../app/providers/auth_provider.dart';
 import '../../app/theme/app_theme.dart';
+import '../../core/utils/formatters.dart';
 import 'package:huanxi/core/utils/app_toast.dart';
 
 class EditProfilePage extends ConsumerStatefulWidget {
@@ -23,7 +24,6 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   late TextEditingController _weightController;
 
   bool _isSaving = false;
-  String _gender = 'male';
   DateTime? _birthDate;
   String _locationCity = '';
   List<String> _albumPhotos = <String>[];
@@ -45,7 +45,6 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
       text: authState.weightKg == null ? '' : authState.weightKg.toString(),
     );
 
-    _gender = authState.gender;
     _locationCity = authState.locationCity ?? '';
     _albumPhotos = List<String>.from(authState.albumPhotos);
     _coverUrl = authState.coverUrl;
@@ -197,7 +196,6 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
       'nickname': nickname,
       'avatar': _avatarController.text.trim(),
       'signature': _signatureController.text.trim(),
-      'gender': _gender,
       'birth_date': _birthDate == null ? null : _dateText(_birthDate),
       'height_cm': heightCm,
       'weight_kg': weightKg,
@@ -338,20 +336,14 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                       maxLength: 500,
                     ),
                     const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      initialValue: _gender,
+                    InputDecorator(
                       decoration: const InputDecoration(
                         labelText: '性别',
                         prefixIcon: Icon(Icons.wc),
                       ),
-                      items: const [
-                        DropdownMenuItem(value: 'male', child: Text('男')),
-                        DropdownMenuItem(value: 'female', child: Text('女')),
-                      ],
-                      onChanged: (value) {
-                        if (value == null) return;
-                        setState(() => _gender = value);
-                      },
+                      child: Text(
+                        authState.gender == 'female' ? '女' : '男',
+                      ),
                     ),
                     const SizedBox(height: 12),
                     _buildTapTile(
@@ -363,7 +355,9 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                     const SizedBox(height: 12),
                     _buildTapTile(
                       label: '所在地',
-                      value: _locationCity.isEmpty ? '请选择到市' : _locationCity,
+                      value: _locationCity.isEmpty
+                          ? '请选择到市'
+                          : Formatters.locationCity(_locationCity),
                       icon: Icons.location_on_outlined,
                       onTap: _pickLocationCity,
                     ),
@@ -460,10 +454,9 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                                       ? Image.network(
                                           rawUrl,
                                           fit: BoxFit.cover,
-                                           errorBuilder: (_, _, _) =>
-                                              const Icon(
-                                                Icons.broken_image_outlined,
-                                              ),
+                                          errorBuilder: (_, _, _) => const Icon(
+                                            Icons.broken_image_outlined,
+                                          ),
                                         )
                                       : const Icon(
                                           Icons.image_outlined,
@@ -791,26 +784,80 @@ Future<String?> _showCityPicker(
                     },
                   ),
                   const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    isExpanded: true,
-                    initialValue: cities.contains(selectedCity)
-                        ? selectedCity
-                        : null,
-                    decoration: const InputDecoration(labelText: '市'),
-                    items: cities
-                        .map(
-                          (item) => DropdownMenuItem(
-                            value: item,
-                            child: Text(item, overflow: TextOverflow.ellipsis),
+                  const Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      '市',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: AppTheme.textSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    height: 200,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8F9FC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFE6EAF0)),
+                    ),
+                    child: ListView.separated(
+                      padding: const EdgeInsets.all(8),
+                      itemCount: cities.length,
+                      separatorBuilder: (context, _) =>
+                          const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final city = cities[index];
+                        final isSelected = city == selectedCity;
+                        return Material(
+                          color: isSelected
+                              ? AppTheme.primaryColor.withValues(alpha: 0.12)
+                              : Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () {
+                              setSheetState(() {
+                                selectedCity = city;
+                              });
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 14,
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      city,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: isSelected
+                                            ? FontWeight.w600
+                                            : FontWeight.w400,
+                                        color: isSelected
+                                            ? AppTheme.primaryColor
+                                            : AppTheme.textPrimary,
+                                      ),
+                                    ),
+                                  ),
+                                  if (isSelected)
+                                    const Icon(
+                                      Icons.check,
+                                      size: 18,
+                                      color: AppTheme.primaryColor,
+                                    ),
+                                ],
+                              ),
+                            ),
                           ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      if (value == null) return;
-                      setSheetState(() {
-                        selectedCity = value;
-                      });
-                    },
+                        );
+                      },
+                    ),
                   ),
                   const SizedBox(height: 20),
                   Row(

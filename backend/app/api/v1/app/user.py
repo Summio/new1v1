@@ -174,7 +174,10 @@ async def update_user_profile(req_in: AppUserProfileUpdateIn):
         update_data["signature"] = signature or None
 
     if req_in.gender is not None:
-        update_data["gender"] = str(req_in.gender.value)
+        current_gender = app_user.gender or "male"
+        requested_gender = str(req_in.gender.value)
+        if requested_gender != current_gender:
+            return Fail(code=400, msg="性别注册后不可修改")
 
     if req_in.birth_date is not None:
         if req_in.birth_date > date.today():
