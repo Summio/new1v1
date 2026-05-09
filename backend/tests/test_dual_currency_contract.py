@@ -79,23 +79,23 @@ def test_admin_web_exposes_trace_and_income_controls() -> None:
     assert "call_anchor_share_bps" in config_content
     assert "im_text_message_anchor_share_bps" in config_content
     assert "step: 0.01" in config_content
-    assert "主播收益(钻石)" in call_record_content
+    assert "认证用户收益(钻石)" in call_record_content
     assert "anchor_income_diamonds" in call_record_content
     assert "收益结算时间" in call_record_content
     assert "income_settled_at" in call_record_content
-    assert "主播收益(钻石)" in app_user_content
+    assert "认证用户收益(钻石)" in app_user_content
     assert "anchor_income_diamonds" in app_user_content
     assert "收益结算时间" in app_user_content
     assert "income_settled_at" in app_user_content
 
 
-def test_app_displays_anchor_diamonds_without_scaling_down() -> None:
+def test_app_displays_certified_user_call_price() -> None:
     content = (BACKEND_ROOT.parent / "huanxi/lib/modules/home/home_page.dart").read_text(
         encoding="utf-8"
     )
 
-    assert "anchor.diamonds ?? 0" in content
-    assert "(anchor.diamonds ?? 0) ~/ 100" not in content
+    assert "certifiedUser.callPrice?.toStringAsFixed(0)" in content
+    assert "anchor.diamonds ?? 0" not in content
 
 
 def test_call_anchor_share_defaults_to_existing_commission_rate() -> None:

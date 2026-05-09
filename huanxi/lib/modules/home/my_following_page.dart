@@ -12,10 +12,16 @@ import '../../services/user_home_service.dart';
 
 class MyFollowingPage extends ConsumerStatefulWidget {
   final bool fansMode;
+  final bool embedded;
 
-  const MyFollowingPage({super.key}) : fansMode = false;
+  const MyFollowingPage({super.key}) : fansMode = false, embedded = false;
 
-  const MyFollowingPage.fans({super.key}) : fansMode = true;
+  const MyFollowingPage.embedded({super.key})
+    : fansMode = false,
+      embedded = true;
+
+  const MyFollowingPage.fans({super.key, this.embedded = false})
+    : fansMode = true;
 
   @override
   ConsumerState<MyFollowingPage> createState() => _MyFollowingPageState();
@@ -23,6 +29,8 @@ class MyFollowingPage extends ConsumerStatefulWidget {
 
 class MyFansPage extends MyFollowingPage {
   const MyFansPage({super.key}) : super.fans();
+
+  const MyFansPage.embedded({super.key}) : super.fans(embedded: true);
 }
 
 class _MyFollowingPageState extends ConsumerState<MyFollowingPage> {
@@ -128,25 +136,29 @@ class _MyFollowingPageState extends ConsumerState<MyFollowingPage> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(_provider);
-    final title = widget.fansMode ? '我的粉丝' : '我的关注';
+    final title = widget.embedded
+        ? (widget.fansMode ? '粉丝' : '关注')
+        : (widget.fansMode ? '我的粉丝' : '我的关注');
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(
-        title: Text(
-          state.totalCount > 0 ? '$title (${state.totalCount})' : title,
-        ),
-        backgroundColor: Colors.white,
-        foregroundColor: AppTheme.textPrimary,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: _refresh,
-          ),
-        ],
-      ),
+      appBar: widget.embedded
+          ? null
+          : AppBar(
+              title: Text(
+                state.totalCount > 0 ? '$title (${state.totalCount})' : title,
+              ),
+              backgroundColor: Colors.white,
+              foregroundColor: AppTheme.textPrimary,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded),
+                  onPressed: _refresh,
+                ),
+              ],
+            ),
       body: SafeArea(
         top: false,
         child: Column(
@@ -259,7 +271,7 @@ class _MyFollowingPageState extends ConsumerState<MyFollowingPage> {
           return _FollowingTile(
             item: item,
             isProcessing: _processingUserId == item.user.userId,
-            onTap: () => context.push(AppRoutes.anchorDetail, extra: item.user),
+            onTap: () => context.push(AppRoutes.certifiedUserDetail, extra: item.user),
             onCancel: widget.fansMode ? null : () => _cancelFollowing(item),
           );
         },
@@ -342,7 +354,7 @@ class _FollowingTile extends StatelessWidget {
                             ),
                           ),
                         ),
-                        _UserTypeBadge(isAnchor: user.isAnchor),
+                        _UserTypeBadge(isCertifiedUser: user.isCertifiedUser),
                       ],
                     ),
                     const SizedBox(height: 6),
@@ -434,24 +446,24 @@ class _FollowingTile extends StatelessWidget {
 }
 
 class _UserTypeBadge extends StatelessWidget {
-  final bool isAnchor;
+  final bool isCertifiedUser;
 
-  const _UserTypeBadge({required this.isAnchor});
+  const _UserTypeBadge({required this.isCertifiedUser});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: isAnchor
+        color: isCertifiedUser
             ? AppTheme.primaryColor.withValues(alpha: 0.12)
             : AppTheme.textSecondary.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
-        isAnchor ? '主播' : '用户',
+        isCertifiedUser ? '认证用户' : '用户',
         style: TextStyle(
-          color: isAnchor ? AppTheme.primaryColor : AppTheme.textSecondary,
+          color: isCertifiedUser ? AppTheme.primaryColor : AppTheme.textSecondary,
           fontSize: 11,
           fontWeight: FontWeight.w700,
         ),

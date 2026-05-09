@@ -1,12 +1,9 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../app/theme/app_theme.dart';
-import '../../services/websocket_service.dart';
-import 'main_shell.dart';
 
 class ProfilePage extends ConsumerStatefulWidget {
   const ProfilePage({super.key});
@@ -16,44 +13,12 @@ class ProfilePage extends ConsumerStatefulWidget {
 }
 
 class _ProfilePageState extends ConsumerState<ProfilePage> {
-  /// 本地"在线接单"状态（true=在线，false=手动离线）
-  /// 由 Switch 控制，收到 presence 广播时同步
-  bool _anchorOnline = true;
-  StreamSubscription<PresenceEvent>? _presenceSub;
-  int? _currentUserId;
-
   @override
   void initState() {
     super.initState();
-    _initPresenceListener();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref.read(authProvider.notifier).fetchUserInfo();
-    });
-  }
-
-  void _initPresenceListener() {
-    _presenceSub = MainShell.presenceStream.listen((event) {
-      if (!mounted) return;
-      if (event.userId == _currentUserId) {
-        setState(() {
-          _anchorOnline = event.online;
-        });
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _presenceSub?.cancel();
-    super.dispose();
-  }
-
-  void _onOnlineStatusChanged(bool value) {
-    // value: true=在线，false=手动离线
-    WsService.instance.sendSetOnlineStatus(value);
-    setState(() {
-      _anchorOnline = value;
     });
   }
 
@@ -61,12 +26,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
     final tokenNames = ref.watch(tokenNamesProvider);
-    final isAnchor = authState.appRole == 'anchor';
-
-    // 同步当前用户 ID
-    if (_currentUserId != authState.userId) {
-      _currentUserId = authState.userId;
-    }
+    final isCertifiedUser = authState.isCertifiedUser;
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
@@ -132,7 +92,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                         color: AppTheme.textPrimary,
                       ),
                     ),
-                    if (isAnchor) ...[
+                    if (isCertifiedUser) ...[
                       const SizedBox(height: 4),
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -144,7 +104,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Text(
-                          '认证主播',
+                          '已真人认证',
                           style: TextStyle(color: Colors.white, fontSize: 12),
                         ),
                       ),
@@ -180,9 +140,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                 borderRadius: BorderRadius.circular(24),
                 boxShadow: AppTheme.elevatedShadow,
               ),
-              child: isAnchor
-                  ? _buildAnchorBalance(authState, tokenNames, context)
-                  : _buildUserBalance(authState, tokenNames, context),
+              child: _buildUserBalance(authState, tokenNames, context),
             ),
           ),
           SliverToBoxAdapter(
@@ -196,51 +154,11 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               child: Column(
                 children: [
                   _buildMenuTile(
-                    icon: Icons.currency_exchange_rounded,
-                    title: '充值',
-                    iconColor: const Color(0xFFFF9500),
-                    onTap: () => context.push(AppRoutes.recharge),
+                    icon: Icons.verified_user_rounded,
+                    title: '认证中心',
+                    iconColor: AppTheme.secondaryColor,
+                    onTap: () => context.push(AppRoutes.certificationCenter),
                   ),
-                  _buildMenuTile(
-                    icon: Icons.history_rounded,
-                    title: '通话记录',
-                    iconColor: const Color(0xFF5856D6),
-                    onTap: () => context.push(AppRoutes.callHistory),
-                  ),
-                  _buildMenuTile(
-                    icon: Icons.favorite_rounded,
-                    title: '我的关注',
-                    iconColor: const Color(0xFFFF2D55),
-                    onTap: () => context.push(AppRoutes.myFollowing),
-                  ),
-                  _buildMenuTile(
-                    icon: Icons.people_alt_rounded,
-                    title: '我的粉丝',
-                    iconColor: const Color(0xFF34C759),
-                    onTap: () => context.push(AppRoutes.myFans),
-                  ),
-                  if (!isAnchor)
-                    _buildMenuTile(
-                      icon: Icons.live_tv_rounded,
-                      title: '申请成为主播',
-                      iconColor: AppTheme.secondaryColor,
-                      onTap: () => context.push(AppRoutes.anchorApply),
-                    ),
-                  if (isAnchor)
-                    _buildMenuTile(
-                      icon: Icons.online_prediction_rounded,
-                      title: '在线接单',
-                      iconColor: const Color(0xFF34C759),
-                      onTap: () {},
-                      trailing: Switch(
-                        value: _anchorOnline,
-                        onChanged: _onOnlineStatusChanged,
-                        activeThumbColor: AppTheme.primaryColor,
-                        activeTrackColor: AppTheme.primaryColor.withValues(
-                          alpha: 0.4,
-                        ),
-                      ),
-                    ),
                   _buildMenuTile(
                     icon: Icons.dynamic_feed_rounded,
                     title: '我的动态',
@@ -276,68 +194,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
   }
 
   Widget _buildUserBalance(
-    AuthState authState,
-    TokenNamesState tokenNames,
-    BuildContext context,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Text(
-                    '${tokenNames.coinName}余额',
-                    style: const TextStyle(color: Colors.white70, fontSize: 13),
-                  ),
-                  const SizedBox(height: 8),
-                  GestureDetector(
-                    onTap: () => context.push(AppRoutes.recharge),
-                    child: Text(
-                      authState.coins.toStringAsFixed(2),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Text(
-                    '${tokenNames.diamondName}余额',
-                    style: const TextStyle(color: Colors.white70, fontSize: 13),
-                  ),
-                  const SizedBox(height: 8),
-                  GestureDetector(
-                    onTap: () => context.push(AppRoutes.withdraw),
-                    child: Text(
-                      authState.diamonds.toStringAsFixed(2),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 28,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAnchorBalance(
     AuthState authState,
     TokenNamesState tokenNames,
     BuildContext context,

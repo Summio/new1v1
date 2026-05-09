@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:typed_data';
 import '../../app/routes/app_router.dart';
-import '../../app/providers/anchor_provider.dart';
+import '../../app/providers/certified_user_provider.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/widgets/status_view.dart';
 
@@ -18,7 +18,7 @@ String _sectionForIndex(int index) {
   }
 }
 
-/// 首页 - 主播列表 + 分类 Tab
+/// 首页 - 认证用户列表 + 分类 Tab
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
@@ -40,9 +40,9 @@ class _HomePageState extends ConsumerState<HomePage>
     _tabController = TabController(length: _categories.length, vsync: this);
     _tabController.addListener(_onTabChanged);
     Future.microtask(() {
-      final notifier = ref.read(anchorListProvider.notifier);
+      final notifier = ref.read(certifiedUserListProvider.notifier);
       notifier.setSection(_sectionForIndex(_currentIndex));
-      notifier.fetchAnchors(refresh: true);
+      notifier.fetchCertifiedUsers(refresh: true);
     });
   }
 
@@ -62,7 +62,7 @@ class _HomePageState extends ConsumerState<HomePage>
   void _selectCategory(int index, {required bool animatePage}) {
     if (_currentIndex != index) {
       setState(() => _currentIndex = index);
-      ref.read(anchorListProvider.notifier).setSection(_sectionForIndex(index));
+      ref.read(certifiedUserListProvider.notifier).setSection(_sectionForIndex(index));
     }
 
     if (_tabController.index != index) {
@@ -156,14 +156,14 @@ class _HomePageState extends ConsumerState<HomePage>
             ),
           ),
 
-          // 主播列表 - PageView 支持左右滑动
+          // 认证用户列表 - PageView 支持左右滑动
           Expanded(
             child: PageView.builder(
               controller: _pageController,
               onPageChanged: _onPageChanged,
               itemCount: _categories.length,
               itemBuilder: (context, index) {
-                return _AnchorListPage(
+                return _CertifiedUserListPage(
                   pageIndex: index,
                   pageController: _pageController,
                 );
@@ -176,21 +176,21 @@ class _HomePageState extends ConsumerState<HomePage>
   }
 }
 
-/// 主播列表分页页面（支持触底加载）
-class _AnchorListPage extends ConsumerStatefulWidget {
+/// 认证用户列表分页页面（支持触底加载）
+class _CertifiedUserListPage extends ConsumerStatefulWidget {
   final int pageIndex;
   final PageController pageController;
 
-  const _AnchorListPage({
+  const _CertifiedUserListPage({
     required this.pageIndex,
     required this.pageController,
   });
 
   @override
-  ConsumerState<_AnchorListPage> createState() => _AnchorListPageState();
+  ConsumerState<_CertifiedUserListPage> createState() => _CertifiedUserListPageState();
 }
 
-class _AnchorListPageState extends ConsumerState<_AnchorListPage> {
+class _CertifiedUserListPageState extends ConsumerState<_CertifiedUserListPage> {
   static const Duration _contentFadeDuration = Duration(milliseconds: 180);
 
   late ScrollController _scrollController;
@@ -213,30 +213,30 @@ class _AnchorListPageState extends ConsumerState<_AnchorListPage> {
     if (!_scrollController.hasClients) return;
     if (_scrollController.position.pixels >=
         _scrollController.position.maxScrollExtent - 200) {
-      ref.read(anchorListProvider.notifier).loadMore();
+      ref.read(certifiedUserListProvider.notifier).loadMore();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final anchorState = ref.watch(anchorListProvider);
+    final certifiedUserState = ref.watch(certifiedUserListProvider);
     final expectedSection = _sectionForIndex(widget.pageIndex);
-    final isCurrentSection = anchorState.section == expectedSection;
+    final isCurrentSection = certifiedUserState.section == expectedSection;
 
     Widget content;
     if (!isCurrentSection) {
       content = StatusView.loading();
-    } else if (anchorState.isLoading && anchorState.anchors.isEmpty) {
+    } else if (certifiedUserState.isLoading && certifiedUserState.certifiedUsers.isEmpty) {
       content = StatusView.loading();
-    } else if (anchorState.error != null && anchorState.anchors.isEmpty) {
+    } else if (certifiedUserState.error != null && certifiedUserState.certifiedUsers.isEmpty) {
       content = StatusView.error(
-        message: anchorState.error!,
-        onRetry: () => ref.read(anchorListProvider.notifier).refresh(),
+        message: certifiedUserState.error!,
+        onRetry: () => ref.read(certifiedUserListProvider.notifier).refresh(),
       );
     } else {
       // RefreshIndicator 包裹 GridView，每个 PageView 页面独立支持下拉刷新
       content = RefreshIndicator(
-        onRefresh: () => ref.read(anchorListProvider.notifier).refresh(),
+        onRefresh: () => ref.read(certifiedUserListProvider.notifier).refresh(),
         child: GridView.builder(
           controller: _scrollController,
           physics:
@@ -248,14 +248,14 @@ class _AnchorListPageState extends ConsumerState<_AnchorListPage> {
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
           ),
-          itemCount: anchorState.anchors.length,
+          itemCount: certifiedUserState.certifiedUsers.length,
           itemBuilder: (context, idx) {
-            final anchor = anchorState.anchors[idx];
-            return _AnchorCard(
+            final certifiedUser = certifiedUserState.certifiedUsers[idx];
+            return _CertifiedUserCard(
               key: ValueKey(
-                'anchor_card_${anchor.userId}_${anchor.coverUrl ?? ''}',
+                'certified_user_card_${certifiedUser.userId}_${certifiedUser.coverUrl ?? ''}',
               ),
-              anchor: anchor,
+              certifiedUser: certifiedUser,
             );
           },
         ),
@@ -268,7 +268,7 @@ class _AnchorListPageState extends ConsumerState<_AnchorListPage> {
       switchOutCurve: Curves.easeOut,
       child: KeyedSubtree(
         key: ValueKey(
-          '${widget.pageIndex}_${anchorState.section}_${anchorState.isLoading}_${anchorState.anchors.length}',
+          '${widget.pageIndex}_${certifiedUserState.section}_${certifiedUserState.isLoading}_${certifiedUserState.certifiedUsers.length}',
         ),
         child: content,
       ),
@@ -276,16 +276,16 @@ class _AnchorListPageState extends ConsumerState<_AnchorListPage> {
   }
 }
 
-class _AnchorCard extends StatefulWidget {
-  final AnchorInfo anchor;
+class _CertifiedUserCard extends StatefulWidget {
+  final CertifiedUserInfo certifiedUser;
 
-  const _AnchorCard({super.key, required this.anchor});
+  const _CertifiedUserCard({super.key, required this.certifiedUser});
 
   @override
-  State<_AnchorCard> createState() => _AnchorCardState();
+  State<_CertifiedUserCard> createState() => _CertifiedUserCardState();
 }
 
-class _AnchorCardState extends State<_AnchorCard> {
+class _CertifiedUserCardState extends State<_CertifiedUserCard> {
   static final Uint8List _transparentImage = Uint8List.fromList([
     0x89,
     0x50,
@@ -363,7 +363,7 @@ class _AnchorCardState extends State<_AnchorCard> {
     if (_isNavigating) return;
     _isNavigating = true;
     try {
-      await context.push(AppRoutes.anchorDetail, extra: widget.anchor);
+      await context.push(AppRoutes.certifiedUserDetail, extra: widget.certifiedUser);
     } finally {
       if (mounted) {
         _isNavigating = false;
@@ -373,9 +373,9 @@ class _AnchorCardState extends State<_AnchorCard> {
 
   @override
   Widget build(BuildContext context) {
-    final anchor = widget.anchor;
-    final isOnline = anchor.isOnline ?? false;
-    final coverUrl = anchor.coverUrl?.trim() ?? '';
+    final certifiedUser = widget.certifiedUser;
+    final isOnline = certifiedUser.isOnline ?? false;
+    final coverUrl = certifiedUser.coverUrl?.trim() ?? '';
 
     return GestureDetector(
       onTap: _openDetail,
@@ -399,11 +399,11 @@ class _AnchorCardState extends State<_AnchorCard> {
               children: [
                 // 照片
                 Hero(
-                  tag: 'anchor_avatar_${anchor.userId}',
+                  tag: 'certified_user_avatar_${certifiedUser.userId}',
                   child: coverUrl.isNotEmpty
                       ? FadeInImage.memoryNetwork(
                           key: ValueKey(
-                            'anchor_cover_${anchor.userId}_$coverUrl',
+                            'certified_user_cover_${certifiedUser.userId}_$coverUrl',
                           ),
                           placeholder: _transparentImage,
                           image: coverUrl,
@@ -496,7 +496,7 @@ class _AnchorCardState extends State<_AnchorCard> {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        anchor.username ?? '匿名用户',
+                        certifiedUser.username ?? '匿名用户',
                         style: const TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.w800,
@@ -513,7 +513,7 @@ class _AnchorCardState extends State<_AnchorCard> {
                           ),
                           const SizedBox(width: 2),
                           Text(
-                            '${anchor.callPrice?.toStringAsFixed(0) ?? '0'}/分',
+                            '${certifiedUser.callPrice?.toStringAsFixed(0) ?? '0'}/分',
                             style: TextStyle(
                               fontSize: 10,
                               color: AppTheme.textSecondaryFaint,

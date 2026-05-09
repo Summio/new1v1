@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../app/providers/anchor_provider.dart';
+import '../../app/providers/certified_user_provider.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../app/providers/gift_provider.dart';
 import '../../app/routes/app_router.dart';
@@ -36,15 +36,15 @@ class CallRoomPage extends ConsumerStatefulWidget {
   /// 通话对端 AppUser ID（用于资料展示）
   final String peerUserId;
 
-  /// 礼物目标 Anchor ID（可选，缺省时尝试按 peerUserId 反查）
-  final String? anchorId;
+  /// 礼物目标用户 ID（可选，缺省时尝试按 peerUserId 反查）
+  final String? targetUserId;
   final String peerName;
 
   const CallRoomPage({
     super.key,
     required this.callId,
     required this.peerUserId,
-    this.anchorId,
+    this.targetUserId,
     this.peerName = '',
   });
 
@@ -95,7 +95,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
     );
     _log(
       'page init, peerUserId=${widget.peerUserId}, '
-      'anchorId=${widget.anchorId}, peerName=${widget.peerName}',
+      'targetUserId=${widget.targetUserId}, peerName=${widget.peerName}',
     );
 
     // 使用 Future.microtask 延迟执行，避免 widget build 阶段修改 provider
@@ -335,8 +335,8 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
     }
   }
 
-  int? _resolveGiftTargetAnchorId(AnchorInfo? anchor) {
-    final fromRoute = int.tryParse((widget.anchorId ?? '').trim());
+  int? _resolveGiftTargetUserId(CertifiedUserInfo? certifiedUser) {
+    final fromRoute = int.tryParse((widget.targetUserId ?? '').trim());
     if (fromRoute != null && fromRoute > 0) {
       return fromRoute;
     }
@@ -344,12 +344,12 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
     if (fromPeer != null && fromPeer > 0) {
       return fromPeer;
     }
-    return anchor?.id;
+    return certifiedUser?.id;
   }
 
-  void _showGiftPanel(AnchorInfo? anchor) {
-    final targetAnchorId = _resolveGiftTargetAnchorId(anchor);
-    if (targetAnchorId == null || targetAnchorId <= 0) {
+  void _showGiftPanel(CertifiedUserInfo? certifiedUser) {
+    final targetUserId = _resolveGiftTargetUserId(certifiedUser);
+    if (targetUserId == null || targetUserId <= 0) {
       AppToast.showSnackBar(
         context,
         const SnackBar(content: Text('目标用户参数异常，暂无法送礼')),
@@ -362,7 +362,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => GiftPanel(
-        anchorId: targetAnchorId.toString(),
+        targetUserId: targetUserId.toString(),
         scene: 'call',
         callId: widget.callId,
         onGiftSent: _handleCallGiftSent,
@@ -394,11 +394,11 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
     );
   }
 
-  AnchorInfo? _findAnchorForPeer() {
-    final anchorState = ref.read(anchorListProvider);
-    for (final anchor in anchorState.anchors) {
-      if (anchor.userId.toString() == widget.peerUserId) {
-        return anchor;
+  CertifiedUserInfo? _findCertifiedUserForPeer() {
+    final certifiedUserState = ref.read(certifiedUserListProvider);
+    for (final certifiedUser in certifiedUserState.certifiedUsers) {
+      if (certifiedUser.userId.toString() == widget.peerUserId) {
+        return certifiedUser;
       }
     }
     return null;
@@ -896,7 +896,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
                 isChatInputVisible: _chatInputVisible,
                 isImChatLoading: _isImChatLoading,
                 onToggleChat: _toggleChatInput,
-                onShowGift: () => _showGiftPanel(_findAnchorForPeer()),
+                onShowGift: () => _showGiftPanel(_findCertifiedUserForPeer()),
               ),
               _CallHangupButton(
                 isChatInputVisible: _chatInputVisible,
@@ -1387,17 +1387,17 @@ class _CallTopBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokenNames = ref.watch(tokenNamesProvider);
-    final anchorState = ref.watch(anchorListProvider);
-    AnchorInfo? anchor;
-    for (final item in anchorState.anchors) {
+    final certifiedUserState = ref.watch(certifiedUserListProvider);
+    CertifiedUserInfo? certifiedUser;
+    for (final item in certifiedUserState.certifiedUsers) {
       if (item.userId.toString() == peerUserId) {
-        anchor = item;
+        certifiedUser = item;
         break;
       }
     }
     final peerName = routePeerName.trim().isNotEmpty
         ? routePeerName.trim()
-        : (anchor?.username ?? '主播');
+        : (certifiedUser?.username ?? '认证用户');
 
     return Positioned(
       top: 0,
@@ -1444,7 +1444,7 @@ class _CallTopBar extends ConsumerWidget {
                 ],
               ),
             ),
-            if (anchor?.callPrice != null)
+            if (certifiedUser?.callPrice != null)
               Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 10,
@@ -1455,7 +1455,7 @@ class _CallTopBar extends ConsumerWidget {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  '${anchor!.callPrice!.toStringAsFixed(0)}${tokenNames.coinName}/min',
+                  '${certifiedUser!.callPrice!.toStringAsFixed(0)}${tokenNames.coinName}/min',
                   style: const TextStyle(color: Colors.white, fontSize: 12),
                 ),
               ),

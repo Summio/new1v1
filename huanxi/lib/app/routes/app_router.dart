@@ -5,10 +5,10 @@ import '../../modules/auth/login_page.dart';
 import '../../modules/auth/register_page.dart';
 import '../../modules/home/home_page.dart';
 import '../../modules/home/discover_page.dart';
-import '../../modules/home/messages_page.dart';
+import '../../modules/home/chat_page.dart';
 import '../../modules/home/profile_page.dart';
 import '../../modules/home/main_shell.dart';
-import '../../modules/home/anchor_apply_page.dart';
+import '../../modules/home/certification_center_page.dart';
 import '../../modules/call/call_room_page.dart';
 import '../../modules/call/call_outgoing_page.dart';
 import '../../modules/call/incoming_call_page.dart';
@@ -26,11 +26,11 @@ import '../../modules/im/im_page.dart';
 import '../../modules/gift/gift_panel.dart';
 import '../../modules/home/my_moments_page.dart';
 import '../../modules/home/publish_moment_page.dart';
-import '../../modules/home/anchor_detail_page.dart';
+import '../../modules/home/certified_user_detail_page.dart';
 import '../../modules/home/my_following_page.dart';
 import '../../modules/home/user_search_page.dart';
 import '../../modules/home/call_page.dart';
-import '../../app/providers/anchor_provider.dart';
+import '../../app/providers/certified_user_provider.dart';
 import '../../app/providers/wallet_provider.dart';
 import '../../core/storage/storage.dart';
 
@@ -42,7 +42,7 @@ class AppRoutes {
   static const String index = '/index';
   static const String discover = '/discover';
   static const String messages = '/messages';
-  static const String anchorDetail = '/anchor/detail';
+  static const String certifiedUserDetail = '/certified-user/detail';
   static const String userSearch = '/search';
   static const String profile = '/profile';
   static const String recharge = '/profile/recharge';
@@ -56,7 +56,7 @@ class AppRoutes {
   static const String settingsAgreement = '/settings/agreement';
   static const String settingsPrivacy = '/settings/privacy';
   static const String settingsPassword = '/settings/password';
-  static const String anchorApply = '/anchor/apply';
+  static const String certificationCenter = '/profile/certification';
   static const String im = '/im';
   static const String giftPanel = '/gift';
   static const String myMoments = '/profile/moments';
@@ -67,8 +67,8 @@ class AppRoutes {
   static const String callOutgoing = '/call/outgoing';
   static const String callIncoming = '/call/incoming';
 
-  static AnchorInfo? tryGetAnchorInfo(Object? extra) {
-    return extra is AnchorInfo ? extra : null;
+  static CertifiedUserInfo? tryGetCertifiedUserInfo(Object? extra) {
+    return extra is CertifiedUserInfo ? extra : null;
   }
 }
 
@@ -118,8 +118,16 @@ final appRouter = GoRouter(
         ),
         GoRoute(
           path: AppRoutes.messages,
-          pageBuilder: (context, state) =>
-              NoTransitionPage(child: MessagesPage()),
+          pageBuilder: (context, state) => NoTransitionPage(
+            child: ChatPage(
+              initialTabIndex: ChatPage.tabIndexFromQuery(
+                state.uri.queryParameters['tab'],
+              ),
+              initialRelationTabIndex: ChatPage.relationTabIndexFromQuery(
+                state.uri.queryParameters['relation'],
+              ),
+            ),
+          ),
         ),
         GoRoute(
           path: AppRoutes.profile,
@@ -139,7 +147,7 @@ final appRouter = GoRouter(
           peerUserId: state.uri.queryParameters['peerUserId'] ?? '',
           peerName: state.uri.queryParameters['peerName'] ?? '',
           peerAvatar: state.uri.queryParameters['peerAvatar'],
-          anchorId: state.uri.queryParameters['anchorId'],
+          targetUserId: state.uri.queryParameters['targetUserId'],
           callPrice: callPrice,
         );
       },
@@ -178,26 +186,26 @@ final appRouter = GoRouter(
         return CallRoomPage(
           callId: callId,
           peerUserId: state.uri.queryParameters['peerUserId'] ?? '',
-          anchorId: state.uri.queryParameters['anchorId'],
+          targetUserId: state.uri.queryParameters['targetUserId'],
           peerName: state.uri.queryParameters['peerName'] ?? '',
         );
       },
     ),
     GoRoute(
-      path: AppRoutes.anchorDetail,
+      path: AppRoutes.certifiedUserDetail,
       builder: (context, state) {
-        final anchor = AppRoutes.tryGetAnchorInfo(state.extra);
+        final certifiedUser = AppRoutes.tryGetCertifiedUserInfo(state.extra);
         final userId = int.tryParse(state.uri.queryParameters['userId'] ?? '');
-        if (anchor == null) {
+        if (certifiedUser == null) {
           if (userId != null && userId > 0) {
-            return AnchorDetailPage(userId: userId);
+            return CertifiedUserDetailPage(userId: userId);
           }
           return Scaffold(
             appBar: AppBar(title: const Text('提示')),
-            body: const Center(child: Text('主播信息无效，请返回重试')),
+            body: const Center(child: Text('认证用户信息无效，请返回重试')),
           );
         }
-        return AnchorDetailPage(anchor: anchor, userId: userId);
+        return CertifiedUserDetailPage(certifiedUser: certifiedUser, userId: userId);
       },
     ),
     GoRoute(
@@ -253,8 +261,8 @@ final appRouter = GoRouter(
       builder: (context, state) => const ChangePasswordPage(),
     ),
     GoRoute(
-      path: AppRoutes.anchorApply,
-      builder: (context, state) => const AnchorApplyPage(),
+      path: AppRoutes.certificationCenter,
+      builder: (context, state) => const CertificationCenterPage(),
     ),
     GoRoute(
       path: '${AppRoutes.im}/:userId',
@@ -289,7 +297,7 @@ final appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.giftPanel,
       builder: (context, state) => GiftPanel(
-        anchorId: state.uri.queryParameters['anchorId'] ?? '',
+        targetUserId: state.uri.queryParameters['targetUserId'] ?? '',
         onClose: () => context.pop(),
       ),
     ),

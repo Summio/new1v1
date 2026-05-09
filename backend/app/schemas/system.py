@@ -50,7 +50,7 @@ class IMTextBillingConfigIn(BaseModel):
     """IM 文字消息计费配置输入"""
     enabled: bool = Field(default=False, description="是否开启文字聊天扣费")
     price: int = Field(default=0, ge=0, le=1000000, description="每条文字消息扣费金币数")
-    anchor_share_bps: int = Field(default=5000, ge=0, le=10000, description="主播分成万分比")
+    anchor_share_bps: int = Field(default=5000, ge=0, le=10000, description="认证用户分成万分比")
 
     @model_validator(mode="after")
     def validate_enabled_price(self):
@@ -61,3 +61,26 @@ class IMTextBillingConfigIn(BaseModel):
 
 class IMTextBillingConfigOut(IMTextBillingConfigIn):
     """IM 文字消息计费配置输出"""
+
+
+class CertifiedCallPriceConfigIn(BaseModel):
+    """认证用户通话价格档位配置输入"""
+
+    tiers: List[int] = Field(
+        min_length=1,
+        max_length=50,
+        description="认证用户通话价格档位（分/分钟）",
+    )
+
+    @model_validator(mode="after")
+    def validate_tiers(self):
+        cleaned = []
+        for tier in self.tiers:
+            if tier < 0:
+                raise ValueError("tiers must be greater than or equal to 0")
+            if tier not in cleaned:
+                cleaned.append(tier)
+        if 0 not in cleaned:
+            cleaned.insert(0, 0)
+        self.tiers = sorted(cleaned)
+        return self

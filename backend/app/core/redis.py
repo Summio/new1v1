@@ -80,7 +80,7 @@ def heartbeat_key(call_id: int) -> str:
 
 
 def online_anchors_key() -> str:
-    """在线主播集合 key"""
+    """在线认证用户集合 key"""
     return "anchor:online"
 
 

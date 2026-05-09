@@ -29,7 +29,9 @@ async def test_get_user_info_serializes_decimal_balances() -> None:
         frozen_diamonds=Decimal("1.20"),
         status="normal",
         ban_reason=None,
-        is_anchor=False,
+        is_certified_user=False,
+        certification_status="none",
+        certified_call_price=0,
         created_at=datetime(2026, 5, 7, 10, 30, 0),
     )
 

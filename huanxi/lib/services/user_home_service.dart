@@ -1,18 +1,21 @@
-import '../app/providers/anchor_provider.dart';
+import '../app/providers/certified_user_provider.dart';
 import '../core/constants/api_endpoints.dart';
 import '../core/network/api_exception.dart';
 import '../core/network/dio_client.dart';
 import '../core/utils/app_logger.dart';
 
 class UserHomeProfile {
-  final AnchorInfo anchor;
+  final CertifiedUserInfo certifiedUser;
   final bool isFollowing;
 
-  const UserHomeProfile({required this.anchor, required this.isFollowing});
+  const UserHomeProfile({
+    required this.certifiedUser,
+    required this.isFollowing,
+  });
 }
 
 class FollowingUserItem {
-  final AnchorInfo user;
+  final CertifiedUserInfo user;
   final DateTime? followedAt;
 
   const FollowingUserItem({required this.user, this.followedAt});
@@ -53,7 +56,7 @@ class UserHomeService {
         throw ApiException(code: 500, message: '获取主页信息失败');
       }
       return UserHomeProfile(
-        anchor: AnchorInfo.fromJson(respData),
+        certifiedUser: CertifiedUserInfo.fromJson(respData),
         isFollowing: respData['is_following'] as bool? ?? false,
       );
     } on ApiException {
@@ -166,7 +169,7 @@ class UserHomeService {
       final items = rows.map((row) {
         final map = Map<String, dynamic>.from(row as Map);
         return FollowingUserItem(
-          user: AnchorInfo.fromJson(map),
+          user: CertifiedUserInfo.fromJson(map),
           followedAt: DateTime.tryParse(map['followed_at'] as String? ?? ''),
         );
       }).toList();

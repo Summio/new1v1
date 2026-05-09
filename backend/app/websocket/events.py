@@ -153,7 +153,7 @@ async def push_gift_sent(
 
 
 async def push_gift_received(
-    anchor_id: int,
+    target_user_id: int,
     sender_id: int,
     sender_nickname: str,
     sender_avatar: str | None,
@@ -168,7 +168,7 @@ async def push_gift_received(
     scene: str,
     call_id: int | None,
 ) -> PushResult:
-    """推送收到礼物给主播，用于展示礼物动画。"""
+    """推送收到礼物给认证用户，用于展示礼物动画。"""
     data = {
         "gift_id": int(gift_id),
         "gift_name": gift_name,
@@ -185,7 +185,7 @@ async def push_gift_received(
         "sender_nickname": sender_nickname,
         "sender_avatar": sender_avatar,
     }
-    return await get_manager().push_to_user(int(anchor_id), "gift_received", data)
+    return await get_manager().push_to_user(int(target_user_id), "gift_received", data)
 
 
 # ===== 余额事件 =====

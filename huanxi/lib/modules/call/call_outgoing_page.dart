@@ -21,7 +21,7 @@ class CallOutgoingPage extends ConsumerStatefulWidget {
   final String peerUserId;
   final String peerName;
   final String? peerAvatar;
-  final String? anchorId;
+  final String? targetUserId;
   final int callPrice;
 
   const CallOutgoingPage({
@@ -30,7 +30,7 @@ class CallOutgoingPage extends ConsumerStatefulWidget {
     required this.peerUserId,
     required this.peerName,
     this.peerAvatar,
-    this.anchorId,
+    this.targetUserId,
     required this.callPrice,
   });
 
@@ -174,10 +174,10 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
   Future<void> _startDialing() async {
     final ctrl = ref.read(callOutgoingControllerProvider);
     if (ctrl.isDialingInFlight || ctrl.isPageClosing) return;
-    final anchorId =
-        int.tryParse((widget.anchorId ?? '').trim()) ??
+    final targetUserId =
+        int.tryParse((widget.targetUserId ?? '').trim()) ??
         int.tryParse(_peerUserId.trim());
-    if (anchorId == null || anchorId <= 0) {
+    if (targetUserId == null || targetUserId <= 0) {
       if (!mounted) return;
       AppToast.showSnackBar(
         context,
@@ -191,7 +191,7 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
     try {
       final dialingRes = await DioClient.instance.apiPost(
         ApiEndpoints.dialing,
-        data: {'anchor_user_id': anchorId},
+        data: {'target_user_id': targetUserId},
       );
       final dialingData = dialingRes['data'] as Map<String, dynamic>?;
       final callId = (dialingData?['call_id'] as num?)?.toInt();
@@ -263,7 +263,7 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
         queryParameters: {
           'callId': callId.toString(),
           'peerUserId': _peerUserId,
-          'anchorId': widget.anchorId,
+          'targetUserId': widget.targetUserId,
           'peerName': _peerName,
         },
       ).toString(),

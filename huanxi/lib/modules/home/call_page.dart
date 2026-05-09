@@ -18,7 +18,11 @@ import '../../services/im_service.dart';
 /// 通话记录页面（我的页入口）
 /// 数据源：IM 通话留痕消息（custom message: call_trace.v1）
 class CallPage extends ConsumerStatefulWidget {
-  const CallPage({super.key});
+  final bool embedded;
+
+  const CallPage({super.key}) : embedded = false;
+
+  const CallPage.embedded({super.key}) : embedded = true;
 
   @override
   ConsumerState<CallPage> createState() => _CallPageState();
@@ -326,10 +330,12 @@ class _CallPageState extends ConsumerState<CallPage> {
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
     final tokenNames = ref.watch(tokenNamesProvider);
-    final isCurrentUserAnchor = authState.appRole == 'anchor';
+    final isCurrentUserCertified = authState.isCertifiedUser;
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(backgroundColor: Colors.white, title: const Text('通话记录')),
+      appBar: widget.embedded
+          ? null
+          : AppBar(backgroundColor: Colors.white, title: const Text('通话记录')),
       body: _isLoading
           ? StatusView.loading(message: '正在加载通话记录...')
           : (_errorMessage != null && _records.isEmpty)
@@ -371,7 +377,7 @@ class _CallPageState extends ConsumerState<CallPage> {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    '去首页找一个主播开始通话吧',
+                    '去首页找一个认证用户开始通话吧',
                     style: TextStyle(
                       fontSize: 14,
                       color: AppTheme.textSecondary,
@@ -381,7 +387,7 @@ class _CallPageState extends ConsumerState<CallPage> {
                   OutlinedButton.icon(
                     onPressed: () => context.go(AppRoutes.index),
                     icon: const Icon(Icons.explore),
-                    label: const Text('去首页找主播'),
+                    label: const Text('去首页找认证用户'),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppTheme.primaryColor,
                       side: const BorderSide(color: AppTheme.primaryColor),
@@ -410,7 +416,7 @@ class _CallPageState extends ConsumerState<CallPage> {
                   final (icon, iconColor) = _phaseIcon(trace);
                   final detail = trace.detailText(
                     currentUserId: _myAppUserId,
-                    isCurrentUserAnchor: isCurrentUserAnchor,
+                    isCurrentUserCertified: isCurrentUserCertified,
                     coinName: tokenNames.coinName,
                     diamondName: tokenNames.diamondName,
                   );

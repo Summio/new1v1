@@ -4,7 +4,7 @@ from .base import BaseModel, TimestampMixin
 
 
 class AppUser(BaseModel, TimestampMixin):
-    """App 用户（普通用户 + 主播）"""
+    """App 用户（普通用户 + 认证用户）"""
     phone = fields.CharField(max_length=20, unique=True, description="手机号(登录账号)", index=True)
     password = fields.CharField(max_length=128, description="密码(加密)")
     nickname = fields.CharField(max_length=30, null=True, description="昵称")
@@ -18,22 +18,22 @@ class AppUser(BaseModel, TimestampMixin):
     album_photos = fields.JSONField(null=True, description="相册URL列表(最多6张)")
     cover_url = fields.CharField(max_length=500, null=True, description="封面URL(必须来自相册)")
     status = fields.CharField(max_length=20, null=True, default="normal", description="normal/banned", index=True)
-    is_anchor = fields.BooleanField(default=False, description="是否为签约主播", index=True)
-    is_recommended = fields.BooleanField(default=False, description="是否首页推荐主播", index=True)
-    recommend_weight = fields.IntField(default=0, description="主播推荐值", index=True)
-    anchor_intro = fields.CharField(max_length=500, null=True, description="主播简介")
-    anchor_tags = fields.JSONField(null=True, description="主播标签列表")
-    anchor_call_price = fields.BigIntField(default=100, description="主播通话价格(分/分钟)")
-    anchor_apply_status = fields.CharField(
+    is_certified_user = fields.BooleanField(default=False, description="是否为真人认证用户", index=True)
+    is_recommended = fields.BooleanField(default=False, description="是否首页推荐认证用户", index=True)
+    recommend_weight = fields.IntField(default=0, description="认证用户推荐值", index=True)
+    certified_intro = fields.CharField(max_length=500, null=True, description="认证用户简介")
+    certified_tags = fields.JSONField(null=True, description="认证用户标签列表")
+    certified_call_price = fields.BigIntField(default=0, description="认证用户通话价格(分/分钟)")
+    certification_status = fields.CharField(
         max_length=20,
         default="none",
-        description="主播申请状态 none/pending/approved/rejected",
+        description="真人认证状态 none/pending/approved/rejected",
         index=True,
     )
-    anchor_apply_at = fields.DatetimeField(null=True, description="主播申请时间")
-    anchor_reviewed_at = fields.DatetimeField(null=True, description="主播审核时间")
-    anchor_reject_reason = fields.CharField(max_length=500, null=True, description="主播申请拒绝原因")
-    anchor_apply_face_image = fields.CharField(max_length=500, null=True, description="主播申请正面照URL")
+    certification_apply_at = fields.DatetimeField(null=True, description="真人认证申请时间")
+    certification_reviewed_at = fields.DatetimeField(null=True, description="真人认证审核时间")
+    certification_reject_reason = fields.CharField(max_length=500, null=True, description="真人认证拒绝原因")
+    certification_face_image = fields.CharField(max_length=500, null=True, description="真人认证正面照URL")
     coins = fields.DecimalField(max_digits=18, decimal_places=2, default=0, description="金币余额")
     diamonds = fields.DecimalField(max_digits=18, decimal_places=2, default=0, description="钻石余额")
     frozen_diamonds = fields.DecimalField(max_digits=18, decimal_places=2, default=0, description="冻结钻石")

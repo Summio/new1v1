@@ -38,7 +38,7 @@ class AppLoginOut(BaseModel):
     user_id: int
     nickname: str
     avatar: Optional[str] = None
-    is_anchor: bool = False
+    is_certified_user: bool = False
 
 
 # ===== 注册 =====
@@ -89,7 +89,9 @@ class AppUserInfoOut(BaseModel):
     frozen_diamonds: float = 0.0
     status: str = "normal"
     ban_reason: Optional[str] = None
-    is_anchor: bool = False
+    is_certified_user: bool = False
+    certification_status: str = "none"
+    certified_call_price: int = 0
     created_at: Optional[datetime] = None
 
 
@@ -119,39 +121,42 @@ class AppUserAdminUpdateIn(BaseModel):
     album_photos: Optional[List[str]] = Field(default=None, description="相册URL列表(最多6张)")
     cover_url: Optional[str] = Field(default=None, max_length=500, description="封面URL")
     status: Optional[Literal["normal", "banned"]] = Field(default=None, description="状态")
-    is_anchor: Optional[bool] = Field(default=None, description="是否主播")
-    is_recommended: Optional[bool] = Field(default=None, description="是否首页推荐主播")
-    recommend_weight: Optional[int] = Field(default=None, ge=0, le=999999, description="主播推荐值")
-    anchor_intro: Optional[str] = Field(default=None, max_length=500, description="主播简介")
-    anchor_tags: Optional[List[str]] = Field(default=None, description="主播标签")
-    anchor_call_price: Optional[int] = Field(default=None, ge=10, le=1000, description="主播通话价格(分/分钟)")
-    anchor_apply_status: Optional[Literal["none", "pending", "approved", "rejected"]] = Field(
+    is_certified_user: Optional[bool] = Field(default=None, description="是否真人认证用户")
+    is_recommended: Optional[bool] = Field(default=None, description="是否首页推荐认证用户")
+    recommend_weight: Optional[int] = Field(default=None, ge=0, le=999999, description="认证用户推荐值")
+    certified_intro: Optional[str] = Field(default=None, max_length=500, description="认证用户简介")
+    certified_tags: Optional[List[str]] = Field(default=None, description="认证用户标签")
+    certified_call_price: Optional[int] = Field(default=None, ge=0, le=1000000, description="认证用户通话价格(分/分钟)")
+    certification_status: Optional[Literal["none", "pending", "approved", "rejected"]] = Field(
         default=None,
-        description="主播申请状态",
+        description="真人认证状态",
     )
-    anchor_reject_reason: Optional[str] = Field(default=None, max_length=500, description="主播申请拒绝原因")
-    anchor_apply_face_image: Optional[str] = Field(default=None, max_length=500, description="主播申请正面照URL")
+    certification_reject_reason: Optional[str] = Field(default=None, max_length=500, description="真人认证拒绝原因")
+    certification_face_image: Optional[str] = Field(default=None, max_length=500, description="真人认证正面照URL")
 
 
-# ===== 主播申请 =====
+# ===== 真人认证 =====
 
-class AnchorApplyIn(BaseModel):
+class CertificationApplyIn(BaseModel):
     face_photo_url: str = Field(..., max_length=500, description="正面照URL")
 
 
-class AnchorApplyStatusOut(BaseModel):
+class CertificationStatusOut(BaseModel):
     status: str  # "none" / "pending" / "approved" / "rejected"
     apply_at: Optional[datetime] = None
     reject_reason: Optional[str] = None
     face_photo_url: Optional[str] = None
-    anchor_id: Optional[int] = None  # 审批通过后返回主播ID
-    anchor_user_id: Optional[int] = None
+    certified_user_id: Optional[int] = None
 
 
-class AnchorApplyReviewIn(BaseModel):
+class CertificationReviewIn(BaseModel):
     id: int = Field(..., ge=1, description="用户ID")
     status: Literal["approved", "rejected"] = Field(..., description="审核结果")
     reject_reason: Optional[str] = Field(default=None, max_length=500, description="驳回原因")
+
+
+class CertifiedCallPriceUpdateIn(BaseModel):
+    price: int = Field(..., ge=0, le=1000000, description="认证用户通话价格(分/分钟)")
 
 
 # ===== 关注 =====

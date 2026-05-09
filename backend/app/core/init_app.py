@@ -104,6 +104,17 @@ def build_operation_children(parent_id: int) -> list[Menu]:
             component="/operation/withdraw",
             keepalive=False,
         ),
+        Menu(
+            menu_type=MenuType.MENU,
+            name="真人认证审核",
+            path="certification-review",
+            order=7,
+            parent_id=parent_id,
+            icon="material-symbols:verified-user-outline-rounded",
+            is_hidden=False,
+            component="/operation/certification-review",
+            keepalive=False,
+        ),
     ]
 
 
@@ -266,6 +277,13 @@ async def init_menus():
             "icon": "material-symbols:payments-outline-rounded",
             "component": "/system/withdraw-config",
         },
+        {
+            "name": "认证用户通话价格档位",
+            "path": "certified-call-price-config",
+            "order": 10,
+            "icon": "material-symbols:price-change-outline-rounded",
+            "component": "/system/certified-call-price-config",
+        },
     ]
     for child in system_children:
         await _ensure_menu_exists(
@@ -385,7 +403,16 @@ async def init_roles():
     # 兼容存量环境：为所有历史角色补齐运营中心菜单与通话记录查询权限（幂等）
     all_roles = await Role.all()
     operation_menus = await Menu.filter(
-        path__in=["/operation", "app-user", "call-record", "gift", "moment", "recharge", "withdraw"]
+        path__in=[
+            "/operation",
+            "app-user",
+            "call-record",
+            "gift",
+            "moment",
+            "recharge",
+            "withdraw",
+            "certification-review",
+        ]
     ).all()
     if all_roles and operation_menus:
         for role in all_roles:
@@ -426,9 +453,11 @@ async def init_roles():
         for role in all_roles:
             await role.apis.add(*withdraw_apis)
     withdraw_config_menu = await Menu.filter(path="withdraw-config").first()
+    certified_call_price_config_menu = await Menu.filter(path="certified-call-price-config").first()
     withdraw_config_apis = await Api.filter(
         path__in=[
             "/api/v1/apis/system/withdraw-config",
+            "/api/v1/apis/system/certified-call-price-config",
         ],
     ).all()
 
@@ -437,6 +466,8 @@ async def init_roles():
     if admin_role:
         if withdraw_config_menu:
             await admin_role.menus.add(withdraw_config_menu)
+        if certified_call_price_config_menu:
+            await admin_role.menus.add(certified_call_price_config_menu)
         if withdraw_config_apis:
             await admin_role.apis.add(*withdraw_config_apis)
         all_apis = await Api.all()

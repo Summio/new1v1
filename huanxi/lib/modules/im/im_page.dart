@@ -52,7 +52,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
   String? _peerUserId;
   String? _peerNickname;
   String? _peerAvatarUrl;
-  int? _peerAnchorId;
+  int? _peerCertifiedUserId;
   String? _myAvatarUrl;
   final Set<String> _messageIds = <String>{};
   V2TimMessage? _lastHistoryMsg;
@@ -270,16 +270,18 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
         final appAvatar = _imService.normalizeMediaUrl(
           (payload['avatar'] as String?)?.trim(),
         );
-        final appAnchorId =
-            (payload['anchor_user_id'] as num?)?.toInt() ??
-            (payload['anchor_id'] as num?)?.toInt();
+        final appCertifiedUserId =
+            (payload['target_user_id'] as num?)?.toInt() ??
+            (payload['certified_user_id'] as num?)?.toInt() ??
+            (payload['user_id'] as num?)?.toInt() ??
+            (payload['id'] as num?)?.toInt();
         if (appNick != null && appNick.isNotEmpty) {
           _peerNickname = appNick;
         }
         if (appAvatar.isNotEmpty) {
           _peerAvatarUrl = appAvatar;
         }
-        _peerAnchorId = appAnchorId;
+        _peerCertifiedUserId = appCertifiedUserId;
       });
     } on ApiException catch (e) {
       if (e.code == 400) {
@@ -467,9 +469,9 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
     return ResponseParsers.parseIMTextChargePayload(data);
   }
 
-  int? _resolveGiftAnchorId() {
-    if (_peerAnchorId != null && _peerAnchorId! > 0) {
-      return _peerAnchorId;
+  int? _resolveGiftTargetUserId() {
+    if (_peerCertifiedUserId != null && _peerCertifiedUserId! > 0) {
+      return _peerCertifiedUserId;
     }
     final peer = _peerUserId ?? widget.userId;
     return _extractAppUserId(peer);
@@ -495,8 +497,8 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
   }
 
   void _openGiftPanel() {
-    final anchorId = _resolveGiftAnchorId();
-    if (anchorId == null || anchorId <= 0) {
+    final targetUserId = _resolveGiftTargetUserId();
+    if (targetUserId == null || targetUserId <= 0) {
       AppToast.showSnackBar(
         context,
         const SnackBar(content: Text('当前聊天对象暂不支持送礼')),
@@ -512,7 +514,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         builder: (context) => GiftPanel(
-          anchorId: anchorId.toString(),
+          targetUserId: targetUserId.toString(),
           scene: 'chat',
           onClose: () => Navigator.pop(context),
         ),
@@ -644,7 +646,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
       );
       return;
     }
-    final anchorId = _peerAnchorId ?? peerNumId;
+    final targetUserId = _peerCertifiedUserId ?? peerNumId;
 
     setState(() => _isStartingCall = true);
     try {
@@ -655,7 +657,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
                 path: AppRoutes.callOutgoing,
                 queryParameters: {
                   'peerUserId': peerNumId.toString(),
-                  'anchorId': anchorId.toString(),
+                  'targetUserId': targetUserId.toString(),
                   'peerName': _peerDisplayName(),
                   'peerAvatar': _peerAvatarUrl ?? '',
                   'callPrice': '0',
@@ -699,7 +701,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
     final authState = ref.watch(authProvider);
     final tokenNames = ref.watch(tokenNamesProvider);
     final currentUserId = authState.userId ?? StorageService.getUserId() ?? 0;
-    final isCurrentUserAnchor = authState.appRole == 'anchor';
+    final isCurrentUserCertified = authState.isCertifiedUser;
     final size = MediaQuery.sizeOf(context);
     final maxBubbleWidth = size.width * 0.75;
     final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
@@ -787,7 +789,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
                                       message: msg,
                                       maxBubbleWidth: maxBubbleWidth,
                                       currentUserId: currentUserId,
-                                      isCurrentUserAnchor: isCurrentUserAnchor,
+                                      isCurrentUserCertified: isCurrentUserCertified,
                                       coinName: tokenNames.coinName,
                                       diamondName: tokenNames.diamondName,
                                       avatarUrl: msg.isMe
@@ -912,7 +914,7 @@ class _MessageBubble extends StatelessWidget {
   final _ChatMessage message;
   final double maxBubbleWidth;
   final int currentUserId;
-  final bool isCurrentUserAnchor;
+  final bool isCurrentUserCertified;
   final String coinName;
   final String diamondName;
   final String? avatarUrl;
@@ -922,7 +924,7 @@ class _MessageBubble extends StatelessWidget {
     required this.message,
     required this.maxBubbleWidth,
     required this.currentUserId,
-    required this.isCurrentUserAnchor,
+    required this.isCurrentUserCertified,
     required this.coinName,
     required this.diamondName,
     required this.avatarUrl,
@@ -943,7 +945,7 @@ class _MessageBubble extends StatelessWidget {
         message: message,
         maxBubbleWidth: maxBubbleWidth,
         currentUserId: currentUserId,
-        isCurrentUserAnchor: isCurrentUserAnchor,
+        isCurrentUserCertified: isCurrentUserCertified,
         coinName: coinName,
         diamondName: diamondName,
       );
@@ -1118,7 +1120,7 @@ class _CallTraceCard extends StatelessWidget {
   final _ChatMessage message;
   final double maxBubbleWidth;
   final int currentUserId;
-  final bool isCurrentUserAnchor;
+  final bool isCurrentUserCertified;
   final String coinName;
   final String diamondName;
 
@@ -1126,7 +1128,7 @@ class _CallTraceCard extends StatelessWidget {
     required this.message,
     required this.maxBubbleWidth,
     required this.currentUserId,
-    required this.isCurrentUserAnchor,
+    required this.isCurrentUserCertified,
     required this.coinName,
     required this.diamondName,
   });
@@ -1136,7 +1138,7 @@ class _CallTraceCard extends StatelessWidget {
     final detail =
         message.callTrace?.detailText(
           currentUserId: currentUserId,
-          isCurrentUserAnchor: isCurrentUserAnchor,
+          isCurrentUserCertified: isCurrentUserCertified,
           coinName: coinName,
           diamondName: diamondName,
         ) ??

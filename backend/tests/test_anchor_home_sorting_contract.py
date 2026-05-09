@@ -3,37 +3,37 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 BACKEND_ROOT = REPO_ROOT / "backend"
 
-ANCHOR_API = BACKEND_ROOT / "app/api/v1/app/anchor.py"
+CERTIFIED_USER_API = BACKEND_ROOT / "app/api/v1/app/certified_user.py"
 APP_USER_MODEL = BACKEND_ROOT / "app/models/app_user.py"
 APP_USER_SCHEMA = BACKEND_ROOT / "app/schemas/app_user.py"
 APP_USER_ADMIN_API = BACKEND_ROOT / "app/api/v1/app_users/app_users.py"
 PRESENCE = BACKEND_ROOT / "app/websocket/presence.py"
 WS_MANAGER = BACKEND_ROOT / "app/websocket/manager.py"
 APP_USER_VIEW = BACKEND_ROOT / "web/src/views/operation/app-user/index.vue"
-ANCHOR_PROVIDER = REPO_ROOT / "huanxi/lib/app/providers/anchor_provider.dart"
+CERTIFIED_USER_PROVIDER = REPO_ROOT / "huanxi/lib/app/providers/certified_user_provider.dart"
 HOME_PAGE = REPO_ROOT / "huanxi/lib/modules/home/home_page.dart"
 
 
-def test_anchor_model_has_recommend_fields() -> None:
+def test_certified_user_model_has_recommend_fields() -> None:
     text = APP_USER_MODEL.read_text(encoding="utf-8")
 
     assert "is_recommended" in text
     assert "recommend_weight" in text
 
 
-def test_anchor_list_supports_online_section_sorting() -> None:
-    text = ANCHOR_API.read_text(encoding="utf-8")
+def test_certified_user_list_supports_online_section_sorting() -> None:
+    text = CERTIFIED_USER_API.read_text(encoding="utf-8")
 
     assert "section: str" in text
     assert 'filters["id__in"]' not in text
     assert "users = await q.all()" not in text
-    assert "_fetch_sorted_anchor_page" in text
+    assert "_fetch_sorted_certified_user_page" in text
     assert "online_ids" in text
     assert "user.id in online_ids" in text
     assert "is_recommended" in text
     assert "True" in text
     assert "recommend_weight" in text
-    assert "anchor_reviewed_at" in text
+    assert "certification_reviewed_at" in text
     assert "get_online_user_id_page" in text
     assert "count_online_user_ids" in text
 
@@ -51,7 +51,7 @@ def test_presence_records_online_since_for_active_sorting() -> None:
     assert "clear_online_since" in manager_text
 
 
-def test_admin_update_and_page_support_anchor_recommend_fields() -> None:
+def test_admin_update_and_page_support_certified_user_recommend_fields() -> None:
     schema_text = APP_USER_SCHEMA.read_text(encoding="utf-8")
     api_text = APP_USER_ADMIN_API.read_text(encoding="utf-8")
     view_text = APP_USER_VIEW.read_text(encoding="utf-8")
@@ -65,8 +65,8 @@ def test_admin_update_and_page_support_anchor_recommend_fields() -> None:
     assert "modalForm.recommend_weight" in view_text
 
 
-def test_flutter_home_tabs_send_anchor_section() -> None:
-    provider_text = ANCHOR_PROVIDER.read_text(encoding="utf-8")
+def test_flutter_home_tabs_send_certified_user_section() -> None:
+    provider_text = CERTIFIED_USER_PROVIDER.read_text(encoding="utf-8")
     home_text = HOME_PAGE.read_text(encoding="utf-8")
 
     assert "section" in provider_text

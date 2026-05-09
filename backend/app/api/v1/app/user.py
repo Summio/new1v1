@@ -39,7 +39,7 @@ def _normalize_album(raw_value) -> list[str]:
     return normalize_media_list(raw_value)
 
 
-def _normalize_anchor_tags(raw_value) -> list[str]:
+def _normalize_certified_tags(raw_value) -> list[str]:
     if not isinstance(raw_value, list):
         return []
     out: list[str] = []
@@ -76,14 +76,15 @@ async def _serialize_user_home(app_user: AppUser, *, is_following: bool, is_onli
         "weight_kg": app_user.weight_kg,
         "location_city": app_user.location_city or "",
         "signature": app_user.signature or "",
-        "anchor_intro": app_user.anchor_intro or "",
-        "intro": app_user.anchor_intro or "",
-        "tags": _normalize_anchor_tags(app_user.anchor_tags),
-        "call_price": int(app_user.anchor_call_price or 0),
+        "certified_intro": app_user.certified_intro or "",
+        "intro": app_user.certified_intro or "",
+        "tags": _normalize_certified_tags(app_user.certified_tags),
+        "call_price": int(app_user.certified_call_price or 0),
         "is_online": is_online,
         "last_active": app_user.last_login.isoformat() if app_user.last_login else None,
         "status": app_user.status or "normal",
-        "is_anchor": bool(app_user.is_anchor),
+        "is_certified_user": bool(app_user.is_certified_user),
+        "certification_status": app_user.certification_status or "none",
         "diamonds": int(app_user.diamonds or 0),
         "is_following": is_following,
     }
@@ -135,7 +136,9 @@ async def get_user_info():
             "frozen_diamonds": decimal_to_float_2(app_user.frozen_diamonds),
             "status": app_user.status or "normal",
             "ban_reason": app_user.ban_reason or "",
-            "is_anchor": app_user.is_anchor,
+            "is_certified_user": app_user.is_certified_user,
+            "certification_status": app_user.certification_status or "none",
+            "certified_call_price": int(app_user.certified_call_price or 0),
             "created_at": app_user.created_at.isoformat() if app_user.created_at else None,
         }
     )

@@ -43,12 +43,13 @@ const modalForm = ref({
   weight_kg: null,
   location_city: '',
   status: 'normal',
-  is_anchor: false,
+  is_certified_user: false,
   is_recommended: false,
   recommend_weight: 0,
-  anchor_apply_status: 'none',
-  anchor_reject_reason: '',
-  anchor_apply_face_image: '',
+  certification_status: 'none',
+  certification_reject_reason: '',
+  certification_face_image: '',
+  certified_call_price: 0,
   cover_url: '',
   album_photos: [],
   coins: 0,
@@ -62,6 +63,7 @@ const callRecordRows = ref([])
 const peerJumpLoading = ref(false)
 const billLoading = ref(false)
 const billRows = ref([])
+const certifiedCallPriceOptions = ref([{ label: '免费', value: 0 }])
 const billSummary = reactive({
   income_coins_total: 0,
   income_diamonds_total: 0,
@@ -116,6 +118,7 @@ const billPagination = reactive({
 })
 
 onMounted(() => {
+  fetchCertifiedCallPriceOptions()
   $table.value?.handleSearch()
 })
 
@@ -130,21 +133,42 @@ const genderOptions = [
   { label: '保密', value: 'secret' },
 ]
 
-const anchorOptions = [
-  { label: '主播', value: true },
+const certificationOptions = [
+  { label: '真人认证', value: true },
   { label: '普通用户', value: false },
 ]
-const anchorApplyStatusOptions = [
+const certificationStatusOptions = [
   { label: '未申请', value: 'none' },
   { label: '待审核', value: 'pending' },
   { label: '已通过', value: 'approved' },
   { label: '已驳回', value: 'rejected' },
 ]
-const anchorApplyStatusMap = {
+const certificationStatusMap = {
   none: { type: 'default', text: '未申请' },
   pending: { type: 'warning', text: '待审核' },
   approved: { type: 'success', text: '已通过' },
   rejected: { type: 'error', text: '已驳回' },
+}
+
+async function fetchCertifiedCallPriceOptions() {
+  try {
+    const res = await api.getCertifiedCallPriceConfig()
+    const tiers = Array.isArray(res?.data?.tiers) ? res.data.tiers : []
+    const normalized = Array.from(
+      new Set(
+        tiers
+          .map((item) => Number(item))
+          .filter((item) => Number.isInteger(item) && item >= 0)
+      )
+    ).sort((a, b) => a - b)
+    if (!normalized.includes(0)) normalized.unshift(0)
+    certifiedCallPriceOptions.value = normalized.map((value) => ({
+      label: value === 0 ? '免费' : `${value / 100}元/分钟`,
+      value,
+    }))
+  } catch (error) {
+    certifiedCallPriceOptions.value = [{ label: '免费', value: 0 }]
+  }
 }
 const callRecordStatusOptions = [
   { label: '待接听', value: 'pending' },
@@ -251,12 +275,13 @@ function openEditModal(row) {
     weight_kg: row.weight_kg ?? null,
     location_city: row.location_city || '',
     status: row.status || 'normal',
-    is_anchor: !!row.is_anchor,
+    is_certified_user: !!row.is_certified_user,
     is_recommended: !!row.is_recommended,
     recommend_weight: row.recommend_weight ?? 0,
-    anchor_apply_status: row.anchor_apply_status || 'none',
-    anchor_reject_reason: row.anchor_reject_reason || '',
-    anchor_apply_face_image: row.anchor_apply_face_image || '',
+    certification_status: row.certification_status || 'none',
+    certification_reject_reason: row.certification_reject_reason || '',
+    certification_face_image: row.certification_face_image || '',
+    certified_call_price: row.is_certified_user ? Number(row.certified_call_price || 0) : 0,
     cover_url: row.cover_url || '',
     album_photos: album,
     coins: row.coins ?? 0,
@@ -388,7 +413,7 @@ const callRecordColumns = [
   },
   { title: '总费用(金币)', key: 'total_fee', width: 100, align: 'center' },
   {
-    title: '收益主播',
+    title: '收益认证用户',
     key: 'income_anchor_user_id',
     width: 100,
     align: 'center',
@@ -397,7 +422,7 @@ const callRecordColumns = [
     },
   },
   {
-    title: '主播收益(钻石)',
+    title: '认证用户收益(钻石)',
     key: 'anchor_income_diamonds',
     width: 130,
     align: 'center',
@@ -602,12 +627,15 @@ async function handleSave() {
       weight_kg: modalForm.value.weight_kg ?? null,
       location_city: (modalForm.value.location_city || '').trim(),
       status: modalForm.value.status || 'normal',
-      is_anchor: !!modalForm.value.is_anchor,
+      is_certified_user: !!modalForm.value.is_certified_user,
       is_recommended: !!modalForm.value.is_recommended,
       recommend_weight: modalForm.value.recommend_weight ?? 0,
-      anchor_apply_status: modalForm.value.anchor_apply_status || 'none',
-      anchor_reject_reason: (modalForm.value.anchor_reject_reason || '').trim() || null,
-      anchor_apply_face_image: (modalForm.value.anchor_apply_face_image || '').trim(),
+      certification_status: modalForm.value.certification_status || 'none',
+      certification_reject_reason: (modalForm.value.certification_reject_reason || '').trim() || null,
+      certification_face_image: (modalForm.value.certification_face_image || '').trim(),
+      certified_call_price: modalForm.value.is_certified_user
+        ? Number(modalForm.value.certified_call_price || 0)
+        : 0,
       album_photos: album,
       cover_url: (modalForm.value.cover_url || '').trim(),
     }
@@ -809,40 +837,40 @@ const columns = [
     },
   },
   {
-    title: '主播',
-    key: 'is_anchor',
+    title: '真人认证',
+    key: 'is_certified_user',
     width: 70,
     align: 'center',
     render(row) {
       return h(
         NTag,
-        { type: row.is_anchor ? 'warning' : 'default' },
-        { default: () => (row.is_anchor ? '是' : '否') }
+        { type: row.is_certified_user ? 'warning' : 'default' },
+        { default: () => (row.is_certified_user ? '是' : '否') }
       )
     },
   },
   {
-    title: '申请状态',
-    key: 'anchor_apply_status',
+    title: '认证状态',
+    key: 'certification_status',
     width: 100,
     align: 'center',
     render(row) {
-      const item = anchorApplyStatusMap[row.anchor_apply_status] || {
+      const item = certificationStatusMap[row.certification_status] || {
         type: 'default',
-        text: row.anchor_apply_status || '-',
+        text: row.certification_status || '-',
       }
       return h(NTag, { type: item.type }, { default: () => item.text })
     },
   },
   {
-    title: '申请正面照',
-    key: 'anchor_apply_face_image',
+    title: '认证正面照',
+    key: 'certification_face_image',
     width: 100,
     align: 'center',
     render(row) {
-      if (!row.anchor_apply_face_image) return '-'
+      if (!row.certification_face_image) return '-'
       return h(NImage, {
-        src: row.anchor_apply_face_image,
+        src: row.certification_face_image,
         width: 44,
         height: 44,
         objectFit: 'cover',
@@ -850,9 +878,19 @@ const columns = [
         imgProps: {
           class: 'avatar-thumb',
           style: avatarImgStyle,
-          alt: 'anchor-apply-face',
+          alt: 'certification-face',
         },
       })
+    },
+  },
+  {
+    title: '通话价格',
+    key: 'certified_call_price',
+    width: 110,
+    align: 'center',
+    render(row) {
+      const price = Number(row.certified_call_price || 0)
+      return price > 0 ? `${price / 100}元/分钟` : '免费'
     },
   },
   { title: '金币', key: 'coins', width: 90, align: 'center' },
@@ -951,21 +989,21 @@ const columns = [
             placeholder="请选择状态"
           />
         </QueryBarItem>
-        <QueryBarItem label="主播" :label-width="50">
+        <QueryBarItem label="真人认证" :label-width="50">
           <NSelect
-            v-model:value="queryItems.is_anchor"
+            v-model:value="queryItems.is_certified_user"
             clearable
             style="width: 160px"
-            :options="anchorOptions"
+            :options="certificationOptions"
             placeholder="请选择类型"
           />
         </QueryBarItem>
-        <QueryBarItem label="申请状态" :label-width="70">
+        <QueryBarItem label="认证状态" :label-width="70">
           <NSelect
-            v-model:value="queryItems.anchor_apply_status"
+            v-model:value="queryItems.certification_status"
             clearable
             style="width: 160px"
-            :options="anchorApplyStatusOptions"
+            :options="certificationStatusOptions"
             placeholder="请选择状态"
           />
         </QueryBarItem>
@@ -995,7 +1033,7 @@ const columns = [
                 v-model:value="modalForm.signature"
                 type="textarea"
                 :autosize="{ minRows: 2, maxRows: 4 }"
-                placeholder="用于App主播详情页“关于我”展示"
+                placeholder="用于App认证用户详情页“关于我”展示"
               />
             </NFormItem>
             <NFormItem label="性别">
@@ -1016,8 +1054,15 @@ const columns = [
             <NFormItem label="状态">
               <NSelect v-model:value="modalForm.status" :options="statusOptions" />
             </NFormItem>
-            <NFormItem label="主播">
-              <NSwitch v-model:value="modalForm.is_anchor" />
+            <NFormItem label="真人认证">
+              <NSwitch v-model:value="modalForm.is_certified_user" />
+            </NFormItem>
+            <NFormItem label="通话价格">
+              <NSelect
+                v-model:value="modalForm.certified_call_price"
+                :options="certifiedCallPriceOptions"
+                :disabled="!modalForm.is_certified_user"
+              />
             </NFormItem>
             <NFormItem label="首页推荐">
               <NSwitch v-model:value="modalForm.is_recommended" />
@@ -1030,15 +1075,15 @@ const columns = [
                 :precision="0"
               />
             </NFormItem>
-            <NFormItem label="申请状态">
+            <NFormItem label="认证状态">
               <NSelect
-                v-model:value="modalForm.anchor_apply_status"
-                :options="anchorApplyStatusOptions"
+                v-model:value="modalForm.certification_status"
+                :options="certificationStatusOptions"
               />
             </NFormItem>
             <NFormItem label="驳回原因" class="full-span">
               <NInput
-                v-model:value="modalForm.anchor_reject_reason"
+                v-model:value="modalForm.certification_reject_reason"
                 type="textarea"
                 :autosize="{ minRows: 2, maxRows: 4 }"
                 placeholder="驳回申请时请填写原因"
@@ -1119,12 +1164,12 @@ const columns = [
                 <div v-else class="hint">暂无相册图片</div>
               </div>
             </NFormItem>
-            <NFormItem label="申请正面照" class="full-span">
+            <NFormItem label="认证正面照" class="full-span">
               <div class="media-row">
                 <div class="media-thumb-lg">
                   <NImage
-                    v-if="modalForm.anchor_apply_face_image"
-                    :src="modalForm.anchor_apply_face_image"
+                    v-if="modalForm.certification_face_image"
+                    :src="modalForm.certification_face_image"
                     width="92"
                     height="92"
                     object-fit="cover"
@@ -1132,8 +1177,8 @@ const columns = [
                   <span v-else>未上传</span>
                 </div>
                 <NInput
-                  v-model:value="modalForm.anchor_apply_face_image"
-                  placeholder="申请正面照URL（通常由App端上传）"
+                  v-model:value="modalForm.certification_face_image"
+                  placeholder="认证正面照URL（通常由App端上传）"
                   style="width: 420px"
                 />
               </div>

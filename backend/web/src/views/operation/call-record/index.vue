@@ -101,7 +101,7 @@ const columns = [
     },
   },
   {
-    title: '收益主播',
+    title: '收益认证用户',
     key: 'income_anchor_user_id',
     width: 100,
     align: 'center',
@@ -110,7 +110,7 @@ const columns = [
     },
   },
   {
-    title: '主播收益(钻石)',
+    title: '认证用户收益(钻石)',
     key: 'anchor_income_diamonds',
     width: 130,
     align: 'center',

@@ -3,9 +3,9 @@ from fastapi import APIRouter, Depends
 from app.core.app_auth import DependAppAuth
 
 from .bootstrap import router as bootstrap_router
-from .anchor import router as anchor_router
-from .anchor_apply import router as anchor_apply_router
 from .call import router as call_router
+from .certification import router as certification_router
+from .certified_user import router as certified_user_router
 from .gift import router as gift_router
 from .im import router as im_router
 from .moment import router as moment_router
@@ -24,8 +24,8 @@ app_router.include_router(register_router, prefix="")
 # user_router: /login 无需认证，/user/info 需要 DependAppAuth
 app_router.include_router(user_router, prefix="")
 app_router.include_router(bootstrap_router, prefix="")
-app_router.include_router(anchor_router, prefix="", dependencies=[Depends(DependAppAuth)])
-app_router.include_router(anchor_apply_router, prefix="", dependencies=[Depends(DependAppAuth)])
+app_router.include_router(certified_user_router, prefix="", dependencies=[Depends(DependAppAuth)])
+app_router.include_router(certification_router, prefix="", dependencies=[Depends(DependAppAuth)])
 app_router.include_router(call_router, prefix="", dependencies=[Depends(DependAppAuth)])
 app_router.include_router(gift_router, prefix="", dependencies=[Depends(DependAppAuth)])
 app_router.include_router(wallet_router, prefix="", dependencies=[Depends(DependAppAuth)])

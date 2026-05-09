@@ -45,16 +45,6 @@ class SettingsPage extends ConsumerWidget {
           const SizedBox(height: 8),
           const _SectionTitle(title: '隐私与安全'),
           _SettingsTile(
-            icon: Icons.block,
-            title: '黑名单管理',
-            onTap: () {
-              AppToast.showSnackBar(
-                context,
-                const SnackBar(content: Text('黑名单管理功能开发中')),
-              );
-            },
-          ),
-          _SettingsTile(
             icon: Icons.do_not_disturb,
             title: '免打扰模式',
             trailing: Switch(
