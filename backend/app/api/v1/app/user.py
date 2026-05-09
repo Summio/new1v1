@@ -1,12 +1,13 @@
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
 from tortoise.expressions import Q
+from tortoise.transactions import in_transaction
 
 from app.core.app_auth import DependAppAuth, logout_app_user
 from app.core.ctx import CTX_APP_USER_ID, CTX_APP_USER_OBJ
-from app.models import AppUser, UserFollow
+from app.models import AppUser, AppUserProfileReviewApply, UserFollow
 from app.schemas.app_user import (
     AppUserProfileUpdateIn,
     UserFollowActionOut,
@@ -15,6 +16,7 @@ from app.schemas.app_user import (
 )
 from app.schemas.base import Fail, Success, SuccessExtra
 from app.services.gift_income_service import decimal_to_float_2
+from app.services.profile_review_service import build_profile_review_payload
 from app.settings.config import settings
 from app.utils.media_url import normalize_media_list, to_relative_media_url
 from app.utils.upload_files import (
@@ -49,6 +51,16 @@ def _normalize_certified_tags(raw_value) -> list[str]:
         if tag:
             out.append(tag)
     return out
+
+
+def _serialize_profile_review_snapshot(app_user: AppUser) -> dict:
+    return {
+        "nickname": app_user.nickname or "",
+        "avatar": to_relative_media_url(app_user.avatar),
+        "signature": app_user.signature or "",
+        "album_photos": _normalize_album(app_user.album_photos),
+        "cover_url": to_relative_media_url(app_user.cover_url),
+    }
 
 
 async def _is_following(current_user_id: int, target_user_id: int) -> bool:
@@ -152,6 +164,19 @@ async def update_user_profile(req_in: AppUserProfileUpdateIn):
     if app_user.status == "banned":
         return Fail(code=403, msg=f"账号已被封禁，原因：{app_user.ban_reason or '未知'}")
 
+    if req_in.gender is not None:
+        current_gender = app_user.gender or "male"
+        requested_gender = str(req_in.gender.value)
+        if requested_gender != current_gender:
+            return Fail(code=400, msg="性别注册后不可修改")
+
+    has_pending_review = await AppUserProfileReviewApply.filter(
+        user_id=app_user.id,
+        status__in=["pending", "reviewing"],
+    ).exists()
+    if has_pending_review:
+        return Fail(code=400, msg="您有资料编辑申请待审核，请审核完成后再提交")
+
     current_album = _normalize_album(app_user.album_photos)
     target_album = current_album
     if req_in.album_photos is not None:
@@ -159,25 +184,35 @@ async def update_user_profile(req_in: AppUserProfileUpdateIn):
         if len(target_album) > 6:
             return Fail(code=400, msg="相册最多上传6张照片")
 
+    current_cover = to_relative_media_url(app_user.cover_url)
+    target_avatar = (
+        to_relative_media_url(req_in.avatar) if req_in.avatar is not None else to_relative_media_url(app_user.avatar)
+    )
+    target_nickname = req_in.nickname.strip() if req_in.nickname is not None else (app_user.nickname or "")
+    target_signature = req_in.signature.strip() if req_in.signature is not None else (app_user.signature or "")
+    target_cover = current_cover
+    if req_in.cover_url is not None:
+        cover = to_relative_media_url(req_in.cover_url)
+        if cover and cover not in target_album:
+            return Fail(code=400, msg="封面必须从相册中选择")
+        target_cover = cover or None
+    elif req_in.album_photos is not None:
+        if current_cover and current_cover in target_album:
+            target_cover = current_cover
+        else:
+            target_cover = target_album[0] if target_album else None
+
+    current_snapshot = _serialize_profile_review_snapshot(app_user)
+    target_snapshot = {
+        "nickname": target_nickname,
+        "avatar": target_avatar,
+        "signature": target_signature,
+        "album_photos": target_album,
+        "cover_url": target_cover,
+    }
+    review_payload = build_profile_review_payload(current_snapshot, target_snapshot)
+    review_items = review_payload["review_items"]
     update_data = {}
-
-    if req_in.nickname is not None:
-        nickname = req_in.nickname.strip()
-        update_data["nickname"] = nickname or None
-
-    if req_in.avatar is not None:
-        avatar = to_relative_media_url(req_in.avatar)
-        update_data["avatar"] = avatar or None
-
-    if req_in.signature is not None:
-        signature = req_in.signature.strip()
-        update_data["signature"] = signature or None
-
-    if req_in.gender is not None:
-        current_gender = app_user.gender or "male"
-        requested_gender = str(req_in.gender.value)
-        if requested_gender != current_gender:
-            return Fail(code=400, msg="性别注册后不可修改")
 
     if req_in.birth_date is not None:
         if req_in.birth_date > date.today():
@@ -194,23 +229,50 @@ async def update_user_profile(req_in: AppUserProfileUpdateIn):
         city = req_in.location_city.strip()
         update_data["location_city"] = city or None
 
-    if req_in.album_photos is not None:
-        update_data["album_photos"] = target_album
+    if not review_items:
+        if req_in.nickname is not None:
+            update_data["nickname"] = target_nickname or None
+        if req_in.avatar is not None:
+            update_data["avatar"] = target_avatar or None
+        if req_in.signature is not None:
+            update_data["signature"] = target_signature or None
+        if req_in.album_photos is not None:
+            update_data["album_photos"] = target_album
+            if current_cover and current_cover in target_album:
+                update_data["cover_url"] = current_cover
+            else:
+                update_data["cover_url"] = target_album[0] if target_album else None
+        if req_in.cover_url is not None and req_in.album_photos is None:
+            update_data["cover_url"] = target_cover or None
 
-    if req_in.cover_url is not None:
-        cover = to_relative_media_url(req_in.cover_url)
-        if cover and cover not in target_album:
-            return Fail(code=400, msg="封面必须从相册中选择")
-        update_data["cover_url"] = cover or None
-    elif req_in.album_photos is not None:
-        current_cover = to_relative_media_url(app_user.cover_url)
-        if current_cover and current_cover in target_album:
-            update_data["cover_url"] = current_cover
-        else:
-            update_data["cover_url"] = target_album[0] if target_album else None
-
-    if update_data:
+    apply = None
+    if review_items:
+        async with in_transaction() as conn:
+            if update_data:
+                await AppUser.filter(id=app_user.id).using_db(conn).update(**update_data)
+            apply = await AppUserProfileReviewApply.create(
+                user_id=app_user.id,
+                status="pending",
+                before_snapshot=review_payload["before_snapshot"],
+                after_snapshot=review_payload["after_snapshot"],
+                review_items=review_items,
+                submitted_at=datetime.now(),
+                using_db=conn,
+            )
+    elif update_data:
         await AppUser.filter(id=app_user.id).update(**update_data)
+
+    if review_items:
+        refreshed = await AppUser.filter(id=app_user.id).first()
+        if not refreshed:
+            return Fail(code=500, msg="更新失败")
+        return Success(
+            msg="资料修改申请已提交，请等待审核",
+            data={
+                "profile_review_status": "pending",
+                "profile_review_apply_id": apply.id,
+            },
+        )
 
     refreshed = await AppUser.filter(id=app_user.id).first()
     if not refreshed:

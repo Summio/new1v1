@@ -5,12 +5,33 @@ from typing import Literal
 
 from fastapi import APIRouter, File, Query, UploadFile
 from tortoise.expressions import Q
+from tortoise.transactions import in_transaction
 
-from app.models import AppUser, CallRecord, GiftRecord, ImTextMessageChargeRecord, RechargeOrder, WithdrawApply
-from app.schemas.app_user import CertificationReviewIn, AppUserAdminUpdateIn
+from app.core.ctx import CTX_USER_ID
+from app.models import (
+    AppUser,
+    AppUserProfileReviewApply,
+    CallRecord,
+    GiftRecord,
+    ImTextMessageChargeRecord,
+    RechargeOrder,
+    WithdrawApply,
+)
+from app.schemas.app_user import AppUserAdminUpdateIn, CertificationReviewIn
+from app.schemas.app_user_profile_review import (
+    ProfileReviewBulkIn,
+    ProfileReviewItemReviewIn,
+)
 from app.schemas.base import Fail, Success, SuccessExtra
 from app.services.certification_price_service import normalize_certified_call_price
 from app.services.gift_income_service import decimal_to_float_2
+from app.services.profile_review_service import (
+    ProfileReviewValidationError,
+    apply_approved_profile_review_items,
+    mark_all_review_items,
+    review_items_have_pending,
+    update_review_item_status,
+)
 from app.settings.config import settings
 from app.utils.media_url import normalize_media_list, to_relative_media_url
 from app.utils.upload_files import (
@@ -50,6 +71,28 @@ def _amount_decimal(value) -> Decimal:
         return Decimal(str(value or "0"))
     except Exception:  # noqa: BLE001
         return Decimal("0")
+
+
+def _format_profile_review_apply(apply: AppUserProfileReviewApply, user: AppUser) -> dict:
+    before_snapshot = apply.before_snapshot or {}
+    after_snapshot = apply.after_snapshot or {}
+    review_items = apply.review_items or []
+    return {
+        "id": apply.id,
+        "user_id": int(user.id),
+        "phone": user.phone or "",
+        "nickname": user.nickname or user.phone or "",
+        "avatar": to_relative_media_url(user.avatar),
+        "status": apply.status or "pending",
+        "submitted_at": apply.submitted_at.isoformat() if apply.submitted_at else None,
+        "completed_at": apply.completed_at.isoformat() if apply.completed_at else None,
+        "completed_by": int(apply.completed_by or 0) or None,
+        "review_remark": apply.review_remark or "",
+        "before_snapshot": before_snapshot,
+        "after_snapshot": after_snapshot,
+        "review_items": review_items,
+        "review_item_count": len(review_items),
+    }
 
 
 @router.get("/list", summary="查看App用户列表")
@@ -207,11 +250,7 @@ async def update_app_user(req_in: AppUserAdminUpdateIn):
             price=target_price,
             is_certified_user=target_certified,
         )
-        if (
-            target_certified
-            and req_in.certified_call_price is not None
-            and normalized_price != target_price
-        ):
+        if target_certified and req_in.certified_call_price is not None and normalized_price != target_price:
             return Fail(code=400, msg="请选择后台配置的通话价格档位")
         update_data["certified_call_price"] = normalized_price
     if req_in.album_photos is not None:
@@ -288,6 +327,169 @@ async def upload_app_user_image(file: UploadFile = File(...)):
     return Success(data={"url": relative_url})
 
 
+@router.get("/profile-review/list", summary="查看App用户资料编辑申请列表")
+async def list_profile_review_apply(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(10, ge=1, le=100, description="每页数量"),
+    status: str = Query("pending", description="申请状态 pending/reviewing/completed/cancelled"),
+    phone: str = Query("", description="手机号"),
+    nickname: str = Query("", description="昵称"),
+    user_id: int | None = Query(None, ge=1, description="用户ID"),
+):
+    q = Q()
+    normalized_status = (status or "").strip()
+    if normalized_status:
+        q &= Q(status=normalized_status)
+
+    target_user_ids: list[int] | None = None
+    if user_id:
+        q &= Q(user_id=user_id)
+    if phone or nickname:
+        user_q = Q()
+        if phone:
+            user_q &= Q(phone__contains=phone)
+        if nickname:
+            user_q &= Q(nickname__contains=nickname)
+        matched_user_ids = await AppUser.filter(user_q).values_list("id", flat=True)
+        target_user_ids = [int(item) for item in matched_user_ids]
+        if not target_user_ids:
+            return SuccessExtra(data=None, rows=[], current=page, total=0, has_more=False)
+        q &= Q(user_id__in=target_user_ids)
+
+    total = await AppUserProfileReviewApply.filter(q).count()
+    applies = (
+        await AppUserProfileReviewApply.filter(q)
+        .order_by("-submitted_at", "-id")
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    apply_user_ids = [int(item.user_id) for item in applies]
+    users = await AppUser.filter(id__in=apply_user_ids).all() if apply_user_ids else []
+    user_map = {int(user.id): user for user in users}
+    rows = []
+    for apply in applies:
+        user = user_map.get(int(apply.user_id))
+        if not user:
+            continue
+        rows.append(_format_profile_review_apply(apply, user))
+    return SuccessExtra(
+        data=None,
+        rows=rows,
+        current=page,
+        total=total,
+        has_more=page * page_size < total,
+    )
+
+
+@router.get("/profile-review/get", summary="查看App用户资料编辑申请详情")
+async def get_profile_review_apply(id: int = Query(..., ge=1, description="申请ID")):
+    apply = await AppUserProfileReviewApply.filter(id=id).first()
+    if not apply:
+        return Fail(code=404, msg="申请不存在")
+    user = await AppUser.filter(id=apply.user_id).first()
+    if not user:
+        return Fail(code=404, msg="用户不存在")
+    return Success(data=_format_profile_review_apply(apply, user))
+
+
+@router.post("/profile-review/item/review", summary="审核App用户资料编辑单项")
+async def review_profile_review_item(req_in: ProfileReviewItemReviewIn):
+    apply = await AppUserProfileReviewApply.filter(id=req_in.id).first()
+    if not apply:
+        return Fail(code=404, msg="申请不存在")
+    if (apply.status or "pending") == "completed":
+        return Fail(code=400, msg="申请已完成，不能继续审核")
+
+    try:
+        next_items = update_review_item_status(
+            apply.review_items or [],
+            item_id=req_in.item_id,
+            status=req_in.status,
+            reviewed_by=int(CTX_USER_ID.get() or 0) or None,
+            review_remark=req_in.review_remark,
+        )
+    except ProfileReviewValidationError as exc:
+        return Fail(code=400, msg=str(exc))
+
+    apply.review_items = next_items
+    apply.status = "reviewing"
+    await apply.save(update_fields=["review_items", "status", "updated_at"])
+    return Success(msg="审核成功")
+
+
+@router.post("/profile-review/approve-all", summary="全部通过App用户资料编辑申请")
+async def approve_all_profile_review_items(req_in: ProfileReviewBulkIn):
+    apply = await AppUserProfileReviewApply.filter(id=req_in.id).first()
+    if not apply:
+        return Fail(code=404, msg="申请不存在")
+    if (apply.status or "pending") == "completed":
+        return Fail(code=400, msg="申请已完成，不能继续审核")
+
+    apply.review_items = mark_all_review_items(
+        apply.review_items or [],
+        status="approved",
+        reviewed_by=int(CTX_USER_ID.get() or 0) or None,
+    )
+    apply.status = "reviewing"
+    await apply.save(update_fields=["review_items", "status", "updated_at"])
+    return Success(msg="已全部通过")
+
+
+@router.post("/profile-review/reject-all", summary="全部驳回App用户资料编辑申请")
+async def reject_all_profile_review_items(req_in: ProfileReviewBulkIn):
+    apply = await AppUserProfileReviewApply.filter(id=req_in.id).first()
+    if not apply:
+        return Fail(code=404, msg="申请不存在")
+    if (apply.status or "pending") == "completed":
+        return Fail(code=400, msg="申请已完成，不能继续审核")
+
+    apply.review_items = mark_all_review_items(
+        apply.review_items or [],
+        status="rejected",
+        reviewed_by=int(CTX_USER_ID.get() or 0) or None,
+    )
+    apply.status = "reviewing"
+    await apply.save(update_fields=["review_items", "status", "updated_at"])
+    return Success(msg="已全部驳回")
+
+
+@router.post("/profile-review/complete", summary="完成App用户资料编辑审核")
+async def complete_profile_review(req_in: ProfileReviewBulkIn):
+    apply = await AppUserProfileReviewApply.filter(id=req_in.id).first()
+    if not apply:
+        return Fail(code=404, msg="申请不存在")
+    if (apply.status or "pending") == "completed":
+        return Fail(code=400, msg="申请已完成")
+    review_items = apply.review_items or []
+    if review_items_have_pending(review_items):
+        return Fail(code=400, msg="还有未审核项")
+
+    user = await AppUser.filter(id=apply.user_id).first()
+    if not user:
+        return Fail(code=404, msg="用户不存在")
+
+    try:
+        update_data = apply_approved_profile_review_items(
+            before_snapshot=apply.before_snapshot or {},
+            after_snapshot=apply.after_snapshot or {},
+            review_items=review_items,
+        )
+    except ProfileReviewValidationError as exc:
+        return Fail(code=400, msg=str(exc))
+
+    async with in_transaction() as conn:
+        await AppUser.filter(id=user.id).using_db(conn).update(**update_data)
+        await AppUserProfileReviewApply.filter(id=apply.id).using_db(conn).update(
+            status="completed",
+            completed_at=datetime.now(),
+            completed_by=int(CTX_USER_ID.get() or 0) or None,
+            review_remark=(req_in.review_remark or "").strip() or None,
+            updated_at=datetime.now(),
+        )
+
+    return Success(msg="审核完成")
+
+
 @router.get("/bill/list", summary="查看App用户账单列表")
 async def list_app_user_bill(
     user_id: int = Query(..., ge=1, description="用户ID"),
@@ -306,7 +508,9 @@ async def list_app_user_bill(
     call_expenses = await CallRecord.filter(
         (Q(payer_user_id=user_id) | (Q(payer_user_id__isnull=True) & Q(caller_id=user_id))) & Q(total_fee__gt=0)
     ).values("id", "caller_id", "callee_id", "payer_user_id", "total_fee", "created_at", "ended_at")
-    call_incomes = await CallRecord.filter(income_certified_user_id=user_id, certified_user_income_diamonds__gt=0).values(
+    call_incomes = await CallRecord.filter(
+        income_certified_user_id=user_id, certified_user_income_diamonds__gt=0
+    ).values(
         "id",
         "caller_id",
         "callee_id",
@@ -330,7 +534,9 @@ async def list_app_user_bill(
     im_text_expenses = await ImTextMessageChargeRecord.filter(sender_id=user_id, price__gt=0).values(
         "id", "sender_id", "receiver_id", "price", "created_at"
     )
-    im_text_incomes = await ImTextMessageChargeRecord.filter(receiver_id=user_id, certified_user_income_diamonds__gt=0).values(
+    im_text_incomes = await ImTextMessageChargeRecord.filter(
+        receiver_id=user_id, certified_user_income_diamonds__gt=0
+    ).values(
         "id",
         "sender_id",
         "receiver_id",
@@ -600,4 +806,3 @@ async def list_app_user_bill(
         expense_coins_total=decimal_to_float_2(expense_coins_total),
         expense_diamonds_total=decimal_to_float_2(expense_diamonds_total),
     )
-

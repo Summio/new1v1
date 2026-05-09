@@ -29,6 +29,7 @@ class AuthState {
   final int certifiedCallPrice;
   final double coins;
   final double diamonds;
+  final Map<String, dynamic>? lastProfileUpdateData;
   final bool isLoading;
   final String? error;
 
@@ -50,6 +51,7 @@ class AuthState {
     this.certifiedCallPrice = 0,
     this.coins = 0,
     this.diamonds = 0,
+    this.lastProfileUpdateData,
     this.isLoading = false,
     this.error,
   });
@@ -72,6 +74,8 @@ class AuthState {
     int? certifiedCallPrice,
     double? coins,
     double? diamonds,
+    Map<String, dynamic>? lastProfileUpdateData,
+    bool clearLastProfileUpdateData = false,
     bool? isLoading,
     String? error,
   }) {
@@ -93,6 +97,9 @@ class AuthState {
       certifiedCallPrice: certifiedCallPrice ?? this.certifiedCallPrice,
       coins: coins ?? this.coins,
       diamonds: diamonds ?? this.diamonds,
+      lastProfileUpdateData: clearLastProfileUpdateData
+          ? null
+          : lastProfileUpdateData ?? this.lastProfileUpdateData,
       isLoading: isLoading ?? this.isLoading,
       error: error ?? this.error,
     );
@@ -492,6 +499,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<bool> updateProfile(Map<String, dynamic> payload) async {
     try {
+      state = state.copyWith(clearLastProfileUpdateData: true);
       final data = await _dio.apiPost(
         ApiEndpoints.userProfileUpdate,
         data: payload,
@@ -502,6 +510,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         state = state.copyWith(error: msg);
         return false;
       }
+      final respData = data['data'] as Map<String, dynamic>?;
+      state = respData == null
+          ? state.copyWith(clearLastProfileUpdateData: true)
+          : state.copyWith(lastProfileUpdateData: respData);
       await fetchUserInfo();
       return true;
     } on ApiException catch (e) {

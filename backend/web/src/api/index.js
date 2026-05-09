@@ -26,6 +26,15 @@ export default {
   updateAppUser: (data = {}) => request.post('/app_user/update', data),
   getAppUserBillList: (params = {}) => request.get('/app_user/bill/list', { params }),
   reviewCertification: (data = {}) => request.post('/app_user/certification/review', data),
+  getProfileReviewList: (params = {}) => request.get('/app_user/profile-review/list', { params }),
+  getProfileReviewById: (params = {}) => request.get('/app_user/profile-review/get', { params }),
+  reviewProfileReviewItem: (data = {}) =>
+    request.post('/app_user/profile-review/item/review', data),
+  approveAllProfileReviewItems: (data = {}) =>
+    request.post('/app_user/profile-review/approve-all', data),
+  rejectAllProfileReviewItems: (data = {}) =>
+    request.post('/app_user/profile-review/reject-all', data),
+  completeProfileReview: (data = {}) => request.post('/app_user/profile-review/complete', data),
   uploadAppUserImage: (data) =>
     request.post('/app_user/upload-image', data, {
       headers: { 'Content-Type': 'multipart/form-data' },

@@ -117,9 +117,20 @@ def build_operation_children(parent_id: int) -> list[Menu]:
         ),
         Menu(
             menu_type=MenuType.MENU,
+            name="资料编辑审核",
+            path="profile-review",
+            order=8,
+            parent_id=parent_id,
+            icon="material-symbols:fact-check-outline-rounded",
+            is_hidden=False,
+            component="/operation/profile-review",
+            keepalive=False,
+        ),
+        Menu(
+            menu_type=MenuType.MENU,
             name="排行榜",
             path="ranking",
-            order=8,
+            order=9,
             parent_id=parent_id,
             icon="material-symbols:leaderboard-outline-rounded",
             is_hidden=False,
@@ -162,7 +173,9 @@ async def _ensure_menu_exists(
 async def _repair_legacy_certification_menu(parent_id: int) -> None:
     legacy_menus = await Menu.filter(path="anchor-apply-review").all()
     for legacy_menu in legacy_menus:
-        existing = await Menu.filter(path="certification-review", parent_id=parent_id).exclude(id=legacy_menu.id).first()
+        existing = (
+            await Menu.filter(path="certification-review", parent_id=parent_id).exclude(id=legacy_menu.id).first()
+        )
         if existing:
             legacy_menu.name = "真人认证审核(旧)"
             legacy_menu.path = f"legacy-certification-review-{legacy_menu.id}"
@@ -440,6 +453,7 @@ async def init_roles():
             "recharge",
             "withdraw",
             "certification-review",
+            "profile-review",
             "ranking",
         ]
     ).all()
@@ -486,6 +500,19 @@ async def init_roles():
     if withdraw_apis and all_roles:
         for role in all_roles:
             await role.apis.add(*withdraw_apis)
+    profile_review_apis = await Api.filter(
+        path__in=[
+            "/api/v1/app_user/profile-review/list",
+            "/api/v1/app_user/profile-review/get",
+            "/api/v1/app_user/profile-review/item/review",
+            "/api/v1/app_user/profile-review/approve-all",
+            "/api/v1/app_user/profile-review/reject-all",
+            "/api/v1/app_user/profile-review/complete",
+        ]
+    ).all()
+    if profile_review_apis and all_roles:
+        for role in all_roles:
+            await role.apis.add(*profile_review_apis)
     ranking_apis = await Api.filter(
         path__in=[
             "/api/v1/ranking/list",

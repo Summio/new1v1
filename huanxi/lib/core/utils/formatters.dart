@@ -40,4 +40,9 @@ class Formatters {
     if (phone.length != 11) return phone;
     return '${phone.substring(0, 3)}****${phone.substring(7)}';
   }
+
+  /// 格式化所在地（省-市 → 省 · 市）
+  static String locationCity(String value) {
+    return value.trim().replaceAll('-', ' · ');
+  }
 }

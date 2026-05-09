@@ -215,7 +215,10 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
       return;
     }
 
-    AppToast.showSnackBar(context, const SnackBar(content: Text('资料已保存')));
+    final updateData = ref.read(authProvider).lastProfileUpdateData;
+    final reviewStatus = updateData?['profile_review_status'] as String?;
+    final message = reviewStatus == 'pending' ? '资料修改申请已提交，请等待审核' : '资料已保存';
+    AppToast.showSnackBar(context, SnackBar(content: Text(message)));
     context.pop();
   }
 
@@ -341,9 +344,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                         labelText: '性别',
                         prefixIcon: Icon(Icons.wc),
                       ),
-                      child: Text(
-                        authState.gender == 'female' ? '女' : '男',
-                      ),
+                      child: Text(authState.gender == 'female' ? '女' : '男'),
                     ),
                     const SizedBox(height: 12),
                     _buildTapTile(
