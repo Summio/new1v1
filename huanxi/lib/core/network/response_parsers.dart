@@ -11,7 +11,7 @@ class UserSigPayload {
 class IMTextChargePayload {
   final bool charged;
   final int price;
-  final double anchorIncomeDiamonds;
+  final double certifiedUserIncomeDiamonds;
   final int coins;
   final int diamonds;
   final int receiverUserId;
@@ -20,7 +20,7 @@ class IMTextChargePayload {
   const IMTextChargePayload({
     required this.charged,
     required this.price,
-    required this.anchorIncomeDiamonds,
+    required this.certifiedUserIncomeDiamonds,
     required this.coins,
     required this.diamonds,
     required this.receiverUserId,
@@ -59,7 +59,7 @@ class ResponseParsers {
     }
     final chargedRaw = data['charged'];
     final price = _parseInt(data['price']);
-    final anchorIncomeDiamonds = _parseDouble(data['anchor_income_diamonds']);
+    final certifiedUserIncomeDiamonds = _parseDouble(data['certified_user_income_diamonds']);
     final coins = _parseInt(data['coins']);
     final diamonds = _parseInt(data['diamonds']);
     final receiverUserId = _parseInt(data['receiver_user_id']);
@@ -68,7 +68,7 @@ class ResponseParsers {
         : '';
     if (chargedRaw is! bool ||
         price == null ||
-        anchorIncomeDiamonds == null ||
+        certifiedUserIncomeDiamonds == null ||
         coins == null ||
         diamonds == null ||
         receiverUserId == null ||
@@ -79,7 +79,7 @@ class ResponseParsers {
     return IMTextChargePayload(
       charged: chargedRaw,
       price: price,
-      anchorIncomeDiamonds: anchorIncomeDiamonds,
+      certifiedUserIncomeDiamonds: certifiedUserIncomeDiamonds,
       coins: coins,
       diamonds: diamonds,
       receiverUserId: receiverUserId,
@@ -101,3 +101,4 @@ class ResponseParsers {
     return null;
   }
 }
+

@@ -167,7 +167,7 @@ async function loadGiftSettings() {
     const rows = res.data || []
     const coinRow = rows.find((item) => item.cfg_key === 'coin_name')
     coinName.value = (coinRow?.cfg_value || '金币').toString().trim() || '金币'
-    const shareRow = rows.find((item) => item.cfg_key === 'gift_anchor_share_bps')
+    const shareRow = rows.find((item) => item.cfg_key === 'gift_certified_user_share_bps')
     shareConfigId.value = shareRow?.id || null
     const rawBps = Number(shareRow?.cfg_value ?? 5000)
     giftAnchorSharePercent.value = Number.isFinite(rawBps)
@@ -194,13 +194,13 @@ async function saveShareConfig() {
     if (shareConfigId.value) {
       await api.updateSystemConfig({
         id: shareConfigId.value,
-        cfg_key: 'gift_anchor_share_bps',
+        cfg_key: 'gift_certified_user_share_bps',
         cfg_value: cfgValue,
         desc: '礼物接收方分成比例（万分比）',
       })
     } else {
       const res = await api.createSystemConfig({
-        cfg_key: 'gift_anchor_share_bps',
+        cfg_key: 'gift_certified_user_share_bps',
         cfg_value: cfgValue,
         desc: '礼物接收方分成比例（万分比）',
       })

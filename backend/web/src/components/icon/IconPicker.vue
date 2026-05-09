@@ -6,7 +6,12 @@ import { NInput, NPopover } from 'naive-ui'
 import TheIcon from './TheIcon.vue'
 import iconData from '@/assets/js/icons'
 
-const props = defineProps({ value: String })
+const props = defineProps({
+  value: {
+    type: String,
+    default: '',
+  },
+})
 const emit = defineEmits(['update:value'])
 
 const choosed = ref(props.value) // 选中值
@@ -28,7 +33,7 @@ watchDebounced(
     filterIcons()
     emit('update:value', choosed.value)
   },
-  { debounce: 200 },
+  { debounce: 200 }
 )
 </script>
 

@@ -10,24 +10,24 @@ from app.services.gift_income_service import decimal_to_float_2, quantize_decima
 from app.utils.parse import clamp_int, safe_parse_int
 
 DEFAULT_IM_TEXT_PRICE = 0
-DEFAULT_IM_TEXT_ANCHOR_SHARE_BPS = 5000
-MAX_ANCHOR_SHARE_BPS = 10000
+DEFAULT_IM_TEXT_CERTIFIED_USER_SHARE_BPS = 5000
+MAX_CERTIFIED_USER_SHARE_BPS = 10000
 
 
 @dataclass(frozen=True)
 class IMTextBillingConfig:
     enabled: bool
     price: int
-    anchor_share_bps: int
+    certified_user_share_bps: int
 
 
-def calc_im_text_anchor_income_diamonds(
+def calc_im_text_certified_user_income_diamonds(
     total_price: int,
-    anchor_share_bps: int,
+    certified_user_share_bps: int,
 ) -> Decimal:
     amount = max(0, int(total_price or 0))
-    bps = clamp_int(int(anchor_share_bps or 0), 0, MAX_ANCHOR_SHARE_BPS)
-    income = Decimal(amount) * Decimal(bps) / Decimal(MAX_ANCHOR_SHARE_BPS)
+    bps = clamp_int(int(certified_user_share_bps or 0), 0, MAX_CERTIFIED_USER_SHARE_BPS)
+    income = Decimal(amount) * Decimal(bps) / Decimal(MAX_CERTIFIED_USER_SHARE_BPS)
     return quantize_decimal_2(income)
 
 
@@ -49,20 +49,20 @@ def parse_im_text_billing_config(config_map: dict[str, str]) -> IMTextBillingCon
     )
     share = clamp_int(
         safe_parse_int(
-            config_map.get("im_text_message_anchor_share_bps"),
-            DEFAULT_IM_TEXT_ANCHOR_SHARE_BPS,
+            config_map.get("im_text_message_certified_user_share_bps"),
+            DEFAULT_IM_TEXT_CERTIFIED_USER_SHARE_BPS,
         ),
         0,
-        MAX_ANCHOR_SHARE_BPS,
+        MAX_CERTIFIED_USER_SHARE_BPS,
     )
-    return IMTextBillingConfig(enabled=enabled, price=price, anchor_share_bps=share)
+    return IMTextBillingConfig(enabled=enabled, price=price, certified_user_share_bps=share)
 
 
 def dump_im_text_billing_config(config: IMTextBillingConfig) -> dict[str, int | bool]:
     return IMTextBillingConfigOut(
         enabled=config.enabled,
         price=config.price,
-        anchor_share_bps=config.anchor_share_bps,
+        certified_user_share_bps=config.certified_user_share_bps,
     ).model_dump()
 
 
@@ -70,7 +70,7 @@ def dump_im_text_billing_config(config: IMTextBillingConfig) -> dict[str, int | 
 class IMTextChargeResult:
     charged: bool
     price: int
-    anchor_income_diamonds: float
+    certified_user_income_diamonds: float
     coins: int
     diamonds: int
     receiver_user_id: int
@@ -113,7 +113,7 @@ async def charge_im_text_message(
         return IMTextChargeResult(
             charged=True,
             price=int(existing.price),
-            anchor_income_diamonds=decimal_to_float_2(existing.anchor_income_diamonds),
+            certified_user_income_diamonds=decimal_to_float_2(existing.certified_user_income_diamonds),
             coins=int(current.coins if current else sender.coins),
             diamonds=int(current.diamonds if current else sender.diamonds),
             receiver_user_id=receiver_user_id,
@@ -126,7 +126,7 @@ async def charge_im_text_message(
         return IMTextChargeResult(
             charged=False,
             price=0,
-            anchor_income_diamonds=0,
+            certified_user_income_diamonds=0,
             coins=int(sender.coins),
             diamonds=int(sender.diamonds),
             receiver_user_id=receiver_user_id,
@@ -134,25 +134,29 @@ async def charge_im_text_message(
         )
 
     price = int(config.price)
-    anchor_income_diamonds = calc_im_text_anchor_income_diamonds(price, config.anchor_share_bps)
+    certified_user_income_diamonds = calc_im_text_certified_user_income_diamonds(price, config.certified_user_share_bps)
     async with in_transaction() as conn:
-        updated = await AppUser.filter(
-            id=sender_id,
-            coins__gte=price,
-        ).using_db(conn).update(coins=F("coins") - price)
+        updated = (
+            await AppUser.filter(
+                id=sender_id,
+                coins__gte=price,
+            )
+            .using_db(conn)
+            .update(coins=F("coins") - price)
+        )
         if updated == 0:
             raise IMTextBillingError(501, "余额不足，请先充值")
-        if anchor_income_diamonds > 0:
+        if certified_user_income_diamonds > 0:
             await AppUser.filter(id=receiver_user_id).using_db(conn).update(
-                diamonds=F("diamonds") + anchor_income_diamonds
+                diamonds=F("diamonds") + certified_user_income_diamonds
             )
         await ImTextMessageChargeRecord.create(
             sender_id=sender_id,
             receiver_id=receiver_user_id,
             request_id=request_id,
             price=price,
-            anchor_share_bps=int(config.anchor_share_bps),
-            anchor_income_diamonds=anchor_income_diamonds,
+            certified_user_share_bps=int(config.certified_user_share_bps),
+            certified_user_income_diamonds=certified_user_income_diamonds,
             status="charged",
             using_db=conn,
         )
@@ -161,9 +165,10 @@ async def charge_im_text_message(
     return IMTextChargeResult(
         charged=True,
         price=price,
-        anchor_income_diamonds=decimal_to_float_2(anchor_income_diamonds),
+        certified_user_income_diamonds=decimal_to_float_2(certified_user_income_diamonds),
         coins=int(current.coins if current else 0),
         diamonds=int(current.diamonds if current else 0),
         receiver_user_id=receiver_user_id,
         request_id=request_id,
     )
+

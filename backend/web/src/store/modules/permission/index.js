@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia'
 import { basicRoutes, vueModules } from '@/router/routes'
-import Layout from '@/layout/index.vue'
 import api from '@/api'
+
+const Layout = () => import('@/layout/index.vue')
 
 // * 后端路由相关函数
 // 根据后端传来数据构建出前端路由
@@ -19,7 +20,7 @@ function buildRoutes(routes = []) {
     const route = {
       name: buildRouteName(e.name, e.path),
       path: e.path,
-      component: shallowRef(Layout),
+      component: Layout,
       isHidden: e.is_hidden,
       redirect: e.redirect,
       meta: {

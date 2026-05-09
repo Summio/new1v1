@@ -5,7 +5,7 @@ from .base import BaseModel, TimestampMixin
 
 class AppUser(BaseModel, TimestampMixin):
     """App 用户（普通用户 + 认证用户）"""
-    phone = fields.CharField(max_length=20, unique=True, description="手机号(登录账号)", index=True)
+    phone = fields.CharField(max_length=20, unique=True, description="手机号(登录账号)", db_index=True)
     password = fields.CharField(max_length=128, description="密码(加密)")
     nickname = fields.CharField(max_length=30, null=True, description="昵称")
     avatar = fields.CharField(max_length=500, null=True, description="头像URL")
@@ -17,10 +17,10 @@ class AppUser(BaseModel, TimestampMixin):
     location_city = fields.CharField(max_length=50, null=True, description="所在地(省-市)")
     album_photos = fields.JSONField(null=True, description="相册URL列表(最多6张)")
     cover_url = fields.CharField(max_length=500, null=True, description="封面URL(必须来自相册)")
-    status = fields.CharField(max_length=20, null=True, default="normal", description="normal/banned", index=True)
-    is_certified_user = fields.BooleanField(default=False, description="是否为真人认证用户", index=True)
-    is_recommended = fields.BooleanField(default=False, description="是否首页推荐认证用户", index=True)
-    recommend_weight = fields.IntField(default=0, description="认证用户推荐值", index=True)
+    status = fields.CharField(max_length=20, null=True, default="normal", description="normal/banned", db_index=True)
+    is_certified_user = fields.BooleanField(default=False, description="是否为真人认证用户", db_index=True)
+    is_recommended = fields.BooleanField(default=False, description="是否首页推荐认证用户", db_index=True)
+    recommend_weight = fields.IntField(default=0, description="认证用户推荐值", db_index=True)
     certified_intro = fields.CharField(max_length=500, null=True, description="认证用户简介")
     certified_tags = fields.JSONField(null=True, description="认证用户标签列表")
     certified_call_price = fields.BigIntField(default=0, description="认证用户通话价格(分/分钟)")
@@ -28,7 +28,7 @@ class AppUser(BaseModel, TimestampMixin):
         max_length=20,
         default="none",
         description="真人认证状态 none/pending/approved/rejected",
-        index=True,
+        db_index=True,
     )
     certification_apply_at = fields.DatetimeField(null=True, description="真人认证申请时间")
     certification_reviewed_at = fields.DatetimeField(null=True, description="真人认证审核时间")

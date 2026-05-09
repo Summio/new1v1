@@ -1,2 +1,2 @@
-from .base import *
 from .app_user import *
+from .base import *

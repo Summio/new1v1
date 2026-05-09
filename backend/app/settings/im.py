@@ -5,6 +5,7 @@ from pydantic_settings import BaseSettings
 
 class IMSettings(BaseSettings):
     """腾讯 IM 配置"""
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
     # 腾讯 IM 配置（生产环境必填）

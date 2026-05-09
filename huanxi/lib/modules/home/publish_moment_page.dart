@@ -453,7 +453,6 @@ class _PublishMomentPageState extends ConsumerState<PublishMomentPage> {
       );
 
       if (moment != null) {
-        ref.read(momentFeedProvider.notifier).addMoment(moment);
         ref.read(myMomentsProvider.notifier).addMoment(moment);
         if (mounted) {
           Navigator.pop(context, moment);

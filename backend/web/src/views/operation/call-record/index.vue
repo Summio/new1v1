@@ -102,29 +102,29 @@ const columns = [
   },
   {
     title: '收益认证用户',
-    key: 'income_anchor_user_id',
+    key: 'income_certified_user_id',
     width: 100,
     align: 'center',
     render(row) {
-      return row.income_anchor_user_id || '-'
+      return row.income_certified_user_id || '-'
     },
   },
   {
     title: '认证用户收益(钻石)',
-    key: 'anchor_income_diamonds',
+    key: 'certified_user_income_diamonds',
     width: 130,
     align: 'center',
     render(row) {
-      return toCoins(row.anchor_income_diamonds)
+      return toCoins(row.certified_user_income_diamonds)
     },
   },
   {
     title: '分成比例',
-    key: 'anchor_share_bps',
+    key: 'certified_user_share_bps',
     width: 100,
     align: 'center',
     render(row) {
-      const bps = Number(row.anchor_share_bps || 0)
+      const bps = Number(row.certified_user_share_bps || 0)
       if (!Number.isFinite(bps) || bps <= 0) return '-'
       return `${(bps / 100).toFixed(2)}%`
     },

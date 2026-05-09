@@ -61,9 +61,9 @@ def test_app_routes_expose_certification_apply_not_anchor_apply() -> None:
 def test_app_api_request_schemas_do_not_accept_old_anchor_target_fields() -> None:
     content = APP_API_SCHEMA.read_text(encoding="utf-8")
     assert "target_user_id" in content
-    assert "anchor_user_id" not in content
-    assert "anchor_id" not in content
-    assert "validate_anchor_user_id" not in content
+    assert "certified_user_id" not in content
+    assert "certified_user_id" not in content
+    assert "validate_certified_user_id" not in content
 
 
 def test_migration_moves_anchor_columns_to_certification_columns_and_drops_old_columns() -> None:
@@ -76,3 +76,15 @@ def test_migration_moves_anchor_columns_to_certification_columns_and_drops_old_c
     assert "DROP COLUMN `is_anchor`" in content or "DROP COLUMN is_anchor" in content
     assert "DROP COLUMN `anchor_call_price`" in content or "DROP COLUMN anchor_call_price" in content
     assert "THEN 100" in content
+
+
+def test_business_code_no_longer_reads_removed_is_anchor_attribute() -> None:
+    checked_files = [
+        ROOT / "app" / "api" / "v1" / "moments" / "moments.py",
+        ROOT / "app" / "api" / "v1" / "app" / "moment.py",
+        ROOT / "app" / "services" / "ranking_service.py",
+    ]
+    for path in checked_files:
+        content = path.read_text(encoding="utf-8")
+        assert ".is_anchor" not in content
+

@@ -115,6 +115,17 @@ def build_operation_children(parent_id: int) -> list[Menu]:
             component="/operation/certification-review",
             keepalive=False,
         ),
+        Menu(
+            menu_type=MenuType.MENU,
+            name="排行榜",
+            path="ranking",
+            order=8,
+            parent_id=parent_id,
+            icon="material-symbols:leaderboard-outline-rounded",
+            is_hidden=False,
+            component="/operation/ranking",
+            keepalive=False,
+        ),
     ]
 
 
@@ -146,6 +157,27 @@ async def _ensure_menu_exists(
         keepalive=keepalive,
         redirect=redirect,
     )
+
+
+async def _repair_legacy_certification_menu(parent_id: int) -> None:
+    legacy_menus = await Menu.filter(path="anchor-apply-review").all()
+    for legacy_menu in legacy_menus:
+        existing = await Menu.filter(path="certification-review", parent_id=parent_id).exclude(id=legacy_menu.id).first()
+        if existing:
+            legacy_menu.name = "真人认证审核(旧)"
+            legacy_menu.path = f"legacy-certification-review-{legacy_menu.id}"
+            legacy_menu.component = "/operation/certification-review"
+            legacy_menu.is_hidden = True
+        else:
+            legacy_menu.name = "真人认证审核"
+            legacy_menu.path = "certification-review"
+            legacy_menu.parent_id = parent_id
+            legacy_menu.order = 7
+            legacy_menu.icon = "material-symbols:verified-user-outline-rounded"
+            legacy_menu.component = "/operation/certification-review"
+            legacy_menu.is_hidden = False
+        legacy_menu.keepalive = False
+        await legacy_menu.save()
 
 
 def make_middlewares():
@@ -309,6 +341,7 @@ async def init_menus():
         keepalive=False,
         redirect="/operation/app-user",
     )
+    await _repair_legacy_certification_menu(parent_id=operation_parent.id)
     for child in build_operation_children(parent_id=operation_parent.id):
         await _ensure_menu_exists(
             name=child.name,
@@ -400,7 +433,7 @@ async def init_roles():
         await user_role.apis.add(*basic_apis)
         return
 
-    # 兼容存量环境：为所有历史角色补齐运营中心菜单与通话记录查询权限（幂等）
+    # 兼容存量环境：为所有历史角色补齐运营中心菜单与运营查询权限（幂等）
     all_roles = await Role.all()
     operation_menus = await Menu.filter(
         path__in=[
@@ -412,6 +445,7 @@ async def init_roles():
             "recharge",
             "withdraw",
             "certification-review",
+            "ranking",
         ]
     ).all()
     if all_roles and operation_menus:
@@ -430,6 +464,11 @@ async def init_roles():
         path__in=[
             "/api/v1/moment/list",
             "/api/v1/moment/delete",
+            "/api/v1/moment/pin",
+            "/api/v1/moment/unpin",
+            "/api/v1/moment/recommend",
+            "/api/v1/moment/unrecommend",
+            "/api/v1/moment/clear-recommend-override",
         ],
     ).all()
     if moment_apis and all_roles:
@@ -452,6 +491,16 @@ async def init_roles():
     if withdraw_apis and all_roles:
         for role in all_roles:
             await role.apis.add(*withdraw_apis)
+    ranking_apis = await Api.filter(
+        path__in=[
+            "/api/v1/ranking/list",
+            "/api/v1/ranking/refresh",
+            "/api/v1/ranking/config",
+        ],
+    ).all()
+    if ranking_apis and all_roles:
+        for role in all_roles:
+            await role.apis.add(*ranking_apis)
     withdraw_config_menu = await Menu.filter(path="withdraw-config").first()
     certified_call_price_config_menu = await Menu.filter(path="certified-call-price-config").first()
     withdraw_config_apis = await Api.filter(

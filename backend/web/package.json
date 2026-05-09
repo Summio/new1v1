@@ -25,7 +25,7 @@
     "naive-ui": "^2.34.4",
     "pinia": "^2.1.6",
     "rollup-plugin-visualizer": "^5.9.2",
-    "sass": "^1.65.1",
+    "sass": "1.77.8",
     "typescript": "^5.1.6",
     "unocss": "^0.55.0",
     "unplugin-auto-import": "^0.16.6",

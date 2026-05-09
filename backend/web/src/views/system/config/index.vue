@@ -95,7 +95,7 @@ const configDefs = [
   {
     group: 'IM 配置',
     name: '文字聊天认证用户分成',
-    key: 'im_text_message_anchor_share_bps',
+    key: 'im_text_message_certified_user_share_bps',
     type: 'percent',
     unit: '%',
     min: 0,
@@ -141,7 +141,7 @@ const configDefs = [
   {
     group: '计费配置',
     name: '视频通话认证用户分成',
-    key: 'call_anchor_share_bps',
+    key: 'call_certified_user_share_bps',
     type: 'percent',
     unit: '%',
     min: 0,
@@ -152,7 +152,7 @@ const configDefs = [
   {
     group: '计费配置',
     name: '礼物认证用户分成',
-    key: 'gift_anchor_share_bps',
+    key: 'gift_certified_user_share_bps',
     type: 'percent',
     unit: '%',
     min: 0,
@@ -258,7 +258,11 @@ const columns = [
     key: 'group',
     width: 120,
     render(row) {
-      return h(NTag, { type: groupTagType(row.group), bordered: false }, { default: () => row.group })
+      return h(
+        NTag,
+        { type: groupTagType(row.group), bordered: false },
+        { default: () => row.group }
+      )
     },
   },
   { title: '配置名称', key: 'name', width: 190 },

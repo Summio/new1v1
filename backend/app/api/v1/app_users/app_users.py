@@ -296,47 +296,37 @@ async def list_app_user_bill(
         "id", "amount", "created_at", "paid_at"
     )
     call_expenses = await CallRecord.filter(
-        (
-            Q(payer_user_id=user_id)
-            | (Q(payer_user_id__isnull=True) & Q(caller_id=user_id))
-        )
-        & Q(total_fee__gt=0)
+        (Q(payer_user_id=user_id) | (Q(payer_user_id__isnull=True) & Q(caller_id=user_id))) & Q(total_fee__gt=0)
     ).values("id", "caller_id", "callee_id", "payer_user_id", "total_fee", "created_at", "ended_at")
-    call_incomes = await CallRecord.filter(
-        income_anchor_user_id=user_id, anchor_income_diamonds__gt=0
-    ).values(
+    call_incomes = await CallRecord.filter(income_certified_user_id=user_id, certified_user_income_diamonds__gt=0).values(
         "id",
         "caller_id",
         "callee_id",
         "payer_user_id",
-        "income_anchor_user_id",
-        "anchor_income_diamonds",
+        "income_certified_user_id",
+        "certified_user_income_diamonds",
         "created_at",
         "income_settled_at",
     )
     gift_expenses = await GiftRecord.filter(sender_id=user_id, total_price__gt=0).values(
         "id", "sender_id", "receiver_id", "gift_name", "total_price", "created_at"
     )
-    gift_incomes = await GiftRecord.filter(
-        receiver_id=user_id, anchor_income_diamonds__gt=0
-    ).values(
+    gift_incomes = await GiftRecord.filter(receiver_id=user_id, certified_user_income_diamonds__gt=0).values(
         "id",
         "sender_id",
         "receiver_id",
         "gift_name",
-        "anchor_income_diamonds",
+        "certified_user_income_diamonds",
         "created_at",
     )
     im_text_expenses = await ImTextMessageChargeRecord.filter(sender_id=user_id, price__gt=0).values(
         "id", "sender_id", "receiver_id", "price", "created_at"
     )
-    im_text_incomes = await ImTextMessageChargeRecord.filter(
-        receiver_id=user_id, anchor_income_diamonds__gt=0
-    ).values(
+    im_text_incomes = await ImTextMessageChargeRecord.filter(receiver_id=user_id, certified_user_income_diamonds__gt=0).values(
         "id",
         "sender_id",
         "receiver_id",
-        "anchor_income_diamonds",
+        "certified_user_income_diamonds",
         "created_at",
     )
     withdraw_expenses = await WithdrawApply.filter(user_id=user_id, amount__gt=0).values(
@@ -431,7 +421,7 @@ async def list_app_user_bill(
             }
         )
     for row in call_incomes:
-        amount = decimal_to_float_2(row.get("anchor_income_diamonds"))
+        amount = decimal_to_float_2(row.get("certified_user_income_diamonds"))
         payer_user_id = int(row.get("payer_user_id") or 0)
         caller_id = int(row.get("caller_id") or 0)
         callee_id = int(row.get("callee_id") or 0)
@@ -451,9 +441,7 @@ async def list_app_user_bill(
                 "amount": amount,
                 "related_user_id": related_id,
                 "related_user_nickname": related_nickname,
-                "created_at": _format_bill_dt(
-                    row.get("income_settled_at") or row.get("created_at")
-                ),
+                "created_at": _format_bill_dt(row.get("income_settled_at") or row.get("created_at")),
             }
         )
     for row in gift_expenses:
@@ -476,7 +464,7 @@ async def list_app_user_bill(
             }
         )
     for row in gift_incomes:
-        amount = decimal_to_float_2(row.get("anchor_income_diamonds"))
+        amount = decimal_to_float_2(row.get("certified_user_income_diamonds"))
         gift_name = (row.get("gift_name") or "").strip()
         related_id, related_nickname = _resolve_related_user(int(row.get("sender_id") or 0))
         bills.append(
@@ -513,7 +501,7 @@ async def list_app_user_bill(
             }
         )
     for row in im_text_incomes:
-        amount = decimal_to_float_2(row.get("anchor_income_diamonds"))
+        amount = decimal_to_float_2(row.get("certified_user_income_diamonds"))
         related_id, related_nickname = _resolve_related_user(int(row.get("sender_id") or 0))
         bills.append(
             {
@@ -568,9 +556,7 @@ async def list_app_user_bill(
         filtered = [item for item in filtered if item["biz_type"] == normalized_biz_type]
 
     income_coins_total = sum(
-        _amount_decimal(item["amount"])
-        for item in filtered
-        if item["is_income"] and item.get("asset_type") == "coins"
+        _amount_decimal(item["amount"]) for item in filtered if item["is_income"] and item.get("asset_type") == "coins"
     )
     income_diamonds_total = sum(
         _amount_decimal(item["amount"])
@@ -606,3 +592,4 @@ async def list_app_user_bill(
         expense_coins_total=decimal_to_float_2(expense_coins_total),
         expense_diamonds_total=decimal_to_float_2(expense_diamonds_total),
     )
+

@@ -10,9 +10,7 @@ async def test_call_heartbeat_updates_last_seen_for_participant() -> None:
 
     router.CallRecord = SimpleNamespace(  # type: ignore[assignment]
         filter=lambda **_: SimpleNamespace(
-            first=AsyncMock(
-                return_value=SimpleNamespace(id=7, caller_id=1, callee_id=2, status="ongoing")
-            )
+            first=AsyncMock(return_value=SimpleNamespace(id=7, caller_id=1, callee_id=2, status="ongoing"))
         )
     )
     update_last_seen = AsyncMock()
@@ -33,9 +31,7 @@ async def test_call_heartbeat_rejects_non_participant() -> None:
 
     router.CallRecord = SimpleNamespace(  # type: ignore[assignment]
         filter=lambda **_: SimpleNamespace(
-            first=AsyncMock(
-                return_value=SimpleNamespace(id=8, caller_id=10, callee_id=20, status="ongoing")
-            )
+            first=AsyncMock(return_value=SimpleNamespace(id=8, caller_id=10, callee_id=20, status="ongoing"))
         )
     )
     update_last_seen = AsyncMock()

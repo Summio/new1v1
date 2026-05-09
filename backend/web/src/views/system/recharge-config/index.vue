@@ -1,6 +1,16 @@
 <script setup>
 import { h, onMounted, ref } from 'vue'
-import { NButton, NColorPicker, NDataTable, NInput, NInputNumber, NPopconfirm, NSpace, NTag, useMessage } from 'naive-ui'
+import {
+  NButton,
+  NColorPicker,
+  NDataTable,
+  NInput,
+  NInputNumber,
+  NPopconfirm,
+  NSpace,
+  NTag,
+  useMessage,
+} from 'naive-ui'
 
 import CommonPage from '@/components/page/CommonPage.vue'
 import api from '@/api'
@@ -8,7 +18,6 @@ import api from '@/api'
 defineOptions({ name: '充值配置' })
 
 const message = useMessage()
-const $table = ref(null)
 const loading = ref(false)
 const packages = ref([])
 const editingKey = ref('')
@@ -30,16 +39,13 @@ async function loadConfig() {
         tag_color: pkg.tag_color || '#FF5722',
         editable: false,
       }))
-    }
-    else {
+    } else {
       packages.value = []
     }
-  }
-  catch (error) {
+  } catch (error) {
     message.error('加载充值配置失败')
     console.error(error)
-  }
-  finally {
+  } finally {
     loading.value = false
   }
 }
@@ -90,19 +96,18 @@ async function handleSaveRow(row) {
 function handleCancel(row) {
   if (!row.amount || !row.coins) {
     // 新增的空行，直接删除
-    const index = packages.value.findIndex(p => p.key === row.key)
+    const index = packages.value.findIndex((p) => p.key === row.key)
     if (index > -1) {
       packages.value.splice(index, 1)
     }
-  }
-  else {
+  } else {
     row.editable = false
   }
   editingKey.value = ''
 }
 
 async function handleDelete(row) {
-  const index = packages.value.findIndex(p => p.key === row.key)
+  const index = packages.value.findIndex((p) => p.key === row.key)
   if (index > -1) {
     packages.value.splice(index, 1)
     // 自动保存
@@ -111,7 +116,7 @@ async function handleDelete(row) {
 }
 
 async function moveUp(row) {
-  const index = packages.value.findIndex(p => p.key === row.key)
+  const index = packages.value.findIndex((p) => p.key === row.key)
   if (index > 0) {
     const temp = packages.value[index]
     packages.value[index] = packages.value[index - 1]
@@ -122,7 +127,7 @@ async function moveUp(row) {
 }
 
 async function moveDown(row) {
-  const index = packages.value.findIndex(p => p.key === row.key)
+  const index = packages.value.findIndex((p) => p.key === row.key)
   if (index < packages.value.length - 1) {
     const temp = packages.value[index]
     packages.value[index] = packages.value[index + 1]
@@ -144,20 +149,14 @@ async function saveToBackend() {
       })),
     })
     message.success('保存成功')
-  }
-  catch (error) {
+  } catch (error) {
     message.error(error?.message || '保存失败')
     console.error(error)
     // 保存失败，重新加载
     await loadConfig()
-  }
-  finally {
+  } finally {
     loading.value = false
   }
-}
-
-async function handleSave() {
-  await saveToBackend()
 }
 
 const columns = [
@@ -227,11 +226,17 @@ const columns = [
           },
         })
       }
-      return row.tag ? h(NTag, {
-        type: 'success',
-        size: 'small',
-        color: { color: row.tag_color || '#FF5722', textColor: '#fff' }
-      }, { default: () => row.tag }) : '-'
+      return row.tag
+        ? h(
+            NTag,
+            {
+              type: 'success',
+              size: 'small',
+              color: { color: row.tag_color || '#FF5722', textColor: '#fff' },
+            },
+            { default: () => row.tag }
+          )
+        : '-'
     },
   },
   {
@@ -249,24 +254,28 @@ const columns = [
           },
         })
       }
-      return h('div', {
-        style: {
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-        },
-      }, [
-        h('div', {
+      return h(
+        'div',
+        {
           style: {
-            width: '20px',
-            height: '20px',
-            borderRadius: '4px',
-            backgroundColor: row.tag_color || '#FF5722',
-            border: '1px solid #e0e0e6',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
           },
-        }),
-        h('span', {}, row.tag_color || '#FF5722'),
-      ])
+        },
+        [
+          h('div', {
+            style: {
+              width: '20px',
+              height: '20px',
+              borderRadius: '4px',
+              backgroundColor: row.tag_color || '#FF5722',
+              border: '1px solid #e0e0e6',
+            },
+          }),
+          h('span', {}, row.tag_color || '#FF5722'),
+        ]
+      )
     },
   },
   {
@@ -277,57 +286,93 @@ const columns = [
     fixed: 'right',
     render(row, index) {
       if (row.editable) {
-        return h(NSpace, { justify: 'center' }, {
-          default: () => [
-            h(NButton, {
-              size: 'small',
-              type: 'primary',
-              onClick: () => handleSaveRow(row),
-            }, { default: () => '保存' }),
-            h(NButton, {
-              size: 'small',
-              onClick: () => handleCancel(row),
-            }, { default: () => '取消' }),
-          ],
-        })
+        return h(
+          NSpace,
+          { justify: 'center' },
+          {
+            default: () => [
+              h(
+                NButton,
+                {
+                  size: 'small',
+                  type: 'primary',
+                  onClick: () => handleSaveRow(row),
+                },
+                { default: () => '保存' }
+              ),
+              h(
+                NButton,
+                {
+                  size: 'small',
+                  onClick: () => handleCancel(row),
+                },
+                { default: () => '取消' }
+              ),
+            ],
+          }
+        )
       }
 
-      return h(NSpace, { justify: 'center' }, {
-        default: () => [
-          h(NButton, {
-            size: 'small',
-            type: 'primary',
-            secondary: true,
-            disabled: editingKey.value !== '',
-            onClick: () => handleEdit(row),
-          }, { default: () => '编辑' }),
-          h(NButton, {
-            size: 'small',
-            disabled: editingKey.value !== '' || index === 0,
-            onClick: () => moveUp(row),
-          }, { default: () => '上移' }),
-          h(NButton, {
-            size: 'small',
-            disabled: editingKey.value !== '' || index === packages.value.length - 1,
-            onClick: () => moveDown(row),
-          }, { default: () => '下移' }),
-          h(NPopconfirm, {
-            onPositiveClick: () => handleDelete(row),
-          }, {
-            trigger: () => h(NButton, {
-              size: 'small',
-              type: 'error',
-              secondary: true,
-              disabled: editingKey.value !== '',
-            }, { default: () => '删除' }),
-            default: () => '确认删除该套餐？',
-          }),
-        ],
-      })
+      return h(
+        NSpace,
+        { justify: 'center' },
+        {
+          default: () => [
+            h(
+              NButton,
+              {
+                size: 'small',
+                type: 'primary',
+                secondary: true,
+                disabled: editingKey.value !== '',
+                onClick: () => handleEdit(row),
+              },
+              { default: () => '编辑' }
+            ),
+            h(
+              NButton,
+              {
+                size: 'small',
+                disabled: editingKey.value !== '' || index === 0,
+                onClick: () => moveUp(row),
+              },
+              { default: () => '上移' }
+            ),
+            h(
+              NButton,
+              {
+                size: 'small',
+                disabled: editingKey.value !== '' || index === packages.value.length - 1,
+                onClick: () => moveDown(row),
+              },
+              { default: () => '下移' }
+            ),
+            h(
+              NPopconfirm,
+              {
+                onPositiveClick: () => handleDelete(row),
+              },
+              {
+                trigger: () =>
+                  h(
+                    NButton,
+                    {
+                      size: 'small',
+                      type: 'error',
+                      secondary: true,
+                      disabled: editingKey.value !== '',
+                    },
+                    { default: () => '删除' }
+                  ),
+                default: () => '确认删除该套餐？',
+              }
+            ),
+          ],
+        }
+      )
     },
   },
 ]
-
 </script>
 
 <template>
@@ -351,5 +396,4 @@ const columns = [
   </CommonPage>
 </template>
 
-<style scoped>
-</style>
+<style scoped></style>

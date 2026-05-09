@@ -30,23 +30,14 @@ async def recharge_list(
         q &= Q(pay_channel=pay_channel.strip())
 
     total = await RechargeOrder.filter(q).count()
-    records = (
-        await RechargeOrder.filter(q)
-        .order_by("-created_at")
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    )
+    records = await RechargeOrder.filter(q).order_by("-created_at").offset((page - 1) * page_size).limit(page_size)
 
     user_ids = list({int(row.user_id) for row in records})
     user_map: dict[int, str] = {}
     if user_ids:
         users = await AppUser.filter(id__in=user_ids).all()
         user_map = {
-            int(user.id): (
-                (user.nickname or "").strip()
-                or (user.phone or "").strip()
-                or f"用户{user.id}"
-            )
+            int(user.id): ((user.nickname or "").strip() or (user.phone or "").strip() or f"用户{user.id}")
             for user in users
         }
 
@@ -66,7 +57,9 @@ async def recharge_list(
             )
         )
 
-    return SuccessExtra(data=[item.model_dump(mode='json') for item in items], total=total, page=page, page_size=page_size)
+    return SuccessExtra(
+        data=[item.model_dump(mode="json") for item in items], total=total, page=page, page_size=page_size
+    )
 
 
 @router.post("/review", summary="充值订单处理")

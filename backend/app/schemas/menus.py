@@ -27,26 +27,26 @@ class BaseMenu(BaseModel):
 
 class MenuCreate(BaseModel):
     menu_type: MenuType = Field(default=MenuType.CATALOG.value)
-    name: str = Field(example="用户管理")
+    name: str = Field(json_schema_extra={"example": "用户管理"})
     icon: Optional[str] = "ph:user-list-bold"
-    path: str = Field(example="/system/user")
-    order: Optional[int] = Field(example=1)
-    parent_id: Optional[int] = Field(example=0, default=0)
+    path: str = Field(json_schema_extra={"example": "/system/user"})
+    order: Optional[int] = Field(json_schema_extra={"example": 1})
+    parent_id: Optional[int] = Field(json_schema_extra={"example": 0}, default=0)
     is_hidden: Optional[bool] = False
-    component: str = Field(default="Layout", example="/system/user")
+    component: str = Field(default="Layout", json_schema_extra={"example": "/system/user"})
     keepalive: Optional[bool] = True
     redirect: Optional[str] = ""
 
 
 class MenuUpdate(BaseModel):
     id: int
-    menu_type: Optional[MenuType] = Field(example=MenuType.CATALOG.value)
-    name: Optional[str] = Field(example="用户管理")
+    menu_type: Optional[MenuType] = Field(json_schema_extra={"example": MenuType.CATALOG.value})
+    name: Optional[str] = Field(json_schema_extra={"example": "用户管理"})
     icon: Optional[str] = "ph:user-list-bold"
-    path: Optional[str] = Field(example="/system/user")
-    order: Optional[int] = Field(example=1)
-    parent_id: Optional[int] = Field(example=0)
+    path: Optional[str] = Field(json_schema_extra={"example": "/system/user"})
+    order: Optional[int] = Field(json_schema_extra={"example": 1})
+    parent_id: Optional[int] = Field(json_schema_extra={"example": 0})
     is_hidden: Optional[bool] = False
-    component: str = Field(example="/system/user")
+    component: str = Field(json_schema_extra={"example": "/system/user"})
     keepalive: Optional[bool] = False
     redirect: Optional[str] = ""

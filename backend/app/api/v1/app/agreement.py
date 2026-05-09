@@ -1,4 +1,5 @@
 from fastapi import APIRouter
+
 from app.schemas.base import Success
 
 router = APIRouter()
@@ -39,6 +40,7 @@ AGREEMENT_CONTENT = """
 
 最后更新：2026年4月
 """
+
 
 @router.get("/agreement", summary="获取用户协议")
 async def get_agreement():

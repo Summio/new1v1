@@ -34,6 +34,7 @@ class CertifiedUserListOut(BaseModel):
 
 # ===== 通话 =====
 
+
 class DialingIn(BaseModel):
     target_user_id: Optional[int] = Field(default=None, description="目标用户ID(app_user.id)")
     target_id: Optional[int] = Field(default=None, description="兼容字段: 目标用户ID")
@@ -62,6 +63,7 @@ class DialingOut(BaseModel):
 
 class CallEndIn(BaseModel):
     call_id: int = Field(..., description="通话记录ID")
+
 
 class CallEndOut(BaseModel):
     total_fee: float
@@ -94,6 +96,7 @@ class RTCTokenOut(BaseModel):
 
 
 # ===== 礼物 =====
+
 
 class GiftOut(BaseModel):
     id: int
@@ -133,12 +136,13 @@ class GiftSendOut(BaseModel):
     quantity: int = 1
     unit_price: int = 0
     total_price: int = 0
-    anchor_income_diamonds: float = 0.0
+    certified_user_income_diamonds: float = 0.0
     coins: float
     msg: str = "发送成功"
 
 
 # ===== 钱包 =====
+
 
 class BalanceOut(BaseModel):
     coins: float
@@ -229,6 +233,7 @@ class WithdrawListItem(BaseModel):
 
 # ===== Wallet Transactions =====
 
+
 class TransactionRecord(BaseModel):
     id: str
     type: str  # recharge / call / gift / withdraw
@@ -249,6 +254,7 @@ class TransactionListOut(BaseModel):
 
 # ===== IM =====
 
+
 class IMSigOut(BaseModel):
     usersig: str
     expired_time: int
@@ -263,8 +269,9 @@ class IMTextChargeIn(BaseModel):
 class IMTextChargeOut(BaseModel):
     charged: bool = False
     price: int = 0
-    anchor_income_diamonds: float = 0.0
+    certified_user_income_diamonds: float = 0.0
     coins: int = 0
     diamonds: int = 0
     receiver_user_id: int
     request_id: str
+

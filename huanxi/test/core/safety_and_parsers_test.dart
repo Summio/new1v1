@@ -38,7 +38,7 @@ void main() {
         'data': {
           'charged': true,
           'price': 20,
-          'anchor_income_diamonds': 10,
+          'certified_user_income_diamonds': 10,
           'coins': 980,
           'diamonds': 0,
           'receiver_user_id': 2,
@@ -47,7 +47,7 @@ void main() {
       });
       expect(parsed.charged, isTrue);
       expect(parsed.price, 20);
-      expect(parsed.anchorIncomeDiamonds, 10);
+      expect(parsed.certifiedUserIncomeDiamonds, 10);
       expect(parsed.coins, 980);
       expect(parsed.receiverUserId, 2);
       expect(parsed.requestId, 'req_123456');
@@ -70,3 +70,4 @@ void main() {
     });
   });
 }
+

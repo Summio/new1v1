@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../app/providers/moment_provider.dart';
 import '../../app/theme/app_theme.dart';
 import '../../services/moment_service.dart';
 import 'moment_card.dart';
@@ -15,6 +14,8 @@ class MomentListView extends ConsumerStatefulWidget {
   final VoidCallback onRefresh;
   final VoidCallback onLoadMore;
   final void Function(Moment moment)? onDelete; // 可选删除回调
+  final String emptyTitle;
+  final String emptySubtitle;
 
   const MomentListView({
     super.key,
@@ -26,6 +27,8 @@ class MomentListView extends ConsumerStatefulWidget {
     required this.onRefresh,
     required this.onLoadMore,
     this.onDelete,
+    this.emptyTitle = '暂无动态',
+    this.emptySubtitle = '快去发布第一条动态吧',
   });
 
   @override
@@ -44,7 +47,10 @@ class _MomentListViewState extends ConsumerState<MomentListView> {
     }
 
     if (widget.moments.isEmpty) {
-      return _EmptyView();
+      return _EmptyView(
+        title: widget.emptyTitle,
+        subtitle: widget.emptySubtitle,
+      );
     }
 
     return RefreshIndicator(
@@ -73,7 +79,9 @@ class _MomentListViewState extends ConsumerState<MomentListView> {
             final moment = widget.moments[index];
             return MomentCard(
               moment: moment,
-              onDelete: widget.onDelete != null ? () => _confirmDelete(moment) : null,
+              onDelete: widget.onDelete != null
+                  ? () => _confirmDelete(moment)
+                  : null,
             );
           },
         ),
@@ -121,7 +129,11 @@ class _ErrorView extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 64, color: AppTheme.errorColor),
+            const Icon(
+              Icons.error_outline,
+              size: 64,
+              color: AppTheme.errorColor,
+            ),
             const SizedBox(height: 16),
             Text(
               error,
@@ -129,10 +141,7 @@ class _ErrorView extends StatelessWidget {
               style: const TextStyle(color: AppTheme.textSecondary),
             ),
             const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: onRetry,
-              child: const Text('重试'),
-            ),
+            ElevatedButton(onPressed: onRetry, child: const Text('重试')),
           ],
         ),
       ),
@@ -142,22 +151,35 @@ class _ErrorView extends StatelessWidget {
 
 /// 空状态视图
 class _EmptyView extends StatelessWidget {
+  final String title;
+  final String subtitle;
+
+  const _EmptyView({required this.title, required this.subtitle});
+
   @override
   Widget build(BuildContext context) {
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.dynamic_feed_outlined, size: 64, color: AppTheme.textHint),
+          const Icon(
+            Icons.dynamic_feed_outlined,
+            size: 64,
+            color: AppTheme.textHint,
+          ),
           const SizedBox(height: 16),
-          const Text(
-            '暂无动态',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.textPrimary,
+            ),
           ),
           const SizedBox(height: 8),
-          const Text(
-            '快去发布第一条动态吧',
-            style: TextStyle(fontSize: 14, color: AppTheme.textSecondary),
+          Text(
+            subtitle,
+            style: const TextStyle(fontSize: 14, color: AppTheme.textSecondary),
           ),
         ],
       ),

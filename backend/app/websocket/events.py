@@ -9,7 +9,6 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
 
 from app.websocket.manager import get_manager
 
@@ -19,6 +18,7 @@ PushResult = bool
 
 
 # ===== 通话事件 =====
+
 
 async def push_call_incoming(
     callee_id: int,
@@ -118,6 +118,7 @@ async def push_call_balance_empty(
 
 # ===== 礼物事件 =====
 
+
 async def push_gift_sent(
     sender_id: int,
     gift_id: int,
@@ -127,7 +128,7 @@ async def push_gift_sent(
     gift_price: int,
     quantity: int,
     total_price: int,
-    anchor_income_diamonds: float,
+    certified_user_income_diamonds: float,
     scene: str,
     call_id: int | None,
     sender_nickname: str,
@@ -143,7 +144,7 @@ async def push_gift_sent(
         "unit_price": int(gift_price),
         "quantity": int(quantity),
         "total_price": int(total_price),
-        "anchor_income_diamonds": anchor_income_diamonds,
+        "certified_user_income_diamonds": certified_user_income_diamonds,
         "scene": scene,
         "call_id": int(call_id) if call_id is not None else None,
         "sender_nickname": sender_nickname,
@@ -164,7 +165,7 @@ async def push_gift_received(
     gift_price: int,
     quantity: int,
     total_price: int,
-    anchor_income_diamonds: float,
+    certified_user_income_diamonds: float,
     scene: str,
     call_id: int | None,
 ) -> PushResult:
@@ -178,7 +179,7 @@ async def push_gift_received(
         "unit_price": int(gift_price),
         "quantity": int(quantity),
         "total_price": int(total_price),
-        "anchor_income_diamonds": anchor_income_diamonds,
+        "certified_user_income_diamonds": certified_user_income_diamonds,
         "scene": scene,
         "call_id": int(call_id) if call_id is not None else None,
         "sender_id": int(sender_id),
@@ -189,6 +190,7 @@ async def push_gift_received(
 
 
 # ===== 余额事件 =====
+
 
 async def push_balance_update(
     user_id: int,
@@ -205,6 +207,7 @@ async def push_balance_update(
 
 # ===== 在线状态事件 =====
 
+
 async def push_presence(
     user_id: int,
     online: bool,
@@ -215,3 +218,4 @@ async def push_presence(
         "online": bool(online),
     }
     return await get_manager().push_to_user(int(user_id), "presence", data, critical=True)
+

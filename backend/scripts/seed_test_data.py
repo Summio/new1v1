@@ -2,16 +2,17 @@
 添加测试数据：1个用户 + 20个主播
 运行方式: cd backend && python scripts/seed_test_data.py
 """
+
 import asyncio
 import random
-
 import sys
+
 sys.path.insert(0, ".")
 
 from tortoise import Tortoise
-from app.models import AppUser, Anchor, Gift
-from app.utils.password import get_password_hash
 
+from app.models import Anchor, AppUser, Gift
+from app.utils.password import get_password_hash
 
 # 真实头像 URL（randomuser.me）
 # 测试用户用固定头像，主播头像根据性别分配

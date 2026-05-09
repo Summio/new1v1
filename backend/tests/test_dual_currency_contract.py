@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -25,39 +24,39 @@ def test_recharge_callback_credits_coins_not_diamonds() -> None:
 def test_gift_send_credits_receiver_diamonds() -> None:
     content = _read_backend_file("app/api/v1/app/gift.py")
 
-    assert "anchor_income_diamonds = (" in content
-    assert "gift_anchor_share_bps" in content
-    assert 'diamonds=F("diamonds") + anchor_income_diamonds' in content
+    assert "certified_user_income_diamonds = (" in content
+    assert "gift_certified_user_share_bps" in content
+    assert 'diamonds=F("diamonds") + certified_user_income_diamonds' in content
 
 
 def test_call_end_credits_anchor_diamonds() -> None:
     content = _read_backend_file("app/api/v1/app/call.py")
 
-    assert "settle_call_anchor_income_once(" in content
+    assert "settle_call_certified_user_income_once(" in content
 
 
-def test_call_creation_snapshots_income_anchor_and_share() -> None:
+def test_call_creation_snapshots_income_certified_user_and_share() -> None:
     content = _read_backend_file("app/api/v1/app/call.py")
 
-    assert "anchor_share_bps = await get_anchor_share_bps()" in content
-    assert "income_anchor_user_id=income_anchor_user_id" in content
-    assert "anchor_share_bps=anchor_share_bps" in content
+    assert "certified_user_share_bps = await get_certified_user_share_bps()" in content
+    assert "income_certified_user_id=income_certified_user_id" in content
+    assert "certified_user_share_bps=certified_user_share_bps" in content
 
 
-def test_call_record_model_exposes_anchor_income_fields() -> None:
+def test_call_record_model_exposes_certified_user_income_fields() -> None:
     content = _read_backend_file("app/models/admin.py")
 
-    assert "income_anchor_user_id" in content
-    assert "anchor_share_bps" in content
-    assert "anchor_income_diamonds" in content
+    assert "income_certified_user_id" in content
+    assert "certified_user_share_bps" in content
+    assert "certified_user_income_diamonds" in content
     assert "income_settled_at" in content
 
 
-def test_watchdog_settlement_records_anchor_income_for_im_trace() -> None:
+def test_watchdog_settlement_records_certified_user_income_for_im_trace() -> None:
     content = _read_backend_file("app/core/call_watchdog.py")
 
-    assert "settle_call_anchor_income_once(" in content
-    assert "anchor_balance_pushes" in content
+    assert "settle_call_certified_user_income_once(" in content
+    assert "certified_user_balance_pushes" in content
 
 
 def test_admin_system_config_alias_matches_spec_path() -> None:
@@ -76,18 +75,17 @@ def test_admin_web_exposes_trace_and_income_controls() -> None:
 
     assert "im_call_trace_enabled" in config_content
     assert "im_admin_identifier" in config_content
-    assert "call_anchor_share_bps" in config_content
-    assert "im_text_message_anchor_share_bps" in config_content
+    assert "call_certified_user_share_bps" in config_content
+    assert "im_text_message_certified_user_share_bps" in config_content
     assert "step: 0.01" in config_content
     assert "认证用户收益(钻石)" in call_record_content
-    assert "anchor_income_diamonds" in call_record_content
+    assert "certified_user_income_diamonds" in call_record_content
     assert "收益结算时间" in call_record_content
     assert "income_settled_at" in call_record_content
     assert "认证用户收益(钻石)" in app_user_content
-    assert "anchor_income_diamonds" in app_user_content
+    assert "certified_user_income_diamonds" in app_user_content
     assert "收益结算时间" in app_user_content
     assert "income_settled_at" in app_user_content
-
 
 def test_app_displays_certified_user_call_price() -> None:
     content = (BACKEND_ROOT.parent / "huanxi/lib/modules/home/home_page.dart").read_text(
@@ -98,41 +96,47 @@ def test_app_displays_certified_user_call_price() -> None:
     assert "anchor.diamonds ?? 0" not in content
 
 
-def test_call_anchor_share_defaults_to_existing_commission_rate() -> None:
-    migration_text = _read_backend_file("migrations/models/19_20260504110000_dual_currency_columns_seed.py")
+def test_call_certified_user_share_defaults_to_existing_commission_rate() -> None:
+    original_migration_text = _read_backend_file("migrations/models/19_20260504110000_dual_currency_columns_seed.py")
+    rename_migration_text = _read_backend_file("migrations/models/39_20260509100000_certified_user_income_fields.py")
     call_content = _read_backend_file("app/api/v1/app/call.py")
     watchdog_content = _read_backend_file("app/core/call_watchdog.py")
 
-    assert "DEFAULT 5000" in migration_text
-    assert "SELECT 'call_anchor_share_bps', '5000'" in migration_text
-    assert "DEFAULT_ANCHOR_SHARE_BPS = 5000" in call_content
-    assert "DEFAULT_ANCHOR_SHARE_BPS = 5000" in watchdog_content
+    assert "DEFAULT 5000" in original_migration_text
+    assert "SELECT 'call_anchor_share_bps', '5000'" in original_migration_text
+    assert "SELECT 'call_certified_user_share_bps', '5000'" in rename_migration_text
+    assert "DEFAULT_CERTIFIED_USER_SHARE_BPS = 5000" in call_content
+    assert "DEFAULT_CERTIFIED_USER_SHARE_BPS = 5000" in watchdog_content
 
 
 def test_call_income_migration_is_idempotent_for_existing_columns() -> None:
-    migration_text = _read_backend_file("migrations/models/19_20260504110000_dual_currency_columns_seed.py")
+    original_migration_text = _read_backend_file("migrations/models/19_20260504110000_dual_currency_columns_seed.py")
+    rename_migration_text = _read_backend_file("migrations/models/39_20260509100000_certified_user_income_fields.py")
 
-    assert "INFORMATION_SCHEMA.COLUMNS" in migration_text
-    assert "COLUMN_NAME = 'income_anchor_user_id'" in migration_text
-    assert "COLUMN_NAME = 'anchor_share_bps'" in migration_text
-    assert "COLUMN_NAME = 'anchor_income_diamonds'" in migration_text
-    assert "COLUMN_NAME = 'income_settled_at'" in migration_text
-    assert "PREPARE stmt FROM @sql" in migration_text
+    assert "INFORMATION_SCHEMA.COLUMNS" in original_migration_text
+    assert "COLUMN_NAME = 'income_anchor_user_id'" in original_migration_text
+    assert "COLUMN_NAME = 'anchor_share_bps'" in original_migration_text
+    assert "COLUMN_NAME = 'anchor_income_diamonds'" in original_migration_text
+    assert "COLUMN_NAME = 'income_settled_at'" in original_migration_text
+    assert "PREPARE stmt FROM @sql" in original_migration_text
+    assert "INFORMATION_SCHEMA.COLUMNS" in rename_migration_text
+    assert "CHANGE COLUMN `income_anchor_user_id` `income_certified_user_id`" in rename_migration_text
+    assert "CHANGE COLUMN `anchor_share_bps` `certified_user_share_bps`" in rename_migration_text
+    assert "CHANGE COLUMN `anchor_income_diamonds` `certified_user_income_diamonds`" in rename_migration_text
+    assert "PREPARE stmt FROM @sql" in rename_migration_text
 
 
 def test_income_service_is_idempotent_and_locks_anchor_row() -> None:
     content = _read_backend_file("app/services/call_income_service.py")
 
-    assert "async def settle_call_anchor_income_once" in content
-    assert "if getattr(call_record, \"income_settled_at\", None) is not None" in content
+    assert "async def settle_call_certified_user_income_once" in content
+    assert 'if getattr(call_record, "income_settled_at", None) is not None' in content
     assert ".select_for_update()" in content
-    assert 'diamonds=F("diamonds") + anchor_income' in content
+    assert 'diamonds=F("diamonds") + certified_user_income' in content
 
 
 def test_app_user_dual_currency_migration_is_idempotent() -> None:
-    migration_text = _read_backend_file(
-        "migrations/models/20_20260504190000_app_user_dual_currency_idempotent.py"
-    )
+    migration_text = _read_backend_file("migrations/models/20_20260504190000_app_user_dual_currency_idempotent.py")
 
     assert "COLUMN_NAME = 'coins'" in migration_text
     assert "COLUMN_NAME = 'diamonds'" in migration_text
@@ -149,10 +153,10 @@ def test_app_user_dual_currency_migration_is_idempotent() -> None:
 
 def test_migrations_create_dual_currency_columns() -> None:
     migration_text = "\n".join(
-        path.read_text(encoding="utf-8")
-        for path in sorted((BACKEND_ROOT / "migrations/models").glob("*.py"))
+        path.read_text(encoding="utf-8") for path in sorted((BACKEND_ROOT / "migrations/models").glob("*.py"))
     )
 
     assert "ADD `coins`" in migration_text
     assert "ADD `diamonds`" in migration_text
     assert "ADD `frozen_diamonds`" in migration_text
+

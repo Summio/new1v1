@@ -10,9 +10,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.requests import Request
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from app.core.app_auth import AppAuthControl
-from app.core.dependency import AuthControl
-from app.models.admin import AuditLog, User
+from app.models.admin import AuditLog
 
 from .bgtask import BgTasks
 
@@ -210,8 +208,10 @@ class HttpAuditLogMiddleware(BaseHTTPMiddleware):
         if ctx_user:
             # App 用户（认证用户/普通用户）
             data["user_id"] = ctx_user_id or 0
-            data["username"] = ctx_user.nickname if hasattr(ctx_user, "nickname") and ctx_user.nickname else (
-                ctx_user.phone if hasattr(ctx_user, "phone") and ctx_user.phone else str(ctx_user.id)
+            data["username"] = (
+                ctx_user.nickname
+                if hasattr(ctx_user, "nickname") and ctx_user.nickname
+                else (ctx_user.phone if hasattr(ctx_user, "phone") and ctx_user.phone else str(ctx_user.id))
             )
         else:
             data["user_id"] = 0

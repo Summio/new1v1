@@ -14,7 +14,7 @@ router = APIRouter()
 CONFIG_ITEMS = {
     "im_text_message_billing_enabled": "文字聊天扣费开关",
     "im_text_message_price": "文字聊天每条扣费金币数",
-    "im_text_message_anchor_share_bps": "文字聊天认证用户分成比例",
+    "im_text_message_certified_user_share_bps": "文字聊天认证用户分成比例",
 }
 
 
@@ -30,7 +30,7 @@ async def update_im_text_billing_config(config_in: IMTextBillingConfigIn):
     values = {
         "im_text_message_billing_enabled": "true" if config_in.enabled else "false",
         "im_text_message_price": str(config_in.price),
-        "im_text_message_anchor_share_bps": str(config_in.anchor_share_bps),
+        "im_text_message_certified_user_share_bps": str(config_in.certified_user_share_bps),
     }
     try:
         for key, value in values.items():
@@ -50,3 +50,4 @@ async def update_im_text_billing_config(config_in: IMTextBillingConfigIn):
     except Exception as exc:
         raise HTTPException(status_code=500, detail="配置更新失败") from exc
     return Success(msg="配置已更新")
+

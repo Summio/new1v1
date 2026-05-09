@@ -3,15 +3,16 @@
 使用 randomuser.me API 提供的高质量头像
 运行方式: cd backend && python scripts/update_anchor_avatars.py
 """
+
 import asyncio
 import random
-
 import sys
+
 sys.path.insert(0, ".")
 
 from tortoise import Tortoise
-from app.models import AppUser, Anchor
 
+from app.models import Anchor, AppUser
 
 # 20个真实感头像 URL（randomuser.me 端口）
 # 分为女性(1-70)和男性(1-70)两组

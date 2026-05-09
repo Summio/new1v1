@@ -11,9 +11,9 @@ from app.models import AppUser, CallRecord, Gift, GiftRecord
 from app.schemas.app_api import GiftSendIn, GiftSendOut
 from app.schemas.base import Fail, Success, SuccessExtra
 from app.services.gift_income_service import (
-    calc_gift_anchor_income_diamonds,
+    calc_gift_certified_user_income_diamonds,
     decimal_to_float_2,
-    get_gift_anchor_share_bps,
+    get_gift_certified_user_share_bps,
 )
 from app.services.tim_service import send_gift_notification
 from app.utils.media_url import to_relative_media_url
@@ -133,25 +133,29 @@ async def gift_send(req_in: GiftSendIn):
         return Fail(code=501, msg="余额不足，请先充值")
 
     receiver_is_certified_user = bool(target_user.is_certified_user)
-    anchor_share_bps = await get_gift_anchor_share_bps()
-    anchor_income_diamonds = (
-        calc_gift_anchor_income_diamonds(total_price, anchor_share_bps)
+    certified_user_share_bps = await get_gift_certified_user_share_bps()
+    certified_user_income_diamonds = (
+        calc_gift_certified_user_income_diamonds(total_price, certified_user_share_bps)
         if receiver_is_certified_user
-        else calc_gift_anchor_income_diamonds(0, anchor_share_bps)
+        else calc_gift_certified_user_income_diamonds(0, certified_user_share_bps)
     )
     current_coins = 0.0
     try:
         async with in_transaction() as conn:
-            updated = await AppUser.filter(
-                id=sender_id,
-                coins__gte=total_price,
-            ).using_db(conn).update(coins=F("coins") - total_price)
+            updated = (
+                await AppUser.filter(
+                    id=sender_id,
+                    coins__gte=total_price,
+                )
+                .using_db(conn)
+                .update(coins=F("coins") - total_price)
+            )
             if updated == 0:
                 raise ValueError("余额不足，扣款失败")
 
-            if anchor_income_diamonds > 0:
+            if certified_user_income_diamonds > 0:
                 await AppUser.filter(id=target_user.id).using_db(conn).update(
-                    diamonds=F("diamonds") + anchor_income_diamonds,
+                    diamonds=F("diamonds") + certified_user_income_diamonds,
                 )
 
             await GiftRecord.create(
@@ -162,8 +166,8 @@ async def gift_send(req_in: GiftSendIn):
                 price=gift.price,
                 quantity=quantity,
                 total_price=total_price,
-                anchor_share_bps=anchor_share_bps,
-                anchor_income_diamonds=anchor_income_diamonds,
+                certified_user_share_bps=certified_user_share_bps,
+                certified_user_income_diamonds=certified_user_income_diamonds,
                 using_db=conn,
             )
 
@@ -186,7 +190,7 @@ async def gift_send(req_in: GiftSendIn):
             gift_price=int(gift.price),
             quantity=quantity,
             total_price=total_price,
-            anchor_income_diamonds=decimal_to_float_2(anchor_income_diamonds),
+            certified_user_income_diamonds=decimal_to_float_2(certified_user_income_diamonds),
             scene=scene,
             call_id=call_id,
             sender_nickname=sender_nickname,
@@ -203,7 +207,7 @@ async def gift_send(req_in: GiftSendIn):
             gift_price=int(gift.price),
             quantity=quantity,
             total_price=total_price,
-            anchor_income_diamonds=decimal_to_float_2(anchor_income_diamonds),
+            certified_user_income_diamonds=decimal_to_float_2(certified_user_income_diamonds),
             scene=scene,
             call_id=call_id,
             sender_nickname=sender_nickname,
@@ -223,7 +227,7 @@ async def gift_send(req_in: GiftSendIn):
             gift_price=int(gift.price),
             quantity=quantity,
             total_price=total_price,
-            anchor_income_diamonds=decimal_to_float_2(anchor_income_diamonds),
+            certified_user_income_diamonds=decimal_to_float_2(certified_user_income_diamonds),
             scene=scene,
             call_id=call_id,
         )
@@ -238,7 +242,7 @@ async def gift_send(req_in: GiftSendIn):
             quantity=quantity,
             unit_price=int(gift.price),
             total_price=total_price,
-            anchor_income_diamonds=decimal_to_float_2(anchor_income_diamonds),
+            certified_user_income_diamonds=decimal_to_float_2(certified_user_income_diamonds),
             coins=current_coins,
             msg="发送成功",
         ).model_dump()
@@ -255,7 +259,7 @@ async def _ws_push_gift_sent(
     gift_price: int,
     quantity: int,
     total_price: int,
-    anchor_income_diamonds: float,
+    certified_user_income_diamonds: float,
     scene: str,
     call_id: int | None,
     sender_nickname: str,
@@ -273,7 +277,7 @@ async def _ws_push_gift_sent(
             gift_price=gift_price,
             quantity=quantity,
             total_price=total_price,
-            anchor_income_diamonds=anchor_income_diamonds,
+            certified_user_income_diamonds=certified_user_income_diamonds,
             scene=scene,
             call_id=call_id,
             sender_nickname=sender_nickname,
@@ -296,7 +300,7 @@ async def _ws_push_gift_received(
     gift_price: int,
     quantity: int,
     total_price: int,
-    anchor_income_diamonds: float,
+    certified_user_income_diamonds: float,
     scene: str,
     call_id: int | None,
 ) -> None:
@@ -315,9 +319,10 @@ async def _ws_push_gift_received(
             gift_price=gift_price,
             quantity=quantity,
             total_price=total_price,
-            anchor_income_diamonds=anchor_income_diamonds,
+            certified_user_income_diamonds=certified_user_income_diamonds,
             scene=scene,
             call_id=call_id,
         )
     except Exception:  # noqa: BLE001
         pass
+

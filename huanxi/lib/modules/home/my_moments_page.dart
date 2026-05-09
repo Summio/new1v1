@@ -55,9 +55,13 @@ class _MyMomentsPageState extends ConsumerState<MyMomentsPage> {
   }
 
   Future<void> _deleteMoment(Moment moment) async {
-    final success = await ref.read(myMomentsProvider.notifier).deleteMoment(moment.id);
+    final success = await ref
+        .read(myMomentsProvider.notifier)
+        .deleteMoment(moment.id);
     if (success) {
-      ref.read(momentFeedProvider.notifier).removeMoment(moment.id);
+      for (final category in MomentFeedCategory.values) {
+        ref.read(momentFeedProvider(category).notifier).removeMoment(moment.id);
+      }
       if (mounted) {
         AppToast.show(context, '删除成功');
       }

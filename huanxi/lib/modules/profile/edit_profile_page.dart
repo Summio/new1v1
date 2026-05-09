@@ -339,7 +339,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                     ),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
-                      value: _gender,
+                      initialValue: _gender,
                       decoration: const InputDecoration(
                         labelText: '性别',
                         prefixIcon: Icon(Icons.wc),
@@ -461,7 +461,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                                       ? Image.network(
                                           rawUrl,
                                           fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) =>
+                                           errorBuilder: (_, _, _) =>
                                               const Icon(
                                                 Icons.broken_image_outlined,
                                               ),
@@ -769,7 +769,7 @@ Future<String?> _showCityPicker(
                   const SizedBox(height: 16),
                   DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: selectedProvince,
+                    initialValue: selectedProvince,
                     decoration: const InputDecoration(labelText: '省/自治区/直辖市'),
                     items: provinces
                         .map(
@@ -794,7 +794,9 @@ Future<String?> _showCityPicker(
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: cities.contains(selectedCity) ? selectedCity : null,
+                    initialValue: cities.contains(selectedCity)
+                        ? selectedCity
+                        : null,
                     decoration: const InputDecoration(labelText: '市'),
                     items: cities
                         .map(

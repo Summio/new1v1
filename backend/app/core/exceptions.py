@@ -95,22 +95,14 @@ def _build_validation_msg(exc: RequestValidationError) -> str:
 
         match = re.search(r"at least\s+(\d+)", lower_msg)
         if match:
-            return (
-                f"{field_cn}长度不能少于{match.group(1)}位"
-                if field_cn
-                else f"参数长度不能少于{match.group(1)}位"
-            )
+            return f"{field_cn}长度不能少于{match.group(1)}位" if field_cn else f"参数长度不能少于{match.group(1)}位"
 
     if "string should have at most" in lower_msg:
         import re
 
         match = re.search(r"at most\s+(\d+)", lower_msg)
         if match:
-            return (
-                f"{field_cn}长度不能超过{match.group(1)}位"
-                if field_cn
-                else f"参数长度不能超过{match.group(1)}位"
-            )
+            return f"{field_cn}长度不能超过{match.group(1)}位" if field_cn else f"参数长度不能超过{match.group(1)}位"
 
     if "input should be" in lower_msg or "invalid" in lower_msg:
         return f"{field_cn}格式不正确" if field_cn else "参数格式不正确"

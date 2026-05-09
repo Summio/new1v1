@@ -1,8 +1,7 @@
-from datetime import datetime, timezone
 import importlib.util
-from pathlib import Path
 import unittest
-
+from datetime import datetime, timezone
+from pathlib import Path
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "app" / "core" / "time_utils.py"
 SPEC = importlib.util.spec_from_file_location("time_utils_under_test", MODULE_PATH)

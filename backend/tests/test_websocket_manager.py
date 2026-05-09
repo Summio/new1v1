@@ -8,6 +8,7 @@
 - 关键事件失败时记录 WARNING 日志
 - PubSub 消息路由到正确的 worker
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -33,6 +34,7 @@ class TestPushToUser:
     @pytest.fixture
     def manager(self):
         from app.websocket.manager import ConnectionManager
+
         return ConnectionManager()
 
     @pytest.mark.asyncio
@@ -135,9 +137,7 @@ class TestPubsubLoopRouting:
 
         await manager._send_ws(100, {"type": "event", "event": "call_ended", "data": {}})
 
-        mock_ws_100.send_json.assert_called_once_with(
-            {"type": "event", "event": "call_ended", "data": {}}
-        )
+        mock_ws_100.send_json.assert_called_once_with({"type": "event", "event": "call_ended", "data": {}})
 
     @pytest.mark.asyncio
     async def test_message_ignored_when_user_not_connected(self):
@@ -176,9 +176,7 @@ class TestPubsubLoopRouting:
             sent = await manager._send_ws(100, {"type": "event", "event": "call_incoming", "data": {}})
 
         assert sent is True
-        ws_new.send_json.assert_called_once_with(
-            {"type": "event", "event": "call_incoming", "data": {}}
-        )
+        ws_new.send_json.assert_called_once_with({"type": "event", "event": "call_incoming", "data": {}})
         ws_old.send_json.assert_not_called()
 
     @pytest.mark.asyncio
@@ -241,21 +239,25 @@ class TestCriticalEventMarkers:
 
     def test_call_ended_is_critical(self):
         from app.websocket.manager import ConnectionManager
+
         manager = ConnectionManager()
         assert "call_ended" in manager._CRITICAL_EVENTS
 
     def test_call_timeout_is_critical(self):
         from app.websocket.manager import ConnectionManager
+
         manager = ConnectionManager()
         assert "call_timeout" in manager._CRITICAL_EVENTS
 
     def test_call_balance_empty_is_critical(self):
         from app.websocket.manager import ConnectionManager
+
         manager = ConnectionManager()
         assert "call_balance_empty" in manager._CRITICAL_EVENTS
 
     def test_balance_updated_is_critical(self):
         from app.websocket.manager import ConnectionManager
+
         manager = ConnectionManager()
         assert "balance_updated" in manager._CRITICAL_EVENTS
 

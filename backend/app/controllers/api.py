@@ -35,7 +35,9 @@ class ApiController(CRUDBase[Api, ApiCreate, ApiUpdate]):
         for method, path, summary, tags in all_api_list:
             api_obj = await Api.filter(method=method, path=path).first()
             if api_obj:
-                await api_obj.update_from_dict(dict(method=method, path=path, summary=summary, tags=list(tags)[0] if tags else "")).save()
+                await api_obj.update_from_dict(
+                    dict(method=method, path=path, summary=summary, tags=list(tags)[0] if tags else "")
+                ).save()
             else:
                 logger.debug(f"API Created {method} {path}")
                 await Api.create(**dict(method=method, path=path, summary=summary, tags=list(tags)[0] if tags else ""))

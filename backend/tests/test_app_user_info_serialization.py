@@ -1,12 +1,18 @@
 import json
+import sys
 from datetime import datetime
 from decimal import Decimal
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
-from app.api.v1.app import user as user_api
-from app.core.ctx import CTX_APP_USER_OBJ
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from app.api.v1.app import user as user_api  # noqa: E402
+from app.core.ctx import CTX_APP_USER_OBJ  # noqa: E402
 
 
 @pytest.mark.asyncio

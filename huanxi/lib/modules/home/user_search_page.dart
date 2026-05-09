@@ -111,7 +111,7 @@ class _UserSearchPageState extends ConsumerState<UserSearchPage> {
       controller: _scrollController,
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
       itemCount: state.users.length + (state.isLoading ? 1 : 0),
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (_, _) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         if (index >= state.users.length) {
           return const Padding(

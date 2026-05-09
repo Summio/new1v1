@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 MIGRATION = Path("migrations/models/30_20260508100000_admin_moment_management_menu.py")
 
 

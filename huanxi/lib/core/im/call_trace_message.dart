@@ -23,8 +23,8 @@ class CallTraceMessage {
   final int ts;
   final int durationSeconds;
   final double totalFeeCoins;
-  final int incomeAnchorUserId;
-  final double anchorIncomeDiamonds;
+  final int incomeCertifiedUserId;
+  final double certifiedUserIncomeDiamonds;
   final String? reason;
 
   const CallTraceMessage({
@@ -36,8 +36,8 @@ class CallTraceMessage {
     required this.ts,
     required this.durationSeconds,
     required this.totalFeeCoins,
-    required this.incomeAnchorUserId,
-    required this.anchorIncomeDiamonds,
+    required this.incomeCertifiedUserId,
+    required this.certifiedUserIncomeDiamonds,
     this.reason,
   });
 
@@ -74,8 +74,8 @@ class CallTraceMessage {
     final ts = _asInt(json['ts']);
     final durationSeconds = _asInt(json['duration_seconds']);
     final totalFeeCoins = _asDouble(json['total_fee_coins']);
-    final incomeAnchorUserId = _asInt(json['income_anchor_user_id']);
-    final anchorIncomeDiamonds = _asDouble(json['anchor_income_diamonds']);
+    final incomeCertifiedUserId = _asInt(json['income_certified_user_id']);
+    final certifiedUserIncomeDiamonds = _asDouble(json['certified_user_income_diamonds']);
     final reason = (json['reason'] as String?)?.trim();
 
     if (callId <= 0 || actorUserId <= 0 || peerUserId <= 0) {
@@ -91,8 +91,8 @@ class CallTraceMessage {
       ts: ts,
       durationSeconds: durationSeconds,
       totalFeeCoins: totalFeeCoins,
-      incomeAnchorUserId: incomeAnchorUserId,
-      anchorIncomeDiamonds: anchorIncomeDiamonds,
+      incomeCertifiedUserId: incomeCertifiedUserId,
+      certifiedUserIncomeDiamonds: certifiedUserIncomeDiamonds,
       reason: reason?.isEmpty == true ? null : reason,
     );
   }
@@ -132,11 +132,11 @@ class CallTraceMessage {
       parts.add('时长 ${_formatDuration(durationSeconds)}');
     }
     final shouldShowIncome = isCurrentUserCertified &&
-        incomeAnchorUserId == currentUserId &&
-        anchorIncomeDiamonds > 0;
+        incomeCertifiedUserId == currentUserId &&
+        certifiedUserIncomeDiamonds > 0;
     final shouldShowExpense = totalFeeCoins > 0 && !isCurrentUserCertified;
     if (shouldShowIncome) {
-      parts.add('收入 ${anchorIncomeDiamonds.toStringAsFixed(2)} $diamondName');
+      parts.add('收入 ${certifiedUserIncomeDiamonds.toStringAsFixed(2)} $diamondName');
     } else if (shouldShowExpense) {
       parts.add('消费 ${totalFeeCoins.toStringAsFixed(2)} $coinName');
     }
@@ -165,3 +165,4 @@ class CallTraceMessage {
     return '${m.toString().padLeft(2, '0')}:${r.toString().padLeft(2, '0')}';
   }
 }
+
