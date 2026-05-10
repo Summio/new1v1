@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../app/providers/auth_provider.dart';
 import '../../app/providers/moment_provider.dart';
 import '../../app/theme/app_theme.dart';
+import '../../core/utils/capability_limit_guard.dart';
 import '../../core/utils/app_toast.dart';
 import '../../services/moment_service.dart';
 import '../../services/review_entry_guard_service.dart';
@@ -82,6 +84,20 @@ class _MyMomentsPageState extends ConsumerState<MyMomentsPage> {
       _isCheckingPublishEntry = true;
     });
     try {
+      await ref.read(appInitProvider.notifier).init();
+      if (!mounted) return;
+
+      final authState = ref.read(authProvider);
+      final initState = ref.read(appInitProvider);
+      final capabilityMessage = momentPublishRestrictionMessage(
+        authState,
+        initState,
+      );
+      if (capabilityMessage != null) {
+        AppToast.show(context, capabilityMessage);
+        return;
+      }
+
       final entryStatus = await ReviewEntryGuardService.instance
           .fetchEntryStatus();
       if (!mounted) return;

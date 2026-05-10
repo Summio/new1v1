@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../app/theme/app_theme.dart';
+import '../../core/utils/capability_limit_guard.dart';
 import '../../core/utils/app_toast.dart';
 import '../../services/review_entry_guard_service.dart';
 
@@ -58,38 +59,76 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     const SizedBox(height: 40),
-                    GestureDetector(
-                      onTap: _openEditProfile,
-                      child: Hero(
-                        tag: 'user_avatar',
-                        child: Container(
-                          width: 80,
-                          height: 80,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 3),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.1),
-                                blurRadius: 10,
+                    Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        GestureDetector(
+                          onTap: _openEditProfile,
+                          child: Hero(
+                            tag: 'user_avatar',
+                            child: Container(
+                              width: 80,
+                              height: 80,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 3),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.1),
+                                    blurRadius: 10,
+                                  ),
+                                ],
+                                image: authState.avatar != null
+                                    ? DecorationImage(
+                                        image: NetworkImage(authState.avatar!),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : null,
                               ),
-                            ],
-                            image: authState.avatar != null
-                                ? DecorationImage(
-                                    image: NetworkImage(authState.avatar!),
-                                    fit: BoxFit.cover,
-                                  )
-                                : null,
+                              child: authState.avatar == null
+                                  ? const Icon(
+                                      Icons.person,
+                                      size: 40,
+                                      color: AppTheme.primaryColor,
+                                    )
+                                  : null,
+                            ),
                           ),
-                          child: authState.avatar == null
-                              ? const Icon(
-                                  Icons.person,
-                                  size: 40,
-                                  color: AppTheme.primaryColor,
-                                )
-                              : null,
                         ),
-                      ),
+                        Positioned(
+                          right: -2,
+                          bottom: -2,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: _openEditProfile,
+                            child: Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: AppTheme.primaryColor,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 2,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.12),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              alignment: Alignment.center,
+                              child: const Icon(
+                                Icons.edit,
+                                size: 14,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 12),
                     Text(
@@ -173,7 +212,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     icon: Icons.verified_user_rounded,
                     title: '认证中心',
                     iconColor: AppTheme.secondaryColor,
-                    onTap: () => context.push(AppRoutes.certificationCenter),
+                    onTap: () => _openCertificationCenter(context, ref),
                   ),
                   _buildMenuTile(
                     icon: Icons.dynamic_feed_rounded,
@@ -277,6 +316,20 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
       _isCheckingProfileEdit = true;
     });
     try {
+      await ref.read(appInitProvider.notifier).init();
+      if (!mounted) return;
+
+      final authState = ref.read(authProvider);
+      final initState = ref.read(appInitProvider);
+      final capabilityMessage = profileEditRestrictionMessage(
+        authState,
+        initState,
+      );
+      if (capabilityMessage != null) {
+        AppToast.show(context, capabilityMessage);
+        return;
+      }
+
       final entryStatus = await ReviewEntryGuardService.instance
           .fetchEntryStatus();
       if (!mounted) return;
@@ -297,6 +350,24 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         });
       }
     }
+  }
+
+  Future<void> _openCertificationCenter(
+    BuildContext context,
+    WidgetRef ref,
+  ) async {
+    await ref.read(appInitProvider.notifier).init();
+    if (!context.mounted) return;
+
+    final authState = ref.read(authProvider);
+    final initState = ref.read(appInitProvider);
+    final message = certificationEntryRestrictionMessage(authState, initState);
+    if (message != null) {
+      AppToast.show(context, message);
+      return;
+    }
+
+    await context.push(AppRoutes.certificationCenter);
   }
 
   Future<void> _openCustomerService(BuildContext context, WidgetRef ref) async {

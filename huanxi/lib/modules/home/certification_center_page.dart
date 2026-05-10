@@ -10,6 +10,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../core/constants/api_endpoints.dart';
+import '../../core/utils/capability_limit_guard.dart';
 import '../../core/media/image_upload_preprocessor.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/network/dio_client.dart';
@@ -103,6 +104,10 @@ class CertificationApplyNotifier
       if ((body['code'] as int?) != 200) return null;
       final url = (body['data'] as Map<String, dynamic>?)?['url'] as String?;
       return (url == null || url.trim().isEmpty) ? null : url.trim();
+    } on ApiException {
+      rethrow;
+    } on NetworkException {
+      rethrow;
     } catch (_) {
       return null;
     }
@@ -128,6 +133,12 @@ class CertificationApplyNotifier
       }
       state = state.copyWith(isLoading: false);
       return false;
+    } on ApiException {
+      state = state.copyWith(isLoading: false);
+      rethrow;
+    } on NetworkException {
+      state = state.copyWith(isLoading: false);
+      rethrow;
     } catch (_) {
       state = state.copyWith(isLoading: false);
       return false;
@@ -183,9 +194,21 @@ class _CertificationCenterPageState
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-      () => ref.read(certificationApplyProvider.notifier).fetchStatus(),
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await ref.read(appInitProvider.notifier).init();
+      await ref.read(certificationApplyProvider.notifier).fetchStatus();
+      if (!mounted) return;
+      final authState = ref.read(authProvider);
+      final initState = ref.read(appInitProvider);
+      final message = certificationEntryRestrictionMessage(
+        authState,
+        initState,
+      );
+      if (message != null) {
+        AppToast.show(context, message);
+        context.pop();
+      }
+    });
   }
 
   @override
@@ -747,7 +770,11 @@ class _CertificationCenterPageState
 
     final success = await ref
         .read(certificationApplyProvider.notifier)
-        .apply(facePhotoUrl: facePhotoUrl);
+        .apply(facePhotoUrl: facePhotoUrl)
+        .catchError((Object error) {
+          if (mounted) AppToast.error(context, error);
+          return false;
+        });
 
     if (success && mounted) {
       AppToast.showSnackBar(

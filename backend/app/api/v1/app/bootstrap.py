@@ -3,6 +3,7 @@ import json
 from fastapi import APIRouter
 
 from app.schemas.base import Success
+from app.services.capability_limit_service import parse_capability_limit_config
 from app.services.im_text_billing_service import (
     dump_im_text_billing_config,
     parse_im_text_billing_config,
@@ -73,6 +74,7 @@ async def get_app_bootstrap():
     )
     certified_call_price_tiers = parse_certified_call_price_tiers(certified_call_price_tiers_raw)
     customer_service = await load_customer_service_config(config_map)
+    capability_limits = parse_capability_limit_config(config_map).dump()
 
     return Success(
         data={
@@ -94,6 +96,7 @@ async def get_app_bootstrap():
             "recharge_packages": recharge_packages,
             "withdraw_packages": withdraw_packages,
             "certified_call_price_tiers": certified_call_price_tiers,
+            "capability_limits": capability_limits,
             "customer_service": {
                 "enabled": customer_service.enabled,
                 "user_id": customer_service.user_id,

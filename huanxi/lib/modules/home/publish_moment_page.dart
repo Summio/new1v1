@@ -7,10 +7,12 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
+import '../../app/providers/auth_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/providers/moment_provider.dart';
 import '../../core/media/video_upload_preprocessor.dart';
+import '../../core/utils/capability_limit_guard.dart';
 import '../../core/utils/app_toast.dart';
 import 'moment_video_preview_page.dart';
 import '../../services/moment_service.dart';
@@ -35,6 +37,14 @@ class _PublishMomentPageState extends ConsumerState<PublishMomentPage> {
   bool _isPreparingVideo = false;
   bool _isEntryChecking = true;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkEntryAccess();
+    });
+  }
+
   void _showToast(String message) {
     if (!mounted) return;
     AppToast.show(context, message);
@@ -43,14 +53,6 @@ class _PublishMomentPageState extends ConsumerState<PublishMomentPage> {
   void _showErrorToast(Object error) {
     if (!mounted) return;
     AppToast.error(context, error);
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkEntryAccess();
-    });
   }
 
   @override
@@ -182,6 +184,16 @@ class _PublishMomentPageState extends ConsumerState<PublishMomentPage> {
 
   Future<void> _checkEntryAccess() async {
     try {
+      await ref.read(appInitProvider.notifier).init();
+      if (!mounted) return;
+
+      final capabilityMessage = _publishRestrictionMessage();
+      if (capabilityMessage != null) {
+        AppToast.show(context, capabilityMessage);
+        _leavePage();
+        return;
+      }
+
       final entryStatus = await ReviewEntryGuardService.instance
           .fetchEntryStatus();
       if (!mounted) return;
@@ -460,6 +472,11 @@ class _PublishMomentPageState extends ConsumerState<PublishMomentPage> {
 
   Future<void> _publish() async {
     if (!_canPublish) return;
+    final restrictionMessage = _publishRestrictionMessage();
+    if (restrictionMessage != null) {
+      _showToast(restrictionMessage);
+      return;
+    }
 
     setState(() {
       _isPublishing = true;
@@ -513,6 +530,12 @@ class _PublishMomentPageState extends ConsumerState<PublishMomentPage> {
         _isPublishing = false;
       });
     }
+  }
+
+  String? _publishRestrictionMessage() {
+    final authState = ref.read(authProvider);
+    final initState = ref.read(appInitProvider);
+    return momentPublishRestrictionMessage(authState, initState);
   }
 
   void _confirmExit() {

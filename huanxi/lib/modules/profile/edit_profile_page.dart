@@ -8,6 +8,7 @@ import '../../app/routes/app_router.dart';
 import '../../core/data/china_location_data.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/utils/capability_limit_guard.dart';
 import 'package:huanxi/core/utils/app_toast.dart';
 import '../../services/review_entry_guard_service.dart';
 
@@ -246,6 +247,19 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
 
   Future<void> _checkEntryAccess() async {
     try {
+      await ref.read(appInitProvider.notifier).init();
+      if (!mounted) return;
+
+      final capabilityMessage = profileEditRestrictionMessage(
+        ref.read(authProvider),
+        ref.read(appInitProvider),
+      );
+      if (capabilityMessage != null) {
+        AppToast.show(context, capabilityMessage);
+        _leavePage();
+        return;
+      }
+
       final entryStatus = await ReviewEntryGuardService.instance
           .fetchEntryStatus();
       if (!mounted) return;

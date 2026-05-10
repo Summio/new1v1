@@ -16,6 +16,10 @@ from app.schemas.app_user import (
 )
 from app.schemas.base import Fail, Success, SuccessExtra
 from app.services.gift_income_service import decimal_to_float_2
+from app.services.capability_limit_service import (
+    load_capability_limit_config,
+    profile_edit_denial_message,
+)
 from app.services.interaction_relation_service import InteractionRelationError, ensure_interaction_allowed
 from app.services.profile_review_service import build_profile_review_payload
 from app.services.review_entry_guard_service import (
@@ -168,6 +172,11 @@ async def update_user_profile(req_in: AppUserProfileUpdateIn):
 
     if app_user.status == "banned":
         return Fail(code=403, msg=f"账号已被封禁，原因：{app_user.ban_reason or '未知'}")
+
+    capability_limits = await load_capability_limit_config()
+    denial_message = profile_edit_denial_message(app_user, capability_limits)
+    if denial_message:
+        return Fail(code=403, msg=denial_message)
 
     if req_in.gender is not None:
         current_gender = app_user.gender or "male"
@@ -332,6 +341,11 @@ async def upload_user_image(file: UploadFile = File(...)):
     app_user = CTX_APP_USER_OBJ.get()
     if not app_user:
         return Fail(code=401, msg="用户不存在")
+
+    capability_limits = await load_capability_limit_config()
+    denial_message = profile_edit_denial_message(app_user, capability_limits)
+    if denial_message:
+        return Fail(code=403, msg=denial_message)
 
     try:
         suffix, content = await read_validated_image_upload(

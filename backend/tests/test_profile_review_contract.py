@@ -47,6 +47,14 @@ def test_app_profile_update_creates_review_apply_for_guarded_fields() -> None:
     assert "upload_user_image" in text
 
 
+def test_app_profile_update_is_guarded_by_capability_limit() -> None:
+    text = APP_USER_API.read_text(encoding="utf-8")
+
+    assert "load_capability_limit_config" in text
+    assert "profile_edit_denial_message" in text
+    assert "通过真人认证后才可以编辑资料" not in text
+
+
 def test_admin_profile_review_endpoints_exist() -> None:
     text = ADMIN_APP_USER_API.read_text(encoding="utf-8")
 
@@ -102,6 +110,7 @@ def test_flutter_profile_update_uses_review_submit_success_message() -> None:
     assert "lastProfileUpdateData" in auth_text
     assert "profile_review_status" in page_text
     assert "资料修改申请已提交，请等待审核" in page_text
+    assert "profileEditRestrictionMessage" in page_text
 
 
 def test_album_cover_and_order_changes_skip_profile_review() -> None:

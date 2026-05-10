@@ -8,7 +8,14 @@ from app.core.ctx import CTX_APP_USER_OBJ
 from app.models import AppUser, Moment, MomentMedia, UserFollow
 from app.schemas.base import Fail, Success, SuccessExtra
 from app.schemas.moments import MomentCreateIn
-from app.services.review_entry_guard_service import MOMENT_REVIEW_PENDING_MESSAGE, has_pending_moment_review
+from app.services.capability_limit_service import (
+    load_capability_limit_config,
+    moment_publish_denial_message,
+)
+from app.services.review_entry_guard_service import (
+    MOMENT_REVIEW_PENDING_MESSAGE,
+    has_pending_moment_review,
+)
 from app.settings.config import settings
 from app.utils.media_url import to_relative_media_url
 from app.utils.upload_files import (
@@ -105,6 +112,11 @@ async def upload_moment_media(
     if not app_user:
         return Fail(code=401, msg="用户不存在")
 
+    capability_limits = await load_capability_limit_config()
+    denial_message = moment_publish_denial_message(app_user, capability_limits)
+    if denial_message:
+        return Fail(code=403, msg=denial_message)
+
     if not file.filename:
         return Fail(code=400, msg="文件名无效")
 
@@ -190,6 +202,11 @@ async def create_moment(req_in: MomentCreateIn):
     app_user = CTX_APP_USER_OBJ.get()
     if not app_user:
         return Fail(code=401, msg="用户不存在")
+
+    capability_limits = await load_capability_limit_config()
+    denial_message = moment_publish_denial_message(app_user, capability_limits)
+    if denial_message:
+        return Fail(code=403, msg=denial_message)
 
     content = (req_in.content or "").strip()
     if not content and not req_in.media_ids:

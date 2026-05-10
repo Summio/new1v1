@@ -49,6 +49,48 @@ void main() {
     },
   );
 
+  test('profile page exposes a dedicated edit avatar entry', () {
+    final profilePage = File(
+      'lib/modules/home/profile_page.dart',
+    ).readAsStringSync();
+    final editProfilePage = File(
+      'lib/modules/profile/edit_profile_page.dart',
+    ).readAsStringSync();
+
+    expect(profilePage, contains('Stack('));
+    expect(profilePage, contains('Icons.edit'));
+    expect(profilePage, contains('AppRoutes.editProfile'));
+    expect(profilePage, contains('_openEditProfile'));
+    expect(profilePage, contains('profileEditRestrictionMessage'));
+    expect(editProfilePage, contains('profileEditRestrictionMessage'));
+  });
+
+  test(
+    'profile page guards certification center entry with capability limits',
+    () {
+      final profilePage = File(
+        'lib/modules/home/profile_page.dart',
+      ).readAsStringSync();
+
+      expect(profilePage, contains('_openCertificationCenter'));
+      expect(profilePage, contains('certificationEntryRestrictionMessage'));
+    },
+  );
+
+  test('my moments page guards publish entry with capability limits', () {
+    final myMomentsPage = File(
+      'lib/modules/home/my_moments_page.dart',
+    ).readAsStringSync();
+    final publishMomentPage = File(
+      'lib/modules/home/publish_moment_page.dart',
+    ).readAsStringSync();
+
+    expect(myMomentsPage, contains('_openPublishMoment'));
+    expect(myMomentsPage, contains('momentPublishRestrictionMessage'));
+    expect(publishMomentPage, contains('_publishRestrictionMessage'));
+    expect(publishMomentPage, contains('momentPublishRestrictionMessage'));
+  });
+
   test('settings does not expose blacklist entry', () {
     final settingsPage = File(
       'lib/modules/settings/settings_page.dart',
