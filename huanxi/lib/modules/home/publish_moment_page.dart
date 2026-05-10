@@ -456,7 +456,7 @@ class _PublishMomentPageState extends ConsumerState<PublishMomentPage> {
         ref.read(myMomentsProvider.notifier).addMoment(moment);
         if (mounted) {
           Navigator.pop(context, moment);
-          _showToast('发布成功');
+          _showToast('已提交审核');
         }
       } else {
         _showToast('发布失败');

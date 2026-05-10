@@ -472,6 +472,7 @@ async def init_roles():
     moment_apis = await Api.filter(
         path__in=[
             "/api/v1/moment/list",
+            "/api/v1/moment/review",
             "/api/v1/moment/delete",
             "/api/v1/moment/pin",
             "/api/v1/moment/unpin",

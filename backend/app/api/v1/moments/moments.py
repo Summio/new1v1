@@ -3,7 +3,9 @@ from datetime import datetime
 from fastapi import APIRouter, Query
 from tortoise.expressions import Q
 
+from app.core.ctx import CTX_USER_ID
 from app.models import AppUser, Moment, MomentMedia
+from app.schemas.moments import MomentReviewIn
 from app.schemas.base import Fail, Success, SuccessExtra
 from app.utils.media_url import to_relative_media_url
 
@@ -28,6 +30,17 @@ def _recommend_status_label(moment: Moment, user: AppUser | None) -> str:
     if user and user.is_recommended:
         return "推荐认证用户默认推荐"
     return "未推荐"
+
+
+def _review_status_label(status: str | None) -> str:
+    value = (status or "").strip().lower()
+    if value == "pending":
+        return "待审核"
+    if value == "approved":
+        return "已通过"
+    if value == "rejected":
+        return "已驳回"
+    return value or "-"
 
 
 def _apply_recommend_status_filter(q: Q, recommend_status: str, recommended_user_ids: list[int]) -> Q:
@@ -64,6 +77,11 @@ async def _serialize_moment(
         "is_pinned": bool(moment.is_pinned),
         "pinned_at": moment.pinned_at.isoformat() if moment.pinned_at else None,
         "recommend_override": moment.recommend_override,
+        "review_status": moment.review_status or "approved",
+        "review_status_label": _review_status_label(moment.review_status),
+        "reviewed_at": moment.reviewed_at.isoformat() if moment.reviewed_at else None,
+        "reviewed_by": int(moment.reviewed_by or 0) or None,
+        "review_remark": moment.review_remark or "",
         "is_recommended": _effective_recommended(moment, user),
         "recommend_status_label": _recommend_status_label(moment, user),
         "media_count": len(media_list),
@@ -91,6 +109,7 @@ async def list_moment(
     keyword: str = Query("", description="关键词：昵称/手机号/动态内容"),
     recommend_status: str = Query("all", description="推荐状态"),
     pin_status: str = Query("all", description="置顶状态"),
+    review_status: str = Query("all", description="审核状态 all/pending/approved/rejected"),
 ):
     q = Q()
     target_user_id = (user_id or "").strip()
@@ -126,6 +145,10 @@ async def list_moment(
         recommended_user_ids = await AppUser.filter(is_recommended=True).values_list("id", flat=True)
         q = _apply_recommend_status_filter(q, recommend_status_value, list(recommended_user_ids))
 
+    review_status_value = (review_status or "all").strip().lower()
+    if review_status_value in {"pending", "approved", "rejected"}:
+        q &= Q(review_status=review_status_value)
+
     total = await Moment.filter(q).count()
     moments = (
         await Moment.filter(q)
@@ -147,6 +170,33 @@ async def list_moment(
             media_by_moment.setdefault(int(item.moment_id), []).append(item)
     data = [await _serialize_moment(moment, users, media_by_moment) for moment in moments]
     return SuccessExtra(data=data, total=total, page=page, page_size=page_size)
+
+
+@router.post("/review", summary="审核用户动态")
+async def review_moment(req_in: MomentReviewIn):
+    moment = await Moment.filter(id=req_in.id).first()
+    if not moment:
+        return _moment_missing()
+
+    normalized_status = (req_in.status or "").strip().lower()
+    if normalized_status not in {"approved", "rejected"}:
+        return Fail(code=400, msg="审核结果必须为 approved 或 rejected")
+
+    current_status = (moment.review_status or "approved").strip().lower()
+    if current_status != "pending":
+        return Fail(code=400, msg="动态已完成审核")
+
+    review_remark = (req_in.review_remark or "").strip()
+    if normalized_status == "rejected" and not review_remark:
+        return Fail(code=400, msg="驳回时必须填写审核备注")
+
+    await Moment.filter(id=req_in.id).update(
+        review_status=normalized_status,
+        reviewed_at=datetime.now(),
+        reviewed_by=int(CTX_USER_ID.get() or 0) or None,
+        review_remark=review_remark or None,
+    )
+    return Success(msg="审核成功")
 
 
 @router.delete("/delete", summary="删除用户动态")

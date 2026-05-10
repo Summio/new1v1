@@ -13,12 +13,14 @@ class MomentCard extends StatelessWidget {
   final Moment moment;
   final VoidCallback? onTap;
   final VoidCallback? onDelete; // 仅自己的动态可删除
+  final bool showReviewStatus;
 
   const MomentCard({
     super.key,
     required this.moment,
     this.onTap,
     this.onDelete,
+    this.showReviewStatus = false,
   });
 
   @override
@@ -77,6 +79,10 @@ class MomentCard extends StatelessWidget {
                           color: AppTheme.textSecondary,
                         ),
                       ),
+                      if (showReviewStatus) ...[
+                        const SizedBox(height: 6),
+                        _ReviewStatusChip(status: moment.reviewStatus),
+                      ],
                     ],
                   ),
                 ),
@@ -104,6 +110,18 @@ class MomentCard extends StatelessWidget {
                 ),
                 maxLines: 10,
                 overflow: TextOverflow.ellipsis,
+              ),
+            ],
+
+            if (showReviewStatus && moment.reviewStatus == 'rejected' && (moment.reviewRemark?.trim().isNotEmpty ?? false)) ...[
+              const SizedBox(height: 10),
+              Text(
+                '驳回原因：${moment.reviewRemark!.trim()}',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: AppTheme.errorColor,
+                  height: 1.4,
+                ),
               ),
             ],
 
@@ -153,6 +171,58 @@ class MomentCard extends StatelessWidget {
     } catch (_) {
       return '';
     }
+  }
+}
+
+class _ReviewStatusChip extends StatelessWidget {
+  final String status;
+
+  const _ReviewStatusChip({required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final normalized = status.trim().toLowerCase();
+    late final String label;
+    late final Color color;
+    late final Color background;
+    switch (normalized) {
+      case 'pending':
+        label = '待审核';
+        color = const Color(0xFFE6A23C);
+        background = const Color(0xFFFFF7E6);
+        break;
+      case 'rejected':
+        label = '已驳回';
+        color = AppTheme.errorColor;
+        background = const Color(0xFFFFEEF0);
+        break;
+      case 'approved':
+        label = '已通过';
+        color = const Color(0xFF17A34A);
+        background = const Color(0xFFEAF8EE);
+        break;
+      default:
+        label = '未审核';
+        color = AppTheme.textSecondary;
+        background = const Color(0xFFF2F4F7);
+        break;
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      ),
+    );
   }
 }
 

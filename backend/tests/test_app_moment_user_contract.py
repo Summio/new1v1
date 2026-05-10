@@ -19,7 +19,7 @@ def test_user_moments_filters_by_target_user() -> None:
     source = inspect.getsource(get_user_moments)
     serializer_source = inspect.getsource(_serialize_moment)
 
-    assert "Moment.filter(user_id=user_id)" in source
+    assert 'Moment.filter(user_id=user_id, review_status="approved")' in source
     assert "_serialize_moment" in source
     assert '"media_list"' in serializer_source
     assert '"user"' in serializer_source

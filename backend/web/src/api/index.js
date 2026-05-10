@@ -50,6 +50,7 @@ export default {
   unrecommendMoment: (params = {}) => request.post('/moment/unrecommend', null, { params }),
   clearMomentRecommendOverride: (params = {}) =>
     request.post('/moment/clear-recommend-override', null, { params }),
+  reviewMoment: (data = {}) => request.post('/moment/review', data),
   // gift manage
   getGiftList: (params = {}) => request.get('/gift/list', { params }),
   getGiftById: (params = {}) => request.get('/gift/get', { params }),

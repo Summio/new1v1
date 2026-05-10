@@ -14,6 +14,7 @@ class MomentListView extends ConsumerStatefulWidget {
   final VoidCallback onRefresh;
   final VoidCallback onLoadMore;
   final void Function(Moment moment)? onDelete; // 可选删除回调
+  final bool showReviewStatus;
   final String emptyTitle;
   final String emptySubtitle;
 
@@ -27,6 +28,7 @@ class MomentListView extends ConsumerStatefulWidget {
     required this.onRefresh,
     required this.onLoadMore,
     this.onDelete,
+    this.showReviewStatus = false,
     this.emptyTitle = '暂无动态',
     this.emptySubtitle = '快去发布第一条动态吧',
   });
@@ -79,6 +81,7 @@ class _MomentListViewState extends ConsumerState<MomentListView> {
             final moment = widget.moments[index];
             return MomentCard(
               moment: moment,
+              showReviewStatus: widget.showReviewStatus,
               onDelete: widget.onDelete != null
                   ? () => _confirmDelete(moment)
                   : null,

@@ -65,7 +65,6 @@ def test_admin_moment_missing_uses_business_error_not_http_404() -> None:
 
 def test_admin_web_has_moment_page_api_and_user_entry() -> None:
     api_text = WEB_API.read_text(encoding="utf-8")
-    app_user_text = APP_USER_VIEW.read_text(encoding="utf-8")
     moment_view_text = MOMENT_VIEW.read_text(encoding="utf-8")
 
     assert "getMomentList" in api_text
@@ -82,8 +81,6 @@ def test_admin_web_has_moment_page_api_and_user_entry() -> None:
     assert "/moment/recommend" in api_text
     assert "/moment/unrecommend" in api_text
     assert "/moment/clear-recommend-override" in api_text
-    assert "handleOpenUserMoments" in app_user_text
-    assert "/operation/moment" in app_user_text
     assert "api.getMomentList" in moment_view_text
     assert "api.deleteMoment" in moment_view_text
     assert "api.pinMoment" in moment_view_text

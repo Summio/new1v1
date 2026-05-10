@@ -62,6 +62,10 @@ class Moment {
   final String? pinnedAt;
   final bool isRecommended;
   final bool? recommendOverride;
+  final String reviewStatus;
+  final String? reviewedAt;
+  final int? reviewedBy;
+  final String? reviewRemark;
   final bool authorIsCertifiedUser;
   final bool authorIsRecommended;
   final List<MomentMedia> mediaList;
@@ -76,6 +80,10 @@ class Moment {
     this.pinnedAt,
     this.isRecommended = false,
     this.recommendOverride,
+    this.reviewStatus = 'approved',
+    this.reviewedAt,
+    this.reviewedBy,
+    this.reviewRemark,
     this.authorIsCertifiedUser = false,
     this.authorIsRecommended = false,
     this.mediaList = const [],
@@ -92,6 +100,10 @@ class Moment {
       pinnedAt: json['pinned_at'] as String?,
       isRecommended: json['is_recommended'] as bool? ?? false,
       recommendOverride: json['recommend_override'] as bool?,
+      reviewStatus: json['review_status'] as String? ?? 'approved',
+      reviewedAt: json['reviewed_at'] as String?,
+      reviewedBy: json['reviewed_by'] as int?,
+      reviewRemark: json['review_remark'] as String?,
       authorIsCertifiedUser: json['author_is_certified_user'] as bool? ?? false,
       authorIsRecommended: json['author_is_recommended'] as bool? ?? false,
       mediaList:

@@ -15,12 +15,16 @@ const route = useRoute()
 const $table = ref(null)
 const queryItems = ref({
   user_id: route.query.user_id ? String(route.query.user_id) : '',
+  review_status: 'all',
 })
 const videoModalVisible = ref(false)
 const currentVideo = ref({
   url: '',
   cover_url: '',
 })
+const detailVisible = ref(false)
+const currentMoment = ref(null)
+const reviewRemark = ref('')
 const pinStatusOptions = [
   { label: '全部', value: 'all' },
   { label: '已置顶', value: 'pinned' },
@@ -34,6 +38,18 @@ const recommendStatusOptions = [
   { label: '单条取消推荐', value: 'override_cancelled' },
   { label: '跟随认证用户默认', value: 'default' },
 ]
+const reviewStatusOptions = [
+  { label: '全部', value: 'all' },
+  { label: '待审核', value: 'pending' },
+  { label: '已通过', value: 'approved' },
+  { label: '已驳回', value: 'rejected' },
+]
+
+const reviewStatusMap = {
+  pending: { type: 'warning', text: '待审核' },
+  approved: { type: 'success', text: '已通过' },
+  rejected: { type: 'error', text: '已驳回' },
+}
 
 onMounted(() => {
   $table.value?.handleSearch()
@@ -45,6 +61,12 @@ function openVideo(item) {
     cover_url: item?.cover_url || '',
   }
   videoModalVisible.value = true
+}
+
+function openDetail(row) {
+  currentMoment.value = row
+  reviewRemark.value = row.review_remark || ''
+  detailVisible.value = true
 }
 
 async function handleDelete(row) {
@@ -105,6 +127,39 @@ function recommendStatusLabel(row) {
   return row.recommend_status_label || '未推荐'
 }
 
+function reviewTagType(row) {
+  const target = reviewStatusMap[row.review_status] || { type: 'default' }
+  return target.type
+}
+
+function reviewStatusLabel(row) {
+  const target = reviewStatusMap[row.review_status]
+  return target?.text || row.review_status_label || row.review_status || '-'
+}
+
+async function reviewCurrentMoment(status) {
+  if (!currentMoment.value) return
+  const remark = reviewRemark.value.trim()
+  if (status === 'rejected' && !remark) {
+    window.$message?.error('请填写驳回原因')
+    return
+  }
+  try {
+    await api.reviewMoment({
+      id: currentMoment.value.id,
+      status,
+      review_remark: remark,
+    })
+    window.$message?.success(status === 'approved' ? '审核通过' : '审核驳回')
+    detailVisible.value = false
+    currentMoment.value = null
+    reviewRemark.value = ''
+    $table.value?.handleSearch()
+  } catch (error) {
+    window.$message?.error(error?.message || '审核失败')
+  }
+}
+
 const columns = [
   { title: '动态ID', key: 'id', width: 90, align: 'center' },
   {
@@ -136,6 +191,19 @@ const columns = [
     minWidth: 280,
     render(row) {
       return row.content || '-'
+    },
+  },
+  {
+    title: '审核状态',
+    key: 'review_status',
+    width: 110,
+    align: 'center',
+    render(row) {
+      return h(
+        NTag,
+        { type: reviewTagType(row), size: 'small' },
+        { default: () => reviewStatusLabel(row) }
+      )
     },
   },
   {
@@ -259,11 +327,16 @@ const columns = [
   {
     title: '操作',
     key: 'actions',
-    width: 280,
+    width: 340,
     align: 'center',
     fixed: 'right',
     render(row) {
       return h(NSpace, { size: 6, justify: 'center' }, () => [
+        h(
+          NButton,
+          { size: 'small', secondary: true, onClick: () => openDetail(row) },
+          { default: () => '查看' }
+        ),
         row.is_pinned
           ? h(
               NButton,
@@ -331,7 +404,7 @@ const columns = [
       v-model:query-items="queryItems"
       :columns="columns"
       :get-data="api.getMomentList"
-      :scroll-x="1150"
+      :scroll-x="1320"
     >
       <template #queryBar>
         <QueryBarItem label="用户ID" :label-width="55">
@@ -348,6 +421,15 @@ const columns = [
             clearable
             placeholder="昵称/手机号/内容"
             @keypress.enter="$table?.handleSearch()"
+          />
+        </QueryBarItem>
+        <QueryBarItem label="审核状态" :label-width="70">
+          <NSelect
+            v-model:value="queryItems.review_status"
+            clearable
+            :options="reviewStatusOptions"
+            placeholder="全部"
+            style="width: 120px"
           />
         </QueryBarItem>
         <QueryBarItem label="置顶状态" :label-width="70">
@@ -381,6 +463,92 @@ const columns = [
         autoplay
         playsinline
       />
+    </NModal>
+
+    <NModal v-model:show="detailVisible" preset="card" title="动态详情" style="width: 860px">
+      <div v-if="currentMoment" class="detail">
+        <div class="detail-header">
+          <div>
+            <div class="detail-title">动态 {{ currentMoment.id }}</div>
+            <div class="sub">用户ID：{{ currentMoment.user_id }}</div>
+          </div>
+          <NTag :type="reviewTagType(currentMoment)">
+            {{ reviewStatusLabel(currentMoment) }}
+          </NTag>
+        </div>
+
+        <div class="detail-meta">
+          <div class="detail-meta-item">昵称：{{ currentMoment.nickname || '-' }}</div>
+          <div class="detail-meta-item">手机号：{{ currentMoment.phone || '-' }}</div>
+          <div class="detail-meta-item">
+            发布时间：{{
+              currentMoment.created_at
+                ? formatDate(currentMoment.created_at, 'YYYY-MM-DD HH:mm:ss')
+                : '-'
+            }}
+          </div>
+        </div>
+
+        <div class="detail-block">
+          <div class="detail-label">内容</div>
+          <div class="detail-content">{{ currentMoment.content || '-' }}</div>
+        </div>
+
+        <div class="detail-block">
+          <div class="detail-label">媒体</div>
+          <div v-if="currentMoment.media_list?.length" class="media-inline-list">
+            <template v-for="item in currentMoment.media_list" :key="item.id">
+              <NImage
+                v-if="Number(item.media_type) === 1"
+                :src="item.url"
+                width="72"
+                height="72"
+                object-fit="cover"
+                :preview-disabled="false"
+                class="detail-media-img"
+              />
+              <div
+                v-else
+                class="detail-media-thumb media-inline-thumb"
+                role="button"
+                tabindex="0"
+                @click="openVideo(item)"
+              >
+                <img v-if="item.cover_url" :src="item.cover_url" alt="video-cover" />
+                <span v-else class="video-empty">视频</span>
+                <span class="play-mark">▶</span>
+              </div>
+            </template>
+          </div>
+          <div v-else class="detail-empty">暂无媒体</div>
+        </div>
+
+        <div v-if="currentMoment.review_status === 'pending'" class="detail-block">
+          <div class="detail-label">驳回原因</div>
+          <NInput
+            v-model:value="reviewRemark"
+            type="textarea"
+            placeholder="请输入驳回原因，审核通过时可留空"
+            :autosize="{ minRows: 3, maxRows: 5 }"
+          />
+        </div>
+
+        <div v-if="currentMoment.review_status === 'pending'" class="detail-actions">
+          <NSpace>
+            <NButton type="success" secondary @click="reviewCurrentMoment('approved')">
+              审核通过
+            </NButton>
+            <NButton type="error" secondary @click="reviewCurrentMoment('rejected')">
+              审核驳回
+            </NButton>
+          </NSpace>
+        </div>
+
+        <div v-if="currentMoment.review_remark" class="detail-block">
+          <div class="detail-label">审核备注</div>
+          <div class="detail-content">{{ currentMoment.review_remark }}</div>
+        </div>
+      </div>
     </NModal>
   </CommonPage>
 </template>
@@ -486,5 +654,83 @@ const columns = [
   max-height: 70vh;
   border-radius: 8px;
   background: #000;
+}
+
+.detail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.detail-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1f2329;
+}
+
+.detail-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  color: #4e5969;
+  font-size: 13px;
+}
+
+.detail-meta-item {
+  min-width: 0;
+}
+
+.detail-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.detail-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1f2329;
+}
+
+.detail-content {
+  white-space: pre-wrap;
+  line-height: 1.6;
+  color: #1f2329;
+  background: #f7f8fb;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.detail-empty {
+  color: #8b8f99;
+  font-size: 13px;
+}
+
+.detail-media-thumb {
+  width: 72px !important;
+  height: 72px !important;
+  min-width: 72px;
+  min-height: 72px;
+  max-width: 72px;
+  max-height: 72px;
+}
+
+.detail-media-img {
+  width: 72px !important;
+  height: 72px !important;
+  object-fit: cover;
+  border-radius: 8px;
+}
+
+.detail-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 </style>

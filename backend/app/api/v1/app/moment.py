@@ -65,6 +65,10 @@ async def _serialize_moment(
         "pinned_at": moment.pinned_at.isoformat() if moment.pinned_at else None,
         "is_recommended": is_recommended,
         "recommend_override": recommend_override,
+        "review_status": moment.review_status or "approved",
+        "reviewed_at": moment.reviewed_at.isoformat() if moment.reviewed_at else None,
+        "reviewed_by": int(moment.reviewed_by or 0) or None,
+        "review_remark": moment.review_remark or "",
         "author_is_certified_user": bool(resolved_user.is_certified_user) if resolved_user else False,
         "author_is_recommended": author_is_recommended,
         "media_list": [
@@ -195,6 +199,10 @@ async def create_moment(req_in: MomentCreateIn):
 
     media_ids = req_in.media_ids or []
 
+    has_pending_moment = await Moment.filter(user_id=app_user.id, review_status="pending").exists()
+    if has_pending_moment:
+        return Fail(code=400, msg="您有动态待审核，请审核完成后再提交")
+
     # 校验媒体数量：图片最多4张，视频最多1个（二选一）
     if media_ids:
         media_items = await MomentMedia.filter(id__in=media_ids).all()
@@ -211,7 +219,11 @@ async def create_moment(req_in: MomentCreateIn):
             return Fail(code=400, msg="图片和视频不能同时上传")
 
     # 创建动态
-    moment = await Moment.create(user_id=app_user.id, content=content or None)
+    moment = await Moment.create(
+        user_id=app_user.id,
+        content=content or None,
+        review_status="pending",
+    )
 
     # 绑定媒体到动态
     if media_ids:
@@ -228,6 +240,10 @@ async def create_moment(req_in: MomentCreateIn):
             "user_id": moment.user_id,
             "content": moment.content or "",
             "created_at": moment.created_at.isoformat() if moment.created_at else None,
+            "review_status": moment.review_status or "pending",
+            "reviewed_at": moment.reviewed_at.isoformat() if moment.reviewed_at else None,
+            "reviewed_by": int(moment.reviewed_by or 0) or None,
+            "review_remark": moment.review_remark or "",
             "media_list": [
                 {
                     "id": m.id,
@@ -265,7 +281,7 @@ async def get_moment_feed(
 
     offset = (page - 1) * page_size
 
-    q = Q()
+    q = Q(review_status="approved")
 
     if category_value == "following":
         following_ids = await UserFollow.filter(follower_id=app_user.id).values_list("following_id", flat=True)
@@ -310,8 +326,14 @@ async def get_user_moments(
     if not user:
         return Fail(code=404, msg="用户不存在")
 
-    total = await Moment.filter(user_id=user_id).count()
-    moments = await Moment.filter(user_id=user_id).order_by("-created_at").offset(offset).limit(page_size).all()
+    total = await Moment.filter(user_id=user_id, review_status="approved").count()
+    moments = (
+        await Moment.filter(user_id=user_id, review_status="approved")
+        .order_by("-created_at")
+        .offset(offset)
+        .limit(page_size)
+        .all()
+    )
     media_by_moment = await _prefetch_moment_media(moments)
     rows = [await _serialize_moment(moment, user=user, media_by_moment=media_by_moment) for moment in moments]
 

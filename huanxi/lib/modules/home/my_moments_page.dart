@@ -50,6 +50,7 @@ class _MyMomentsPageState extends ConsumerState<MyMomentsPage> {
         onRefresh: () => ref.read(myMomentsProvider.notifier).load(),
         onLoadMore: () => ref.read(myMomentsProvider.notifier).loadMore(),
         onDelete: (moment) => _deleteMoment(moment),
+        showReviewStatus: true,
       ),
     );
   }

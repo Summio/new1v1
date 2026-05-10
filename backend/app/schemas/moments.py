@@ -10,6 +10,14 @@ class MomentCreateIn(BaseModel):
     media_ids: Optional[List[int]] = Field(default_factory=list, description="已上传媒体ID列表")
 
 
+class MomentReviewIn(BaseModel):
+    """动态审核请求"""
+
+    id: int = Field(..., ge=1, description="动态ID")
+    status: str = Field(..., description="审核结果 approved/rejected")
+    review_remark: Optional[str] = Field(default=None, max_length=500, description="审核备注")
+
+
 class MomentMediaOut(BaseModel):
     """动态媒体输出"""
 
@@ -30,6 +38,10 @@ class MomentOut(BaseModel):
     created_at: Optional[str] = None
     media_list: List[MomentMediaOut] = Field(default_factory=list)
     user: Optional[dict] = None  # 用户信息
+    review_status: str = "approved"
+    reviewed_at: Optional[str] = None
+    reviewed_by: Optional[int] = None
+    review_remark: Optional[str] = None
 
 
 class MomentListOut(BaseModel):

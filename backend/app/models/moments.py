@@ -11,6 +11,15 @@ class Moment(BaseModel, TimestampMixin):
     is_pinned = fields.BooleanField(default=False, description="是否置顶", db_index=True)
     pinned_at = fields.DatetimeField(null=True, description="置顶时间", db_index=True)
     recommend_override = fields.BooleanField(null=True, description="单条推荐覆盖值", db_index=True)
+    review_status = fields.CharField(
+        max_length=20,
+        default="approved",
+        description="审核状态 pending/approved/rejected",
+        db_index=True,
+    )
+    reviewed_at = fields.DatetimeField(null=True, description="审核时间")
+    reviewed_by = fields.BigIntField(null=True, description="审核后台用户ID")
+    review_remark = fields.CharField(max_length=500, null=True, description="审核备注")
 
     class Meta:
         table = "moments"
