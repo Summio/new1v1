@@ -3,9 +3,25 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('first-level tab pages do not intercept system back', () {
+  test('first-level tab routes disable system back inside shell navigator', () {
     final guard = File('lib/core/widgets/root_back_guard.dart');
-    expect(guard.existsSync(), isFalse);
+    expect(guard.existsSync(), isTrue);
+
+    final guardSource = guard.readAsStringSync();
+    expect(guardSource, contains('class RootBackGuard'));
+    expect(guardSource, contains('PopScope'));
+    expect(guardSource, contains('canPop: false'));
+
+    final router = File('lib/app/routes/app_router.dart').readAsStringSync();
+    expect(
+      router,
+      contains("import '../../core/widgets/root_back_guard.dart';"),
+    );
+    expect(router, contains('RootBackGuard(child: HomePage())'));
+    expect(router, contains('RootBackGuard(child: DiscoverPage())'));
+    expect(router, contains('RootBackGuard('));
+    expect(router, contains('child: ChatPage('));
+    expect(router, contains('RootBackGuard(child: ProfilePage())'));
 
     final firstLevelPages = [
       'lib/modules/home/home_page.dart',
@@ -17,7 +33,6 @@ void main() {
       final source = File(path).readAsStringSync();
       expect(source, isNot(contains('RootBackGuard')), reason: path);
       expect(source, isNot(contains('root_back_guard.dart')), reason: path);
-      expect(source, isNot(contains('canPop: false')), reason: path);
     }
 
     final secondLevelPages = [

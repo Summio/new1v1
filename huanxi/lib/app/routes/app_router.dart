@@ -33,6 +33,7 @@ import '../../modules/home/call_page.dart';
 import '../../app/providers/certified_user_provider.dart';
 import '../../app/providers/wallet_provider.dart';
 import '../../core/storage/storage.dart';
+import '../../core/widgets/root_back_guard.dart';
 
 class AppRoutes {
   AppRoutes._();
@@ -109,22 +110,25 @@ final appRouter = GoRouter(
       routes: [
         GoRoute(
           path: AppRoutes.index,
-          pageBuilder: (context, state) => NoTransitionPage(child: HomePage()),
+          pageBuilder: (context, state) =>
+              NoTransitionPage(child: RootBackGuard(child: HomePage())),
         ),
         GoRoute(
           path: AppRoutes.discover,
           pageBuilder: (context, state) =>
-              NoTransitionPage(child: DiscoverPage()),
+              NoTransitionPage(child: RootBackGuard(child: DiscoverPage())),
         ),
         GoRoute(
           path: AppRoutes.messages,
           pageBuilder: (context, state) => NoTransitionPage(
-            child: ChatPage(
-              initialTabIndex: ChatPage.tabIndexFromQuery(
-                state.uri.queryParameters['tab'],
-              ),
-              initialRelationTabIndex: ChatPage.relationTabIndexFromQuery(
-                state.uri.queryParameters['relation'],
+            child: RootBackGuard(
+              child: ChatPage(
+                initialTabIndex: ChatPage.tabIndexFromQuery(
+                  state.uri.queryParameters['tab'],
+                ),
+                initialRelationTabIndex: ChatPage.relationTabIndexFromQuery(
+                  state.uri.queryParameters['relation'],
+                ),
               ),
             ),
           ),
@@ -132,7 +136,7 @@ final appRouter = GoRouter(
         GoRoute(
           path: AppRoutes.profile,
           pageBuilder: (context, state) =>
-              NoTransitionPage(child: ProfilePage()),
+              NoTransitionPage(child: RootBackGuard(child: ProfilePage())),
         ),
       ],
     ),
