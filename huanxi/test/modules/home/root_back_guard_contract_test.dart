@@ -3,25 +3,20 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('first-level tab routes disable system back inside shell navigator', () {
+  test('first-level tab routes do not use RootBackGuard', () {
     final guard = File('lib/core/widgets/root_back_guard.dart');
-    expect(guard.existsSync(), isTrue);
-
-    final guardSource = guard.readAsStringSync();
-    expect(guardSource, contains('class RootBackGuard'));
-    expect(guardSource, contains('PopScope'));
-    expect(guardSource, contains('canPop: false'));
+    expect(guard.existsSync(), isFalse);
 
     final router = File('lib/app/routes/app_router.dart').readAsStringSync();
     expect(
       router,
-      contains("import '../../core/widgets/root_back_guard.dart';"),
+      isNot(contains("import '../../core/widgets/root_back_guard.dart';")),
     );
-    expect(router, contains('RootBackGuard(child: HomePage())'));
-    expect(router, contains('RootBackGuard(child: DiscoverPage())'));
-    expect(router, contains('RootBackGuard('));
+    expect(router, isNot(contains('RootBackGuard')));
+    expect(router, contains('NoTransitionPage(child: HomePage())'));
+    expect(router, contains('NoTransitionPage(child: DiscoverPage())'));
     expect(router, contains('child: ChatPage('));
-    expect(router, contains('RootBackGuard(child: ProfilePage())'));
+    expect(router, contains('NoTransitionPage(child: ProfilePage())'));
 
     final firstLevelPages = [
       'lib/modules/home/home_page.dart',
