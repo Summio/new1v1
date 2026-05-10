@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../app/providers/auth_provider.dart';
 import '../../app/providers/moment_provider.dart';
 import '../../app/theme/app_theme.dart';
+import '../../core/utils/capability_limit_guard.dart';
 import '../../core/utils/app_toast.dart';
 import '../../services/moment_service.dart';
 import '../../app/routes/app_router.dart';
@@ -32,7 +34,7 @@ class _MyMomentsPageState extends ConsumerState<MyMomentsPage> {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push(AppRoutes.publishMoment),
+        onPressed: () => _openPublishMoment(context),
         backgroundColor: AppTheme.primaryColor,
         child: const Icon(Icons.add, color: Colors.white),
       ),
@@ -71,5 +73,20 @@ class _MyMomentsPageState extends ConsumerState<MyMomentsPage> {
         AppToast.show(context, '删除失败');
       }
     }
+  }
+
+  Future<void> _openPublishMoment(BuildContext context) async {
+    await ref.read(appInitProvider.notifier).init();
+    if (!context.mounted) return;
+
+    final authState = ref.read(authProvider);
+    final initState = ref.read(appInitProvider);
+    final message = momentPublishRestrictionMessage(authState, initState);
+    if (message != null) {
+      AppToast.show(context, message);
+      return;
+    }
+
+    await context.push(AppRoutes.publishMoment);
   }
 }

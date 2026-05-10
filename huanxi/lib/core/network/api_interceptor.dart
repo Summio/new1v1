@@ -115,7 +115,10 @@ class ApiInterceptor extends Interceptor {
             handler.reject(
               DioException(
                 requestOptions: response.requestOptions,
-                error: ForbiddenException(banReason: banReason),
+                error: ForbiddenException(
+                  banReason: banReason,
+                  message: banReason,
+                ),
                 type: DioExceptionType.badResponse,
                 response: response,
               ),
@@ -298,7 +301,7 @@ class ApiInterceptor extends Interceptor {
         return UnauthorizedException(message: message);
       case 403:
         final banReason = payload['ban_reason'] as String? ?? message;
-        return ForbiddenException(banReason: banReason);
+        return ForbiddenException(banReason: banReason, message: banReason);
       case 501:
         return const InsufficientBalanceException();
       default:

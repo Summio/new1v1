@@ -4,11 +4,7 @@ class ApiException implements Exception {
   final String message;
   final dynamic data;
 
-  const ApiException({
-    required this.code,
-    required this.message,
-    this.data,
-  });
+  const ApiException({required this.code, required this.message, this.data});
 
   bool get isUnauthorized => code == 401;
   bool get isForbidden => code == 403;
@@ -22,25 +18,21 @@ class ApiException implements Exception {
 /// 未登录异常
 class UnauthorizedException extends ApiException {
   const UnauthorizedException({super.message = '登录已过期，请重新登录'})
-      : super(code: 401);
+    : super(code: 401);
 }
 
 /// 账号封禁异常
 class ForbiddenException extends ApiException {
   final String? banReason;
 
-  const ForbiddenException({this.banReason})
-      : super(
-          code: 403,
-          message: '账号已被封禁',
-          data: banReason,
-        );
+  const ForbiddenException({this.banReason, String? message})
+    : super(code: 403, message: message ?? '账号已被封禁', data: banReason);
 }
 
 /// 余额不足异常
 class InsufficientBalanceException extends ApiException {
   const InsufficientBalanceException({super.message = '余额不足，请先充值'})
-      : super(code: 501);
+    : super(code: 501);
 }
 
 /// 网络异常

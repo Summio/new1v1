@@ -121,6 +121,58 @@ class TokenNamesState {
   }
 }
 
+/// 用户能力限制状态
+class CapabilityLimitsState {
+  final bool certificationMaleOnlyEnabled;
+  final bool certificationFemaleOnlyEnabled;
+  final bool profileEditCertifiedOnlyEnabled;
+  final bool momentPublishCertifiedOnlyEnabled;
+
+  const CapabilityLimitsState({
+    this.certificationMaleOnlyEnabled = false,
+    this.certificationFemaleOnlyEnabled = false,
+    this.profileEditCertifiedOnlyEnabled = false,
+    this.momentPublishCertifiedOnlyEnabled = false,
+  });
+
+  CapabilityLimitsState copyWith({
+    bool? certificationMaleOnlyEnabled,
+    bool? certificationFemaleOnlyEnabled,
+    bool? profileEditCertifiedOnlyEnabled,
+    bool? momentPublishCertifiedOnlyEnabled,
+  }) {
+    return CapabilityLimitsState(
+      certificationMaleOnlyEnabled:
+          certificationMaleOnlyEnabled ?? this.certificationMaleOnlyEnabled,
+      certificationFemaleOnlyEnabled:
+          certificationFemaleOnlyEnabled ?? this.certificationFemaleOnlyEnabled,
+      profileEditCertifiedOnlyEnabled:
+          profileEditCertifiedOnlyEnabled ??
+          this.profileEditCertifiedOnlyEnabled,
+      momentPublishCertifiedOnlyEnabled:
+          momentPublishCertifiedOnlyEnabled ??
+          this.momentPublishCertifiedOnlyEnabled,
+    );
+  }
+
+  static CapabilityLimitsState fromBootstrapMap(
+    Map<String, dynamic>? respData,
+  ) {
+    final capabilityLimits =
+        respData?['capability_limits'] as Map<String, dynamic>?;
+    return CapabilityLimitsState(
+      certificationMaleOnlyEnabled:
+          capabilityLimits?['certification_male_only_enabled'] == true,
+      certificationFemaleOnlyEnabled:
+          capabilityLimits?['certification_female_only_enabled'] == true,
+      profileEditCertifiedOnlyEnabled:
+          capabilityLimits?['profile_edit_certified_only_enabled'] == true,
+      momentPublishCertifiedOnlyEnabled:
+          capabilityLimits?['moment_publish_certified_only_enabled'] == true,
+    );
+  }
+}
+
 /// App 初始化配置状态
 class AppInitState {
   final bool isLoading;
@@ -137,6 +189,7 @@ class AppInitState {
   final int imTextBillingPrice;
   final int imTextBillingAnchorShareBps;
   final List<int> certifiedCallPriceTiers;
+  final CapabilityLimitsState capabilityLimits;
 
   const AppInitState({
     this.isLoading = false,
@@ -153,6 +206,7 @@ class AppInitState {
     this.imTextBillingPrice = 0,
     this.imTextBillingAnchorShareBps = 5000,
     this.certifiedCallPriceTiers = const [],
+    this.capabilityLimits = const CapabilityLimitsState(),
   });
 
   AppInitState copyWith({
@@ -170,6 +224,7 @@ class AppInitState {
     int? imTextBillingPrice,
     int? imTextBillingAnchorShareBps,
     List<int>? certifiedCallPriceTiers,
+    CapabilityLimitsState? capabilityLimits,
   }) {
     return AppInitState(
       isLoading: isLoading ?? this.isLoading,
@@ -192,6 +247,7 @@ class AppInitState {
           imTextBillingAnchorShareBps ?? this.imTextBillingAnchorShareBps,
       certifiedCallPriceTiers:
           certifiedCallPriceTiers ?? this.certifiedCallPriceTiers,
+      capabilityLimits: capabilityLimits ?? this.capabilityLimits,
     );
   }
 
@@ -208,6 +264,7 @@ class AppInitState {
     final customerServiceUserId = _parseCustomerServiceUserId(
       customerService?['user_id'],
     );
+    final capabilityLimits = CapabilityLimitsState.fromBootstrapMap(respData);
     final tierRaw = respData['certified_call_price_tiers'];
     final tiers = tierRaw is List
         ? tierRaw
@@ -244,6 +301,7 @@ class AppInitState {
           ? imTextShareRaw.toInt()
           : int.tryParse('${imTextShareRaw ?? 5000}') ?? 5000,
       certifiedCallPriceTiers: tiers,
+      capabilityLimits: capabilityLimits,
     );
   }
 

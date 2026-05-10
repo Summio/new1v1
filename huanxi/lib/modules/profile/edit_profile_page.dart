@@ -4,9 +4,11 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../app/providers/auth_provider.dart';
+import '../../app/routes/app_router.dart';
 import '../../core/data/china_location_data.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
+import '../../core/utils/capability_limit_guard.dart';
 import 'package:huanxi/core/utils/app_toast.dart';
 
 class EditProfilePage extends ConsumerStatefulWidget {
@@ -54,6 +56,22 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
     if (rawBirthDate != null && rawBirthDate.trim().isNotEmpty) {
       _birthDate = DateTime.tryParse(rawBirthDate.trim());
     }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await ref.read(appInitProvider.notifier).init();
+      if (!mounted) return;
+      final message = profileEditRestrictionMessage(
+        ref.read(authProvider),
+        ref.read(appInitProvider),
+      );
+      if (message == null) return;
+      AppToast.show(context, message);
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      } else {
+        context.go(AppRoutes.profile);
+      }
+    });
   }
 
   @override

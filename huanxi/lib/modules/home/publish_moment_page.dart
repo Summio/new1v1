@@ -6,9 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
+import '../../app/providers/auth_provider.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/providers/moment_provider.dart';
 import '../../core/media/video_upload_preprocessor.dart';
+import '../../core/utils/capability_limit_guard.dart';
 import '../../core/utils/app_toast.dart';
 import 'moment_video_preview_page.dart';
 import '../../services/moment_service.dart';
@@ -30,6 +32,22 @@ class _PublishMomentPageState extends ConsumerState<PublishMomentPage> {
   final bool _isUploading = false;
   bool _isPublishing = false;
   bool _isPreparingVideo = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await ref.read(appInitProvider.notifier).init();
+      if (!mounted) return;
+      final message = _publishRestrictionMessage();
+      if (message != null) {
+        AppToast.show(context, message);
+        if (Navigator.of(context).canPop()) {
+          Navigator.of(context).pop();
+        }
+      }
+    });
+  }
 
   void _showToast(String message) {
     if (!mounted) return;
@@ -415,6 +433,11 @@ class _PublishMomentPageState extends ConsumerState<PublishMomentPage> {
 
   Future<void> _publish() async {
     if (!_canPublish) return;
+    final restrictionMessage = _publishRestrictionMessage();
+    if (restrictionMessage != null) {
+      _showToast(restrictionMessage);
+      return;
+    }
 
     setState(() {
       _isPublishing = true;
@@ -468,6 +491,12 @@ class _PublishMomentPageState extends ConsumerState<PublishMomentPage> {
         _isPublishing = false;
       });
     }
+  }
+
+  String? _publishRestrictionMessage() {
+    final authState = ref.read(authProvider);
+    final initState = ref.read(appInitProvider);
+    return momentPublishRestrictionMessage(authState, initState);
   }
 
   void _confirmExit() {

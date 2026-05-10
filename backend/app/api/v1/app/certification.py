@@ -12,6 +12,10 @@ from app.schemas.app_user import (
     CertifiedCallPriceUpdateIn,
 )
 from app.schemas.base import Fail, Success
+from app.services.capability_limit_service import (
+    certification_denial_message,
+    load_capability_limit_config,
+)
 from app.services.certification_price_service import (
     get_certified_call_price_tiers,
     normalize_certified_call_price,
@@ -40,6 +44,11 @@ async def upload_certification_face_photo(file: UploadFile = File(...)):
     if not app_user:
         return Fail(code=401, msg="用户不存在")
 
+    capability_limits = await load_capability_limit_config()
+    denial_message = certification_denial_message(app_user, capability_limits)
+    if denial_message:
+        return Fail(code=403, msg=denial_message)
+
     try:
         suffix, content = await read_validated_image_upload(
             file,
@@ -61,6 +70,14 @@ async def upload_certification_face_photo(file: UploadFile = File(...)):
 @router.post("/certification/apply", summary="申请真人认证", dependencies=[Depends(DependAppAuth)])
 async def apply_certification(req_in: CertificationApplyIn):
     app_user: AppUser = CTX_APP_USER_OBJ.get()
+    if not app_user:
+        return Fail(code=401, msg="用户不存在")
+
+    capability_limits = await load_capability_limit_config()
+    denial_message = certification_denial_message(app_user, capability_limits)
+    if denial_message:
+        return Fail(code=403, msg=denial_message)
+
     face_photo_url = to_relative_media_url(req_in.face_photo_url)
     if not face_photo_url:
         return Fail(code=400, msg="请先上传正面照")
@@ -111,7 +128,9 @@ async def get_apply_status():
     )
 
 
-@router.get("/certification/call-price/tiers", summary="获取认证用户通话价格档位", dependencies=[Depends(DependAppAuth)])
+@router.get(
+    "/certification/call-price/tiers", summary="获取认证用户通话价格档位", dependencies=[Depends(DependAppAuth)]
+)
 async def get_call_price_tiers():
     return Success(data={"tiers": await get_certified_call_price_tiers()})
 

@@ -44,9 +44,7 @@ def _load_system_schema_module():
 def test_certification_apply_schema_replaces_legacy_anchor_apply_schema() -> None:
     module = _load_schema_module()
 
-    payload = module.CertificationApplyIn(
-        face_photo_url="/uploads/profile/1/certification/face.jpg"
-    )
+    payload = module.CertificationApplyIn(face_photo_url="/uploads/profile/1/certification/face.jpg")
     assert payload.face_photo_url == "/uploads/profile/1/certification/face.jpg"
 
     with pytest.raises(ValidationError):
@@ -69,6 +67,8 @@ def test_bootstrap_returns_certified_call_price_tiers() -> None:
     content = BOOTSTRAP.read_text(encoding="utf-8")
     assert "certified_call_price_tiers" in content
     assert "[0, 100, 200, 300, 500]" in content
+    assert "capability_limits" in content
+    assert "parse_capability_limit_config" in content
 
 
 def test_system_config_page_exposes_certified_call_price_tiers() -> None:
@@ -79,6 +79,10 @@ def test_system_config_page_exposes_certified_call_price_tiers() -> None:
     assert "updateCertifiedCallPriceConfig" in content
     assert "新增档位" in content
     assert "请至少保留一个收费档位" in content
+    assert "用户能力限制" in content
+    assert "只允许男性认证" in content
+    assert "只允许女性认证" in content
+    assert "只允许认证用户发动态" in content
 
 
 def test_certified_call_price_config_requires_paid_tier() -> None:
@@ -177,4 +181,3 @@ def test_business_code_no_longer_reads_removed_legacy_is_anchor_attribute() -> N
     for path in checked_files:
         content = path.read_text(encoding="utf-8")
         assert ".is_anchor" not in content
-
