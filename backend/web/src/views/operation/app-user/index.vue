@@ -763,6 +763,15 @@ function handleRemoveAlbumPhoto(index) {
   }
 }
 
+function handleMoveAlbumPhoto(index, delta) {
+  const nextIndex = index + delta
+  const next = [...(modalForm.value.album_photos || [])]
+  if (nextIndex < 0 || nextIndex >= next.length) return
+  const [item] = next.splice(index, 1)
+  next.splice(nextIndex, 0, item)
+  modalForm.value.album_photos = next
+}
+
 function handleSetCover(url) {
   modalForm.value.cover_url = url || ''
 }
@@ -1131,6 +1140,20 @@ const columns = [
                       <NButton size="tiny" @click="handleReplaceAlbumPhoto(idx)">更换</NButton>
                       <NButton size="tiny" type="info" @click="handleSetCover(url)">
                         {{ modalForm.cover_url === url ? '当前封面' : '设为封面' }}
+                      </NButton>
+                      <NButton
+                        size="tiny"
+                        :disabled="idx === 0"
+                        @click="handleMoveAlbumPhoto(idx, -1)"
+                      >
+                        上移
+                      </NButton>
+                      <NButton
+                        size="tiny"
+                        :disabled="idx === modalForm.album_photos.length - 1"
+                        @click="handleMoveAlbumPhoto(idx, 1)"
+                      >
+                        下移
                       </NButton>
                       <NButton size="tiny" type="error" @click="handleRemoveAlbumPhoto(idx)"
                         >删除</NButton

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../app/providers/auth_provider.dart';
+import '../../core/data/china_location_data.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import 'package:huanxi/core/utils/app_toast.dart';
@@ -127,6 +128,17 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
     });
   }
 
+  void _moveAlbumPhoto(int index, int delta) {
+    final targetIndex = index + delta;
+    if (targetIndex < 0 || targetIndex >= _albumPhotos.length) return;
+    final next = List<String>.from(_albumPhotos);
+    final item = next.removeAt(index);
+    next.insert(targetIndex, item);
+    setState(() {
+      _albumPhotos = next;
+    });
+  }
+
   List<String> _validAlbumList(List<String> source) {
     final out = <String>[];
     final seen = <String>{};
@@ -217,7 +229,10 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
 
     final updateData = ref.read(authProvider).lastProfileUpdateData;
     final reviewStatus = updateData?['profile_review_status'] as String?;
-    final message = reviewStatus == 'pending' ? '资料修改申请已提交，请等待审核' : '资料已保存';
+    final partialDirectSaved = updateData?['partial_direct_saved'] == true;
+    final message = reviewStatus == 'pending'
+        ? (partialDirectSaved ? '资料已保存，部分修改已提交审核' : '资料修改申请已提交，请等待审核')
+        : '资料已保存';
     AppToast.showSnackBar(context, SnackBar(content: Text(message)));
     context.pop();
   }
@@ -357,7 +372,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                     _buildTapTile(
                       label: '所在地',
                       value: _locationCity.isEmpty
-                          ? '请选择到市'
+                          ? '请选择到市/州/盟/地区'
                           : Formatters.locationCity(_locationCity),
                       icon: Icons.location_on_outlined,
                       onTap: _pickLocationCity,
@@ -544,6 +559,26 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                                   label: const Text('设为封面'),
                                 ),
                                 TextButton.icon(
+                                  onPressed: index > 0
+                                      ? () => _moveAlbumPhoto(index, -1)
+                                      : null,
+                                  icon: const Icon(
+                                    Icons.arrow_upward,
+                                    size: 18,
+                                  ),
+                                  label: const Text('上移'),
+                                ),
+                                TextButton.icon(
+                                  onPressed: index < _albumPhotos.length - 1
+                                      ? () => _moveAlbumPhoto(index, 1)
+                                      : null,
+                                  icon: const Icon(
+                                    Icons.arrow_downward,
+                                    size: 18,
+                                  ),
+                                  label: const Text('下移'),
+                                ),
+                                TextButton.icon(
                                   onPressed: () => _removeAlbumPhoto(index),
                                   icon: const Icon(
                                     Icons.delete_outline,
@@ -684,43 +719,7 @@ Future<String?> _showCityPicker(
   BuildContext context, {
   String initialValue = '',
 }) async {
-  const cityMap = <String, List<String>>{
-    '北京市': ['北京市'],
-    '天津市': ['天津市'],
-    '上海市': ['上海市'],
-    '重庆市': ['重庆市'],
-    '河北省': ['石家庄市', '唐山市', '保定市', '廊坊市'],
-    '山西省': ['太原市', '大同市', '运城市'],
-    '辽宁省': ['沈阳市', '大连市', '鞍山市'],
-    '吉林省': ['长春市', '吉林市'],
-    '黑龙江省': ['哈尔滨市', '齐齐哈尔市'],
-    '江苏省': ['南京市', '苏州市', '无锡市', '常州市'],
-    '浙江省': ['杭州市', '宁波市', '温州市', '金华市'],
-    '安徽省': ['合肥市', '芜湖市'],
-    '福建省': ['福州市', '厦门市', '泉州市'],
-    '江西省': ['南昌市', '赣州市'],
-    '山东省': ['济南市', '青岛市', '烟台市'],
-    '河南省': ['郑州市', '洛阳市', '南阳市'],
-    '湖北省': ['武汉市', '襄阳市', '宜昌市'],
-    '湖南省': ['长沙市', '株洲市'],
-    '广东省': ['广州市', '深圳市', '佛山市', '东莞市'],
-    '海南省': ['海口市', '三亚市'],
-    '四川省': ['成都市', '绵阳市', '南充市'],
-    '贵州省': ['贵阳市', '遵义市'],
-    '云南省': ['昆明市', '曲靖市'],
-    '陕西省': ['西安市', '咸阳市'],
-    '甘肃省': ['兰州市'],
-    '青海省': ['西宁市'],
-    '内蒙古自治区': ['呼和浩特市', '包头市'],
-    '广西壮族自治区': ['南宁市', '桂林市'],
-    '西藏自治区': ['拉萨市'],
-    '宁夏回族自治区': ['银川市'],
-    '新疆维吾尔自治区': ['乌鲁木齐市', '喀什市'],
-    '香港特别行政区': ['香港特别行政区'],
-    '澳门特别行政区': ['澳门特别行政区'],
-    '台湾省': ['台北市', '高雄市'],
-  };
-
+  final cityMap = chinaProvinceCityMap;
   final provinces = cityMap.keys.toList();
   String selectedProvince = provinces.first;
   String selectedCity = cityMap[selectedProvince]!.first;
@@ -756,7 +755,7 @@ Future<String?> _showCityPicker(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   const Text(
-                    '选择所在地（到市）',
+                    '选择所在地（到市/州/盟/地区）',
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 16),
@@ -788,7 +787,7 @@ Future<String?> _showCityPicker(
                   const Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
-                      '市',
+                      '市/州/盟/地区',
                       style: TextStyle(
                         fontSize: 13,
                         color: AppTheme.textSecondary,

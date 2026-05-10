@@ -9,6 +9,7 @@ APP_MODELS_INIT = ROOT / "app/models/__init__.py"
 PROFILE_REVIEW_MODEL = ROOT / "app/models/app_user_profile_review.py"
 WEB_API = ROOT / "web/src/api/index.js"
 WEB_REVIEW_VIEW = ROOT / "web/src/views/operation/profile-review/index.vue"
+WEB_APP_USER_VIEW = ROOT / "web/src/views/operation/app-user/index.vue"
 INIT_APP = ROOT / "app/core/init_app.py"
 AUTH_PROVIDER = REPO / "huanxi/lib/app/providers/auth_provider.dart"
 EDIT_PROFILE_PAGE = REPO / "huanxi/lib/modules/profile/edit_profile_page.dart"
@@ -78,12 +79,18 @@ def test_admin_web_profile_review_view_and_api_exist() -> None:
 
 def test_operation_menu_blueprint_has_profile_review_menu_and_apis() -> None:
     text = INIT_APP.read_text(encoding="utf-8")
+    migration_text = "\n".join(path.read_text(encoding="utf-8") for path in MIGRATIONS_DIR.glob("*.py"))
 
     assert 'name="资料编辑审核"' in text
     assert 'path="profile-review"' in text
     assert 'component="/operation/profile-review"' in text
     assert '"/api/v1/app_user/profile-review/list"' in text
     assert '"/api/v1/app_user/profile-review/complete"' in text
+    assert "'资料编辑审核'" in migration_text
+    assert "'profile-review'" in migration_text
+    assert "'/operation/profile-review'" in migration_text
+    assert "`role_menu`" in migration_text
+    assert "`role_api`" in migration_text
 
 
 def test_flutter_profile_update_uses_review_submit_success_message() -> None:
@@ -93,3 +100,28 @@ def test_flutter_profile_update_uses_review_submit_success_message() -> None:
     assert "lastProfileUpdateData" in auth_text
     assert "profile_review_status" in page_text
     assert "资料修改申请已提交，请等待审核" in page_text
+
+
+def test_album_cover_and_order_changes_skip_profile_review() -> None:
+    service_text = (ROOT / "app/services/profile_review_service.py").read_text(encoding="utf-8")
+    app_api_text = APP_USER_API.read_text(encoding="utf-8")
+
+    assert '"cover_url"' not in service_text.split("_REVIEW_FIELDS", 1)[1].split(")", 1)[0]
+    assert '"op": "remove"' not in service_text
+    assert "direct_update_data" in app_api_text
+    assert "partial_direct_saved" in app_api_text
+    assert "if direct_album != current_album" in app_api_text
+    assert "if direct_cover != current_cover" in app_api_text
+
+
+def test_admin_and_app_album_reorder_controls_exist() -> None:
+    web_text = WEB_APP_USER_VIEW.read_text(encoding="utf-8")
+    page_text = EDIT_PROFILE_PAGE.read_text(encoding="utf-8")
+
+    assert "handleMoveAlbumPhoto" in web_text
+    assert "上移" in web_text
+    assert "下移" in web_text
+    assert "_moveAlbumPhoto" in page_text
+    assert "Icons.arrow_upward" in page_text
+    assert "Icons.arrow_downward" in page_text
+    assert "资料已保存，部分修改已提交审核" in page_text

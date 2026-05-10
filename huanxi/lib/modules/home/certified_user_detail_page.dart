@@ -9,6 +9,7 @@ import '../../app/providers/auth_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/network/api_exception.dart';
+import '../../core/utils/formatters.dart';
 import '../../services/moment_service.dart';
 import '../../services/user_home_service.dart';
 import 'package:huanxi/core/utils/app_toast.dart';
@@ -24,10 +25,12 @@ class CertifiedUserDetailPage extends ConsumerStatefulWidget {
   const CertifiedUserDetailPage({super.key, this.certifiedUser, this.userId});
 
   @override
-  ConsumerState<CertifiedUserDetailPage> createState() => _CertifiedUserDetailPageState();
+  ConsumerState<CertifiedUserDetailPage> createState() =>
+      _CertifiedUserDetailPageState();
 }
 
-class _CertifiedUserDetailPageState extends ConsumerState<CertifiedUserDetailPage> {
+class _CertifiedUserDetailPageState
+    extends ConsumerState<CertifiedUserDetailPage> {
   int _currentPhotoIndex = 0;
   CertifiedUserInfo? _certifiedUser;
   bool _isLoading = false;
@@ -174,7 +177,9 @@ class _CertifiedUserDetailPageState extends ConsumerState<CertifiedUserDetailPag
     if (_isFollowLoading) return;
 
     final authState = ref.read(authProvider);
-    if (authState.userId != null && authState.userId == certifiedUser.userId) return;
+    if (authState.userId != null && authState.userId == certifiedUser.userId) {
+      return;
+    }
 
     if (_isFollowing) {
       final name = certifiedUser.username?.trim().isNotEmpty == true
@@ -409,7 +414,9 @@ class _CertifiedUserDetailPageState extends ConsumerState<CertifiedUserDetailPag
                             children: [
                               Text(
                                 certifiedUser.username ??
-                                    (certifiedUser.isCertifiedUser ? '认证用户' : '用户'),
+                                    (certifiedUser.isCertifiedUser
+                                        ? '认证用户'
+                                        : '用户'),
                                 style: const TextStyle(
                                   fontSize: 26,
                                   fontWeight: FontWeight.bold,
@@ -434,7 +441,8 @@ class _CertifiedUserDetailPageState extends ConsumerState<CertifiedUserDetailPag
                                       'certified_user_id_copy_button',
                                     ),
                                     borderRadius: BorderRadius.circular(12),
-                                    onTap: () => _copyUserId(certifiedUser.userId),
+                                    onTap: () =>
+                                        _copyUserId(certifiedUser.userId),
                                     child: const Padding(
                                       padding: EdgeInsets.all(3),
                                       child: Icon(
@@ -536,10 +544,7 @@ class _CertifiedUserDetailPageState extends ConsumerState<CertifiedUserDetailPag
                         ),
                         _buildInfoChip(
                           icon: Icons.location_on_outlined,
-                          label:
-                              (certifiedUser.locationCity?.trim().isNotEmpty ?? false)
-                              ? certifiedUser.locationCity!.trim()
-                              : '所在地未填',
+                          label: _locationLabel(certifiedUser.locationCity),
                         ),
                       ],
                     ),
@@ -635,7 +640,8 @@ class _CertifiedUserDetailPageState extends ConsumerState<CertifiedUserDetailPag
                         child: Tooltip(
                           message: '聊一聊',
                           child: OutlinedButton(
-                            onPressed: () => _openIm(certifiedUser: certifiedUser),
+                            onPressed: () =>
+                                _openIm(certifiedUser: certifiedUser),
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               minimumSize: const Size(48, 48),
@@ -655,7 +661,8 @@ class _CertifiedUserDetailPageState extends ConsumerState<CertifiedUserDetailPag
                         ),
                       ),
                     ],
-                    if (!isSelf && certifiedUser.isCertifiedUser) const SizedBox(width: 12),
+                    if (!isSelf && certifiedUser.isCertifiedUser)
+                      const SizedBox(width: 12),
                     if (certifiedUser.isCertifiedUser)
                       Expanded(
                         flex: 2,
@@ -834,6 +841,11 @@ class _CertifiedUserDetailPageState extends ConsumerState<CertifiedUserDetailPag
     if (value == 'male') return '男';
     if (value == 'female') return '女';
     return '男';
+  }
+
+  String _locationLabel(String? value) {
+    final city = Formatters.locationCity(value);
+    return city.isEmpty ? '所在地未填' : city;
   }
 }
 
@@ -1023,6 +1035,3 @@ class _CertifiedUserMomentItem extends StatelessWidget {
     return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }
 }
-
-
-

@@ -41,8 +41,13 @@ class Formatters {
     return '${phone.substring(0, 3)}****${phone.substring(7)}';
   }
 
-  /// 格式化所在地（省-市 → 省 · 市）
-  static String locationCity(String value) {
-    return value.trim().replaceAll('-', ' · ');
+  /// 所在地展示只显示市，原始值仍可保留为“省-市”。
+  static String locationCity(String? value) {
+    final raw = value?.trim() ?? '';
+    if (raw.isEmpty) return '';
+
+    final parts = raw.split('-');
+    final city = parts.isEmpty ? raw : parts.last.trim();
+    return city.isEmpty ? raw : city;
   }
 }

@@ -9,7 +9,7 @@ class ProfileReviewValidationError(ValueError):
     pass
 
 
-_REVIEW_FIELDS = ("nickname", "avatar", "signature", "album_photos", "cover_url")
+_REVIEW_FIELDS = ("nickname", "avatar", "signature", "album_photos")
 
 
 def _text_value(value) -> str:
@@ -61,22 +61,6 @@ def build_profile_review_payload(current: dict | None, target: dict | None) -> d
 
     current_album = before_snapshot["album_photos"]
     target_album = after_snapshot["album_photos"]
-    for idx, photo in enumerate(current_album):
-        if photo not in target_album:
-            review_items.append(
-                {
-                    "item_id": f"album_photos:remove:{idx}",
-                    "field": "album_photos",
-                    "label": "相册",
-                    "op": "remove",
-                    "before": photo,
-                    "after": None,
-                    "status": "pending",
-                    "review_remark": "",
-                    "reviewed_at": None,
-                    "reviewed_by": None,
-                }
-            )
     for idx, photo in enumerate(target_album):
         if photo not in current_album:
             review_items.append(
@@ -93,9 +77,6 @@ def build_profile_review_payload(current: dict | None, target: dict | None) -> d
                     "reviewed_by": None,
                 }
             )
-
-    if before_snapshot["cover_url"] != after_snapshot["cover_url"]:
-        review_items.append(_build_simple_item("cover_url", before_snapshot["cover_url"], after_snapshot["cover_url"]))
 
     return {
         "before_snapshot": before_snapshot,
@@ -167,7 +148,6 @@ def apply_approved_profile_review_items(
         if item:
             update_data[field] = item.get("after")
 
-    current_album = before_snapshot["album_photos"]
     target_album = after_snapshot["album_photos"]
     approved_additions = {
         _text_value(item.get("after"))
@@ -176,44 +156,28 @@ def apply_approved_profile_review_items(
         and item.get("op") == "add"
         and (item.get("status") or "pending") == "approved"
     }
-    approved_removals = {
-        _text_value(item.get("before"))
-        for item in review_items
-        if item.get("field") == "album_photos"
-        and item.get("op") == "remove"
-        and (item.get("status") or "pending") == "approved"
-    }
+    current_album = before_snapshot["album_photos"]
 
     final_album: list[str] = []
     seen: set[str] = set()
     for photo in target_album:
-        if photo in current_album and photo in approved_removals:
-            continue
         if photo in current_album or photo in approved_additions:
             if photo not in seen:
                 final_album.append(photo)
                 seen.add(photo)
-    for photo in current_album:
-        if photo not in target_album and photo not in approved_removals and photo not in seen:
-            final_album.append(photo)
-            seen.add(photo)
     if len(final_album) > 6:
         raise ProfileReviewValidationError("相册最多上传6张照片")
 
     update_data["album_photos"] = final_album
 
-    cover_item = approved_map.get("cover_url")
-    if cover_item:
-        candidate_cover = _text_value(cover_item.get("after"))
-        if candidate_cover and candidate_cover not in final_album:
-            raise ProfileReviewValidationError("封面必须存在于最终相册")
-        update_data["cover_url"] = candidate_cover or (final_album[0] if final_album else None)
+    target_cover = after_snapshot["cover_url"]
+    current_cover = before_snapshot["cover_url"]
+    if target_cover and target_cover in final_album:
+        update_data["cover_url"] = target_cover
+    elif current_cover and current_cover in final_album:
+        update_data["cover_url"] = current_cover
     else:
-        current_cover = before_snapshot["cover_url"]
-        if current_cover and current_cover in final_album:
-            update_data["cover_url"] = current_cover
-        else:
-            update_data["cover_url"] = final_album[0] if final_album else None
+        update_data["cover_url"] = final_album[0] if final_album else None
 
     if update_data["cover_url"] and update_data["cover_url"] not in final_album:
         raise ProfileReviewValidationError("封面必须存在于最终相册")

@@ -212,44 +212,70 @@ async def update_user_profile(req_in: AppUserProfileUpdateIn):
     }
     review_payload = build_profile_review_payload(current_snapshot, target_snapshot)
     review_items = review_payload["review_items"]
-    update_data = {}
+    direct_update_data = {}
 
     if req_in.birth_date is not None:
         if req_in.birth_date > date.today():
             return Fail(code=400, msg="出生日期不能晚于今天")
-        update_data["birth_date"] = req_in.birth_date
+        direct_update_data["birth_date"] = req_in.birth_date
 
     if req_in.height_cm is not None:
-        update_data["height_cm"] = req_in.height_cm
+        direct_update_data["height_cm"] = req_in.height_cm
 
     if req_in.weight_kg is not None:
-        update_data["weight_kg"] = req_in.weight_kg
+        direct_update_data["weight_kg"] = req_in.weight_kg
 
     if req_in.location_city is not None:
         city = req_in.location_city.strip()
-        update_data["location_city"] = city or None
+        direct_update_data["location_city"] = city or None
+
+    direct_album = target_album
+    if req_in.album_photos is not None and review_items:
+        current_album_set = set(current_album)
+        direct_album = [photo for photo in target_album if photo in current_album_set]
+
+    if req_in.album_photos is not None:
+        if direct_album != current_album:
+            direct_update_data["album_photos"] = direct_album
+
+    should_update_cover = False
+    direct_cover = current_cover
+    if req_in.cover_url is not None:
+        should_update_cover = True
+        if target_cover and target_cover in direct_album:
+            direct_cover = target_cover
+        elif req_in.album_photos is not None and target_cover:
+            direct_cover = (
+                current_cover
+                if current_cover and current_cover in direct_album
+                else (direct_album[0] if direct_album else None)
+            )
+        else:
+            direct_cover = target_cover or None
+    elif req_in.album_photos is not None:
+        should_update_cover = True
+        direct_cover = (
+            current_cover
+            if current_cover and current_cover in direct_album
+            else (direct_album[0] if direct_album else None)
+        )
+    if should_update_cover:
+        if direct_cover != current_cover:
+            direct_update_data["cover_url"] = direct_cover
 
     if not review_items:
         if req_in.nickname is not None:
-            update_data["nickname"] = target_nickname or None
+            direct_update_data["nickname"] = target_nickname or None
         if req_in.avatar is not None:
-            update_data["avatar"] = target_avatar or None
+            direct_update_data["avatar"] = target_avatar or None
         if req_in.signature is not None:
-            update_data["signature"] = target_signature or None
-        if req_in.album_photos is not None:
-            update_data["album_photos"] = target_album
-            if current_cover and current_cover in target_album:
-                update_data["cover_url"] = current_cover
-            else:
-                update_data["cover_url"] = target_album[0] if target_album else None
-        if req_in.cover_url is not None and req_in.album_photos is None:
-            update_data["cover_url"] = target_cover or None
+            direct_update_data["signature"] = target_signature or None
 
     apply = None
     if review_items:
         async with in_transaction() as conn:
-            if update_data:
-                await AppUser.filter(id=app_user.id).using_db(conn).update(**update_data)
+            if direct_update_data:
+                await AppUser.filter(id=app_user.id).using_db(conn).update(**direct_update_data)
             apply = await AppUserProfileReviewApply.create(
                 user_id=app_user.id,
                 status="pending",
@@ -259,18 +285,21 @@ async def update_user_profile(req_in: AppUserProfileUpdateIn):
                 submitted_at=datetime.now(),
                 using_db=conn,
             )
-    elif update_data:
-        await AppUser.filter(id=app_user.id).update(**update_data)
+    elif direct_update_data:
+        await AppUser.filter(id=app_user.id).update(**direct_update_data)
 
     if review_items:
         refreshed = await AppUser.filter(id=app_user.id).first()
         if not refreshed:
             return Fail(code=500, msg="更新失败")
+        partial_direct_saved = bool(direct_update_data)
         return Success(
-            msg="资料修改申请已提交，请等待审核",
+            msg="资料已保存，部分修改已提交审核" if partial_direct_saved else "资料修改申请已提交，请等待审核",
             data={
                 "profile_review_status": "pending",
                 "profile_review_apply_id": apply.id,
+                "partial_direct_saved": partial_direct_saved,
+                "direct_saved_fields": list(direct_update_data.keys()),
             },
         )
 

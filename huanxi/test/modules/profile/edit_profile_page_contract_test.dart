@@ -3,6 +3,17 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('edit profile page uses a shared china location data source', () {
+    final page = File(
+      'lib/modules/profile/edit_profile_page.dart',
+    ).readAsStringSync();
+
+    expect(page, contains('chinaProvinceCityMap'));
+    expect(page, isNot(contains('const cityMap = <String, List<String>>{')));
+    expect(page, contains("选择所在地（到市/州/盟/地区）"));
+    expect(page, contains("市/州/盟/地区"));
+  });
+
   test('edit profile page no longer allows gender editing', () {
     final page = File(
       'lib/modules/profile/edit_profile_page.dart',
@@ -20,7 +31,6 @@ void main() {
       'lib/modules/profile/edit_profile_page.dart',
     ).readAsStringSync();
 
-    expect(page, contains("'市'"));
     expect(page, contains('ListView.separated'));
     expect(page, contains('itemCount: cities.length'));
     expect(page, contains('selectedCity = city'));
@@ -30,5 +40,18 @@ void main() {
       page,
       isNot(contains("decoration: const InputDecoration(labelText: '市')")),
     );
+  });
+
+  test('edit profile album supports moving photos and mixed review prompt', () {
+    final page = File(
+      'lib/modules/profile/edit_profile_page.dart',
+    ).readAsStringSync();
+
+    expect(page, contains('void _moveAlbumPhoto(int index, int delta)'));
+    expect(page, contains('_moveAlbumPhoto(index, -1)'));
+    expect(page, contains('_moveAlbumPhoto(index, 1)'));
+    expect(page, contains('Icons.arrow_upward'));
+    expect(page, contains('Icons.arrow_downward'));
+    expect(page, contains('资料已保存，部分修改已提交审核'));
   });
 }

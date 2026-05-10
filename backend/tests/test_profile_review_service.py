@@ -1,7 +1,4 @@
-import pytest
-
 from app.services.profile_review_service import (
-    ProfileReviewValidationError,
     apply_approved_profile_review_items,
     build_profile_review_payload,
     review_items_have_pending,
@@ -40,13 +37,36 @@ def test_build_profile_review_payload_splits_changed_profile_fields_and_album_it
     ] == [
         ("nickname", "replace", "旧昵称", "新昵称", "pending"),
         ("signature", "replace", "旧签名", "新签名", "pending"),
-        ("album_photos", "remove", "/uploads/profile/1/a.jpg", None, "pending"),
         ("album_photos", "add", None, "/uploads/profile/1/c.jpg", "pending"),
-        ("cover_url", "replace", "/uploads/profile/1/a.jpg", "/uploads/profile/1/c.jpg", "pending"),
     ]
 
 
-def test_build_profile_review_payload_ignores_pure_album_reorder() -> None:
+def test_build_profile_review_payload_ignores_album_remove_reorder_and_cover_change() -> None:
+    payload = build_profile_review_payload(
+        current={
+            "nickname": "小喜",
+            "avatar": "",
+            "signature": "",
+            "album_photos": [
+                "/uploads/profile/1/a.jpg",
+                "/uploads/profile/1/b.jpg",
+                "/uploads/profile/1/c.jpg",
+            ],
+            "cover_url": "/uploads/profile/1/a.jpg",
+        },
+        target={
+            "nickname": "小喜",
+            "avatar": "",
+            "signature": "",
+            "album_photos": ["/uploads/profile/1/c.jpg", "/uploads/profile/1/a.jpg"],
+            "cover_url": "/uploads/profile/1/c.jpg",
+        },
+    )
+
+    assert payload["review_items"] == []
+
+
+def test_build_profile_review_payload_reviews_added_album_photo_only() -> None:
     payload = build_profile_review_payload(
         current={
             "nickname": "小喜",
@@ -59,12 +79,14 @@ def test_build_profile_review_payload_ignores_pure_album_reorder() -> None:
             "nickname": "小喜",
             "avatar": "",
             "signature": "",
-            "album_photos": ["/uploads/profile/1/b.jpg", "/uploads/profile/1/a.jpg"],
-            "cover_url": "/uploads/profile/1/a.jpg",
+            "album_photos": ["/uploads/profile/1/b.jpg", "/uploads/profile/1/c.jpg"],
+            "cover_url": "/uploads/profile/1/c.jpg",
         },
     )
 
-    assert payload["review_items"] == []
+    assert [(item["field"], item["op"], item["after"]) for item in payload["review_items"]] == [
+        ("album_photos", "add", "/uploads/profile/1/c.jpg"),
+    ]
 
 
 def test_update_review_item_status_does_not_require_reject_reason() -> None:
@@ -125,9 +147,7 @@ def test_apply_approved_profile_review_items_writes_only_approved_items() -> Non
         "nickname": "approved",
         "avatar": "rejected",
         "signature": "approved",
-        "album_photos:remove": "approved",
         "album_photos:add": "approved",
-        "cover_url": "approved",
     }
     reviewed_items = []
     for item in payload["review_items"]:
@@ -151,44 +171,43 @@ def test_apply_approved_profile_review_items_writes_only_approved_items() -> Non
     }
 
 
-def test_apply_approved_profile_review_items_fails_when_approved_cover_not_in_final_album() -> None:
+def test_apply_approved_profile_review_items_keeps_reordered_existing_album_when_add_rejected() -> None:
     payload = build_profile_review_payload(
         current={
             "nickname": "小喜",
             "avatar": "",
             "signature": "",
-            "album_photos": ["/uploads/profile/1/a.jpg"],
+            "album_photos": [
+                "/uploads/profile/1/a.jpg",
+                "/uploads/profile/1/b.jpg",
+                "/uploads/profile/1/c.jpg",
+            ],
             "cover_url": "/uploads/profile/1/a.jpg",
         },
         target={
             "nickname": "小喜",
             "avatar": "",
             "signature": "",
-            "album_photos": [],
-            "cover_url": "/uploads/profile/1/a.jpg",
+            "album_photos": [
+                "/uploads/profile/1/c.jpg",
+                "/uploads/profile/1/b.jpg",
+                "/uploads/profile/1/d.jpg",
+            ],
+            "cover_url": "/uploads/profile/1/d.jpg",
         },
     )
-    reviewed_items = [
-        {**item, "status": "approved"} for item in payload["review_items"] if item["field"] == "album_photos"
-    ]
-    reviewed_items.append(
-        {
-            "item_id": "cover_url",
-            "field": "cover_url",
-            "label": "封面",
-            "op": "replace",
-            "before": "/uploads/profile/1/a.jpg",
-            "after": "/uploads/profile/1/a.jpg",
-            "status": "approved",
-            "review_remark": "",
-            "reviewed_at": None,
-            "reviewed_by": None,
-        }
+    reviewed_items = [{**item, "status": "rejected"} for item in payload["review_items"]]
+
+    update_data = apply_approved_profile_review_items(
+        before_snapshot=payload["before_snapshot"],
+        after_snapshot=payload["after_snapshot"],
+        review_items=reviewed_items,
     )
 
-    with pytest.raises(ProfileReviewValidationError, match="封面必须存在于最终相册"):
-        apply_approved_profile_review_items(
-            before_snapshot=payload["before_snapshot"],
-            after_snapshot=payload["after_snapshot"],
-            review_items=reviewed_items,
-        )
+    assert update_data == {
+        "album_photos": [
+            "/uploads/profile/1/c.jpg",
+            "/uploads/profile/1/b.jpg",
+        ],
+        "cover_url": "/uploads/profile/1/c.jpg",
+    }
