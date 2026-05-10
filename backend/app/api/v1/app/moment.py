@@ -8,6 +8,7 @@ from app.core.ctx import CTX_APP_USER_OBJ
 from app.models import AppUser, Moment, MomentMedia, UserFollow
 from app.schemas.base import Fail, Success, SuccessExtra
 from app.schemas.moments import MomentCreateIn
+from app.services.review_entry_guard_service import MOMENT_REVIEW_PENDING_MESSAGE, has_pending_moment_review
 from app.settings.config import settings
 from app.utils.media_url import to_relative_media_url
 from app.utils.upload_files import (
@@ -199,9 +200,9 @@ async def create_moment(req_in: MomentCreateIn):
 
     media_ids = req_in.media_ids or []
 
-    has_pending_moment = await Moment.filter(user_id=app_user.id, review_status="pending").exists()
+    has_pending_moment = await has_pending_moment_review(int(app_user.id))
     if has_pending_moment:
-        return Fail(code=400, msg="您有动态待审核，请审核完成后再提交")
+        return Fail(code=400, msg=MOMENT_REVIEW_PENDING_MESSAGE)
 
     # 校验媒体数量：图片最多4张，视频最多1个（二选一）
     if media_ids:

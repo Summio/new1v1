@@ -18,6 +18,10 @@ from app.schemas.base import Fail, Success, SuccessExtra
 from app.services.gift_income_service import decimal_to_float_2
 from app.services.interaction_relation_service import InteractionRelationError, ensure_interaction_allowed
 from app.services.profile_review_service import build_profile_review_payload
+from app.services.review_entry_guard_service import (
+    PROFILE_REVIEW_PENDING_MESSAGE,
+    has_pending_profile_review,
+)
 from app.settings.config import settings
 from app.utils.media_url import normalize_media_list, to_relative_media_url
 from app.utils.upload_files import (
@@ -171,12 +175,9 @@ async def update_user_profile(req_in: AppUserProfileUpdateIn):
         if requested_gender != current_gender:
             return Fail(code=400, msg="性别注册后不可修改")
 
-    has_pending_review = await AppUserProfileReviewApply.filter(
-        user_id=app_user.id,
-        status__in=["pending", "reviewing"],
-    ).exists()
+    has_pending_review = await has_pending_profile_review(int(app_user.id))
     if has_pending_review:
-        return Fail(code=400, msg="您有资料编辑申请待审核，请审核完成后再提交")
+        return Fail(code=400, msg=PROFILE_REVIEW_PENDING_MESSAGE)
 
     current_album = _normalize_album(app_user.album_photos)
     target_album = current_album

@@ -4,10 +4,12 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../app/providers/auth_provider.dart';
+import '../../app/routes/app_router.dart';
 import '../../core/data/china_location_data.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import 'package:huanxi/core/utils/app_toast.dart';
+import '../../services/review_entry_guard_service.dart';
 
 class EditProfilePage extends ConsumerStatefulWidget {
   const EditProfilePage({super.key});
@@ -29,6 +31,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   String _locationCity = '';
   List<String> _albumPhotos = <String>[];
   String? _coverUrl;
+  bool _isEntryChecking = true;
 
   @override
   void initState() {
@@ -54,6 +57,10 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
     if (rawBirthDate != null && rawBirthDate.trim().isNotEmpty) {
       _birthDate = DateTime.tryParse(rawBirthDate.trim());
     }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkEntryAccess();
+    });
   }
 
   @override
@@ -237,6 +244,35 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
     context.pop();
   }
 
+  Future<void> _checkEntryAccess() async {
+    try {
+      final entryStatus = await ReviewEntryGuardService.instance
+          .fetchEntryStatus();
+      if (!mounted) return;
+      if (!entryStatus.profileEdit.canEnter) {
+        AppToast.show(context, entryStatus.profileEdit.msg);
+        _leavePage();
+        return;
+      }
+      setState(() {
+        _isEntryChecking = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      AppToast.show(context, '状态检查失败，请稍后再试');
+      _leavePage();
+    }
+  }
+
+  void _leavePage() {
+    if (!mounted) return;
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(AppRoutes.profile);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
@@ -246,400 +282,422 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
       appBar: AppBar(title: const Text('编辑资料')),
-      body: GestureDetector(
-        onTap: () => FocusScope.of(context).unfocus(),
-        child: SingleChildScrollView(
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSectionTitle('头像'),
-              _buildSectionCard(
+      body: _isEntryChecking
+          ? const Center(child: CircularProgressIndicator())
+          : GestureDetector(
+              onTap: () => FocusScope.of(context).unfocus(),
+              child: SingleChildScrollView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    InkWell(
-                      borderRadius: BorderRadius.circular(56),
-                      onTap: () async {
-                        final url = await _pickAndUploadImage();
-                        if (url == null || !mounted) return;
-                        setState(() {
-                          _avatarController.text = url;
-                        });
-                      },
-                      child: Stack(
-                        clipBehavior: Clip.none,
+                    _buildSectionTitle('头像'),
+                    _buildSectionCard(
+                      child: Column(
                         children: [
-                          CircleAvatar(
-                            radius: 46,
-                            backgroundColor: AppTheme.primaryColor.withValues(
-                              alpha: 0.12,
-                            ),
-                            backgroundImage: avatarUrl.isNotEmpty
-                                ? NetworkImage(avatarUrl)
-                                : (authState.avatar != null &&
-                                          authState.avatar!.trim().isNotEmpty
-                                      ? NetworkImage(authState.avatar!.trim())
-                                      : null),
-                            child:
-                                (avatarUrl.isEmpty &&
-                                    (authState.avatar == null ||
-                                        authState.avatar!.trim().isEmpty))
-                                ? const Icon(
-                                    Icons.person,
-                                    size: 46,
-                                    color: AppTheme.primaryColor,
-                                  )
-                                : null,
-                          ),
-                          Positioned(
-                            right: -2,
-                            bottom: -2,
-                            child: Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: AppTheme.primaryColor,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: Colors.white,
-                                  width: 2,
-                                ),
-                              ),
-                              child: const Icon(
-                                Icons.edit,
-                                size: 14,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      '点击头像更换',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppTheme.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 16),
-              _buildSectionTitle('基本信息'),
-              _buildSectionCard(
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: _nicknameController,
-                      decoration: const InputDecoration(
-                        labelText: '昵称',
-                        hintText: '请输入昵称',
-                        prefixIcon: Icon(Icons.person_outline),
-                      ),
-                      maxLength: 30,
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _signatureController,
-                      decoration: const InputDecoration(
-                        labelText: '个性签名',
-                        hintText: '写一句关于自己的介绍',
-                        prefixIcon: Icon(Icons.edit_note_outlined),
-                      ),
-                      minLines: 2,
-                      maxLines: 4,
-                      maxLength: 500,
-                    ),
-                    const SizedBox(height: 8),
-                    InputDecorator(
-                      decoration: const InputDecoration(
-                        labelText: '性别',
-                        prefixIcon: Icon(Icons.wc),
-                      ),
-                      child: Text(authState.gender == 'female' ? '女' : '男'),
-                    ),
-                    const SizedBox(height: 12),
-                    _buildTapTile(
-                      label: '出生日期',
-                      value: _dateText(_birthDate),
-                      icon: Icons.cake_outlined,
-                      onTap: _pickBirthDate,
-                    ),
-                    const SizedBox(height: 12),
-                    _buildTapTile(
-                      label: '所在地',
-                      value: _locationCity.isEmpty
-                          ? '请选择到市/州/盟/地区'
-                          : Formatters.locationCity(_locationCity),
-                      icon: Icons.location_on_outlined,
-                      onTap: _pickLocationCity,
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _heightController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: '身高(cm)',
-                              hintText: '如 170',
-                              prefixIcon: Icon(Icons.height),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: TextField(
-                            controller: _weightController,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: '体重(kg)',
-                              hintText: '如 52',
-                              prefixIcon: Icon(Icons.monitor_weight_outlined),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 16),
-              _buildSectionTitle('相册与封面'),
-              _buildSectionCard(
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Text(
-                          '相册（${_validAlbumList(_albumPhotos).length}/6）',
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const Spacer(),
-                        FilledButton.tonalIcon(
-                          onPressed: _addAlbumPhoto,
-                          icon: const Icon(Icons.add, size: 18),
-                          label: const Text('新增'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    if (_albumPhotos.isEmpty)
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(vertical: 18),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8F9FC),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Center(child: Text('还没有照片，点击“新增”添加')),
-                      ),
-                    ...List.generate(_albumPhotos.length, (index) {
-                      final rawUrl = _albumPhotos[index].trim();
-                      final hasImage = rawUrl.isNotEmpty;
-                      final isCover =
-                          _coverUrl != null && _coverUrl == rawUrl && hasImage;
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF8F9FC),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Column(
-                          children: [
-                            Row(
+                          InkWell(
+                            borderRadius: BorderRadius.circular(56),
+                            onTap: () async {
+                              final url = await _pickAndUploadImage();
+                              if (url == null || !mounted) return;
+                              setState(() {
+                                _avatarController.text = url;
+                              });
+                            },
+                            child: Stack(
+                              clipBehavior: Clip.none,
                               children: [
-                                Container(
-                                  width: 72,
-                                  height: 72,
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(10),
-                                    color: Colors.white,
-                                  ),
-                                  clipBehavior: Clip.antiAlias,
-                                  child: hasImage
-                                      ? Image.network(
-                                          rawUrl,
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (_, _, _) => const Icon(
-                                            Icons.broken_image_outlined,
-                                          ),
+                                CircleAvatar(
+                                  radius: 46,
+                                  backgroundColor: AppTheme.primaryColor
+                                      .withValues(alpha: 0.12),
+                                  backgroundImage: avatarUrl.isNotEmpty
+                                      ? NetworkImage(avatarUrl)
+                                      : (authState.avatar != null &&
+                                                authState.avatar!
+                                                    .trim()
+                                                    .isNotEmpty
+                                            ? NetworkImage(
+                                                authState.avatar!.trim(),
+                                              )
+                                            : null),
+                                  child:
+                                      (avatarUrl.isEmpty &&
+                                          (authState.avatar == null ||
+                                              authState.avatar!.trim().isEmpty))
+                                      ? const Icon(
+                                          Icons.person,
+                                          size: 46,
+                                          color: AppTheme.primaryColor,
                                         )
-                                      : const Icon(
-                                          Icons.image_outlined,
-                                          color: AppTheme.textHint,
-                                        ),
+                                      : null,
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        '照片 ${index + 1}',
-                                        style: const TextStyle(
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      Text(
-                                        isCover ? '当前封面' : '可用于封面',
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: AppTheme.textSecondary,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                if (isCover)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
+                                Positioned(
+                                  right: -2,
+                                  bottom: -2,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(6),
                                     decoration: BoxDecoration(
-                                      color: AppTheme.primaryColor.withValues(
-                                        alpha: 0.12,
-                                      ),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: const Text(
-                                      '封面',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: AppTheme.primaryColor,
-                                        fontWeight: FontWeight.w600,
+                                      color: AppTheme.primaryColor,
+                                      borderRadius: BorderRadius.circular(14),
+                                      border: Border.all(
+                                        color: Colors.white,
+                                        width: 2,
                                       ),
                                     ),
+                                    child: const Icon(
+                                      Icons.edit,
+                                      size: 14,
+                                      color: Colors.white,
+                                    ),
                                   ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              alignment: WrapAlignment.spaceBetween,
-                              children: [
-                                TextButton.icon(
-                                  onPressed: () async {
-                                    final url = await _pickAndUploadImage();
-                                    if (url == null || !mounted) return;
-                                    _updateAlbumPhoto(index, url);
-                                  },
-                                  icon: const Icon(
-                                    Icons.photo_library_outlined,
-                                    size: 18,
-                                  ),
-                                  label: Text(hasImage ? '更换' : '上传'),
-                                ),
-                                TextButton.icon(
-                                  onPressed: hasImage
-                                      ? () {
-                                          setState(() {
-                                            _coverUrl = rawUrl;
-                                          });
-                                        }
-                                      : null,
-                                  icon: const Icon(
-                                    Icons.image_outlined,
-                                    size: 18,
-                                  ),
-                                  label: const Text('设为封面'),
-                                ),
-                                TextButton.icon(
-                                  onPressed: index > 0
-                                      ? () => _moveAlbumPhoto(index, -1)
-                                      : null,
-                                  icon: const Icon(
-                                    Icons.arrow_upward,
-                                    size: 18,
-                                  ),
-                                  label: const Text('上移'),
-                                ),
-                                TextButton.icon(
-                                  onPressed: index < _albumPhotos.length - 1
-                                      ? () => _moveAlbumPhoto(index, 1)
-                                      : null,
-                                  icon: const Icon(
-                                    Icons.arrow_downward,
-                                    size: 18,
-                                  ),
-                                  label: const Text('下移'),
-                                ),
-                                TextButton.icon(
-                                  onPressed: () => _removeAlbumPhoto(index),
-                                  icon: const Icon(
-                                    Icons.delete_outline,
-                                    size: 18,
-                                  ),
-                                  label: const Text('删除'),
                                 ),
                               ],
                             ),
-                          ],
-                        ),
-                      );
-                    }),
-                    if (validAlbum.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 6),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            '上传相册图片后可设置封面',
+                          ),
+                          const SizedBox(height: 10),
+                          const Text(
+                            '点击头像更换',
                             style: TextStyle(
                               fontSize: 12,
                               color: AppTheme.textSecondary,
                             ),
                           ),
-                        ),
+                        ],
                       ),
+                    ),
+
+                    const SizedBox(height: 16),
+                    _buildSectionTitle('基本信息'),
+                    _buildSectionCard(
+                      child: Column(
+                        children: [
+                          TextField(
+                            controller: _nicknameController,
+                            decoration: const InputDecoration(
+                              labelText: '昵称',
+                              hintText: '请输入昵称',
+                              prefixIcon: Icon(Icons.person_outline),
+                            ),
+                            maxLength: 30,
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: _signatureController,
+                            decoration: const InputDecoration(
+                              labelText: '个性签名',
+                              hintText: '写一句关于自己的介绍',
+                              prefixIcon: Icon(Icons.edit_note_outlined),
+                            ),
+                            minLines: 2,
+                            maxLines: 4,
+                            maxLength: 500,
+                          ),
+                          const SizedBox(height: 8),
+                          InputDecorator(
+                            decoration: const InputDecoration(
+                              labelText: '性别',
+                              prefixIcon: Icon(Icons.wc),
+                            ),
+                            child: Text(
+                              authState.gender == 'female' ? '女' : '男',
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          _buildTapTile(
+                            label: '出生日期',
+                            value: _dateText(_birthDate),
+                            icon: Icons.cake_outlined,
+                            onTap: _pickBirthDate,
+                          ),
+                          const SizedBox(height: 12),
+                          _buildTapTile(
+                            label: '所在地',
+                            value: _locationCity.isEmpty
+                                ? '请选择到市/州/盟/地区'
+                                : Formatters.locationCity(_locationCity),
+                            icon: Icons.location_on_outlined,
+                            onTap: _pickLocationCity,
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _heightController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: '身高(cm)',
+                                    hintText: '如 170',
+                                    prefixIcon: Icon(Icons.height),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: TextField(
+                                  controller: _weightController,
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(
+                                    labelText: '体重(kg)',
+                                    hintText: '如 52',
+                                    prefixIcon: Icon(
+                                      Icons.monitor_weight_outlined,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+                    _buildSectionTitle('相册与封面'),
+                    _buildSectionCard(
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Text(
+                                '相册（${_validAlbumList(_albumPhotos).length}/6）',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const Spacer(),
+                              FilledButton.tonalIcon(
+                                onPressed: _addAlbumPhoto,
+                                icon: const Icon(Icons.add, size: 18),
+                                label: const Text('新增'),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          if (_albumPhotos.isEmpty)
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(vertical: 18),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8F9FC),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Center(
+                                child: Text('还没有照片，点击“新增”添加'),
+                              ),
+                            ),
+                          ...List.generate(_albumPhotos.length, (index) {
+                            final rawUrl = _albumPhotos[index].trim();
+                            final hasImage = rawUrl.isNotEmpty;
+                            final isCover =
+                                _coverUrl != null &&
+                                _coverUrl == rawUrl &&
+                                hasImage;
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8F9FC),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Column(
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        width: 72,
+                                        height: 72,
+                                        decoration: BoxDecoration(
+                                          borderRadius: BorderRadius.circular(
+                                            10,
+                                          ),
+                                          color: Colors.white,
+                                        ),
+                                        clipBehavior: Clip.antiAlias,
+                                        child: hasImage
+                                            ? Image.network(
+                                                rawUrl,
+                                                fit: BoxFit.cover,
+                                                errorBuilder: (_, _, _) =>
+                                                    const Icon(
+                                                      Icons
+                                                          .broken_image_outlined,
+                                                    ),
+                                              )
+                                            : const Icon(
+                                                Icons.image_outlined,
+                                                color: AppTheme.textHint,
+                                              ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              '照片 ${index + 1}',
+                                              style: const TextStyle(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Text(
+                                              isCover ? '当前封面' : '可用于封面',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                color: AppTheme.textSecondary,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      if (isCover)
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: AppTheme.primaryColor
+                                                .withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(
+                                              12,
+                                            ),
+                                          ),
+                                          child: const Text(
+                                            '封面',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: AppTheme.primaryColor,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Wrap(
+                                    spacing: 6,
+                                    runSpacing: 6,
+                                    alignment: WrapAlignment.spaceBetween,
+                                    children: [
+                                      TextButton.icon(
+                                        onPressed: () async {
+                                          final url =
+                                              await _pickAndUploadImage();
+                                          if (url == null || !mounted) return;
+                                          _updateAlbumPhoto(index, url);
+                                        },
+                                        icon: const Icon(
+                                          Icons.photo_library_outlined,
+                                          size: 18,
+                                        ),
+                                        label: Text(hasImage ? '更换' : '上传'),
+                                      ),
+                                      TextButton.icon(
+                                        onPressed: hasImage
+                                            ? () {
+                                                setState(() {
+                                                  _coverUrl = rawUrl;
+                                                });
+                                              }
+                                            : null,
+                                        icon: const Icon(
+                                          Icons.image_outlined,
+                                          size: 18,
+                                        ),
+                                        label: const Text('设为封面'),
+                                      ),
+                                      TextButton.icon(
+                                        onPressed: index > 0
+                                            ? () => _moveAlbumPhoto(index, -1)
+                                            : null,
+                                        icon: const Icon(
+                                          Icons.arrow_upward,
+                                          size: 18,
+                                        ),
+                                        label: const Text('上移'),
+                                      ),
+                                      TextButton.icon(
+                                        onPressed:
+                                            index < _albumPhotos.length - 1
+                                            ? () => _moveAlbumPhoto(index, 1)
+                                            : null,
+                                        icon: const Icon(
+                                          Icons.arrow_downward,
+                                          size: 18,
+                                        ),
+                                        label: const Text('下移'),
+                                      ),
+                                      TextButton.icon(
+                                        onPressed: () =>
+                                            _removeAlbumPhoto(index),
+                                        icon: const Icon(
+                                          Icons.delete_outline,
+                                          size: 18,
+                                        ),
+                                        label: const Text('删除'),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            );
+                          }),
+                          if (validAlbum.isEmpty)
+                            const Padding(
+                              padding: EdgeInsets.only(top: 6),
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  '上传相册图片后可设置封面',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 16),
+                    _buildSectionCard(
+                      child: _buildInfoTile(
+                        '用户ID',
+                        authState.userId?.toString() ?? '-',
+                      ),
+                    ),
+
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: FilledButton(
+                        onPressed: _isSaving ? null : _save,
+                        child: _isSaving
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text('保存资料'),
+                      ),
+                    ),
                   ],
                 ),
               ),
-
-              const SizedBox(height: 16),
-              _buildSectionCard(
-                child: _buildInfoTile(
-                  '用户ID',
-                  authState.userId?.toString() ?? '-',
-                ),
-              ),
-
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: FilledButton(
-                  onPressed: _isSaving ? null : _save,
-                  child: _isSaving
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text('保存资料'),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+            ),
     );
   }
 

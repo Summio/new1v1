@@ -5,6 +5,7 @@ import '../../app/providers/moment_provider.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/utils/app_toast.dart';
 import '../../services/moment_service.dart';
+import '../../services/review_entry_guard_service.dart';
 import '../../app/routes/app_router.dart';
 import 'moment_list_view.dart';
 
@@ -17,6 +18,8 @@ class MyMomentsPage extends ConsumerStatefulWidget {
 }
 
 class _MyMomentsPageState extends ConsumerState<MyMomentsPage> {
+  bool _isCheckingPublishEntry = false;
+
   @override
   void initState() {
     super.initState();
@@ -32,7 +35,7 @@ class _MyMomentsPageState extends ConsumerState<MyMomentsPage> {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push(AppRoutes.publishMoment),
+        onPressed: _openPublishMoment,
         backgroundColor: AppTheme.primaryColor,
         child: const Icon(Icons.add, color: Colors.white),
       ),
@@ -69,6 +72,34 @@ class _MyMomentsPageState extends ConsumerState<MyMomentsPage> {
     } else {
       if (mounted) {
         AppToast.show(context, '删除失败');
+      }
+    }
+  }
+
+  Future<void> _openPublishMoment() async {
+    if (_isCheckingPublishEntry) return;
+    setState(() {
+      _isCheckingPublishEntry = true;
+    });
+    try {
+      final entryStatus = await ReviewEntryGuardService.instance
+          .fetchEntryStatus();
+      if (!mounted) return;
+      final momentPublish = entryStatus.momentPublish;
+      if (!momentPublish.canEnter) {
+        AppToast.show(context, momentPublish.msg);
+        return;
+      }
+      context.push(AppRoutes.publishMoment);
+    } catch (_) {
+      if (mounted) {
+        AppToast.show(context, '状态检查失败，请稍后再试');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCheckingPublishEntry = false;
+        });
       }
     }
   }

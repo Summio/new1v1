@@ -34,8 +34,8 @@ def test_app_moment_create_submits_pending_and_blocks_existing_pending() -> None
     source = inspect.getsource(app_moment.create_moment)
 
     assert 'review_status="pending"' in source
-    assert 'Moment.filter(user_id=app_user.id, review_status="pending").exists()' in source
-    assert "您有动态待审核，请审核完成后再提交" in source
+    assert "has_pending_moment_review" in source
+    assert "MOMENT_REVIEW_PENDING_MESSAGE" in source
     assert '"review_status": moment.review_status or "pending"' in source
 
 

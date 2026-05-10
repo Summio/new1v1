@@ -3,15 +3,18 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
+import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/providers/moment_provider.dart';
 import '../../core/media/video_upload_preprocessor.dart';
 import '../../core/utils/app_toast.dart';
 import 'moment_video_preview_page.dart';
 import '../../services/moment_service.dart';
+import '../../services/review_entry_guard_service.dart';
 
 /// 发布动态页面
 class PublishMomentPage extends ConsumerStatefulWidget {
@@ -30,6 +33,7 @@ class _PublishMomentPageState extends ConsumerState<PublishMomentPage> {
   final bool _isUploading = false;
   bool _isPublishing = false;
   bool _isPreparingVideo = false;
+  bool _isEntryChecking = true;
 
   void _showToast(String message) {
     if (!mounted) return;
@@ -39,6 +43,14 @@ class _PublishMomentPageState extends ConsumerState<PublishMomentPage> {
   void _showErrorToast(Object error) {
     if (!mounted) return;
     AppToast.error(context, error);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkEntryAccess();
+    });
   }
 
   @override
@@ -96,72 +108,105 @@ class _PublishMomentPageState extends ConsumerState<PublishMomentPage> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // 文字输入
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: TextField(
-                      controller: _contentController,
-                      maxLines: 8,
-                      minLines: 4,
-                      maxLength: 500,
-                      decoration: InputDecoration(
-                        hintText: '分享这一刻...',
-                        hintStyle: const TextStyle(color: AppTheme.textHint),
-                        border: InputBorder.none,
-                        counterStyle: const TextStyle(
-                          color: AppTheme.textSecondary,
-                        ),
-                      ),
-                      style: const TextStyle(fontSize: 16, height: 1.5),
-                      onChanged: (_) => setState(() {}),
-                    ),
-                  ),
-
-                  const Divider(height: 1),
-
-                  // 已上传媒体预览
-                  if (_uploadedMediaIds.isNotEmpty) ...[
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 8,
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.check_circle,
-                            color: AppTheme.onlineGreen,
-                            size: 16,
+      body: _isEntryChecking
+          ? const Center(child: CircularProgressIndicator())
+          : Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // 文字输入
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: TextField(
+                            controller: _contentController,
+                            maxLines: 8,
+                            minLines: 4,
+                            maxLength: 500,
+                            decoration: InputDecoration(
+                              hintText: '分享这一刻...',
+                              hintStyle: const TextStyle(
+                                color: AppTheme.textHint,
+                              ),
+                              border: InputBorder.none,
+                              counterStyle: const TextStyle(
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                            style: const TextStyle(fontSize: 16, height: 1.5),
+                            onChanged: (_) => setState(() {}),
                           ),
-                          const SizedBox(width: 6),
-                          Text(
-                            '已上传 ${_uploadedMediaIds.length} 个媒体',
-                            style: const TextStyle(
-                              fontSize: 13,
-                              color: AppTheme.textSecondary,
+                        ),
+
+                        const Divider(height: 1),
+
+                        // 已上传媒体预览
+                        if (_uploadedMediaIds.isNotEmpty) ...[
+                          Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.check_circle,
+                                  color: AppTheme.onlineGreen,
+                                  size: 16,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '已上传 ${_uploadedMediaIds.length} 个媒体',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: AppTheme.textSecondary,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
-                      ),
-                    ),
-                  ],
 
-                  // 媒体选择区
-                  _buildMediaSelector(),
-                ],
-              ),
+                        // 媒体选择区
+                        _buildMediaSelector(),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
     );
+  }
+
+  Future<void> _checkEntryAccess() async {
+    try {
+      final entryStatus = await ReviewEntryGuardService.instance
+          .fetchEntryStatus();
+      if (!mounted) return;
+      if (!entryStatus.momentPublish.canEnter) {
+        AppToast.show(context, entryStatus.momentPublish.msg);
+        _leavePage();
+        return;
+      }
+      setState(() {
+        _isEntryChecking = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      AppToast.show(context, '状态检查失败，请稍后再试');
+      _leavePage();
+    }
+  }
+
+  void _leavePage() {
+    if (!mounted) return;
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(AppRoutes.myMoments);
+    }
   }
 
   bool get _canPublish {

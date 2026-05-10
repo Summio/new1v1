@@ -13,16 +13,25 @@ void main() {
     expect(service, contains("json['review_remark']"));
   });
 
-  test('publish moment submits for review instead of showing published success', () {
-    final page = File('lib/modules/home/publish_moment_page.dart').readAsStringSync();
+  test(
+    'publish moment submits for review instead of showing published success',
+    () {
+      final page = File(
+        'lib/modules/home/publish_moment_page.dart',
+      ).readAsStringSync();
 
-    expect(page, contains('已提交审核'));
-    expect(page, isNot(contains("发布成功'")));
-  });
+      expect(page, contains('已提交审核'));
+      expect(page, isNot(contains("发布成功'")));
+    },
+  );
 
   test('my moments page enables review status display', () {
-    final page = File('lib/modules/home/my_moments_page.dart').readAsStringSync();
-    final listView = File('lib/modules/home/moment_list_view.dart').readAsStringSync();
+    final page = File(
+      'lib/modules/home/my_moments_page.dart',
+    ).readAsStringSync();
+    final listView = File(
+      'lib/modules/home/moment_list_view.dart',
+    ).readAsStringSync();
     final card = File('lib/modules/home/moment_card.dart').readAsStringSync();
 
     expect(page, contains('showReviewStatus: true'));
@@ -32,4 +41,29 @@ void main() {
     expect(card, contains('已驳回'));
     expect(card, contains('驳回原因'));
   });
+
+  test(
+    'moment publish entry checks review status before navigation and render',
+    () {
+      final myMoments = File(
+        'lib/modules/home/my_moments_page.dart',
+      ).readAsStringSync();
+      final publish = File(
+        'lib/modules/home/publish_moment_page.dart',
+      ).readAsStringSync();
+      final service = File(
+        'lib/services/review_entry_guard_service.dart',
+      ).readAsStringSync();
+
+      expect(service, contains('reviewEntryStatus'));
+      expect(service, contains('reasonCode'));
+      expect(myMoments, contains('fetchEntryStatus'));
+      expect(myMoments, contains('momentPublish.canEnter'));
+      expect(myMoments, contains('状态检查失败，请稍后再试'));
+      expect(publish, contains('_isEntryChecking'));
+      expect(publish, contains('CircularProgressIndicator'));
+      expect(publish, contains('momentPublish.canEnter'));
+      expect(publish, contains('AppRoutes.myMoments'));
+    },
+  );
 }

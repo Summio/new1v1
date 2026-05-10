@@ -54,4 +54,29 @@ void main() {
     expect(page, contains('Icons.arrow_downward'));
     expect(page, contains('资料已保存，部分修改已提交审核'));
   });
+
+  test(
+    'edit profile entry checks review status before navigation and render',
+    () {
+      final profilePage = File(
+        'lib/modules/home/profile_page.dart',
+      ).readAsStringSync();
+      final editPage = File(
+        'lib/modules/profile/edit_profile_page.dart',
+      ).readAsStringSync();
+      final service = File(
+        'lib/services/review_entry_guard_service.dart',
+      ).readAsStringSync();
+
+      expect(service, contains('reviewEntryStatus'));
+      expect(service, contains('reasonCode'));
+      expect(profilePage, contains('fetchEntryStatus'));
+      expect(profilePage, contains('profileEdit.canEnter'));
+      expect(profilePage, contains('状态检查失败，请稍后再试'));
+      expect(editPage, contains('_isEntryChecking'));
+      expect(editPage, contains('CircularProgressIndicator'));
+      expect(editPage, contains('profileEdit.canEnter'));
+      expect(editPage, contains('AppRoutes.profile'));
+    },
+  );
 }

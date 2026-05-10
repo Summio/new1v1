@@ -5,6 +5,7 @@ import '../../app/routes/app_router.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/utils/app_toast.dart';
+import '../../services/review_entry_guard_service.dart';
 
 class ProfilePage extends ConsumerStatefulWidget {
   const ProfilePage({super.key});
@@ -14,6 +15,8 @@ class ProfilePage extends ConsumerStatefulWidget {
 }
 
 class _ProfilePageState extends ConsumerState<ProfilePage> {
+  bool _isCheckingProfileEdit = false;
+
   @override
   void initState() {
     super.initState();
@@ -56,7 +59,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                   children: [
                     const SizedBox(height: 40),
                     GestureDetector(
-                      onTap: () => context.push(AppRoutes.editProfile),
+                      onTap: _openEditProfile,
                       child: Hero(
                         tag: 'user_avatar',
                         child: Container(
@@ -266,6 +269,34 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         ),
       ],
     );
+  }
+
+  Future<void> _openEditProfile() async {
+    if (_isCheckingProfileEdit) return;
+    setState(() {
+      _isCheckingProfileEdit = true;
+    });
+    try {
+      final entryStatus = await ReviewEntryGuardService.instance
+          .fetchEntryStatus();
+      if (!mounted) return;
+      final profileEdit = entryStatus.profileEdit;
+      if (!profileEdit.canEnter) {
+        AppToast.show(context, profileEdit.msg);
+        return;
+      }
+      context.push(AppRoutes.editProfile);
+    } catch (_) {
+      if (mounted) {
+        AppToast.show(context, '状态检查失败，请稍后再试');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCheckingProfileEdit = false;
+        });
+      }
+    }
   }
 
   Future<void> _openCustomerService(BuildContext context, WidgetRef ref) async {

@@ -54,8 +54,7 @@ class ApiEndpoints {
       'app/certification/call-price/tiers';
 
   /// 更新认证用户通话价格
-  static const String certifiedCallPriceUpdate =
-      'app/certification/call-price';
+  static const String certifiedCallPriceUpdate = 'app/certification/call-price';
 
   // ========== 通话模块 ==========
   /// 发起呼叫（余额预检）
@@ -144,4 +143,8 @@ class ApiEndpoints {
 
   /// 删除动态
   static const String momentDelete = 'app/moment'; // DELETE /app/moment/{id}
+
+  // ========== 审核入口状态 ==========
+  /// 查询资料编辑与动态发布入口状态
+  static const String reviewEntryStatus = 'app/review/entry-status';
 }

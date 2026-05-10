@@ -13,6 +13,7 @@ WEB_APP_USER_VIEW = ROOT / "web/src/views/operation/app-user/index.vue"
 INIT_APP = ROOT / "app/core/init_app.py"
 AUTH_PROVIDER = REPO / "huanxi/lib/app/providers/auth_provider.dart"
 EDIT_PROFILE_PAGE = REPO / "huanxi/lib/modules/profile/edit_profile_page.dart"
+REVIEW_ENTRY_GUARD_SERVICE = ROOT / "app/services/review_entry_guard_service.py"
 MIGRATIONS_DIR = ROOT / "migrations/models"
 
 
@@ -36,11 +37,12 @@ def test_profile_review_model_and_migration_are_registered() -> None:
 
 def test_app_profile_update_creates_review_apply_for_guarded_fields() -> None:
     text = APP_USER_API.read_text(encoding="utf-8")
+    guard_text = REVIEW_ENTRY_GUARD_SERVICE.read_text(encoding="utf-8")
 
     assert "AppUserProfileReviewApply" in text
-    assert 'pending", "reviewing"' in text or "pending', 'reviewing'" in text
+    assert 'pending", "reviewing"' in guard_text or "pending', 'reviewing'" in guard_text
     assert "资料修改申请已提交，请等待审核" in text
-    assert "您有资料编辑申请待审核，请审核完成后再提交" in text
+    assert "您有资料编辑申请待审核，请审核完成后再提交" in guard_text
     assert "profile_review_status" in text
     assert "upload_user_image" in text
 
