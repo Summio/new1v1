@@ -14,12 +14,14 @@ class CallMappedEvent {
   final bool shouldExit;
   final bool shouldSyncBalance;
   final bool shouldShowGift;
+  final bool shouldShowBalanceLow;
 
   const CallMappedEvent({
     required this.endReason,
     this.shouldExit = false,
     this.shouldSyncBalance = false,
     this.shouldShowGift = false,
+    this.shouldShowBalanceLow = false,
   });
 }
 
@@ -33,6 +35,9 @@ class CallEventMapper {
     }
     if (event == 'gift_received' || event == 'gift_sent') {
       return const CallMappedEvent(endReason: null, shouldShowGift: true);
+    }
+    if (event == 'call_balance_low') {
+      return const CallMappedEvent(endReason: null, shouldShowBalanceLow: true);
     }
     if (event == 'call_balance_empty') {
       return const CallMappedEvent(

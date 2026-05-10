@@ -47,7 +47,7 @@ async def push_call_accepted(
 ) -> PushResult:
     """推送通话已接听给主叫方。"""
     data = {"call_id": int(call_id)}
-    return await get_manager().push_to_user(int(caller_id), "call_accepted", data)
+    return await get_manager().push_to_user(int(caller_id), "call_accepted", data, critical=True)
 
 
 async def push_call_rejected(
@@ -114,6 +114,23 @@ async def push_call_balance_empty(
     ]
     results = await asyncio.gather(*tasks)
     return all(results)
+
+
+async def push_call_balance_low(
+    user_id: int,
+    call_id: int,
+    coins: float,
+    required_coins: int,
+    source: str,
+) -> PushResult:
+    """推送通话中余额不足下一分钟费用的预警给付费方。"""
+    data = {
+        "call_id": int(call_id),
+        "coins": coins,
+        "required_coins": int(required_coins),
+        "source": source,
+    }
+    return await get_manager().push_to_user(int(user_id), "call_balance_low", data)
 
 
 # ===== 礼物事件 =====
@@ -218,4 +235,3 @@ async def push_presence(
         "online": bool(online),
     }
     return await get_manager().push_to_user(int(user_id), "presence", data, critical=True)
-

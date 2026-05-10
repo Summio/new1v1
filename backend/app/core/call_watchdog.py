@@ -1,7 +1,7 @@
 import asyncio
 import random
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from tortoise.expressions import F
 from tortoise.transactions import in_transaction
@@ -11,13 +11,13 @@ from app.core.call_presence import (
     get_snapshot,
     mark_left_candidate,
 )
-from app.core.time_utils import now_local_naive, to_utc_aware
+from app.core.time_utils import now_local_naive, to_local_naive_for_db, to_utc_aware
 from app.log import logger
 from app.models import AppUser, CallRecord
 from app.models.system_config import SystemConfig
+from app.services.balance_event_service import publish_balance_changed
 from app.services.call_income_service import settle_call_certified_user_income_once
 from app.services.call_trace_service import CallTraceService
-from app.services.gift_income_service import decimal_to_float_2
 from app.utils.parse import clamp_int, safe_parse_int
 
 FREE_SECONDS_BEFORE_BILLING = 10
@@ -53,6 +53,13 @@ class ForceExitDecision:
     force_exit_user_id: int | None
     mark_candidate_roles: tuple[str, ...] = ()
     clear_candidate_roles: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class WatchdogBillingResult:
+    ended_records: list[CallRecord]
+    charged_payer_ids: list[int]
+    certified_user_balance_pushes: list[int]
 
 
 def _clamp_seconds(value: int) -> int:
@@ -181,7 +188,7 @@ def _now_ms() -> int:
 
 
 def _ms_to_local_naive(ms: int) -> datetime:
-    return datetime.fromtimestamp(ms / 1000)
+    return to_local_naive_for_db(datetime.fromtimestamp(ms / 1000, timezone.utc))
 
 
 def _resolve_force_exit_decision(
@@ -197,7 +204,7 @@ def _resolve_force_exit_decision(
 ) -> ForceExitDecision:
     detect_ms = int(max(0, offline_detect_seconds) * 1000)
     settle_ms = int(max(0, settle_grace_seconds) * 1000)
-    connected_ms = int(connected_at.timestamp() * 1000)
+    connected_ms = int(to_utc_aware(connected_at).timestamp() * 1000)
 
     mark_roles: list[str] = []
     clear_roles: list[str] = []
@@ -402,6 +409,49 @@ async def _close_stale_ongoing(config: WatchdogConfig) -> None:
         asyncio.create_task(_ws_push_balance_updated_for_charge(payer_id))
     for certified_user_id in certified_user_balance_pushes:
         asyncio.create_task(_ws_push_balance_updated_for_charge(certified_user_id))
+
+
+async def process_ongoing_call_billing_once(call_id: int) -> WatchdogBillingResult:
+    config = await _load_watchdog_config()
+    raw_records = await CallRecord.filter(id=int(call_id), status="ongoing").values(
+        "id",
+        "caller_id",
+        "callee_id",
+        "connected_at",
+        "deducted_minutes",
+        "deducted_amount",
+        "call_price",
+        "billing_free_seconds",
+        "payer_user_id",
+    )
+    if not raw_records:
+        return WatchdogBillingResult(
+            ended_records=[],
+            charged_payer_ids=[],
+            certified_user_balance_pushes=[],
+        )
+
+    all_user_ids: set[int] = set()
+    for record in raw_records:
+        all_user_ids.add(int(record["caller_id"]))
+        all_user_ids.add(int(record["callee_id"]))
+    certified_user_ids = set(
+        await AppUser.filter(
+            id__in=list(all_user_ids),
+            is_certified_user=True,
+        ).values_list("id", flat=True)
+    )
+
+    ended_records, charged_records, certified_user_balance_pushes = await _process_stale_batch(
+        config,
+        raw_records,
+        certified_user_ids,
+    )
+    return WatchdogBillingResult(
+        ended_records=ended_records,
+        charged_payer_ids=[payer_id for _, payer_id in charged_records],
+        certified_user_balance_pushes=certified_user_balance_pushes,
+    )
 
 
 async def _process_stale_batch(
@@ -711,16 +761,7 @@ async def _ws_push_call_force_exit(call_record: CallRecord) -> None:
 async def _ws_push_balance_updated_for_charge(payer_id: int) -> None:
     """Watchdog 扣费成功后推送余额更新给付费方（fire-and-forget）。"""
     try:
-        from app.models import AppUser
-        from app.websocket import events as ws_events
-
-        payer = await AppUser.filter(id=payer_id).first()
-        if payer:
-            await ws_events.push_balance_update(
-                user_id=payer_id,
-                coins=decimal_to_float_2(payer.coins),
-                diamonds=decimal_to_float_2(payer.diamonds),
-            )
+        await publish_balance_changed(int(payer_id), source="call_billing")
     except Exception as e:  # noqa: BLE001
         logger.warning("ws push balance_updated for charge failed: {}", str(e))
 

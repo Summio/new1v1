@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, File, Query, UploadFile
-from tortoise.expressions import Q
+from tortoise.expressions import F, Q
 from tortoise.transactions import in_transaction
 
 from app.core.ctx import CTX_USER_ID
@@ -17,12 +17,13 @@ from app.models import (
     RechargeOrder,
     WithdrawApply,
 )
-from app.schemas.app_user import AppUserAdminUpdateIn, CertificationReviewIn
+from app.schemas.app_user import AppUserAdminUpdateIn, AppUserBalanceAdjustIn, CertificationReviewIn
 from app.schemas.app_user_profile_review import (
     ProfileReviewBulkIn,
     ProfileReviewItemReviewIn,
 )
 from app.schemas.base import Fail, Success, SuccessExtra
+from app.services.balance_event_service import publish_balance_changed
 from app.services.certification_price_service import normalize_certified_call_price
 from app.services.gift_income_service import decimal_to_float_2
 from app.services.profile_review_service import (
@@ -150,6 +151,53 @@ async def get_app_user(id: int = Query(..., ge=1, description="用户ID")):
     album = data.get("album_photos")
     data["album_count"] = len(album) if isinstance(album, list) else 0
     return Success(data=data)
+
+
+@router.post("/balance/adjust", summary="调整App用户余额")
+async def adjust_app_user_balance(req_in: AppUserBalanceAdjustIn):
+    should_publish_balance = req_in.asset_type == "coins"
+    async with in_transaction() as conn:
+        app_user = await AppUser.filter(id=req_in.id).using_db(conn).first()
+        if not app_user:
+            return Fail(code=404, msg="用户不存在")
+
+        if req_in.asset_type == "coins":
+            if req_in.action == "increase":
+                await AppUser.filter(id=req_in.id).using_db(conn).update(coins=F("coins") + req_in.amount)
+            else:
+                updated_count = (
+                    await AppUser.filter(id=req_in.id, coins__gte=req_in.amount)
+                    .using_db(conn)
+                    .update(coins=F("coins") - req_in.amount)
+                )
+                if not updated_count:
+                    return Fail(code=501, msg="金币余额不足，无法扣除")
+        else:
+            if req_in.action == "increase":
+                await AppUser.filter(id=req_in.id).using_db(conn).update(diamonds=F("diamonds") + req_in.amount)
+            else:
+                updated_count = (
+                    await AppUser.filter(id=req_in.id, diamonds__gte=req_in.amount)
+                    .using_db(conn)
+                    .update(diamonds=F("diamonds") - req_in.amount)
+                )
+                if not updated_count:
+                    return Fail(code=501, msg="钻石余额不足，无法扣除")
+
+        refreshed = await AppUser.filter(id=req_in.id).using_db(conn).first()
+
+    if should_publish_balance:
+        await publish_balance_changed(int(req_in.id), source="balance_adjust")
+
+    return Success(
+        data={
+            "id": int(refreshed.id) if refreshed else req_in.id,
+            "coins": decimal_to_float_2(refreshed.coins if refreshed else 0),
+            "diamonds": decimal_to_float_2(refreshed.diamonds if refreshed else 0),
+            "frozen_diamonds": decimal_to_float_2(refreshed.frozen_diamonds if refreshed else 0),
+        },
+        msg="调整成功",
+    )
 
 
 @router.post("/update", summary="更新App用户")

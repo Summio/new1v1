@@ -10,11 +10,13 @@ from app.core.redis import get_redis
 from app.models import AppUser, CallRecord, Gift, GiftRecord
 from app.schemas.app_api import GiftSendIn, GiftSendOut
 from app.schemas.base import Fail, Success, SuccessExtra
+from app.services.balance_event_service import publish_balance_changed
 from app.services.gift_income_service import (
     calc_gift_certified_user_income_diamonds,
     decimal_to_float_2,
     get_gift_certified_user_share_bps,
 )
+from app.services.interaction_relation_service import InteractionRelationError, ensure_interaction_allowed
 from app.services.tim_service import send_gift_notification
 from app.utils.media_url import to_relative_media_url
 
@@ -108,6 +110,14 @@ async def gift_send(req_in: GiftSendIn):
         if not await check_target_online(target_user.id):
             return Fail(code=404, msg="对方不在线，暂无法发送礼物")
 
+    sender = await AppUser.filter(id=sender_id, status="normal").first()
+    if not sender:
+        return Fail(code=401, msg="登录状态异常")
+    try:
+        await ensure_interaction_allowed(action="gift", actor=sender, target=target_user)
+    except InteractionRelationError as exc:
+        return Fail(code=exc.code, msg=exc.message)
+
     quantity = int(req_in.quantity or 1)
     total_price = int(gift.price) * quantity
     if total_price <= 0:
@@ -126,7 +136,6 @@ async def gift_send(req_in: GiftSendIn):
 
             logger.warning("gift send idempotency check degraded: {}", str(e))
 
-    sender = await AppUser.filter(id=sender_id).first()
     sender_nickname = sender.nickname if sender else f"用户{sender_id}"
     sender_avatar = to_relative_media_url(sender.avatar) if sender else None
     if not sender or decimal_to_float_2(sender.coins) < decimal_to_float_2(total_price):
@@ -214,6 +223,7 @@ async def gift_send(req_in: GiftSendIn):
             receiver_coins=current_coins,
         )
     )
+    asyncio.create_task(publish_balance_changed(int(sender_id), source="gift"))
     asyncio.create_task(
         _ws_push_gift_received(
             target_user_id=int(target_user.id),
@@ -325,4 +335,3 @@ async def _ws_push_gift_received(
         )
     except Exception:  # noqa: BLE001
         pass
-

@@ -69,6 +69,11 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
   String? _myChatUserId;
   String? _peerChatUserId;
   String _myDisplayName = '我';
+  CallSessionNotifier? _sessionNotifier;
+  CallWsController? _wsController;
+  CallRtcController? _rtcController;
+  CallSessionState? _lastSessionState;
+  CallRtcState? _lastRtcState;
   final IMService _imService = IMService();
   final TextEditingController _chatController = TextEditingController();
   final FocusNode _chatFocusNode = FocusNode();
@@ -103,28 +108,34 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
       if (!mounted) return;
       _syncKeyboardInsetFromView();
       _ensureChatOverlay();
-      ref.read(callSessionProvider(widget.callId).notifier).markConnecting();
+      _sessionNotifier ??= ref.read(
+        callSessionProvider(widget.callId).notifier,
+      );
+      _sessionNotifier!.markConnecting();
       _startConnectingWatchdog();
-      ref.read(callWsControllerProvider(widget.callId).notifier).bind();
+      _wsController ??= ref.read(
+        callWsControllerProvider(widget.callId).notifier,
+      );
+      _wsController!.bind();
 
+      _rtcController ??= ref.read(
+        callRtcControllerProvider(widget.callId).notifier,
+      );
       unawaited(
-        ref
-            .read(callRtcControllerProvider(widget.callId).notifier)
-            .initRtc(
-              onCallConnected: () {
-                if (!mounted) return;
-                ref
-                    .read(callSessionProvider(widget.callId).notifier)
-                    .markOngoing();
-              },
-              onRemoteEnd: (endReason) {
-                if (!mounted) return;
-                ref
-                    .read(callSessionProvider(widget.callId).notifier)
-                    .beginEnding(endReason: endReason, notifyEndApi: false);
-              },
-              onLog: _log,
-            ),
+        _rtcController!.initRtc(
+          onCallConnected: () {
+            if (!mounted) return;
+            _sessionNotifier?.markOngoing();
+          },
+          onRemoteEnd: (endReason) {
+            if (!mounted) return;
+            _sessionNotifier?.beginEnding(
+              endReason: endReason,
+              notifyEndApi: true,
+            );
+          },
+          onLog: _log,
+        ),
       );
       unawaited(_initImCallChat());
     });
@@ -157,13 +168,19 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
     }
     _endingConsuming = true;
 
-    final endReason = (sessionState.endReason ?? 'normal').trim();
+    final currentState = ref.read(callSessionProvider(widget.callId));
+    final activeState =
+        currentState.isEndingForBalance ||
+            (currentState.endReason ?? '').trim() == 'balance_empty'
+        ? currentState
+        : sessionState;
+    final endReason = (activeState.endReason ?? 'normal').trim();
     _log(
-      'session ending, reason=$endReason notifyEndApi=${sessionState.notifyEndApi}',
+      'session ending, reason=$endReason notifyEndApi=${activeState.notifyEndApi}',
     );
 
     try {
-      if (sessionState.isEndingForBalance || endReason == 'balance_empty') {
+      if (activeState.isEndingForBalance || endReason == 'balance_empty') {
         if (mounted) {
           AppToast.showSnackBar(
             context,
@@ -251,7 +268,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
       _log('connecting watchdog timeout, force ending to avoid stuck');
       ref
           .read(callSessionProvider(widget.callId).notifier)
-          .beginEnding(endReason: 'timeout', notifyEndApi: false);
+          .beginEnding(endReason: 'timeout', notifyEndApi: true);
     });
   }
 
@@ -738,14 +755,17 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
   }
 
   bool _shouldBestEffortTerminateOnDispose() {
-    final session = ref.read(callSessionProvider(widget.callId));
-    final rtcState = ref.read(callRtcControllerProvider(widget.callId));
+    final session = _lastSessionState;
+    final rtcState = _lastRtcState;
+    if (session == null || rtcState == null) {
+      return false;
+    }
     return !session.hasEnded && rtcState.isJoined;
   }
 
   Future<void> _bestEffortTerminateCall() async {
-    final session = ref.read(callSessionProvider(widget.callId));
-    if (session.hasEnded) {
+    final session = _lastSessionState;
+    if (session?.hasEnded ?? true) {
       return;
     }
     _log('best effort terminate start');
@@ -777,12 +797,11 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
         DeviceOrientation.landscapeRight,
       ]),
     );
-    ref.read(callWsControllerProvider(widget.callId).notifier).unbind();
-    unawaited(
-      ref
-          .read(callRtcControllerProvider(widget.callId).notifier)
-          .leaveAndRelease(onLog: _log),
-    );
+    _wsController?.unbind();
+    final rtcController = _rtcController;
+    if (rtcController != null) {
+      unawaited(rtcController.leaveAndRelease(onLog: _log, updateState: false));
+    }
     if (_shouldBestEffortTerminateOnDispose()) {
       unawaited(_bestEffortTerminateCall());
     }
@@ -791,10 +810,26 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(callWsControllerProvider(widget.callId));
+    ref.listen<CallWsState>(callWsControllerProvider(widget.callId), (
+      previous,
+      next,
+    ) {
+      if ((previous?.balanceLowNoticeSeq ?? 0) == next.balanceLowNoticeSeq) {
+        return;
+      }
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('余额不足下一分钟通话费用，请及时充值')),
+      );
+    });
+    final sessionState = ref.watch(callSessionProvider(widget.callId));
+    _lastSessionState = sessionState;
     ref.listen<CallSessionState>(callSessionProvider(widget.callId), (
       previous,
       next,
     ) {
+      _lastSessionState = next;
       if (next.phase == CallPhase.connecting &&
           previous?.phase != CallPhase.connecting) {
         _startConnectingWatchdog();
@@ -809,9 +844,11 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
     });
 
     final rtcState = ref.watch(callRtcControllerProvider(widget.callId));
+    _lastRtcState = rtcState;
     final rtcController = ref.watch(
       callRtcControllerProvider(widget.callId).notifier,
     );
+    _rtcController ??= rtcController;
 
     return PopScope(
       canPop: false,
@@ -833,10 +870,12 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
           child: Stack(
             fit: StackFit.expand,
             children: [
-              RepaintBoundary(
-                child: _buildRemoteView(
-                  rtcState: rtcState,
-                  rtcController: rtcController,
+              Positioned.fill(
+                child: RepaintBoundary(
+                  child: _buildRemoteView(
+                    rtcState: rtcState,
+                    rtcController: rtcController,
+                  ),
                 ),
               ),
               Consumer(
@@ -924,20 +963,16 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
     required CallRtcController rtcController,
   }) {
     if (!_isRemoteInMainView) {
-      return Positioned.fill(
-        child: _buildLocalPreview(
-          rtcState: rtcState,
-          rtcController: rtcController,
-        ),
+      return _buildLocalPreview(
+        rtcState: rtcState,
+        rtcController: rtcController,
       );
     }
 
-    return Positioned.fill(
-      child: _buildRemoteVideo(
-        rtcState: rtcState,
-        rtcController: rtcController,
-        usePlaceholder: true,
-      ),
+    return _buildRemoteVideo(
+      rtcState: rtcState,
+      rtcController: rtcController,
+      usePlaceholder: true,
     );
   }
 

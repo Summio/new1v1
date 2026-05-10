@@ -13,22 +13,26 @@ class CallWsState {
   final bool connected;
   final bool networkLost;
   final CallMappedEvent? lastMappedEvent;
+  final int balanceLowNoticeSeq;
 
   const CallWsState({
     this.connected = false,
     this.networkLost = false,
     this.lastMappedEvent,
+    this.balanceLowNoticeSeq = 0,
   });
 
   CallWsState copyWith({
     bool? connected,
     bool? networkLost,
     CallMappedEvent? lastMappedEvent,
+    int? balanceLowNoticeSeq,
   }) {
     return CallWsState(
       connected: connected ?? this.connected,
       networkLost: networkLost ?? this.networkLost,
       lastMappedEvent: lastMappedEvent ?? this.lastMappedEvent,
+      balanceLowNoticeSeq: balanceLowNoticeSeq ?? this.balanceLowNoticeSeq,
     );
   }
 }
@@ -44,6 +48,7 @@ class CallWsController extends StateNotifier<CallWsState> {
   StreamSubscription<WsEvent>? _wsSubscription;
   StreamSubscription<WsConnectionEvent>? _wsConnectionSubscription;
   Timer? _wsDisconnectTimer;
+  DateTime? _lastBalanceLowNoticeAt;
 
   void bind() {
     WsService.instance.connect();
@@ -58,10 +63,9 @@ class CallWsController extends StateNotifier<CallWsState> {
         final coins = _asDouble(event.data['coins']);
         final diamonds = _asDouble(event.data['diamonds']);
         if (coins != null || diamonds != null) {
-          _ref.read(authProvider.notifier).syncBalance(
-            coins: coins,
-            diamonds: diamonds,
-          );
+          _ref
+              .read(authProvider.notifier)
+              .syncBalance(coins: coins, diamonds: diamonds);
         }
         return;
       }
@@ -79,17 +83,40 @@ class CallWsController extends StateNotifier<CallWsState> {
         final giftPrice = _asInt(event.data['gift_price']) ?? 0;
         final totalPrice =
             _asInt(event.data['total_price']) ?? (giftPrice * quantity);
-        _ref.read(callGiftControllerProvider(callId).notifier).showGift(
-          giftName: event.data['gift_name'] as String? ?? '',
-          giftIcon: event.data['gift_icon'] as String? ?? '',
-          svgaUrl: event.data['svga_url'] as String? ?? '',
-          giftPrice: giftPrice,
-          quantity: quantity,
-          totalPrice: totalPrice,
-          scene: scene,
-          callId: eventCallId,
-          senderNickname: event.data['sender_nickname'] as String? ?? '用户',
-        );
+        _ref
+            .read(callGiftControllerProvider(callId).notifier)
+            .showGift(
+              giftName: event.data['gift_name'] as String? ?? '',
+              giftIcon: event.data['gift_icon'] as String? ?? '',
+              svgaUrl: event.data['svga_url'] as String? ?? '',
+              giftPrice: giftPrice,
+              quantity: quantity,
+              totalPrice: totalPrice,
+              scene: scene,
+              callId: eventCallId,
+              senderNickname: event.data['sender_nickname'] as String? ?? '用户',
+            );
+        return;
+      }
+
+      if (mapped.shouldShowBalanceLow) {
+        final eventCallId = _asInt(event.data['call_id']);
+        if (eventCallId != callId) {
+          return;
+        }
+        final coins = _asDouble(event.data['coins']);
+        if (coins != null) {
+          _ref.read(authProvider.notifier).syncBalance(coins: coins);
+        }
+        final now = DateTime.now();
+        final lastNoticeAt = _lastBalanceLowNoticeAt;
+        if (lastNoticeAt == null ||
+            now.difference(lastNoticeAt) >= const Duration(seconds: 10)) {
+          _lastBalanceLowNoticeAt = now;
+          state = state.copyWith(
+            balanceLowNoticeSeq: state.balanceLowNoticeSeq + 1,
+          );
+        }
         return;
       }
 
@@ -97,24 +124,28 @@ class CallWsController extends StateNotifier<CallWsState> {
         return;
       }
 
-      final eventCallIdRaw = event.data['call_id'];
-      final eventCallId = eventCallIdRaw is int
-          ? eventCallIdRaw
-          : (eventCallIdRaw as num?)?.toInt();
+      final eventCallId = _asInt(event.data['call_id']);
       if (eventCallId != callId) {
-        debugPrint('[CallWs] 收到事件 ${event.event} 但 call_id 不匹配: eventCallId=$eventCallId, expected=$callId');
+        debugPrint(
+          '[CallWs] 收到事件 ${event.event} 但 call_id 不匹配: '
+          'eventCallId=$eventCallId, expected=$callId',
+        );
         return;
       }
       debugPrint('[CallWs] 收到通话结束事件，开始结束通话');
       final endReason = _mapEndReasonToString(mapped.endReason);
-      _ref.read(callSessionProvider(callId).notifier).beginEnding(
-        endReason: endReason,
-        notifyEndApi: false,
-        endingForBalance: endReason == 'balance_empty',
-      );
+      _ref
+          .read(callSessionProvider(callId).notifier)
+          .beginEnding(
+            endReason: endReason,
+            notifyEndApi: false,
+            endingForBalance: endReason == 'balance_empty',
+          );
     });
 
-    _wsConnectionSubscription = WsService.instance.connectionEvents.listen((event) {
+    _wsConnectionSubscription = WsService.instance.connectionEvents.listen((
+      event,
+    ) {
       if (event.state == WsConnectionState.connected) {
         _wsDisconnectTimer?.cancel();
         _wsDisconnectTimer = null;
@@ -131,10 +162,9 @@ class CallWsController extends StateNotifier<CallWsState> {
             return;
           }
           state = state.copyWith(networkLost: true);
-          _ref.read(callSessionProvider(callId).notifier).beginEnding(
-            endReason: 'network_lost',
-            notifyEndApi: false,
-          );
+          _ref
+              .read(callSessionProvider(callId).notifier)
+              .beginEnding(endReason: 'network_lost', notifyEndApi: true);
         });
       }
     });
@@ -193,7 +223,7 @@ class CallWsController extends StateNotifier<CallWsState> {
   }
 }
 
-final callWsControllerProvider =
-    StateNotifierProvider.autoDispose.family<CallWsController, CallWsState, int>(
+final callWsControllerProvider = StateNotifierProvider.autoDispose
+    .family<CallWsController, CallWsState, int>(
       (ref, callId) => CallWsController(ref, callId: callId),
     );

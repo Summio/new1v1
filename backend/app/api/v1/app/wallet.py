@@ -29,6 +29,7 @@ from app.schemas.app_api import (
     WithdrawApplyOut,
 )
 from app.schemas.base import Fail, Success
+from app.services.balance_event_service import publish_balance_changed
 from app.services.gift_income_service import decimal_to_float_2
 from app.settings.config import settings
 from app.utils.media_url import to_relative_media_url
@@ -187,15 +188,7 @@ async def recharge_callback(order_no: str):
         await order.save(using_db=conn, update_fields=["status"])
 
     # 事务已提交，获取更新后的余额并推送 WebSocket（fire-and-forget）
-    updated_user = await AppUser.filter(id=order.user_id).first()
-    if updated_user:
-        asyncio.create_task(
-            _ws_push_balance_update(
-                user_id=int(order.user_id),
-                coins=decimal_to_float_2(updated_user.coins),
-                diamonds=decimal_to_float_2(updated_user.diamonds),
-            )
-        )
+    asyncio.create_task(_ws_push_balance_update(user_id=int(order.user_id), source="recharge"))
 
     return Success(data={"msg": "充值成功"})
 
@@ -593,17 +586,9 @@ async def wallet_transactions(type: str = "all", page: int = 1, page_size: int =
 
 async def _ws_push_balance_update(
     user_id: int,
-    coins: float,
-    diamonds: float | str,
+    source: str,
 ) -> None:
     try:
-        from app.websocket import events as ws_events
-
-        await ws_events.push_balance_update(
-            user_id=user_id,
-            coins=coins,
-            diamonds=diamonds,
-        )
+        await publish_balance_changed(int(user_id), source=source)
     except Exception:  # noqa: BLE001
         pass
-

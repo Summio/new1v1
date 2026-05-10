@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -17,8 +18,11 @@ from starlette.websockets import WebSocketState
 
 from app.core.app_auth import is_app_authed
 from app.core.call_presence import update_last_seen
+from app.core.call_watchdog import process_ongoing_call_billing_once
 from app.log import logger
 from app.models import CallRecord
+from app.services.balance_event_service import maybe_push_call_balance_low_for_user, publish_balance_changed
+from app.websocket import events as ws_events
 from app.websocket.manager import get_manager
 
 router = APIRouter()
@@ -29,6 +33,13 @@ _AUTH_TIMEOUT = 30  # 秒，等待认证的超时时间
 # 心跳超时必须显著大于客户端 ping 间隔，避免网络抖动下误判离线导致关键事件丢失
 _HEARTBEAT_TIMEOUT = 75  # 秒，无消息则认为断开
 _PING_INTERVAL = 20  # 客户端心跳间隔（秒）
+
+
+@dataclass(frozen=True)
+class CallHeartbeatResult:
+    ok: bool
+    end_event: dict[str, Any] | None = None
+    balance_update_user_ids: tuple[int, ...] = ()
 
 
 # ===== WebSocket 端点 =====
@@ -142,12 +153,22 @@ async def ws_app(websocket: WebSocket) -> None:
                     await _send_error(websocket, 500, "状态切换失败")
 
             elif msg_type == "call_heartbeat":
-                ok = await _handle_call_heartbeat_message(
+                result = await _handle_call_heartbeat_message(
                     user_id=int(user_id),
                     msg=msg,
                 )
-                if not ok:
+                if result.end_event is not None:
+                    await websocket.send_json(
+                        {
+                            "type": "event",
+                            "event": result.end_event["event"],
+                            "data": result.end_event["data"],
+                        }
+                    )
+                elif not result.ok:
                     await _send_error(websocket, 403, "心跳无效或无权限")
+                for user_id_to_push in result.balance_update_user_ids:
+                    asyncio.create_task(_ws_push_balance_update(user_id_to_push))
 
             else:
                 # 忽略其他消息类型
@@ -200,18 +221,18 @@ def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
-async def _handle_call_heartbeat_message(*, user_id: int, msg: dict[str, Any]) -> bool:
+async def _handle_call_heartbeat_message(*, user_id: int, msg: dict[str, Any]) -> CallHeartbeatResult:
     call_id_raw = msg.get("call_id")
     try:
         call_id = int(call_id_raw)
     except (TypeError, ValueError):
-        return False
+        return CallHeartbeatResult(ok=False)
     if call_id <= 0:
-        return False
+        return CallHeartbeatResult(ok=False)
 
-    call_record = await CallRecord.filter(id=call_id, status="ongoing").first()
+    call_record = await CallRecord.filter(id=call_id).first()
     if call_record is None:
-        return False
+        return CallHeartbeatResult(ok=False)
 
     role: str
     if int(call_record.caller_id) == int(user_id):
@@ -219,7 +240,22 @@ async def _handle_call_heartbeat_message(*, user_id: int, msg: dict[str, Any]) -
     elif int(call_record.callee_id) == int(user_id):
         role = "callee"
     else:
-        return False
+        return CallHeartbeatResult(ok=False)
+
+    if call_record.status == "ended":
+        return CallHeartbeatResult(
+            ok=False,
+            end_event={
+                "event": "call_ended",
+                "data": {
+                    "call_id": int(call_record.id),
+                    "end_reason": call_record.end_reason or "normal",
+                },
+            },
+        )
+
+    if call_record.status != "ongoing":
+        return CallHeartbeatResult(ok=False)
 
     # role 由服务端关系推断，不信任客户端上报 role 字段。
     await update_last_seen(
@@ -228,4 +264,64 @@ async def _handle_call_heartbeat_message(*, user_id: int, msg: dict[str, Any]) -
         role=role,
         now_ms=_now_ms(),
     )
-    return True
+
+    billing_result = await process_ongoing_call_billing_once(call_id=call_id)
+    if billing_result.ended_records:
+        ended_record = billing_result.ended_records[0]
+        if ended_record.end_reason == "balance_empty":
+            await ws_events.push_call_balance_empty(
+                caller_id=int(ended_record.caller_id),
+                callee_id=int(ended_record.callee_id),
+                call_id=int(ended_record.id),
+            )
+        else:
+            await ws_events.push_call_ended(
+                caller_id=int(ended_record.caller_id),
+                callee_id=int(ended_record.callee_id),
+                call_id=int(ended_record.id),
+                end_reason=ended_record.end_reason or "normal",
+            )
+        return CallHeartbeatResult(
+            ok=False,
+            end_event={
+                "event": "call_ended",
+                "data": {
+                    "call_id": int(ended_record.id),
+                    "end_reason": ended_record.end_reason or "normal",
+                },
+            },
+            balance_update_user_ids=tuple(
+                {
+                    int(user_id)
+                    for user_id in (
+                        *billing_result.charged_payer_ids,
+                        *billing_result.certified_user_balance_pushes,
+                    )
+                    if int(user_id) > 0
+                }
+            ),
+        )
+
+    if int(getattr(call_record, "payer_user_id", 0) or 0) == int(user_id):
+        await maybe_push_call_balance_low_for_user(user_id=int(user_id), source="call_heartbeat")
+
+    return CallHeartbeatResult(
+        ok=True,
+        balance_update_user_ids=tuple(
+            {
+                int(user_id)
+                for user_id in (
+                    *billing_result.charged_payer_ids,
+                    *billing_result.certified_user_balance_pushes,
+                )
+                if int(user_id) > 0
+            }
+        ),
+    )
+
+
+async def _ws_push_balance_update(user_id: int) -> None:
+    try:
+        await publish_balance_changed(int(user_id), source="call_billing")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("[WS] call heartbeat balance push failed: {}", str(exc))

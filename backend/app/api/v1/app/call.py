@@ -20,6 +20,7 @@ from app.schemas.app_api import (
     DialingOut,
 )
 from app.schemas.base import Fail, Success
+from app.services.balance_event_service import publish_balance_changed
 from app.services.call_income_service import (
     get_certified_user_share_bps,
     resolve_income_certified_user_id_for_call,
@@ -27,6 +28,10 @@ from app.services.call_income_service import (
 )
 from app.services.call_trace_service import CallTraceService
 from app.services.gift_income_service import decimal_to_float_2
+from app.services.interaction_relation_service import (
+    InteractionRelationError,
+    ensure_interaction_allowed,
+)
 from app.utils.billing import calc_due_minutes as _calc_due_minutes_with_free
 from app.utils.media_url import to_relative_media_url
 from app.utils.parse import clamp_int, safe_parse_int
@@ -239,18 +244,33 @@ async def dialing(req_in: DialingIn):
     # 事务包裹忙线检查 + 记录创建：防止 TOCTOU 竞态
     async with in_transaction() as conn:
         # 加行锁：锁住主叫和被叫用户行，防止并发创建冲突的通话记录
-        locked_caller = await AppUser.filter(
-            id=caller_id,
-            status="normal",
-        ).using_db(conn).select_for_update().first()
-        locked_target_user = await AppUser.filter(
-            id=target_user.id,
-            status="normal",
-        ).using_db(conn).select_for_update().first()
+        locked_caller = (
+            await AppUser.filter(
+                id=caller_id,
+                status="normal",
+            )
+            .using_db(conn)
+            .select_for_update()
+            .first()
+        )
+        locked_target_user = (
+            await AppUser.filter(
+                id=target_user.id,
+                status="normal",
+            )
+            .using_db(conn)
+            .select_for_update()
+            .first()
+        )
         if not locked_caller:
             return Fail(code=403, msg="账号状态异常")
         if not locked_target_user:
             return Fail(code=404, msg="目标用户不存在或状态异常")
+
+        try:
+            await ensure_interaction_allowed(action="call", actor=locked_caller, target=locked_target_user)
+        except InteractionRelationError as exc:
+            return Fail(code=exc.code, msg=exc.message)
 
         caller_is_certified_user = bool(locked_caller.is_certified_user)
         callee_is_certified_user = bool(locked_target_user.is_certified_user)
@@ -434,6 +454,34 @@ async def accept_call(req_in: CallActionIn):
         if caller_has_ongoing:
             return Fail(code=409, msg="对方正在其他通话中")
 
+        payer_user_id = await _resolve_payer_id(call_record)
+        if payer_user_id > 0 and int(call_record.call_price or 0) > 0:
+            payer = await AppUser.filter(id=payer_user_id, status="normal").using_db(conn).select_for_update().first()
+            if not payer or payer.coins < int(call_record.call_price or 0):
+                call_record.status = "ended"
+                call_record.end_reason = "balance_empty"
+                call_record.ended_at = now_local_naive()
+                call_record.effective_ended_at = call_record.ended_at
+                call_record.end_basis = "balance_empty"
+                call_record.force_exit_user_id = None
+                call_record.payer_user_id = payer_user_id
+                await call_record.save(using_db=conn)
+                trace_call_record = call_record
+                asyncio.create_task(
+                    _ws_push_call_balance_empty(
+                        caller_id=int(call_record.caller_id),
+                        callee_id=int(call_record.callee_id),
+                        call_id=int(call_record.id),
+                    )
+                )
+                _schedule_call_trace(
+                    call_record,
+                    phase="balance_empty",
+                    actor_user_id=int(user_id),
+                    reason="balance_empty",
+                )
+                return Fail(code=501, msg="余额不足，请先充值")
+
         call_record.status = "ongoing"
         call_record.end_reason = None
         call_record.connected_at = now_local_naive()
@@ -442,7 +490,7 @@ async def accept_call(req_in: CallActionIn):
         call_record.deducted_minutes = 0
         call_record.last_renew_at = None
         call_record.billing_free_seconds = await _get_free_seconds_before_billing()
-        call_record.payer_user_id = await _resolve_payer_id(call_record)
+        call_record.payer_user_id = payer_user_id
         call_record.ended_at = None
         call_record.effective_ended_at = None
         call_record.end_basis = None
@@ -801,6 +849,17 @@ async def _ws_push_call_ended(
         pass
 
 
+async def _ws_push_call_balance_empty(caller_id: int, callee_id: int, call_id: int) -> None:
+    try:
+        await ws_events.push_call_balance_empty(
+            caller_id=caller_id,
+            callee_id=callee_id,
+            call_id=call_id,
+        )
+    except Exception:  # noqa: BLE001
+        pass
+
+
 async def _ws_push_call_ended_to_peer(
     peer_id: int,
     caller_id: int,
@@ -830,14 +889,6 @@ async def _ws_push_call_ended_to_peer(
 async def _ws_push_balance_updated(payer_id: int) -> None:
     """通话结束后推送退款后的余额给付费方（fire-and-forget）。"""
     try:
-        from app.models import AppUser
-
-        payer = await AppUser.filter(id=payer_id).first()
-        if payer:
-            await ws_events.push_balance_update(
-                user_id=payer_id,
-                coins=decimal_to_float_2(payer.coins),
-                diamonds=decimal_to_float_2(payer.diamonds),
-            )
+        await publish_balance_changed(int(payer_id), source="call_end")
     except Exception:  # noqa: BLE001
         pass
