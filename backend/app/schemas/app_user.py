@@ -138,6 +138,13 @@ class AppUserAdminUpdateIn(BaseModel):
     certification_face_image: Optional[str] = Field(default=None, max_length=500, description="真人认证正面照URL")
 
 
+class AppUserBalanceAdjustIn(BaseModel):
+    id: int = Field(..., ge=1, description="用户ID")
+    asset_type: Literal["coins", "diamonds"] = Field(..., description="资产类型")
+    action: Literal["increase", "decrease"] = Field(..., description="调整方向")
+    amount: int = Field(..., gt=0, description="调整数量")
+
+
 # ===== 真人认证 =====
 
 class CertificationApplyIn(BaseModel):

@@ -430,7 +430,10 @@ class CallRtcController extends StateNotifier<CallRtcState> {
     }
   }
 
-  Future<void> leaveAndRelease({void Function(String message)? onLog}) async {
+  Future<void> leaveAndRelease({
+    void Function(String message)? onLog,
+    bool updateState = true,
+  }) async {
     final engine = _engine;
     _engine = null;
     _joinedCallbackEmitted = false;
@@ -452,7 +455,7 @@ class CallRtcController extends StateNotifier<CallRtcState> {
       onLog?.call('rtc release end');
     }
 
-    if (!mounted) {
+    if (!mounted || !updateState) {
       return;
     }
     state = state.copyWith(
@@ -510,16 +513,16 @@ class CallRtcController extends StateNotifier<CallRtcState> {
       if (!mounted) {
         return;
       }
-      state = state.copyWith(isFlipping: false, isFrontCamera: predictedNextIsFrontCamera);
+      state = state.copyWith(
+        isFlipping: false,
+        isFrontCamera: predictedNextIsFrontCamera,
+      );
       _flowLog(
         'ui.flipCamera.done',
         extra: {'next': predictedNextIsFrontCamera ? 'front' : 'back'},
       );
     } catch (e) {
-      _flowLog(
-        'ui.flipCamera.error',
-        extra: {'error': e.toString()},
-      );
+      _flowLog('ui.flipCamera.error', extra: {'error': e.toString()});
       if (mounted) {
         state = state.copyWith(isFlipping: false);
       }
@@ -535,7 +538,7 @@ class CallRtcController extends StateNotifier<CallRtcState> {
 
   @override
   void dispose() {
-    unawaited(leaveAndRelease());
+    unawaited(leaveAndRelease(updateState: false));
     super.dispose();
   }
 }

@@ -274,4 +274,3 @@ class IMTextChargeOut(BaseModel):
     diamonds: int = 0
     receiver_user_id: int
     request_id: str
-

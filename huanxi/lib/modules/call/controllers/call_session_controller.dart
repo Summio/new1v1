@@ -78,7 +78,18 @@ class CallSessionNotifier extends StateNotifier<CallSessionState> {
     required bool notifyEndApi,
     bool endingForBalance = false,
   }) {
-    if (state.hasEnded || state.endingInProgress) {
+    if (state.hasEnded) {
+      return false;
+    }
+    if (state.endingInProgress) {
+      if (endingForBalance && !state.isEndingForBalance) {
+        state = state.copyWith(
+          endReason: endReason,
+          isEndingForBalance: true,
+          notifyEndApi: false,
+        );
+        return true;
+      }
       return false;
     }
     // 立即停止心跳定时器，避免通话结束后继续发送心跳导致 403 错误

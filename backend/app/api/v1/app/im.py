@@ -4,9 +4,11 @@ from fastapi import APIRouter, Depends, Query
 
 from app.core.app_auth import DependAppAuth
 from app.core.ctx import CTX_APP_USER_ID
+from app.models import AppUser
 from app.log import logger
 from app.schemas.app_api import IMSigOut, IMTextChargeIn, IMTextChargeOut
 from app.schemas.base import Fail, Success
+from app.services.interaction_relation_service import InteractionRelationError, ensure_interaction_allowed
 from app.services.im_text_billing_service import (
     IMTextBillingError,
     charge_im_text_message,
@@ -69,6 +71,16 @@ async def get_usersig(
 @router.post("/im/text-charge", summary="文字消息发送前扣费", dependencies=[Depends(DependAppAuth)])
 async def charge_text_message(req_in: IMTextChargeIn):
     sender_id = CTX_APP_USER_ID.get()
+    sender = await AppUser.filter(id=sender_id, status="normal").first()
+    if not sender:
+        return Fail(code=401, msg="登录状态异常")
+    receiver = await AppUser.filter(id=req_in.receiver_user_id, status="normal").first()
+    if not receiver:
+        return Fail(code=404, msg="目标用户不存在或状态异常")
+    try:
+        await ensure_interaction_allowed(action="im_text", actor=sender, target=receiver)
+    except InteractionRelationError as exc:
+        return Fail(code=exc.code, msg=exc.message)
     try:
         result = await charge_im_text_message(
             sender_id=int(sender_id),

@@ -23,6 +23,7 @@ export default {
   // app users
   getAppUserList: (params = {}) => request.get('/app_user/list', { params }),
   getAppUserById: (params = {}) => request.get('/app_user/get', { params }),
+  adjustAppUserBalance: (data = {}) => request.post('/app_user/balance/adjust', data),
   updateAppUser: (data = {}) => request.post('/app_user/update', data),
   getAppUserBillList: (params = {}) => request.get('/app_user/bill/list', { params }),
   reviewCertification: (data = {}) => request.post('/app_user/certification/review', data),

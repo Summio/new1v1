@@ -16,6 +16,7 @@ from app.schemas.app_user import (
 )
 from app.schemas.base import Fail, Success, SuccessExtra
 from app.services.gift_income_service import decimal_to_float_2
+from app.services.interaction_relation_service import InteractionRelationError, ensure_interaction_allowed
 from app.services.profile_review_service import build_profile_review_payload
 from app.settings.config import settings
 from app.utils.media_url import normalize_media_list, to_relative_media_url
@@ -409,6 +410,14 @@ async def follow_user(req_in: UserFollowIn):
     target_user = await AppUser.filter(id=req_in.target_user_id).first()
     if not target_user:
         return Fail(code=404, msg="用户不存在")
+
+    actor_user = CTX_APP_USER_OBJ.get()
+    if not actor_user:
+        return Fail(code=401, msg="用户不存在")
+    try:
+        await ensure_interaction_allowed(action="follow", actor=actor_user, target=target_user)
+    except InteractionRelationError as exc:
+        return Fail(code=exc.code, msg=exc.message)
 
     relation = await UserFollow.filter(
         follower_id=current_user_id,

@@ -56,6 +56,15 @@ const modalForm = ref({
   created_at: '',
   last_login: '',
 })
+const balanceAdjustModal = reactive({
+  visible: false,
+  userId: 0,
+  nickname: '',
+  assetType: 'coins',
+  action: 'increase',
+  amount: 1,
+  loading: false,
+})
 const callRecordLoading = ref(false)
 const callRecordRows = ref([])
 const peerJumpLoading = ref(false)
@@ -246,6 +255,10 @@ const billAssetTypeTextMap = {
   coins: '金币',
   diamonds: '钻石',
 }
+const balanceAssetTextMap = {
+  coins: '金币',
+  diamonds: '钻石',
+}
 
 const avatarImgStyle = {
   width: '44px',
@@ -254,19 +267,6 @@ const avatarImgStyle = {
   minHeight: '44px',
   maxWidth: '44px',
   maxHeight: '44px',
-  borderRadius: '8px',
-  objectFit: 'cover',
-  border: '1px solid #eceff5',
-  display: 'block',
-}
-
-const coverImgStyle = {
-  width: '36px',
-  height: '36px',
-  minWidth: '36px',
-  minHeight: '36px',
-  maxWidth: '36px',
-  maxHeight: '36px',
   borderRadius: '8px',
   objectFit: 'cover',
   border: '1px solid #eceff5',
@@ -776,6 +776,97 @@ function handleSetCover(url) {
   modalForm.value.cover_url = url || ''
 }
 
+const balanceAdjustTitle = computed(() => {
+  const actionText = balanceAdjustModal.action === 'decrease' ? '扣除' : '增加'
+  const assetText = balanceAssetTextMap[balanceAdjustModal.assetType] || ''
+  return `${actionText}${assetText}`
+})
+
+const balanceAdjustUserText = computed(() => {
+  if (!balanceAdjustModal.userId) return '-'
+  const nickname = balanceAdjustModal.nickname ? ` / ${balanceAdjustModal.nickname}` : ''
+  return `ID:${balanceAdjustModal.userId}${nickname}`
+})
+
+function openBalanceAdjustModal(row, assetType, action) {
+  balanceAdjustModal.visible = true
+  balanceAdjustModal.userId = Number(row.id || 0)
+  balanceAdjustModal.nickname = (row.nickname || row.phone || '').trim()
+  balanceAdjustModal.assetType = assetType
+  balanceAdjustModal.action = action
+  balanceAdjustModal.amount = 1
+}
+
+function handleAdjustBalance(row, assetType, action) {
+  openBalanceAdjustModal(row, assetType, action)
+}
+
+async function handleSubmitBalanceAdjust() {
+  const amount = Number(balanceAdjustModal.amount || 0)
+  if (!balanceAdjustModal.userId) return
+  if (!Number.isInteger(amount) || amount <= 0) {
+    window.$message?.warning('请输入调整数量')
+    return
+  }
+
+  balanceAdjustModal.loading = true
+  try {
+    const res = await api.adjustAppUserBalance({
+      id: balanceAdjustModal.userId,
+      asset_type: balanceAdjustModal.assetType,
+      action: balanceAdjustModal.action,
+      amount,
+    })
+    const data = res?.data || {}
+    if (Number(modalForm.value.id || 0) === Number(balanceAdjustModal.userId)) {
+      if (data.coins !== undefined) modalForm.value.coins = data.coins
+      if (data.diamonds !== undefined) modalForm.value.diamonds = data.diamonds
+      if (data.frozen_diamonds !== undefined) modalForm.value.frozen_diamonds = data.frozen_diamonds
+    }
+    balanceAdjustModal.visible = false
+    window.$message?.success('调整成功')
+    $table.value?.handleSearch()
+  } catch (error) {
+    window.$message?.error(error?.message || '调整失败')
+  } finally {
+    balanceAdjustModal.loading = false
+  }
+}
+
+function renderBalanceActions(row, assetType) {
+  return h('div', { class: 'balance-cell' }, [
+    h('div', { class: 'balance-value' }, String(Number(row[assetType] || 0))),
+    h('div', { class: 'balance-actions' }, [
+      h(
+        NButton,
+        {
+          size: 'tiny',
+          type: 'primary',
+          secondary: true,
+          onClick: (event) => {
+            event?.stopPropagation?.()
+            handleAdjustBalance(row, assetType, 'increase')
+          },
+        },
+        { default: () => '增加' }
+      ),
+      h(
+        NButton,
+        {
+          size: 'tiny',
+          type: 'error',
+          secondary: true,
+          onClick: (event) => {
+            event?.stopPropagation?.()
+            handleAdjustBalance(row, assetType, 'decrease')
+          },
+        },
+        { default: () => '扣除' }
+      ),
+    ]),
+  ])
+}
+
 const columns = [
   { title: 'ID', key: 'id', width: 60, align: 'center' },
   {
@@ -831,37 +922,6 @@ const columns = [
     },
   },
   {
-    title: '相册/封面',
-    key: 'album_cover',
-    width: 220,
-    render(row) {
-      const album = normalizeAlbum(row.album_photos)
-      const cover = row.cover_url || ''
-      return h('div', { class: 'album-summary' }, [
-        h('div', { class: 'album-summary-top' }, [
-          cover
-            ? h(NImage, {
-                src: cover,
-                width: 36,
-                height: 36,
-                objectFit: 'cover',
-                previewDisabled: false,
-                imgProps: {
-                  class: 'cover-thumb',
-                  style: coverImgStyle,
-                  alt: 'cover',
-                },
-              })
-            : h('div', { class: 'cover-placeholder' }, '无封面'),
-          h('div', { class: 'album-summary-meta' }, [
-            h('div', { class: 'album-head' }, `相册 ${album.length} 张`),
-            h('div', { class: 'album-sub' }, cover ? '已设置封面' : '未设置封面'),
-          ]),
-        ]),
-      ])
-    },
-  },
-  {
     title: '状态',
     key: 'status',
     width: 80,
@@ -888,8 +948,24 @@ const columns = [
       )
     },
   },
-  { title: '金币', key: 'coins', width: 90, align: 'center' },
-  { title: '钻石', key: 'diamonds', width: 90, align: 'center' },
+  {
+    title: '金币',
+    key: 'coins',
+    width: 150,
+    align: 'center',
+    render(row) {
+      return renderBalanceActions(row, 'coins')
+    },
+  },
+  {
+    title: '钻石',
+    key: 'diamonds',
+    width: 150,
+    align: 'center',
+    render(row) {
+      return renderBalanceActions(row, 'diamonds')
+    },
+  },
   { title: '冻结钻石', key: 'frozen_diamonds', width: 100, align: 'center' },
   {
     title: '创建时间',
@@ -995,6 +1071,39 @@ const columns = [
         </QueryBarItem>
       </template>
     </CrudTable>
+
+    <NModal
+      v-model:show="balanceAdjustModal.visible"
+      preset="card"
+      :title="balanceAdjustTitle"
+      style="width: 420px"
+    >
+      <NForm label-placement="left" label-width="70">
+        <NFormItem label="用户">
+          <NInput :value="balanceAdjustUserText" readonly />
+        </NFormItem>
+        <NFormItem label="数量">
+          <NInputNumber
+            v-model:value="balanceAdjustModal.amount"
+            style="width: 100%"
+            :min="1"
+            :precision="0"
+          />
+        </NFormItem>
+      </NForm>
+
+      <template #action>
+        <NButton @click="balanceAdjustModal.visible = false">取消</NButton>
+        <NButton
+          type="primary"
+          :loading="balanceAdjustModal.loading"
+          style="margin-left: 8px"
+          @click="handleSubmitBalanceAdjust"
+        >
+          确定
+        </NButton>
+      </template>
+    </NModal>
 
     <NModal
       v-model:show="editModalVisible"
@@ -1500,5 +1609,27 @@ const columns = [
 .bill-summary-card.expense-diamonds {
   border-color: #f3dfcc;
   background: #fff8f1;
+}
+
+.balance-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.balance-value {
+  color: #242933;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.balance-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 </style>

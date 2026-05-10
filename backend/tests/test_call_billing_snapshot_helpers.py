@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 from types import SimpleNamespace
 
 import pytest
@@ -30,13 +31,30 @@ def test_dialing_recomputes_billing_snapshot_after_user_locks() -> None:
     assert content is not None
     source = Path(content).read_text(encoding="utf-8")
 
-    assert "locked_caller = await AppUser.filter" in source
-    assert "locked_target_user = await AppUser.filter" in source
+    assert re.search(r"locked_caller\s*=\s*\(\s*await AppUser\.filter", source)
+    assert re.search(r"locked_target_user\s*=\s*\(\s*await AppUser\.filter", source)
     assert "caller_is_certified_user = bool(locked_caller.is_certified_user)" in source
     assert "callee_is_certified_user = bool(locked_target_user.is_certified_user)" in source
     assert "call_price = int(locked_caller.certified_call_price or 0)" in source
     assert "call_price = int(locked_target_user.certified_call_price or 0)" in source
     assert "locked_caller.coins < call_price" in source
+
+
+def test_accept_call_checks_resolved_payer_balance_before_ongoing() -> None:
+    content = call_api.__file__
+    assert content is not None
+    source = Path(content).read_text(encoding="utf-8")
+    accept_source = source.split("async def accept_call(req_in: CallActionIn):", 1)[1].split(
+        "async def reject_call(req_in: CallActionIn):",
+        1,
+    )[0]
+
+    payer_assign_pos = accept_source.index("payer_user_id = await _resolve_payer_id(call_record)")
+    balance_check_pos = accept_source.index("payer.coins < int(call_record.call_price or 0)")
+    ongoing_pos = accept_source.index('call_record.status = "ongoing"')
+
+    assert payer_assign_pos < balance_check_pos < ongoing_pos
+    assert 'return Fail(code=501, msg="余额不足，请先充值")' in accept_source
 
 
 @pytest.mark.asyncio

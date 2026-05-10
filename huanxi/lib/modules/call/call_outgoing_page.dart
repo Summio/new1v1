@@ -42,6 +42,7 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
   static const Duration _wsGracePeriod = Duration(seconds: 10);
 
   Timer? _wsDisconnectTimer;
+  Timer? _rtcJoinPollTimer;
   StreamSubscription<WsEvent>? _wsSubscription;
   StreamSubscription<WsConnectionEvent>? _wsConnectionSubscription;
   bool _disposed = false;
@@ -85,6 +86,7 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
         ref
             .read(callOutgoingControllerProvider.notifier)
             .initCountdown(30, onTimeout: () => _closeWithReason('timeout'));
+        _startRtcJoinPolling();
       } else {
         unawaited(_startDialing());
       }
@@ -230,6 +232,7 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
             leftSeconds,
             onTimeout: () => _closeWithReason('timeout'),
           );
+      _startRtcJoinPolling();
     } on ApiException catch (e) {
       final current = ref.read(callOutgoingControllerProvider);
       if (!mounted || current.isPageClosing) return;
@@ -257,6 +260,7 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
     if (!mounted || ctrl.isPageClosing) return;
     ref.read(callOutgoingControllerProvider.notifier).setPageClosing(true);
     _wsDisconnectTimer?.cancel();
+    _rtcJoinPollTimer?.cancel();
     context.pushReplacement(
       Uri(
         path: AppRoutes.callRoom,
@@ -275,6 +279,7 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
     if (!mounted || ctrl.isPageClosing) return;
     ref.read(callOutgoingControllerProvider.notifier).setPageClosing(true);
     _wsDisconnectTimer?.cancel();
+    _rtcJoinPollTimer?.cancel();
     AppToast.showSnackBar(
       context,
       SnackBar(content: Text(callEndReasonText(reason))),
@@ -312,6 +317,7 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
       if (!mounted) return;
       ref.read(callOutgoingControllerProvider.notifier).setPageClosing(true);
       _wsDisconnectTimer?.cancel();
+      _rtcJoinPollTimer?.cancel();
       _exitPage();
     } catch (_) {
       if (!mounted) return;
@@ -332,9 +338,37 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
   void dispose() {
     _disposed = true;
     _wsDisconnectTimer?.cancel();
+    _rtcJoinPollTimer?.cancel();
     _wsSubscription?.cancel();
     _wsConnectionSubscription?.cancel();
     super.dispose();
+  }
+
+  void _startRtcJoinPolling() {
+    _rtcJoinPollTimer?.cancel();
+    _rtcJoinPollTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      unawaited(_pollRtcJoinReady());
+    });
+    unawaited(_pollRtcJoinReady());
+  }
+
+  Future<void> _pollRtcJoinReady() async {
+    if (_disposed || !mounted) return;
+    final ctrl = ref.read(callOutgoingControllerProvider);
+    if (ctrl.isPageClosing) return;
+    final callId = _callId;
+    if (callId == null || callId <= 0) return;
+
+    try {
+      await DioClient.instance.apiPost(
+        ApiEndpoints.rtcToken,
+        data: {'call_id': callId},
+      );
+      if (!mounted || ref.read(callOutgoingControllerProvider).isPageClosing) {
+        return;
+      }
+      _goToCallRoom(callId);
+    } catch (_) {}
   }
 
   @override
