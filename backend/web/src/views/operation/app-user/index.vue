@@ -15,6 +15,7 @@ import {
   NTag,
   NTabs,
 } from 'naive-ui'
+import { useRoute } from 'vue-router'
 
 import CommonPage from '@/components/page/CommonPage.vue'
 import QueryBarItem from '@/components/query-bar/QueryBarItem.vue'
@@ -24,8 +25,11 @@ import { formatDate } from '@/utils'
 
 defineOptions({ name: 'App用户管理' })
 
+const route = useRoute()
 const $table = ref(null)
-const queryItems = ref({})
+const queryItems = ref({
+  user_id: route.query.user_id ? String(route.query.user_id) : '',
+})
 const editModalVisible = ref(false)
 const saving = ref(false)
 const activeEditTab = ref('basic')
@@ -1015,6 +1019,15 @@ const columns = [
       :get-data="api.getAppUserList"
     >
       <template #queryBar>
+        <QueryBarItem label="用户ID" :label-width="60">
+          <NInput
+            v-model:value="queryItems.user_id"
+            clearable
+            type="text"
+            placeholder="请输入用户ID"
+            @keypress.enter="$table?.handleSearch()"
+          />
+        </QueryBarItem>
         <QueryBarItem label="手机号" :label-width="60">
           <NInput
             v-model:value="queryItems.phone"

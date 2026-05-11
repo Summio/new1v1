@@ -104,6 +104,10 @@ export default {
   // feedback manage
   getFeedbackList: (params = {}) => request.get('/feedback/list', { params }),
   deleteFeedback: (params = {}) => request.delete('/feedback/delete', { params }),
+  // complaint manage
+  getComplaintList: (params = {}) => request.get('/complaint/list', { params }),
+  getComplaintDetail: (params = {}) => request.get('/complaint/detail', { params }),
+  handleComplaint: (data = {}) => request.put('/complaint/handle', data),
   // system config
   getSystemConfigList: (params = {}) => request.get('/system_config/list', { params }),
   createSystemConfig: (data = {}) => request.post('/system_config/create', data),

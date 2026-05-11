@@ -4,16 +4,20 @@ from fastapi import APIRouter, Depends, Query
 
 from app.core.app_auth import DependAppAuth
 from app.core.ctx import CTX_APP_USER_ID
-from app.models import AppUser
 from app.log import logger
+from app.models import AppUser
 from app.schemas.app_api import IMSigOut, IMTextChargeIn, IMTextChargeOut
 from app.schemas.base import Fail, Success
-from app.services.interaction_relation_service import InteractionRelationError, ensure_interaction_allowed
+from app.services.customer_service import load_customer_service_config
 from app.services.im_text_billing_service import (
     IMTextBillingError,
     charge_im_text_message,
 )
-from app.services.customer_service import load_customer_service_config
+from app.services.interaction_relation_service import (
+    InteractionRelationError,
+    ensure_interaction_allowed,
+)
+from app.services.user_block_service import UserBlockError, ensure_not_blocked
 
 router = APIRouter()
 USER_SIG_EXPIRE_SECONDS = 3600 * 2
@@ -83,7 +87,10 @@ async def charge_text_message(req_in: IMTextChargeIn):
     if bool(receiver.text_dnd_enabled) and not is_customer_service_sender:
         return Fail(code=403, msg="对方已开启文字勿扰")
     try:
+        await ensure_not_blocked(int(sender_id), int(receiver.id), "聊天")
         await ensure_interaction_allowed(action="im_text", actor=sender, target=receiver)
+    except UserBlockError as exc:
+        return Fail(code=exc.code, msg=exc.message)
     except InteractionRelationError as exc:
         return Fail(code=exc.code, msg=exc.message)
     try:

@@ -53,6 +53,18 @@ class ApiEndpoints {
   /// 我的粉丝列表
   static const String userFansList = 'app/user/fans/list';
 
+  /// 拉黑 / 解除拉黑
+  static const String userBlock = 'app/user/block';
+
+  /// 黑名单状态
+  static const String userBlockStatus = 'app/user/block/status';
+
+  /// 我的黑名单列表
+  static const String userBlockList = 'app/user/block/list';
+
+  /// 提交用户投诉
+  static const String complaintCreate = 'app/complaint/create';
+
   // ========== 认证用户模块 ==========
   /// 认证用户推荐列表（分页）
   static const String certifiedUserList = 'app/certified-user/list';

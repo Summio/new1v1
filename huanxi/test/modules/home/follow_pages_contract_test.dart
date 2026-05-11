@@ -117,6 +117,34 @@ void main() {
     expect(service, contains('ApiEndpoints.userFansList'));
   });
 
+  test('blacklist tab is wired to backend list and unblock action', () {
+    final chatPage = File('lib/modules/home/chat_page.dart').readAsStringSync();
+    final followingPage = File(
+      'lib/modules/home/my_following_page.dart',
+    ).readAsStringSync();
+    final provider = File(
+      'lib/app/providers/user_follow_provider.dart',
+    ).readAsStringSync();
+    final endpoints = File(
+      'lib/core/constants/api_endpoints.dart',
+    ).readAsStringSync();
+    final service = File(
+      'lib/services/user_home_service.dart',
+    ).readAsStringSync();
+
+    expect(chatPage, isNot(contains('黑名单功能开发中')));
+    expect(chatPage, contains('MyBlacklistPage.embedded'));
+    expect(followingPage, contains('class MyBlacklistPage'));
+    expect(followingPage, contains('解除拉黑'));
+    expect(followingPage, contains('我拉黑的人'));
+    expect(provider, contains('myBlacklistProvider'));
+    expect(provider, contains('getBlockedUsers'));
+    expect(service, contains('getBlockedUsers'));
+    expect(service, contains('unblockUser'));
+    expect(endpoints, contains('userBlockList'));
+    expect(endpoints, contains('app/user/block/list'));
+  });
+
   test('unfollow action asks for confirmation before request', () {
     final followingPage = File(
       'lib/modules/home/my_following_page.dart',

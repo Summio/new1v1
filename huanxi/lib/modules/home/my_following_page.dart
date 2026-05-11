@@ -12,16 +12,26 @@ import '../../services/user_home_service.dart';
 
 class MyFollowingPage extends ConsumerStatefulWidget {
   final bool fansMode;
+  final bool blacklistMode;
   final bool embedded;
 
-  const MyFollowingPage({super.key}) : fansMode = false, embedded = false;
+  const MyFollowingPage({super.key})
+    : fansMode = false,
+      blacklistMode = false,
+      embedded = false;
 
   const MyFollowingPage.embedded({super.key})
     : fansMode = false,
+      blacklistMode = false,
       embedded = true;
 
   const MyFollowingPage.fans({super.key, this.embedded = false})
-    : fansMode = true;
+    : fansMode = true,
+      blacklistMode = false;
+
+  const MyFollowingPage.blacklist({super.key, this.embedded = false})
+    : fansMode = false,
+      blacklistMode = true;
 
   @override
   ConsumerState<MyFollowingPage> createState() => _MyFollowingPageState();
@@ -31,6 +41,13 @@ class MyFansPage extends MyFollowingPage {
   const MyFansPage({super.key}) : super.fans();
 
   const MyFansPage.embedded({super.key}) : super.fans(embedded: true);
+}
+
+class MyBlacklistPage extends MyFollowingPage {
+  const MyBlacklistPage({super.key}) : super.blacklist();
+
+  const MyBlacklistPage.embedded({super.key})
+    : super.blacklist(embedded: true);
 }
 
 class _MyFollowingPageState extends ConsumerState<MyFollowingPage> {
@@ -65,7 +82,9 @@ class _MyFollowingPageState extends ConsumerState<MyFollowingPage> {
   }
 
   AutoDisposeStateNotifierProvider<MyFollowingNotifier, MyFollowingState>
-  get _provider => widget.fansMode ? myFansProvider : myFollowingProvider;
+  get _provider => widget.blacklistMode
+      ? myBlacklistProvider
+      : (widget.fansMode ? myFansProvider : myFollowingProvider);
 
   Future<void> _refresh() async {
     await ref.read(_provider.notifier).refresh();
@@ -133,12 +152,63 @@ class _MyFollowingPageState extends ConsumerState<MyFollowingPage> {
     }
   }
 
+  Future<void> _unblockUser(FollowingUserItem item) async {
+    if (_processingUserId != null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认解除拉黑'),
+        content: Text('确定将 ${_displayName(item)} 移出黑名单吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('解除拉黑'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() {
+      _processingUserId = item.user.userId;
+    });
+
+    try {
+      await UserHomeService.instance.unblockUser(item.user.userId);
+      if (!mounted) return;
+      ref.read(_provider.notifier).removeFollowing(item.user.userId);
+      AppToast.showSnackBar(context, const SnackBar(content: Text('已解除拉黑')));
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      AppToast.showSnackBar(context, SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (!mounted) return;
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('解除拉黑失败，请稍后重试')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _processingUserId = null;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(_provider);
-    final title = widget.embedded
-        ? (widget.fansMode ? '粉丝' : '关注')
-        : (widget.fansMode ? '我的粉丝' : '我的关注');
+    final title = widget.blacklistMode
+        ? (widget.embedded ? '黑名单' : '我的黑名单')
+        : (widget.embedded
+              ? (widget.fansMode ? '粉丝' : '关注')
+              : (widget.fansMode ? '我的粉丝' : '我的关注'));
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
@@ -171,7 +241,9 @@ class _MyFollowingPageState extends ConsumerState<MyFollowingPage> {
                 onSubmitted: (_) => _submitSearch(),
                 onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
-                  hintText: widget.fansMode ? '搜索粉丝昵称或用户ID' : '搜索已关注的昵称或用户ID',
+                  hintText: widget.blacklistMode
+                      ? '搜索我拉黑的人昵称或用户ID'
+                      : (widget.fansMode ? '搜索粉丝昵称或用户ID' : '搜索已关注的昵称或用户ID'),
                   prefixIcon: const Icon(Icons.search_rounded),
                   suffixIcon: _keywordController.text.isEmpty
                       ? null
@@ -190,7 +262,9 @@ class _MyFollowingPageState extends ConsumerState<MyFollowingPage> {
                     child: Text(
                       state.keyword.isNotEmpty
                           ? '筛选结果：${state.totalCount} 人'
-                          : '共 ${state.totalCount} 人',
+                          : (widget.blacklistMode
+                                ? '我拉黑的人：${state.totalCount} 人'
+                                : '共 ${state.totalCount} 人'),
                       style: const TextStyle(
                         color: AppTheme.textSecondary,
                         fontSize: 13,
@@ -238,7 +312,9 @@ class _MyFollowingPageState extends ConsumerState<MyFollowingPage> {
   Widget _buildBody(MyFollowingState state) {
     if (state.isLoading && state.users.isEmpty) {
       return StatusView.loading(
-        message: widget.fansMode ? '加载粉丝列表中...' : '加载关注列表中...',
+        message: widget.blacklistMode
+            ? '加载黑名单中...'
+            : (widget.fansMode ? '加载粉丝列表中...' : '加载关注列表中...'),
       );
     }
     if (state.error != null && state.users.isEmpty) {
@@ -247,8 +323,12 @@ class _MyFollowingPageState extends ConsumerState<MyFollowingPage> {
     if (state.users.isEmpty) {
       return StatusView.empty(
         message: state.keyword.isNotEmpty
-            ? (widget.fansMode ? '没有找到匹配的粉丝' : '没有找到匹配的关注')
-            : (widget.fansMode ? '你还没有粉丝' : '你还没有关注任何人'),
+            ? (widget.blacklistMode
+                  ? '没有找到匹配的黑名单用户'
+                  : (widget.fansMode ? '没有找到匹配的粉丝' : '没有找到匹配的关注'))
+            : (widget.blacklistMode
+                  ? '你还没有拉黑任何人'
+                  : (widget.fansMode ? '你还没有粉丝' : '你还没有关注任何人')),
       );
     }
 
@@ -272,7 +352,11 @@ class _MyFollowingPageState extends ConsumerState<MyFollowingPage> {
             item: item,
             isProcessing: _processingUserId == item.user.userId,
             onTap: () => context.push(AppRoutes.certifiedUserDetail, extra: item.user),
-            onCancel: widget.fansMode ? null : () => _cancelFollowing(item),
+            onCancel: widget.blacklistMode
+                ? () => _unblockUser(item)
+                : (widget.fansMode ? null : () => _cancelFollowing(item)),
+            actionLabel: widget.blacklistMode ? '解除拉黑' : null,
+            dateLabel: widget.blacklistMode ? '拉黑于' : '关注于',
           );
         },
       ),
@@ -292,12 +376,16 @@ class _FollowingTile extends StatelessWidget {
   final bool isProcessing;
   final VoidCallback onTap;
   final VoidCallback? onCancel;
+  final String? actionLabel;
+  final String dateLabel;
 
   const _FollowingTile({
     required this.item,
     required this.isProcessing,
     required this.onTap,
     this.onCancel,
+    this.actionLabel,
+    this.dateLabel = '关注于',
   });
 
   @override
@@ -388,11 +476,11 @@ class _FollowingTile extends StatelessWidget {
                             fontSize: 12,
                           ),
                         ),
-                        if (item.followedAt != null) ...[
+                        if ((item.blockedAt ?? item.followedAt) != null) ...[
                           const SizedBox(width: 10),
                           Expanded(
                             child: Text(
-                              '关注于 ${_formatFollowedAt(item.followedAt!)}',
+                              '$dateLabel ${_formatFollowedAt((item.blockedAt ?? item.followedAt)!)}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: const TextStyle(
@@ -430,7 +518,7 @@ class _FollowingTile extends StatelessWidget {
                         : Icons.favorite_border_rounded,
                     size: 16,
                   ),
-                  label: Text(isProcessing ? '处理中' : '取消关注'),
+                  label: Text(isProcessing ? '处理中' : (actionLabel ?? '取消关注')),
                 ),
               ],
             ],

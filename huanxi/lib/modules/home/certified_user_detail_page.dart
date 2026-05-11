@@ -16,6 +16,7 @@ import 'package:huanxi/core/utils/app_toast.dart';
 import 'moment_media_grid.dart';
 import 'moment_image_preview_page.dart';
 import 'moment_video_preview_page.dart';
+import 'user_more_actions.dart';
 
 /// 认证用户详情页 (Momo 风格)
 class CertifiedUserDetailPage extends ConsumerStatefulWidget {
@@ -36,6 +37,9 @@ class _CertifiedUserDetailPageState
   bool _isLoading = false;
   bool _isFollowLoading = false;
   bool _isFollowing = false;
+  bool _blockedByMe = false;
+  bool _blockedMe = false;
+  bool _interactionBlocked = false;
   String? _error;
 
   CertifiedUserInfo? get _resolvedCertifiedUser =>
@@ -49,6 +53,13 @@ class _CertifiedUserDetailPageState
   }
 
   Future<void> _openIm({required CertifiedUserInfo certifiedUser}) async {
+    if (_interactionBlocked) {
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('你们之间已存在黑名单关系，无法聊天')),
+      );
+      return;
+    }
     final result = await context.push(
       '${AppRoutes.im}/${certifiedUser.userId}',
       extra: {
@@ -67,6 +78,13 @@ class _CertifiedUserDetailPageState
   }
 
   Future<void> _openCall(CertifiedUserInfo certifiedUser) async {
+    if (_interactionBlocked) {
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('你们之间已存在黑名单关系，无法呼叫')),
+      );
+      return;
+    }
     try {
       unawaited(
         context
@@ -143,6 +161,9 @@ class _CertifiedUserDetailPageState
       setState(() {
         _certifiedUser = result.certifiedUser;
         _isFollowing = result.isFollowing;
+        _blockedByMe = result.certifiedUser.blockedByMe;
+        _blockedMe = result.certifiedUser.blockedMe;
+        _interactionBlocked = result.certifiedUser.interactionBlocked;
         _isLoading = false;
         _error = null;
       });
@@ -175,6 +196,13 @@ class _CertifiedUserDetailPageState
 
   Future<void> _toggleFollow(CertifiedUserInfo certifiedUser) async {
     if (_isFollowLoading) return;
+    if (_interactionBlocked) {
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('你们之间已存在黑名单关系，无法关注')),
+      );
+      return;
+    }
 
     final authState = ref.read(authProvider);
     if (authState.userId != null && authState.userId == certifiedUser.userId) {
@@ -238,6 +266,20 @@ class _CertifiedUserDetailPageState
         context,
         const SnackBar(content: Text('关注操作失败，请稍后重试')),
       );
+    }
+  }
+
+  Future<void> _openMoreActions(CertifiedUserInfo certifiedUser) async {
+    final changed = await showUserMoreActions(
+      context: context,
+      targetUserId: certifiedUser.userId,
+      targetName: certifiedUser.username ?? '用户${certifiedUser.userId}',
+      scene: UserComplaintScene.profile,
+      blockedByMe: _blockedByMe,
+      blockedMe: _blockedMe,
+    );
+    if (changed == true) {
+      await _loadProfile();
     }
   }
 
@@ -317,7 +359,7 @@ class _CertifiedUserDetailPageState
         actions: [
           IconButton(
             icon: const Icon(Icons.more_horiz, color: Colors.white),
-            onPressed: () {},
+            onPressed: isSelf ? null : () => _openMoreActions(certifiedUser),
           ),
         ],
       ),
@@ -549,6 +591,24 @@ class _CertifiedUserDetailPageState
                       ],
                     ),
                     const SizedBox(height: 24),
+                    if (_interactionBlocked) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.errorColor.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Text(
+                          '你们之间已存在黑名单关系，无法互相关注、聊天、通话和送礼',
+                          style: TextStyle(
+                            color: AppTheme.errorColor,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     const Divider(color: AppTheme.dividerColor),
                     const SizedBox(height: 24),
                     const Text(
@@ -606,6 +666,7 @@ class _CertifiedUserDetailPageState
                           message: _isFollowing ? '取消关注' : '关注',
                           child: OutlinedButton(
                             onPressed: _isFollowLoading
+                                || _interactionBlocked
                                 ? null
                                 : () => _toggleFollow(certifiedUser),
                             style: OutlinedButton.styleFrom(
@@ -640,8 +701,9 @@ class _CertifiedUserDetailPageState
                         child: Tooltip(
                           message: '聊一聊',
                           child: OutlinedButton(
-                            onPressed: () =>
-                                _openIm(certifiedUser: certifiedUser),
+                            onPressed: _interactionBlocked
+                                ? null
+                                : () => _openIm(certifiedUser: certifiedUser),
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 16),
                               minimumSize: const Size(48, 48),
@@ -673,7 +735,9 @@ class _CertifiedUserDetailPageState
                             boxShadow: AppTheme.elevatedShadow,
                           ),
                           child: ElevatedButton(
-                            onPressed: () => _openCall(certifiedUser),
+                            onPressed: _interactionBlocked
+                                ? null
+                                : () => _openCall(certifiedUser),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.transparent,
                               shadowColor: Colors.transparent,
