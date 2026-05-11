@@ -65,11 +65,5 @@ class InitialProfileUploadOut(BaseModel):
 
 class InitialProfileOptionsOut(BaseModel):
     gender: GenderType
-    avatars: list[str] = Field(default_factory=list)
-    nickname_candidates: list[str] = Field(default_factory=list)
     selected_avatar: str = ""
     selected_nickname: str = ""
-    avatar_count: int = 0
-    nickname_prefix_count: int = 0
-    nickname_suffix_count: int = 0
-    nickname_combo_count: int = 0

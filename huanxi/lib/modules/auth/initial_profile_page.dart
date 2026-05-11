@@ -24,12 +24,9 @@ class _InitialProfilePageState extends ConsumerState<InitialProfilePage> {
   String _gender = 'male';
   String _avatar = '';
   String _nickname = '';
-  int _avatarCount = 0;
-  int _nicknamePrefixCount = 0;
-  int _nicknameSuffixCount = 0;
-  int _nicknameComboCount = 0;
   bool _loading = false;
   bool _submitting = false;
+  bool _loggingOut = false;
 
   @override
   void initState() {
@@ -50,10 +47,6 @@ class _InitialProfilePageState extends ConsumerState<InitialProfilePage> {
         _gender = (respData['gender'] as String?) ?? _gender;
         _avatar = (respData['selected_avatar'] as String?)?.trim() ?? '';
         _nickname = (respData['selected_nickname'] as String?)?.trim() ?? '';
-        _avatarCount = _parseInt(respData['avatar_count']);
-        _nicknamePrefixCount = _parseInt(respData['nickname_prefix_count']);
-        _nicknameSuffixCount = _parseInt(respData['nickname_suffix_count']);
-        _nicknameComboCount = _parseInt(respData['nickname_combo_count']);
       });
     } catch (e) {
       if (!mounted) return;
@@ -64,7 +57,7 @@ class _InitialProfilePageState extends ConsumerState<InitialProfilePage> {
   }
 
   Future<void> _randomAvatar() async {
-    if (_submitting) return;
+    if (_loading || _submitting || _loggingOut) return;
     try {
       final data = await DioClient.instance.apiPost(
         ApiEndpoints.initialProfileRandomAvatar,
@@ -88,7 +81,7 @@ class _InitialProfilePageState extends ConsumerState<InitialProfilePage> {
   }
 
   Future<void> _randomNickname() async {
-    if (_submitting) return;
+    if (_loading || _submitting || _loggingOut) return;
     try {
       final data = await DioClient.instance.apiPost(
         ApiEndpoints.initialProfileRandomNickname,
@@ -112,12 +105,13 @@ class _InitialProfilePageState extends ConsumerState<InitialProfilePage> {
   }
 
   Future<void> _handleGenderChange(String gender) async {
-    if (gender == _gender || _submitting) return;
+    if (gender == _gender || _loading || _submitting || _loggingOut) return;
     setState(() => _gender = gender);
     await _loadOptions();
   }
 
   Future<void> _complete() async {
+    if (_submitting || _loggingOut) return;
     if (_avatar.isEmpty || _nickname.isEmpty) {
       AppToast.show(context, '请先选择头像和昵称');
       return;
@@ -159,11 +153,38 @@ class _InitialProfilePageState extends ConsumerState<InitialProfilePage> {
     }
   }
 
-  int _parseInt(dynamic value) {
-    if (value is int) return value;
-    if (value is num) return value.toInt();
-    if (value is String) return int.tryParse(value.trim()) ?? 0;
-    return 0;
+  Future<void> _confirmLogout() async {
+    if (_submitting || _loggingOut) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('退出登录'),
+        content: const Text('确定要退出当前账号吗？'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('取消'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('退出'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _loggingOut = true);
+    try {
+      await ref.read(authProvider.notifier).logout();
+      if (!mounted) return;
+      context.go(AppRoutes.login);
+    } catch (e) {
+      if (!mounted) return;
+      AppToast.error(context, e);
+    } finally {
+      if (mounted) setState(() => _loggingOut = false);
+    }
   }
 
   @override
@@ -172,6 +193,7 @@ class _InitialProfilePageState extends ConsumerState<InitialProfilePage> {
       _GenderOption(label: '男生', value: 'male'),
       _GenderOption(label: '女生', value: 'female'),
     ];
+    final isBusy = _loading || _submitting || _loggingOut;
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
@@ -191,79 +213,16 @@ class _InitialProfilePageState extends ConsumerState<InitialProfilePage> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: AppTheme.elevatedShadow,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      ToggleButtons(
-                        isSelected: genderOptions
-                            .map((item) => item.value == _gender)
-                            .toList(),
-                        onPressed: (index) =>
-                            _handleGenderChange(genderOptions[index].value),
-                        borderRadius: BorderRadius.circular(12),
-                        selectedColor: Colors.white,
-                        fillColor: AppTheme.primaryColor,
-                        constraints: const BoxConstraints(
-                          minHeight: 44,
-                          minWidth: 120,
-                        ),
-                        children: genderOptions
-                            .map(
-                              (item) => Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                ),
-                                child: Text(item.label),
-                              ),
-                            )
-                            .toList(),
-                      ),
-                      const SizedBox(height: 20),
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(child: _buildAvatarPanel()),
-                          const SizedBox(width: 12),
-                          Expanded(child: _buildNicknamePanel()),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: AppTheme.elevatedShadow,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      _statRow('头像数量', '$_avatarCount'),
-                      const SizedBox(height: 8),
-                      _statRow(
-                        '前缀/后缀',
-                        '$_nicknamePrefixCount / $_nicknameSuffixCount',
-                      ),
-                      const SizedBox(height: 8),
-                      _statRow('可组合昵称', '$_nicknameComboCount'),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
+                _buildAvatarPanel(),
+                const SizedBox(height: 28),
+                _buildNicknamePanel(),
+                const SizedBox(height: 28),
+                _buildGenderSection(genderOptions),
+                const SizedBox(height: 32),
                 SizedBox(
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: (_loading || _submitting) ? null : _complete,
+                    onPressed: isBusy ? null : _complete,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primaryColor,
                       shape: RoundedRectangleBorder(
@@ -282,11 +241,35 @@ class _InitialProfilePageState extends ConsumerState<InitialProfilePage> {
                             ),
                           )
                         : const Text(
-                            '完成',
+                            '进入',
                             style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                             ),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  height: 48,
+                  child: OutlinedButton(
+                    onPressed: isBusy ? null : _confirmLogout,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.textSecondary,
+                      side: const BorderSide(color: AppTheme.dividerColor),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(24),
+                      ),
+                    ),
+                    child: _loggingOut
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text(
+                            '退出登录',
+                            style: TextStyle(fontWeight: FontWeight.w600),
                           ),
                   ),
                 ),
@@ -307,44 +290,60 @@ class _InitialProfilePageState extends ConsumerState<InitialProfilePage> {
           style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 12),
-        AspectRatio(
-          aspectRatio: 1,
-          child: Container(
-            decoration: BoxDecoration(
-              color: AppTheme.backgroundColor,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: AppTheme.dividerColor),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: _avatar.isEmpty
-                  ? const Center(
-                      child: Icon(
-                        Icons.person_outline,
-                        size: 56,
-                        color: AppTheme.textHint,
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 240),
+            child: AspectRatio(
+              aspectRatio: 1,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: AppTheme.dividerColor),
+                        boxShadow: AppTheme.elevatedShadow,
                       ),
-                    )
-                  : Image.network(
-                      toAbsoluteMediaUrl(_avatar),
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
-                          const Center(
-                            child: Icon(
-                              Icons.broken_image_outlined,
-                              size: 44,
-                              color: AppTheme.textHint,
-                            ),
-                          ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(24),
+                        child: _avatar.isEmpty
+                            ? const Center(
+                                child: Icon(
+                                  Icons.person_outline,
+                                  size: 64,
+                                  color: AppTheme.textHint,
+                                ),
+                              )
+                            : Image.network(
+                                toAbsoluteMediaUrl(_avatar),
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    const Center(
+                                      child: Icon(
+                                        Icons.broken_image_outlined,
+                                        size: 48,
+                                        color: AppTheme.textHint,
+                                      ),
+                                    ),
+                              ),
+                      ),
                     ),
+                  ),
+                  Positioned(
+                    right: 10,
+                    bottom: 10,
+                    child: _buildDiceButton(
+                      onPressed: (_loading || _submitting || _loggingOut)
+                          ? null
+                          : _randomAvatar,
+                      tooltip: '换头像',
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-        const SizedBox(height: 12),
-        TextButton.icon(
-          onPressed: _submitting ? null : _randomAvatar,
-          icon: const Icon(Icons.shuffle),
-          label: const Text('换头像'),
         ),
       ],
     );
@@ -360,44 +359,97 @@ class _InitialProfilePageState extends ConsumerState<InitialProfilePage> {
         ),
         const SizedBox(height: 12),
         Container(
-          height: 150,
-          padding: const EdgeInsets.all(16),
+          constraints: const BoxConstraints(minHeight: 72),
+          padding: const EdgeInsets.fromLTRB(18, 10, 10, 10),
           decoration: BoxDecoration(
-            color: AppTheme.backgroundColor,
-            borderRadius: BorderRadius.circular(16),
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(28),
             border: Border.all(color: AppTheme.dividerColor),
+            boxShadow: AppTheme.elevatedShadow,
           ),
-          child: Center(
-            child: Text(
-              _nickname.isEmpty ? '暂无昵称' : _nickname,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: _nickname.isEmpty ? 14 : 24,
-                fontWeight: FontWeight.w600,
-                color: _nickname.isEmpty
-                    ? AppTheme.textHint
-                    : AppTheme.textPrimary,
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  _nickname.isEmpty ? '暂无昵称' : _nickname,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: _nickname.isEmpty ? 15 : 22,
+                    fontWeight: FontWeight.w700,
+                    color: _nickname.isEmpty
+                        ? AppTheme.textHint
+                        : AppTheme.textPrimary,
+                  ),
+                ),
               ),
-            ),
+              const SizedBox(width: 10),
+              _buildDiceButton(
+                onPressed: (_loading || _submitting || _loggingOut)
+                    ? null
+                    : _randomNickname,
+                tooltip: '换昵称',
+              ),
+            ],
           ),
-        ),
-        const SizedBox(height: 12),
-        TextButton.icon(
-          onPressed: _submitting ? null : _randomNickname,
-          icon: const Icon(Icons.shuffle),
-          label: const Text('换昵称'),
         ),
       ],
     );
   }
 
-  Widget _statRow(String label, String value) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _buildGenderSection(List<_GenderOption> genderOptions) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text(label, style: const TextStyle(color: AppTheme.textSecondary)),
-        Text(value, style: const TextStyle(fontWeight: FontWeight.w600)),
+        const Text(
+          '性别',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+        ),
+        const SizedBox(height: 12),
+        Center(
+          child: ToggleButtons(
+            isSelected: genderOptions
+                .map((item) => item.value == _gender)
+                .toList(),
+            onPressed: (_loading || _submitting || _loggingOut)
+                ? null
+                : (index) => _handleGenderChange(genderOptions[index].value),
+            borderRadius: BorderRadius.circular(14),
+            selectedColor: Colors.white,
+            fillColor: AppTheme.primaryColor,
+            color: AppTheme.textSecondary,
+            constraints: const BoxConstraints(minHeight: 44, minWidth: 120),
+            children: genderOptions
+                .map(
+                  (item) => Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Text(item.label),
+                  ),
+                )
+                .toList(),
+          ),
+        ),
       ],
+    );
+  }
+
+  Widget _buildDiceButton({
+    required VoidCallback? onPressed,
+    required String tooltip,
+  }) {
+    return Material(
+      color: onPressed == null ? AppTheme.dividerColor : AppTheme.primaryColor,
+      elevation: onPressed == null ? 0 : 2,
+      shape: const CircleBorder(),
+      child: IconButton(
+        onPressed: onPressed,
+        tooltip: tooltip,
+        icon: const Icon(Icons.casino_outlined),
+        color: Colors.white,
+        iconSize: 22,
+        constraints: const BoxConstraints.tightFor(width: 46, height: 46),
+        padding: EdgeInsets.zero,
+      ),
     );
   }
 }

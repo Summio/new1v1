@@ -63,10 +63,7 @@ def normalize_nickname_import_item(value: str, *, max_length: int = NICKNAME_PAR
 
 def parse_nickname_import_content(content: str, *, max_length: int = NICKNAME_PART_MAX_LENGTH) -> list[str]:
     rows = str(content or "").replace("、", "\n").replace(",", "\n").replace("，", "\n").splitlines()
-    normalized = [
-        normalize_nickname_import_item(item, max_length=max_length)
-        for item in rows
-    ]
+    normalized = [normalize_nickname_import_item(item, max_length=max_length) for item in rows]
     return normalize_nickname_parts(normalized, max_length=max_length)
 
 
@@ -180,20 +177,13 @@ def build_initial_profile_options(
 ) -> dict[str, object]:
     gender_key = normalize_gender(gender)
     avatars = build_avatar_candidates(avatar_pool, gender_key)
-    nickname_candidates = build_nickname_candidates(nickname_pool, gender_key)
     selected_avatar = random_avatar(avatar_pool, gender_key) if avatars else ""
+    nickname_candidates = build_nickname_combinations(nickname_pool, gender_key)
     selected_nickname = random_nickname(nickname_pool, gender_key) if nickname_candidates else ""
-    summary = build_gender_summary(avatar_pool, nickname_pool, gender_key)
     return {
         "gender": gender_key,
-        "avatars": avatars,
-        "nickname_candidates": nickname_candidates,
         "selected_avatar": selected_avatar,
         "selected_nickname": selected_nickname,
-        "avatar_count": summary["avatar_count"],
-        "nickname_prefix_count": summary["prefix_count"],
-        "nickname_suffix_count": summary["suffix_count"],
-        "nickname_combo_count": summary["combo_count"],
     }
 
 

@@ -53,7 +53,9 @@ def test_initial_profile_menu_and_admin_page_are_present() -> None:
 
     assert "初始资料管理" in init_app_text
     assert "path='initial-profile'" in init_app_text or 'path="initial-profile"' in init_app_text
-    assert "component='/system/initial-profile'" in init_app_text or 'component="/system/initial-profile"' in init_app_text
+    assert (
+        "component='/system/initial-profile'" in init_app_text or 'component="/system/initial-profile"' in init_app_text
+    )
     assert "getInitialProfileConfig" in api_text
     assert "updateInitialProfileAvatarPool" in api_text
     assert "updateInitialProfileNicknamePool" in api_text
@@ -73,3 +75,41 @@ def test_initial_profile_nickname_import_accepts_common_leading_labels() -> None
         "清禾",
         "知夏",
     ]
+
+
+def test_initial_profile_options_contract_excludes_pool_statistics() -> None:
+    from app.schemas.initial_profile import InitialProfileOptionsOut
+    from app.services.initial_profile_service import build_initial_profile_options
+
+    options = build_initial_profile_options(
+        {"male": ["avatar-a.png", "avatar-b.png"], "female": []},
+        {
+            "male": {"prefixes": ["初遇", "南山"], "suffixes": ["晴天"]},
+            "female": {"prefixes": [], "suffixes": []},
+        },
+        "male",
+    )
+    payload = InitialProfileOptionsOut(**options).model_dump()
+
+    assert payload["gender"] == "male"
+    assert payload["selected_avatar"]
+    assert payload["selected_nickname"]
+    for field in (
+        "avatars",
+        "nickname_candidates",
+        "avatar_count",
+        "nickname_prefix_count",
+        "nickname_suffix_count",
+        "nickname_combo_count",
+    ):
+        assert field not in options
+        assert field not in payload
+
+
+def test_flutter_initial_profile_page_no_longer_displays_pool_statistics() -> None:
+    page_text = (REPO / "huanxi/lib/modules/auth/initial_profile_page.dart").read_text(encoding="utf-8")
+
+    for removed_text in ("头像数量", "前缀/后缀", "可组合昵称", "_statRow"):
+        assert removed_text not in page_text
+    assert "'进入'" in page_text
+    assert "'退出登录'" in page_text
