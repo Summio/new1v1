@@ -3,8 +3,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, model_validator
 
-
 # ===== 认证用户 =====
+
 
 class CertifiedUserOut(BaseModel):
     id: int
@@ -205,6 +205,33 @@ class WithdrawAccountOut(BaseModel):
     account_no: str = ""
     payment_qr_code: str = ""
     has_account: bool = False
+    status: str = ""
+    review_remark: str = ""
+    reviewed_at: Optional[datetime] = None
+    can_withdraw: bool = False
+
+
+class WithdrawAccountReviewIn(BaseModel):
+    account_id: int = Field(..., description="提现账户ID")
+    action: str = Field(..., description="操作：approve（通过）或 reject（驳回）")
+    review_remark: Optional[str] = Field(None, max_length=500, description="审核备注/驳回原因")
+    review_reason: Optional[str] = Field(None, max_length=500, description="兼容旧字段：驳回原因")
+
+
+class WithdrawAccountListItem(BaseModel):
+    id: int
+    user_id: int
+    real_name: str
+    account_no: str = ""
+    account_no_masked: str = ""
+    payment_qr_code: str = ""
+    status: str
+    review_remark: str = ""
+    reviewed_by: Optional[int] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    reviewed_at: Optional[datetime] = None
+    username: Optional[str] = None
 
 
 class WithdrawReviewIn(BaseModel):

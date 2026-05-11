@@ -69,6 +69,8 @@ export default {
   // withdraw manage
   getWithdrawList: (params = {}) => request.get('/withdraw/list', { params }),
   reviewWithdrawApply: (data = {}) => request.post('/withdraw/review', data),
+  getWithdrawAccountList: (params = {}) => request.get('/withdraw/account/list', { params }),
+  reviewWithdrawAccount: (data = {}) => request.post('/withdraw/account/review', data),
   // ranking manage
   getRankingList: (params = {}) => request.get('/ranking/list', { params }),
   refreshRanking: (data = {}) => request.post('/ranking/refresh', data),

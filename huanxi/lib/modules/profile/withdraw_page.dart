@@ -9,7 +9,6 @@ import '../../app/theme/app_theme.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/utils/app_toast.dart';
-import 'withdraw_account_page.dart';
 
 class WithdrawPage extends ConsumerStatefulWidget {
   const WithdrawPage({super.key});
@@ -88,7 +87,9 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
 
   Future<void> _loadAccount() async {
     setState(() => _isLoadingAccount = true);
-    final account = await ref.read(walletProvider.notifier).fetchWithdrawAccount();
+    final account = await ref
+        .read(walletProvider.notifier)
+        .fetchWithdrawAccount();
     if (!mounted) return;
     setState(() {
       _account = account ?? const WithdrawAccount();
@@ -116,26 +117,35 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
   }
 
   Future<void> _editAccount() async {
-    final draft = await context.push<WithdrawAccountDraft>(
+    final account = await context.push<WithdrawAccount>(
       AppRoutes.withdrawAccount,
       extra: _account,
     );
-    if (draft == null || !mounted) return;
-    setState(() {
-      _account = WithdrawAccount(
-        realName: draft.realName,
-        accountNo: draft.accountNo,
-        paymentQrCode: draft.paymentQrCode,
-        hasAccount: true,
-      );
-    });
+    if (account == null || !mounted) return;
+    setState(() => _account = account);
+    AppToast.showSnackBar(context, const SnackBar(content: Text('提现账户已提交审核')));
   }
 
   Future<void> _submitWithdraw() async {
     if (_isSubmitting || _packages.isEmpty) return;
     if (!_account.isComplete) {
-      AppToast.showSnackBar(context, const SnackBar(content: Text('请先填写提现账户资料')));
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('请先填写提现账户资料')),
+      );
       await _editAccount();
+      return;
+    }
+    if (!_account.canWithdraw) {
+      final message = _account.isPending
+          ? '账户审核中，通过后才能提现'
+          : _account.isRejected
+          ? '账户审核未通过，请修改后重新提交'
+          : '请先提交并通过提现账户审核';
+      AppToast.showSnackBar(context, SnackBar(content: Text(message)));
+      if (_account.isRejected) {
+        await _editAccount();
+      }
       return;
     }
     final pkg = _packages[_selectedIndex];
@@ -147,29 +157,16 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
     }
 
     setState(() => _isSubmitting = true);
-    final saved = await ref.read(walletProvider.notifier).saveWithdrawAccount(
-      realName: _account.realName,
-      accountNo: _account.accountNo,
-      paymentQrCode: _account.paymentQrCode,
-    );
-    if (!mounted) return;
-    if (saved == null || !saved.isComplete) {
-      setState(() => _isSubmitting = false);
-      AppToast.showSnackBar(context, const SnackBar(content: Text('提现账户保存失败')));
-      return;
-    }
-    _account = saved;
-
-    final result = await ref.read(walletProvider.notifier).withdraw(
-      amount: diamonds,
-      realName: saved.realName,
-      accountNo: saved.accountNo,
-      paymentQrCode: saved.paymentQrCode,
-    );
+    final result = await ref
+        .read(walletProvider.notifier)
+        .withdraw(amount: diamonds);
     if (!mounted) return;
     setState(() => _isSubmitting = false);
     if (result == null) {
-      AppToast.showSnackBar(context, const SnackBar(content: Text('提现申请失败，请稍后重试')));
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('提现申请失败，请稍后重试')),
+      );
       return;
     }
     AppToast.showSnackBar(
@@ -194,11 +191,18 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.error_outline, size: 64, color: AppTheme.textSecondary),
+                Icon(
+                  Icons.error_outline,
+                  size: 64,
+                  color: AppTheme.textSecondary,
+                ),
                 const SizedBox(height: 16),
                 Text(
                   _loadError ?? '暂无可用提现档位',
-                  style: const TextStyle(fontSize: 16, color: AppTheme.textSecondary),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    color: AppTheme.textSecondary,
+                  ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 24),
@@ -233,19 +237,29 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.account_balance_wallet_outlined, color: AppTheme.secondaryDark, size: 20),
+                        Icon(
+                          Icons.account_balance_wallet_outlined,
+                          color: AppTheme.secondaryDark,
+                          size: 20,
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             '可提现 ${authState.diamonds.toStringAsFixed(2)}$diamondName，审核通过后到账支付宝',
-                            style: TextStyle(fontSize: 13, color: AppTheme.secondaryDark),
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppTheme.secondaryDark,
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
                   const SizedBox(height: 24),
-                  const Text('选择提现档位', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  const Text(
+                    '选择提现档位',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 12),
                   if (_isLoadingPackages)
                     const Center(
@@ -258,17 +272,22 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
                     GridView.builder(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        childAspectRatio: 1.1,
-                        crossAxisSpacing: 10,
-                        mainAxisSpacing: 10,
-                      ),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3,
+                            childAspectRatio: 1.1,
+                            crossAxisSpacing: 10,
+                            mainAxisSpacing: 10,
+                          ),
                       itemCount: _packages.length,
-                      itemBuilder: (context, index) => _buildPackageTile(index, diamondName),
+                      itemBuilder: (context, index) =>
+                          _buildPackageTile(index, diamondName),
                     ),
                   const SizedBox(height: 24),
-                  const Text('提现资料', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  const Text(
+                    '提现资料',
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 12),
                   _buildAccountCard(),
                 ],
@@ -301,10 +320,14 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
       onTap: () => setState(() => _selectedIndex = index),
       child: Container(
         decoration: BoxDecoration(
-          color: isSelected ? AppTheme.secondaryColor.withValues(alpha: 0.08) : AppTheme.surfaceColor,
+          color: isSelected
+              ? AppTheme.secondaryColor.withValues(alpha: 0.08)
+              : AppTheme.surfaceColor,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
-            color: isSelected ? AppTheme.secondaryColor : const Color(0xFFF0F0F0),
+            color: isSelected
+                ? AppTheme.secondaryColor
+                : const Color(0xFFF0F0F0),
             width: isSelected ? 2 : 1,
           ),
           boxShadow: isSelected ? AppTheme.cardShadow : null,
@@ -320,13 +343,18 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
-                      color: isSelected ? AppTheme.secondaryDark : AppTheme.textPrimary,
+                      color: isSelected
+                          ? AppTheme.secondaryDark
+                          : AppTheme.textPrimary,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     '提现 ${(pkg['amount'] / 100).toStringAsFixed(2)}元',
-                    style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppTheme.textSecondary,
+                    ),
                   ),
                 ],
               ),
@@ -336,14 +364,21 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
                 top: 4,
                 right: 4,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 1,
+                  ),
                   decoration: BoxDecoration(
                     color: _parseColor(pkg['tag_color']?.toString()),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: Text(
                     pkg['tag'].toString(),
-                    style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 9,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
@@ -354,6 +389,18 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
   }
 
   Widget _buildAccountCard() {
+    final statusText = _account.isPending
+        ? '账户审核中'
+        : _account.isApproved
+        ? '已通过'
+        : _account.isRejected
+        ? '账户审核未通过'
+        : '';
+    final statusColor = _account.isApproved
+        ? const Color(0xFF34C759)
+        : _account.isRejected
+        ? const Color(0xFFFF3B30)
+        : const Color(0xFFFF9500);
     return GestureDetector(
       onTap: _isLoadingAccount ? null : _editAccount,
       child: Container(
@@ -371,23 +418,49 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
                 color: AppTheme.secondaryColor.withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(Icons.account_balance_outlined, color: AppTheme.secondaryDark),
+              child: const Icon(
+                Icons.account_balance_outlined,
+                color: AppTheme.secondaryDark,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: _isLoadingAccount
-                  ? const Text('加载中...', style: TextStyle(color: AppTheme.textSecondary))
+                  ? const Text(
+                      '加载中...',
+                      style: TextStyle(color: AppTheme.textSecondary),
+                    )
                   : Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           _account.isComplete ? _account.realName : '填写提现账户',
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
+                          ),
                         ),
                         const SizedBox(height: 4),
+                        if (statusText.isNotEmpty) ...[
+                          Text(
+                            statusText,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: statusColor,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                        ],
                         Text(
-                          _account.isComplete ? '支付宝 ${_account.accountNo}' : '真实姓名、支付宝账号、收款码',
-                          style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+                          _account.isComplete
+                              ? '支付宝 ${_account.accountNo}'
+                              : '真实姓名、支付宝账号、收款码',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppTheme.textSecondary,
+                          ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -403,6 +476,12 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
 
   Widget _buildSubmitBar() {
     final pkg = _packages[_selectedIndex];
+    final disabled = _isSubmitting || _account.isPending;
+    final label = _account.isPending
+        ? '账户审核中'
+        : _account.isRejected
+        ? '修改账户后提现'
+        : '提交提现 ￥${(pkg['amount'] / 100).toStringAsFixed(2)}';
     return Container(
       padding: EdgeInsets.only(
         left: 16,
@@ -429,21 +508,30 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
             boxShadow: AppTheme.elevatedShadow,
           ),
           child: ElevatedButton(
-            onPressed: _isSubmitting ? null : _submitWithdraw,
+            onPressed: disabled ? null : _submitWithdraw,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.transparent,
               shadowColor: Colors.transparent,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
             ),
             child: _isSubmitting
                 ? const SizedBox(
                     width: 24,
                     height: 24,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
                   )
                 : Text(
-                    '提交提现 ￥${(pkg['amount'] / 100).toStringAsFixed(2)}',
-                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: Colors.white),
+                    label,
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
                   ),
           ),
         ),
