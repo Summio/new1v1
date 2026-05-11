@@ -21,6 +21,8 @@ class AppConstants {
   static const String storageToken = 'token';
   static const String storageUserId = 'user_id';
   static const String storageUserInfo = 'user_info';
+  static const String storageInitialProfileCompleted =
+      'initial_profile_completed';
   static const String storageGiftList = 'gift_list';
   static const String storageCertifiedUserList = 'certified_user_list';
   static const String storageFirstLaunch = 'first_launch';

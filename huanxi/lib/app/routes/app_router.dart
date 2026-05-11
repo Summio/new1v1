@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import '../../modules/auth/splash_page.dart';
 import '../../modules/auth/login_page.dart';
 import '../../modules/auth/register_page.dart';
+import '../../modules/auth/initial_profile_page.dart';
 import '../../modules/home/home_page.dart';
 import '../../modules/home/discover_page.dart';
 import '../../modules/home/chat_page.dart';
@@ -36,6 +37,7 @@ import '../../modules/home/feedback_page.dart';
 import '../../modules/home/call_page.dart';
 import '../../app/providers/certified_user_provider.dart';
 import '../../app/providers/wallet_provider.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/storage/storage.dart';
 import '../../services/teen_mode_service.dart';
 
@@ -44,6 +46,7 @@ class AppRoutes {
   static const String splash = '/';
   static const String login = '/login';
   static const String register = '/register';
+  static const String initialProfile = '/register/initial-profile';
   static const String index = '/index';
   static const String discover = '/discover';
   static const String messages = '/messages';
@@ -89,9 +92,14 @@ final appRouter = GoRouter(
     final isOnSplash = state.matchedLocation == AppRoutes.splash;
     final isOnLogin = state.matchedLocation == AppRoutes.login;
     final isOnRegister = state.matchedLocation == AppRoutes.register;
+    final isOnInitialProfile =
+        state.matchedLocation == AppRoutes.initialProfile;
     final isOnTeenModeVerify =
         state.matchedLocation == AppRoutes.teenModeVerify;
     final isTeenModeLocked = TeenModeService.instance.isLocked;
+    final initialProfileCompleted =
+        StorageService.getBool(AppConstants.storageInitialProfileCompleted) ??
+        (StorageService.getUserInfo()?['initial_profile_completed'] == true);
     if (isOnSplash) {
       return null;
     }
@@ -101,7 +109,12 @@ final appRouter = GoRouter(
     if (!isLoggedIn && !isOnLogin && !isOnRegister) {
       return AppRoutes.login;
     }
-    if (isLoggedIn && (isOnLogin || isOnRegister)) {
+    if (isLoggedIn && !initialProfileCompleted && !isOnInitialProfile) {
+      return AppRoutes.initialProfile;
+    }
+    if (isLoggedIn &&
+        initialProfileCompleted &&
+        (isOnLogin || isOnRegister || isOnInitialProfile)) {
       return AppRoutes.index;
     }
     return null;
@@ -118,6 +131,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.register,
       builder: (context, state) => const RegisterPage(),
+    ),
+    GoRoute(
+      path: AppRoutes.initialProfile,
+      builder: (context, state) => const InitialProfilePage(),
     ),
     ShellRoute(
       builder: (context, state, child) => MainShell(child: child),
@@ -225,7 +242,10 @@ final appRouter = GoRouter(
             body: const Center(child: Text('认证用户信息无效，请返回重试')),
           );
         }
-        return CertifiedUserDetailPage(certifiedUser: certifiedUser, userId: userId);
+        return CertifiedUserDetailPage(
+          certifiedUser: certifiedUser,
+          userId: userId,
+        );
       },
     ),
     GoRoute(

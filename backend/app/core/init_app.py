@@ -137,6 +137,17 @@ def build_operation_children(parent_id: int) -> list[Menu]:
             component="/operation/ranking",
             keepalive=False,
         ),
+        Menu(
+            menu_type=MenuType.MENU,
+            name="初始资料管理",
+            path="initial-profile",
+            order=10,
+            parent_id=parent_id,
+            icon="material-symbols:badge-outline-rounded",
+            is_hidden=False,
+            component="/system/initial-profile",
+            keepalive=False,
+        ),
     ]
 
 
@@ -320,7 +331,7 @@ async def init_menus():
         {
             "name": "提现配置",
             "path": "withdraw-config",
-            "order": 9,
+            "order": 8,
             "icon": "material-symbols:payments-outline-rounded",
             "component": "/system/withdraw-config",
         },

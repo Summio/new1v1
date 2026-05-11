@@ -17,6 +17,7 @@ from .register import router as register_router
 from .review_entry import router as review_entry_router
 from .feedback import router as feedback_router
 from .rtc import router as rtc_router
+from .initial_profile import router as initial_profile_router
 from .user import router as user_router
 from .wallet import router as wallet_router
 
@@ -24,6 +25,9 @@ app_router = APIRouter()
 
 # register_router: 注册接口无需认证
 app_router.include_router(register_router, prefix="")
+app_router.include_router(
+    initial_profile_router, prefix="/register/initial-profile", dependencies=[Depends(DependAppAuth)]
+)
 # user_router: /login 无需认证，/user/info 需要 DependAppAuth
 app_router.include_router(user_router, prefix="")
 app_router.include_router(bootstrap_router, prefix="")

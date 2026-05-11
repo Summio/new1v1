@@ -40,6 +40,11 @@ class AppUser(BaseModel, TimestampMixin):
     text_dnd_enabled = fields.BooleanField(default=False, description="文字勿扰开关")
     video_dnd_enabled = fields.BooleanField(default=False, description="视频勿扰开关")
     ranking_invisible_enabled = fields.BooleanField(default=False, description="榜单隐身开关")
+    initial_profile_completed = fields.BooleanField(
+        default=False,
+        description="是否已完成初始资料",
+        db_index=True,
+    )
     ban_reason = fields.CharField(max_length=500, null=True, description="封禁原因")
     last_login = fields.DatetimeField(null=True, description="最后登录时间")
 

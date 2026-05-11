@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dio/dio.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/constants/api_endpoints.dart';
+import '../../core/constants/app_constants.dart';
 import '../../core/media/image_upload_preprocessor.dart';
 import '../../core/storage/storage.dart';
 import '../../core/network/api_exception.dart';
@@ -27,6 +28,7 @@ class AuthState {
   final bool isCertifiedUser;
   final String certificationStatus;
   final int certifiedCallPrice;
+  final bool initialProfileCompleted;
   final bool textDndEnabled;
   final bool videoDndEnabled;
   final bool rankingInvisibleEnabled;
@@ -52,6 +54,7 @@ class AuthState {
     this.isCertifiedUser = false,
     this.certificationStatus = 'none',
     this.certifiedCallPrice = 0,
+    this.initialProfileCompleted = true,
     this.textDndEnabled = false,
     this.videoDndEnabled = false,
     this.rankingInvisibleEnabled = false,
@@ -78,6 +81,7 @@ class AuthState {
     bool? isCertifiedUser,
     String? certificationStatus,
     int? certifiedCallPrice,
+    bool? initialProfileCompleted,
     bool? textDndEnabled,
     bool? videoDndEnabled,
     bool? rankingInvisibleEnabled,
@@ -104,6 +108,8 @@ class AuthState {
       isCertifiedUser: isCertifiedUser ?? this.isCertifiedUser,
       certificationStatus: certificationStatus ?? this.certificationStatus,
       certifiedCallPrice: certifiedCallPrice ?? this.certifiedCallPrice,
+      initialProfileCompleted:
+          initialProfileCompleted ?? this.initialProfileCompleted,
       textDndEnabled: textDndEnabled ?? this.textDndEnabled,
       videoDndEnabled: videoDndEnabled ?? this.videoDndEnabled,
       rankingInvisibleEnabled:
@@ -383,6 +389,17 @@ class AuthNotifier extends StateNotifier<AuthState> {
     return fallback;
   }
 
+  bool _parseBool(dynamic value, {bool fallback = false}) {
+    if (value is bool) return value;
+    if (value is num) return value.toInt() != 0;
+    if (value is String) {
+      final normalized = value.trim().toLowerCase();
+      if (normalized == 'true' || normalized == '1') return true;
+      if (normalized == 'false' || normalized == '0') return false;
+    }
+    return fallback;
+  }
+
   List<String> _parseAlbum(dynamic value) {
     final normalized = normalizeMediaPayload(value, parentKey: 'album_photos');
     if (normalized is! List) return const <String>[];
@@ -423,6 +440,14 @@ class AuthNotifier extends StateNotifier<AuthState> {
               (cachedInfo['certification_status'] as String?) ?? 'none',
           certifiedCallPrice:
               _parseNullableInt(cachedInfo['certified_call_price']) ?? 0,
+          initialProfileCompleted: _parseBool(
+            cachedInfo['initial_profile_completed'],
+            fallback:
+                StorageService.getBool(
+                  AppConstants.storageInitialProfileCompleted,
+                ) ??
+                true,
+          ),
           textDndEnabled: cachedInfo['text_dnd_enabled'] == true,
           videoDndEnabled: cachedInfo['video_dnd_enabled'] == true,
           rankingInvisibleEnabled:
@@ -431,7 +456,15 @@ class AuthNotifier extends StateNotifier<AuthState> {
           diamonds: _parseDouble(cachedInfo['diamonds']),
         );
       } else {
-        state = state.copyWith(isLoggedIn: true, userId: localUserId);
+        state = state.copyWith(
+          isLoggedIn: true,
+          userId: localUserId,
+          initialProfileCompleted:
+              StorageService.getBool(
+                AppConstants.storageInitialProfileCompleted,
+              ) ??
+              false,
+        );
       }
 
       // 异步验证 token 并获取最新数据，失败则清除存储
@@ -500,6 +533,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
             (respData['certification_status'] as String?) ?? 'none',
         certifiedCallPrice:
             _parseNullableInt(respData['certified_call_price']) ?? 0,
+        initialProfileCompleted: _parseBool(
+          respData['initial_profile_completed'],
+          fallback: false,
+        ),
         textDndEnabled: respData['text_dnd_enabled'] == true,
         videoDndEnabled: respData['video_dnd_enabled'] == true,
         rankingInvisibleEnabled: respData['ranking_invisible_enabled'] == true,
@@ -542,6 +579,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         await StorageService.saveUserId(userId);
         await StorageService.saveUserInfo(respData);
       }
+      await StorageService.saveBool(
+        AppConstants.storageInitialProfileCompleted,
+        _parseBool(respData['initial_profile_completed'], fallback: false),
+      );
 
       state = state.copyWith(
         isLoggedIn: true,
@@ -562,6 +603,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
             (respData['certification_status'] as String?) ?? 'none',
         certifiedCallPrice:
             _parseNullableInt(respData['certified_call_price']) ?? 0,
+        initialProfileCompleted: _parseBool(
+          respData['initial_profile_completed'],
+          fallback: false,
+        ),
         textDndEnabled: respData['text_dnd_enabled'] == true,
         videoDndEnabled: respData['video_dnd_enabled'] == true,
         rankingInvisibleEnabled: respData['ranking_invisible_enabled'] == true,
@@ -696,8 +741,23 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   /// 注册成功后设置登录状态（token已保存）
-  void setLoggedInAfterRegister({required int userId, required String gender}) {
-    state = state.copyWith(isLoggedIn: true, userId: userId, gender: gender);
+  Future<void> setLoggedInAfterRegister({
+    required int userId,
+    bool initialProfileCompleted = false,
+  }) async {
+    state = state.copyWith(
+      isLoggedIn: true,
+      userId: userId,
+      initialProfileCompleted: initialProfileCompleted,
+    );
+    await StorageService.saveBool(
+      AppConstants.storageInitialProfileCompleted,
+      initialProfileCompleted,
+    );
+    final cached = StorageService.getUserInfo() ?? <String, dynamic>{};
+    cached['id'] = userId;
+    cached['initial_profile_completed'] = initialProfileCompleted;
+    await StorageService.saveUserInfo(cached);
   }
 
   /// 退出登录

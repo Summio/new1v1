@@ -8,6 +8,19 @@ export default {
   getCertifiedCallPriceConfig: () => request.get('/apis/system/certified-call-price-config'),
   updateCertifiedCallPriceConfig: (data = {}) =>
     request.put('/apis/system/certified-call-price-config', data),
+  // 初始资料管理
+  getInitialProfileConfig: () => request.get('/apis/system/initial-profile'),
+  updateInitialProfileAvatarPool: (data = {}) =>
+    request.put('/apis/system/initial-profile/avatar', data),
+  updateInitialProfileNicknamePool: (data = {}) =>
+    request.put('/apis/system/initial-profile/nickname', data),
+  uploadInitialProfileAvatar: (data, params = {}) =>
+    request.post('/apis/system/initial-profile/avatar/upload', data, {
+      params,
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  importInitialProfileNickname: (data = {}) =>
+    request.post('/apis/system/initial-profile/nickname/import', data),
   // 提现配置
   getWithdrawConfig: () => request.get('/apis/system/withdraw-config'),
   updateWithdrawConfig: (data = {}) => request.put('/apis/system/withdraw-config', data),

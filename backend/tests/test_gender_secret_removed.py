@@ -17,16 +17,16 @@ def test_gender_type_only_allows_male_and_female() -> None:
     assert {item.value for item in GenderType} == {"male", "female"}
 
 
-def test_app_register_defaults_gender_to_male() -> None:
+def test_app_register_no_longer_accepts_gender() -> None:
     req = AppRegisterIn(phone="13800138000", password="abc12345")
 
-    assert req.gender == GenderType.MALE
+    assert req.phone == "13800138000"
+    assert "gender" not in AppRegisterIn.model_fields
 
 
 @pytest.mark.parametrize(
     "schema,payload",
     [
-        (AppRegisterIn, {"phone": "13800138000", "password": "abc12345", "gender": "secret"}),
         (AppUserProfileUpdateIn, {"gender": "secret"}),
         (AppUserAdminUpdateIn, {"id": 1, "gender": "secret"}),
     ],

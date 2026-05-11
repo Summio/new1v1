@@ -135,11 +135,14 @@ class StorageService {
   static Future<void> clearUserData() async {
     await removeToken();
     await _prefs?.remove(AppConstants.storageUserId);
+    await _prefs?.remove(AppConstants.storageInitialProfileCompleted);
     await _userBox?.clear();
   }
 
   static Future<void> _migrateTokenToSecureStorage() async {
-    final secureToken = await _secureStorage.read(key: AppConstants.storageToken);
+    final secureToken = await _secureStorage.read(
+      key: AppConstants.storageToken,
+    );
     if (secureToken != null && secureToken.isNotEmpty) {
       _tokenCache = secureToken;
       await _prefs?.remove(AppConstants.storageToken);
@@ -148,7 +151,10 @@ class StorageService {
 
     final legacyToken = _prefs?.getString(AppConstants.storageToken);
     if (legacyToken != null && legacyToken.isNotEmpty) {
-      await _secureStorage.write(key: AppConstants.storageToken, value: legacyToken);
+      await _secureStorage.write(
+        key: AppConstants.storageToken,
+        value: legacyToken,
+      );
       await _prefs?.remove(AppConstants.storageToken);
       _tokenCache = legacyToken;
       return;

@@ -36,6 +36,7 @@ async def app_login(req_in: AppLoginIn):
             "nickname": app_user.nickname or app_user.phone,
             "avatar": to_relative_media_url(app_user.avatar),
             "is_certified_user": app_user.is_certified_user,
+            "initial_profile_completed": bool(app_user.initial_profile_completed),
         }
     )
 
@@ -51,9 +52,10 @@ async def app_register(req_in: AppRegisterIn):
     app_user = await AppUser.create(
         phone=req_in.phone,
         password=get_password_hash(req_in.password),
-        nickname=req_in.phone[-4:],  # 默认昵称为手机号后4位
-        gender=str(req_in.gender.value),  # 转换为字符串存储
+        nickname=None,
+        avatar=None,
         status="normal",
+        initial_profile_completed=False,
     )
 
     # 生成 Token
@@ -63,5 +65,6 @@ async def app_register(req_in: AppRegisterIn):
         data=AppRegisterOut(
             user_id=app_user.id,
             token=token,
+            initial_profile_completed=bool(app_user.initial_profile_completed),
         ).model_dump()
     )

@@ -40,6 +40,7 @@ class AppLoginOut(BaseModel):
     nickname: str
     avatar: Optional[str] = None
     is_certified_user: bool = False
+    initial_profile_completed: bool = False
 
 
 # ===== 注册 =====
@@ -48,7 +49,6 @@ class AppLoginOut(BaseModel):
 class AppRegisterIn(BaseModel):
     phone: str = Field(..., description="手机号", json_schema_extra={"example": "13800138000"})
     password: str = Field(..., min_length=8, max_length=32, description="密码(8-32位，须包含字母和数字)")
-    gender: GenderType = Field(default=GenderType.MALE, description="性别")
 
     @field_validator("phone")
     @classmethod
@@ -69,6 +69,7 @@ class AppRegisterIn(BaseModel):
 class AppRegisterOut(BaseModel):
     user_id: int
     token: str
+    initial_profile_completed: bool = False
 
 
 # ===== 用户信息 =====
@@ -95,6 +96,7 @@ class AppUserInfoOut(BaseModel):
     is_certified_user: bool = False
     certification_status: str = "none"
     certified_call_price: int = 0
+    initial_profile_completed: bool = False
     text_dnd_enabled: bool = False
     video_dnd_enabled: bool = False
     ranking_invisible_enabled: bool = False
@@ -132,7 +134,9 @@ class AppUserAdminUpdateIn(BaseModel):
     recommend_weight: Optional[int] = Field(default=None, ge=0, le=999999, description="认证用户推荐值")
     certified_intro: Optional[str] = Field(default=None, max_length=500, description="认证用户简介")
     certified_tags: Optional[List[str]] = Field(default=None, description="认证用户标签")
-    certified_call_price: Optional[int] = Field(default=None, ge=0, le=1000000, description="认证用户通话价格(金币/分钟)")
+    certified_call_price: Optional[int] = Field(
+        default=None, ge=0, le=1000000, description="认证用户通话价格(金币/分钟)"
+    )
     certification_status: Optional[Literal["none", "pending", "approved", "rejected"]] = Field(
         default=None,
         description="真人认证状态",
@@ -149,6 +153,7 @@ class AppUserBalanceAdjustIn(BaseModel):
 
 
 # ===== 真人认证 =====
+
 
 class CertificationApplyIn(BaseModel):
     face_photo_url: str = Field(..., max_length=500, description="正面照URL")

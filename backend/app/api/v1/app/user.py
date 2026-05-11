@@ -77,9 +77,7 @@ def _serialize_dnd_settings(app_user: AppUser) -> dict:
     return DndSettingsOut(
         text_dnd_enabled=bool(getattr(app_user, "text_dnd_enabled", False)),
         video_dnd_enabled=bool(getattr(app_user, "video_dnd_enabled", False)),
-        ranking_invisible_enabled=bool(
-            getattr(app_user, "ranking_invisible_enabled", False)
-        ),
+        ranking_invisible_enabled=bool(getattr(app_user, "ranking_invisible_enabled", False)),
     ).model_dump()
 
 
@@ -170,6 +168,7 @@ async def get_user_info():
             "is_certified_user": app_user.is_certified_user,
             "certification_status": app_user.certification_status or "none",
             "certified_call_price": int(app_user.certified_call_price or 0),
+            "initial_profile_completed": bool(app_user.initial_profile_completed),
             **_serialize_dnd_settings(app_user),
             "created_at": app_user.created_at.isoformat() if app_user.created_at else None,
         }

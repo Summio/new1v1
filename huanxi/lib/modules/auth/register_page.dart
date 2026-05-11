@@ -20,7 +20,6 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   bool _isLoading = false;
-  String? _gender;
 
   @override
   void dispose() {
@@ -54,10 +53,6 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
       AppToast.show(context, '两次密码不一致');
       return;
     }
-    if (_gender == null) {
-      AppToast.show(context, '请选择性别');
-      return;
-    }
     setState(() {
       _isLoading = true;
     });
@@ -68,7 +63,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     try {
       final data = await DioClient.instance.apiPost(
         ApiEndpoints.appRegister,
-        data: {'phone': phone, 'password': password, 'gender': _gender},
+        data: {'phone': phone, 'password': password},
       );
       if (!mounted) return;
 
@@ -84,12 +79,16 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         await StorageService.saveToken(token);
         if (userId != null) {
           await StorageService.saveUserId(userId);
+        } else {
+          router.go(AppRoutes.login);
+          return;
         }
-        notifier.setLoggedInAfterRegister(
-          userId: userId!,
-          gender: _gender!,
+        final completed = respData['initial_profile_completed'] == true;
+        await notifier.setLoggedInAfterRegister(
+          userId: userId,
+          initialProfileCompleted: completed,
         );
-        router.go(AppRoutes.index);
+        router.go(completed ? AppRoutes.index : AppRoutes.initialProfile);
       } else {
         router.go(AppRoutes.login);
       }
@@ -182,22 +181,6 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                       color: AppTheme.textHint,
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String>(
-                  initialValue: _gender,
-                  decoration: const InputDecoration(
-                    labelText: '性别',
-                    hintText: '请选择性别',
-                    prefixIcon: Icon(Icons.wc),
-                  ),
-                  items: const [
-                    DropdownMenuItem(value: 'male', child: Text('男')),
-                    DropdownMenuItem(value: 'female', child: Text('女')),
-                  ],
-                  onChanged: (value) {
-                    setState(() => _gender = value);
-                  },
                 ),
                 const SizedBox(height: 32),
                 Container(

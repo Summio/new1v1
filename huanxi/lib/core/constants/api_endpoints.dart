@@ -10,6 +10,22 @@ class ApiEndpoints {
   /// App 注册（手机号+密码）
   static const String appRegister = 'app/register';
 
+  /// 初始资料可选项
+  static const String initialProfileOptions =
+      'app/register/initial-profile/options';
+
+  /// 初始资料随机头像
+  static const String initialProfileRandomAvatar =
+      'app/register/initial-profile/random-avatar';
+
+  /// 初始资料随机昵称
+  static const String initialProfileRandomNickname =
+      'app/register/initial-profile/random-nickname';
+
+  /// 完成初始资料
+  static const String initialProfileComplete =
+      'app/register/initial-profile/complete';
+
   /// 获取当前用户信息
   static const String userInfo = 'app/user/info';
 
