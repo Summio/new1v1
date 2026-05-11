@@ -15,6 +15,7 @@ from .privacy import router as privacy_router
 from .ranking import router as ranking_router
 from .register import router as register_router
 from .review_entry import router as review_entry_router
+from .feedback import router as feedback_router
 from .rtc import router as rtc_router
 from .user import router as user_router
 from .wallet import router as wallet_router
@@ -39,3 +40,4 @@ app_router.include_router(password_router, prefix="", dependencies=[Depends(Depe
 app_router.include_router(moment_router, prefix="", dependencies=[Depends(DependAppAuth)])
 app_router.include_router(ranking_router, prefix="", dependencies=[Depends(DependAppAuth)])
 app_router.include_router(review_entry_router, prefix="", dependencies=[Depends(DependAppAuth)])
+app_router.include_router(feedback_router, prefix="", dependencies=[Depends(DependAppAuth)])

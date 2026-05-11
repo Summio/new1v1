@@ -99,6 +99,9 @@ export default {
   deleteDept: (params = {}) => request.delete('/dept/delete', { params }),
   // auditlog
   getAuditLogList: (params = {}) => request.get('/auditlog/list', { params }),
+  // feedback manage
+  getFeedbackList: (params = {}) => request.get('/feedback/list', { params }),
+  deleteFeedback: (params = {}) => request.delete('/feedback/delete', { params }),
   // system config
   getSystemConfigList: (params = {}) => request.get('/system_config/list', { params }),
   createSystemConfig: (data = {}) => request.post('/system_config/create', data),

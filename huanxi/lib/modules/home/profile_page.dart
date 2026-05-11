@@ -209,6 +209,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                     onTap: () => _openCustomerService(context, ref),
                   ),
                   _buildMenuTile(
+                    icon: Icons.feedback_outlined,
+                    title: '意见反馈',
+                    iconColor: AppTheme.secondaryColor,
+                    onTap: () => context.push(AppRoutes.feedback),
+                  ),
+                  _buildMenuTile(
                     icon: Icons.verified_user_rounded,
                     title: '认证中心',
                     iconColor: AppTheme.secondaryColor,

@@ -12,6 +12,7 @@ from .base import base_router
 from .call_records import call_records_router
 from .depts import depts_router
 from .gift import gift_router
+from .feedback import feedback_router
 from .menus import menus_router
 from .moments import moments_router
 from .ranking import router as ranking_router
@@ -36,6 +37,7 @@ v1_router.include_router(system_config_router, prefix="/system_config", dependen
 v1_router.include_router(system_config_spec_router, prefix="/apis", dependencies=[DependPermission])
 v1_router.include_router(withdraw_router, prefix="/withdraw", dependencies=[DependPermission])
 v1_router.include_router(app_users_router, prefix="/app_user", dependencies=[DependPermission])
+v1_router.include_router(feedback_router, prefix="/feedback", dependencies=[DependPermission])
 v1_router.include_router(call_records_router, prefix="/call_record", dependencies=[DependPermission])
 v1_router.include_router(gift_router, prefix="/gift", dependencies=[DependPermission])
 v1_router.include_router(recharge_router, prefix="/recharge", dependencies=[DependPermission])

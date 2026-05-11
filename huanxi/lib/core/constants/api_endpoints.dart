@@ -147,4 +147,8 @@ class ApiEndpoints {
   // ========== 审核入口状态 ==========
   /// 查询资料编辑与动态发布入口状态
   static const String reviewEntryStatus = 'app/review/entry-status';
+
+  // ========== 反馈模块 ==========
+  /// 提交意见反馈
+  static const String feedbackCreate = 'app/feedback/create';
 }

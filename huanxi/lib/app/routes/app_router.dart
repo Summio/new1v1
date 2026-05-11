@@ -29,6 +29,7 @@ import '../../modules/home/publish_moment_page.dart';
 import '../../modules/home/certified_user_detail_page.dart';
 import '../../modules/home/my_following_page.dart';
 import '../../modules/home/user_search_page.dart';
+import '../../modules/home/feedback_page.dart';
 import '../../modules/home/call_page.dart';
 import '../../app/providers/certified_user_provider.dart';
 import '../../app/providers/wallet_provider.dart';
@@ -66,6 +67,7 @@ class AppRoutes {
   static const String callRoom = '/call/room';
   static const String callOutgoing = '/call/outgoing';
   static const String callIncoming = '/call/incoming';
+  static const String feedback = '/profile/feedback';
 
   static CertifiedUserInfo? tryGetCertifiedUserInfo(Object? extra) {
     return extra is CertifiedUserInfo ? extra : null;
@@ -133,6 +135,11 @@ final appRouter = GoRouter(
           path: AppRoutes.profile,
           pageBuilder: (context, state) =>
               NoTransitionPage(child: ProfilePage()),
+        ),
+        GoRoute(
+          path: AppRoutes.feedback,
+          pageBuilder: (context, state) =>
+              NoTransitionPage(child: FeedbackPage()),
         ),
       ],
     ),

@@ -2,6 +2,7 @@
 from .admin import *
 from .app_user import *
 from .app_user_profile_review import *
+from .feedback import *
 from .moments import *
 from .ranking import *
 from .system_config import *
