@@ -3,8 +3,10 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Query
 from tortoise.expressions import Q
 
+from app.core.ctx import CTX_APP_USER_ID
 from app.models import AppUser
 from app.schemas.base import SuccessExtra
+from app.services.user_block_service import exclude_blocked_user_ids
 from app.utils.media_url import normalize_media_list, to_relative_media_url
 
 router = APIRouter()
@@ -151,6 +153,10 @@ async def certified_user_list(
         if search_keyword.isdigit():
             keyword_q |= Q(id=int(search_keyword))
         q = q.filter(keyword_q)
+
+    blocked_user_ids = await exclude_blocked_user_ids(int(CTX_APP_USER_ID.get() or 0))
+    if blocked_user_ids:
+        q = q.exclude(id__in=blocked_user_ids)
 
     if search_keyword:
         total = await q.count()

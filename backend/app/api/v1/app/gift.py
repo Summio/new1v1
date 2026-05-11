@@ -16,8 +16,12 @@ from app.services.gift_income_service import (
     decimal_to_float_2,
     get_gift_certified_user_share_bps,
 )
-from app.services.interaction_relation_service import InteractionRelationError, ensure_interaction_allowed
+from app.services.interaction_relation_service import (
+    InteractionRelationError,
+    ensure_interaction_allowed,
+)
 from app.services.tim_service import send_gift_notification
+from app.services.user_block_service import UserBlockError, ensure_not_blocked
 from app.utils.media_url import to_relative_media_url
 
 router = APIRouter()
@@ -114,7 +118,10 @@ async def gift_send(req_in: GiftSendIn):
     if not sender:
         return Fail(code=401, msg="登录状态异常")
     try:
+        await ensure_not_blocked(int(sender_id), int(target_user.id), "送礼")
         await ensure_interaction_allowed(action="gift", actor=sender, target=target_user)
+    except UserBlockError as exc:
+        return Fail(code=exc.code, msg=exc.message)
     except InteractionRelationError as exc:
         return Fail(code=exc.code, msg=exc.message)
 

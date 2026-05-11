@@ -192,3 +192,22 @@ class UserFollowStatusOut(BaseModel):
 class UserFollowActionOut(BaseModel):
     target_user_id: int
     is_following: bool = False
+
+
+# ===== 黑名单 =====
+
+
+class UserBlockIn(BaseModel):
+    target_user_id: int = Field(..., ge=1, description="目标用户ID")
+
+
+class UserBlockActionOut(BaseModel):
+    target_user_id: int
+    is_blocked: bool = False
+
+
+class UserBlockStatusOut(BaseModel):
+    target_user_id: int
+    blocked_by_me: bool = False
+    blocked_me: bool = False
+    interaction_blocked: bool = False

@@ -25,6 +25,9 @@ class CertifiedUserInfo {
   final String? status;
   final bool isCertifiedUser;
   final int? diamonds;
+  final bool blockedByMe;
+  final bool blockedMe;
+  final bool interactionBlocked;
 
   const CertifiedUserInfo({
     required this.id,
@@ -46,6 +49,9 @@ class CertifiedUserInfo {
     this.status,
     this.isCertifiedUser = true,
     this.diamonds,
+    this.blockedByMe = false,
+    this.blockedMe = false,
+    this.interactionBlocked = false,
   });
 
   factory CertifiedUserInfo.fromJson(Map<String, dynamic> json) {
@@ -77,6 +83,9 @@ class CertifiedUserInfo {
       status: json['status'] as String?,
       isCertifiedUser: json['is_certified_user'] as bool? ?? true,
       diamonds: (json['diamonds'] as num?)?.toInt(),
+      blockedByMe: json['blocked_by_me'] as bool? ?? false,
+      blockedMe: json['blocked_me'] as bool? ?? false,
+      interactionBlocked: json['interaction_blocked'] as bool? ?? false,
     );
   }
 }

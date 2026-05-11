@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../app/theme/app_theme.dart';
-import '../../app/widgets/status_view.dart';
 import 'call_page.dart';
 import 'messages_page.dart';
 import 'my_following_page.dart';
@@ -149,7 +148,7 @@ class _RelationTabsState extends State<_RelationTabs>
             children: const [
               MyFollowingPage.embedded(),
               MyFansPage.embedded(),
-              _BlacklistPlaceholder(),
+              MyBlacklistPage.embedded(),
             ],
           ),
         ),
@@ -208,14 +207,5 @@ class _ChatCategorySegment extends StatelessWidget {
         );
       },
     );
-  }
-}
-
-class _BlacklistPlaceholder extends StatelessWidget {
-  const _BlacklistPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return StatusView.empty(message: '黑名单功能开发中');
   }
 }

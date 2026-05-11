@@ -32,6 +32,7 @@ from app.services.interaction_relation_service import (
     InteractionRelationError,
     ensure_interaction_allowed,
 )
+from app.services.user_block_service import UserBlockError, ensure_not_blocked
 from app.utils.billing import calc_due_minutes as _calc_due_minutes_with_free
 from app.utils.media_url import to_relative_media_url
 from app.utils.parse import clamp_int, safe_parse_int
@@ -271,7 +272,10 @@ async def dialing(req_in: DialingIn):
             return Fail(code=404, msg="目标用户不存在或状态异常")
 
         try:
+            await ensure_not_blocked(int(caller_id), int(locked_target_user.id), "呼叫")
             await ensure_interaction_allowed(action="call", actor=locked_caller, target=locked_target_user)
+        except UserBlockError as exc:
+            return Fail(code=exc.code, msg=exc.message)
         except InteractionRelationError as exc:
             return Fail(code=exc.code, msg=exc.message)
 

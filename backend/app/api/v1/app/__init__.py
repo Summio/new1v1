@@ -7,17 +7,18 @@ from .bootstrap import router as bootstrap_router
 from .call import router as call_router
 from .certification import router as certification_router
 from .certified_user import router as certified_user_router
+from .complaint import router as complaint_router
+from .feedback import router as feedback_router
 from .gift import router as gift_router
 from .im import router as im_router
+from .initial_profile import router as initial_profile_router
 from .moment import router as moment_router
 from .password import router as password_router
 from .privacy import router as privacy_router
 from .ranking import router as ranking_router
 from .register import router as register_router
 from .review_entry import router as review_entry_router
-from .feedback import router as feedback_router
 from .rtc import router as rtc_router
-from .initial_profile import router as initial_profile_router
 from .user import router as user_router
 from .wallet import router as wallet_router
 
@@ -45,3 +46,4 @@ app_router.include_router(moment_router, prefix="", dependencies=[Depends(Depend
 app_router.include_router(ranking_router, prefix="", dependencies=[Depends(DependAppAuth)])
 app_router.include_router(review_entry_router, prefix="", dependencies=[Depends(DependAppAuth)])
 app_router.include_router(feedback_router, prefix="", dependencies=[Depends(DependAppAuth)])
+app_router.include_router(complaint_router, prefix="", dependencies=[Depends(DependAppAuth)])

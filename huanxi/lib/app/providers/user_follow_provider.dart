@@ -160,3 +160,15 @@ final myFansProvider =
         loadErrorMessage: '粉丝列表加载失败，请稍后重试',
       );
     });
+
+final myBlacklistProvider =
+    StateNotifierProvider.autoDispose<MyFollowingNotifier, MyFollowingState>((
+      ref,
+    ) {
+      final service = UserHomeService.instance;
+      return MyFollowingNotifier(
+        service,
+        loader: service.getBlockedUsers,
+        loadErrorMessage: '黑名单加载失败，请稍后重试',
+      );
+    });

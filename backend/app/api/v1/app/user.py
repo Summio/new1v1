@@ -7,25 +7,36 @@ from tortoise.transactions import in_transaction
 
 from app.core.app_auth import DependAppAuth, logout_app_user
 from app.core.ctx import CTX_APP_USER_ID, CTX_APP_USER_OBJ
-from app.models import AppUser, AppUserProfileReviewApply, UserFollow
+from app.models import AppUser, AppUserProfileReviewApply, UserBlock, UserFollow
+from app.schemas.app_api import DndSettingsIn, DndSettingsOut
 from app.schemas.app_user import (
     AppUserProfileUpdateIn,
+    UserBlockActionOut,
+    UserBlockIn,
+    UserBlockStatusOut,
     UserFollowActionOut,
     UserFollowIn,
     UserFollowStatusOut,
 )
-from app.schemas.app_api import DndSettingsIn, DndSettingsOut
 from app.schemas.base import Fail, Success, SuccessExtra
-from app.services.gift_income_service import decimal_to_float_2
 from app.services.capability_limit_service import (
     load_capability_limit_config,
     profile_edit_denial_message,
 )
-from app.services.interaction_relation_service import InteractionRelationError, ensure_interaction_allowed
+from app.services.gift_income_service import decimal_to_float_2
+from app.services.interaction_relation_service import (
+    InteractionRelationError,
+    ensure_interaction_allowed,
+)
 from app.services.profile_review_service import build_profile_review_payload
 from app.services.review_entry_guard_service import (
     PROFILE_REVIEW_PENDING_MESSAGE,
     has_pending_profile_review,
+)
+from app.services.user_block_service import (
+    UserBlockError,
+    ensure_not_blocked,
+    get_block_relation,
 )
 from app.settings.config import settings
 from app.utils.media_url import normalize_media_list, to_relative_media_url
@@ -90,7 +101,20 @@ async def _is_following(current_user_id: int, target_user_id: int) -> bool:
     ).exists()
 
 
-async def _serialize_user_home(app_user: AppUser, *, is_following: bool, is_online: bool) -> dict:
+async def _serialize_user_home(
+    app_user: AppUser,
+    *,
+    is_following: bool,
+    is_online: bool,
+    block_relation=None,
+) -> dict:
+    relation_payload = {}
+    if block_relation is not None:
+        relation_payload = {
+            "blocked_by_me": bool(block_relation.blocked_by_me),
+            "blocked_me": bool(block_relation.blocked_me),
+            "interaction_blocked": bool(block_relation.interaction_blocked),
+        }
     return {
         "id": app_user.id,
         "user_id": app_user.id,
@@ -116,6 +140,7 @@ async def _serialize_user_home(app_user: AppUser, *, is_following: bool, is_onli
         "certification_status": app_user.certification_status or "none",
         "diamonds": int(app_user.diamonds or 0),
         "is_following": is_following,
+        **relation_payload,
     }
 
 
@@ -418,6 +443,7 @@ async def get_user_public_profile(
     from app.websocket.presence import is_online as _is_online_user
 
     is_following = await _is_following(current_user_id, int(app_user.id))
+    block_relation = await get_block_relation(current_user_id, int(app_user.id))
     is_online = await _is_online_user(int(app_user.id))
 
     return Success(
@@ -425,6 +451,7 @@ async def get_user_public_profile(
             app_user,
             is_following=is_following,
             is_online=is_online,
+            block_relation=block_relation,
         )
     )
 
@@ -466,7 +493,10 @@ async def follow_user(req_in: UserFollowIn):
     if not actor_user:
         return Fail(code=401, msg="用户不存在")
     try:
+        await ensure_not_blocked(current_user_id, int(target_user.id), "关注")
         await ensure_interaction_allowed(action="follow", actor=actor_user, target=target_user)
+    except UserBlockError as exc:
+        return Fail(code=exc.code, msg=exc.message)
     except InteractionRelationError as exc:
         return Fail(code=exc.code, msg=exc.message)
 
@@ -510,6 +540,138 @@ async def unfollow_user(
             target_user_id=user_id,
             is_following=False,
         ).model_dump()
+    )
+
+
+@router.post("/user/block", summary="拉黑用户", dependencies=[Depends(DependAppAuth)])
+async def block_user(req_in: UserBlockIn):
+    current_user_id = int(CTX_APP_USER_ID.get() or 0)
+    if current_user_id <= 0:
+        return Fail(code=401, msg="用户不存在")
+    if current_user_id == req_in.target_user_id:
+        return Fail(code=400, msg="不能拉黑自己")
+
+    target_user = await AppUser.filter(id=req_in.target_user_id).first()
+    if not target_user:
+        return Fail(code=404, msg="用户不存在")
+
+    async with in_transaction() as conn:
+        relation = (
+            await UserBlock.filter(
+                blocker_id=current_user_id,
+                blocked_id=target_user.id,
+            )
+            .using_db(conn)
+            .first()
+        )
+        if not relation:
+            await UserBlock.create(
+                blocker_id=current_user_id,
+                blocked_id=target_user.id,
+                using_db=conn,
+            )
+        await UserFollow.filter(
+            Q(follower_id=current_user_id, following_id=target_user.id)
+            | Q(follower_id=target_user.id, following_id=current_user_id)
+        ).using_db(conn).delete()
+
+    return Success(
+        data=UserBlockActionOut(
+            target_user_id=int(target_user.id),
+            is_blocked=True,
+        ).model_dump(),
+        msg="已拉黑",
+    )
+
+
+@router.delete("/user/block", summary="解除拉黑用户", dependencies=[Depends(DependAppAuth)])
+async def unblock_user(user_id: int = Query(..., description="目标用户ID")):
+    current_user_id = int(CTX_APP_USER_ID.get() or 0)
+    if current_user_id <= 0:
+        return Fail(code=401, msg="用户不存在")
+    if current_user_id == user_id:
+        return Fail(code=400, msg="不能解除自己")
+
+    await UserBlock.filter(blocker_id=current_user_id, blocked_id=user_id).delete()
+    return Success(
+        data=UserBlockActionOut(
+            target_user_id=user_id,
+            is_blocked=False,
+        ).model_dump(),
+        msg="已解除拉黑",
+    )
+
+
+@router.get("/user/block/status", summary="查询黑名单状态", dependencies=[Depends(DependAppAuth)])
+async def get_user_block_status(user_id: int = Query(..., description="目标用户ID")):
+    current_user_id = int(CTX_APP_USER_ID.get() or 0)
+    if current_user_id <= 0:
+        return Fail(code=401, msg="用户不存在")
+    target_user = await AppUser.filter(id=user_id).first()
+    if not target_user:
+        return Fail(code=404, msg="用户不存在")
+    relation = await get_block_relation(current_user_id, int(target_user.id))
+    return Success(
+        data=UserBlockStatusOut(
+            target_user_id=int(target_user.id),
+            blocked_by_me=relation.blocked_by_me,
+            blocked_me=relation.blocked_me,
+            interaction_blocked=relation.interaction_blocked,
+        ).model_dump()
+    )
+
+
+@router.get("/user/block/list", summary="我的黑名单列表", dependencies=[Depends(DependAppAuth)])
+async def list_user_blocked(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(20, ge=1, le=50, description="每页数量"),
+    keyword: str = Query("", description="昵称或用户ID"),
+):
+    current_user_id = int(CTX_APP_USER_ID.get() or 0)
+    if current_user_id <= 0:
+        return Fail(code=401, msg="用户不存在")
+
+    relation_q = UserBlock.filter(blocker_id=current_user_id)
+    trimmed_keyword = keyword.strip()
+    if trimmed_keyword:
+        matched_ids = await AppUser.filter(_build_follow_keyword_query(trimmed_keyword)).values_list("id", flat=True)
+        if not matched_ids:
+            return SuccessExtra(data=None, rows=[], current=page, total=0, has_more=False)
+        relation_q &= Q(blocked_id__in=list(matched_ids))
+
+    total = await relation_q.count()
+    relations = await relation_q.order_by("-created_at", "-id").offset((page - 1) * page_size).limit(page_size)
+    blocked_ids = [relation.blocked_id for relation in relations]
+    if not blocked_ids:
+        return SuccessExtra(data=None, rows=[], current=page, total=total, has_more=False)
+
+    users = await AppUser.filter(id__in=blocked_ids).all()
+    user_map = {int(user.id): user for user in users}
+    from app.websocket.presence import is_online as _is_online_user
+
+    rows: list[dict] = []
+    for relation in relations:
+        app_user = user_map.get(int(relation.blocked_id))
+        if not app_user:
+            continue
+        rows.append(
+            {
+                **await _serialize_user_home(
+                    app_user,
+                    is_following=False,
+                    is_online=await _is_online_user(int(app_user.id)),
+                    block_relation=await get_block_relation(current_user_id, int(app_user.id)),
+                ),
+                "blocked_at": relation.created_at.isoformat() if relation.created_at else None,
+            }
+        )
+
+    return SuccessExtra(
+        data=None,
+        rows=rows,
+        current=page,
+        total=total,
+        has_more=page * page_size < total,
     )
 
 

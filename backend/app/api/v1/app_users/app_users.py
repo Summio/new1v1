@@ -17,7 +17,11 @@ from app.models import (
     RechargeOrder,
     WithdrawApply,
 )
-from app.schemas.app_user import AppUserAdminUpdateIn, AppUserBalanceAdjustIn, CertificationReviewIn
+from app.schemas.app_user import (
+    AppUserAdminUpdateIn,
+    AppUserBalanceAdjustIn,
+    CertificationReviewIn,
+)
 from app.schemas.app_user_profile_review import (
     ProfileReviewBulkIn,
     ProfileReviewItemReviewIn,
@@ -100,6 +104,7 @@ def _format_profile_review_apply(apply: AppUserProfileReviewApply, user: AppUser
 async def list_app_user(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(10, ge=1, le=100, description="每页数量"),
+    user_id: int | None = Query(None, ge=1, description="用户ID"),
     phone: str = Query("", description="手机号"),
     nickname: str = Query("", description="昵称"),
     status: str = Query("", description="状态 normal/banned"),
@@ -109,6 +114,8 @@ async def list_app_user(
     location_city: str = Query("", description="所在地(省-市)"),
 ):
     q = Q()
+    if user_id:
+        q &= Q(id=user_id)
     if phone:
         q &= Q(phone__contains=phone)
     if nickname:

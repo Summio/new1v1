@@ -17,8 +17,9 @@ class UserHomeProfile {
 class FollowingUserItem {
   final CertifiedUserInfo user;
   final DateTime? followedAt;
+  final DateTime? blockedAt;
 
-  const FollowingUserItem({required this.user, this.followedAt});
+  const FollowingUserItem({required this.user, this.followedAt, this.blockedAt});
 }
 
 class FollowingUsersPage {
@@ -116,6 +117,95 @@ class UserHomeService {
     }
   }
 
+  Future<UserBlockStatus> getUserBlockStatus(int userId) async {
+    try {
+      final data = await _dio.apiGet(
+        ApiEndpoints.userBlockStatus,
+        params: {'user_id': userId},
+      );
+      if ((data['code'] as int?) != 200) {
+        final msg = data['msg'] as String? ?? '获取黑名单状态失败';
+        throw ApiException(code: 500, message: msg);
+      }
+      final respData = data['data'] as Map<String, dynamic>? ?? {};
+      return UserBlockStatus.fromJson(respData);
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      AppLogger.debug('UserHomeService.getUserBlockStatus error: $e');
+      throw ApiException(code: 500, message: '获取黑名单状态失败');
+    }
+  }
+
+  Future<bool> blockUser(int userId) async {
+    try {
+      final data = await _dio.apiPost(
+        ApiEndpoints.userBlock,
+        data: {'target_user_id': userId},
+      );
+      if ((data['code'] as int?) != 200) {
+        final msg = data['msg'] as String? ?? '拉黑失败';
+        throw ApiException(code: 500, message: msg);
+      }
+      final respData = data['data'] as Map<String, dynamic>? ?? {};
+      return respData['is_blocked'] as bool? ?? true;
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      AppLogger.debug('UserHomeService.blockUser error: $e');
+      throw ApiException(code: 500, message: '拉黑失败，请重试');
+    }
+  }
+
+  Future<bool> unblockUser(int userId) async {
+    try {
+      final resp = await _dio.delete<Map<String, dynamic>>(
+        ApiEndpoints.userBlock,
+        queryParameters: {'user_id': userId},
+      );
+      final data = resp.data ?? {};
+      if ((data['code'] as int?) != 200) {
+        final msg = data['msg'] as String? ?? '解除拉黑失败';
+        throw ApiException(code: 500, message: msg);
+      }
+      final respData = data['data'] as Map<String, dynamic>? ?? {};
+      return respData['is_blocked'] as bool? ?? false;
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      AppLogger.debug('UserHomeService.unblockUser error: $e');
+      throw ApiException(code: 500, message: '解除拉黑失败，请重试');
+    }
+  }
+
+  Future<void> createComplaint({
+    required int targetUserId,
+    required UserComplaintScene scene,
+    required String reason,
+    required String content,
+  }) async {
+    try {
+      final data = await _dio.apiPost(
+        ApiEndpoints.complaintCreate,
+        data: {
+          'target_user_id': targetUserId,
+          'scene': scene.value,
+          'reason': reason,
+          'content': content,
+        },
+      );
+      if ((data['code'] as int?) != 200) {
+        final msg = data['msg'] as String? ?? '投诉提交失败';
+        throw ApiException(code: 500, message: msg);
+      }
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      AppLogger.debug('UserHomeService.createComplaint error: $e');
+      throw ApiException(code: 500, message: '投诉提交失败，请重试');
+    }
+  }
+
   Future<FollowingUsersPage> getFollowingUsers({
     required int page,
     required int pageSize,
@@ -141,6 +231,20 @@ class UserHomeService {
       pageSize: pageSize,
       keyword: keyword,
       errorMessage: '获取粉丝列表失败',
+    );
+  }
+
+  Future<FollowingUsersPage> getBlockedUsers({
+    required int page,
+    required int pageSize,
+    String keyword = '',
+  }) {
+    return _getFollowUsers(
+      endpoint: ApiEndpoints.userBlockList,
+      page: page,
+      pageSize: pageSize,
+      keyword: keyword,
+      errorMessage: '获取黑名单失败',
     );
   }
 
@@ -171,6 +275,7 @@ class UserHomeService {
         return FollowingUserItem(
           user: CertifiedUserInfo.fromJson(map),
           followedAt: DateTime.tryParse(map['followed_at'] as String? ?? ''),
+          blockedAt: DateTime.tryParse(map['blocked_at'] as String? ?? ''),
         );
       }).toList();
       return FollowingUsersPage(
@@ -186,5 +291,36 @@ class UserHomeService {
       AppLogger.debug('UserHomeService._getFollowUsers error: $e');
       throw ApiException(code: 500, message: errorMessage);
     }
+  }
+}
+
+enum UserComplaintScene {
+  chat('chat'),
+  profile('profile');
+
+  final String value;
+  const UserComplaintScene(this.value);
+}
+
+class UserBlockStatus {
+  final int targetUserId;
+  final bool blockedByMe;
+  final bool blockedMe;
+  final bool interactionBlocked;
+
+  const UserBlockStatus({
+    required this.targetUserId,
+    this.blockedByMe = false,
+    this.blockedMe = false,
+    this.interactionBlocked = false,
+  });
+
+  factory UserBlockStatus.fromJson(Map<String, dynamic> json) {
+    return UserBlockStatus(
+      targetUserId: (json['target_user_id'] as num?)?.toInt() ?? 0,
+      blockedByMe: json['blocked_by_me'] as bool? ?? false,
+      blockedMe: json['blocked_me'] as bool? ?? false,
+      interactionBlocked: json['interaction_blocked'] as bool? ?? false,
+    );
   }
 }

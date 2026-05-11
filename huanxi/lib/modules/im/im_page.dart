@@ -9,6 +9,7 @@ import '../../app/theme/app_theme.dart';
 import '../../app/routes/app_router.dart';
 import '../../core/utils/svga_once_player.dart';
 import '../../services/im_service.dart';
+import '../../services/user_home_service.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/network/response_parsers.dart';
@@ -19,6 +20,7 @@ import '../../app/providers/auth_provider.dart';
 import 'package:tencent_cloud_chat_sdk/models/v2_tim_message.dart';
 import 'package:huanxi/core/utils/app_toast.dart';
 import '../gift/gift_panel.dart';
+import '../home/user_more_actions.dart';
 
 /// IM 聊天页面
 /// 发送文字消息（后续接入 WebSocket）
@@ -59,6 +61,9 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
   V2TimMessage? _lastHistoryMsg;
   bool _isStartingCall = false;
   bool _isSendingText = false;
+  bool _blockedByMe = false;
+  bool _blockedMe = false;
+  bool _interactionBlocked = false;
   GiftNotifyMessage? _fullscreenGift;
   Timer? _fullscreenGiftTimer;
   Timer? _cleanUnreadDebounceTimer;
@@ -163,6 +168,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
       // 6. 加载历史消息
       await _loadPeerProfile();
       await _loadPeerProfileFromApp();
+      await _refreshBlockStatus();
       await _loadHistoryMessages();
       _scheduleCleanUnread();
     } catch (e) {
@@ -299,6 +305,10 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
           _peerAvatarUrl = appAvatar;
         }
         _peerCertifiedUserId = appCertifiedUserId;
+        _blockedByMe = payload['blocked_by_me'] as bool? ?? _blockedByMe;
+        _blockedMe = payload['blocked_me'] as bool? ?? _blockedMe;
+        _interactionBlocked =
+            payload['interaction_blocked'] as bool? ?? _interactionBlocked;
       });
     } on ApiException catch (e) {
       if (e.code == 400) {
@@ -307,6 +317,39 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
       // 其它业务错误不影响聊天主链路
     } catch (_) {
       // App 资料兜底失败不影响聊天主链路
+    }
+  }
+
+  Future<void> _refreshBlockStatus() async {
+    if (_isCustomerServiceConversation) return;
+    final peerNumId = _extractAppUserId(_peerUserId ?? widget.userId);
+    if (peerNumId == null || peerNumId <= 0) return;
+    try {
+      final status = await UserHomeService.instance.getUserBlockStatus(peerNumId);
+      if (!mounted) return;
+      setState(() {
+        _blockedByMe = status.blockedByMe;
+        _blockedMe = status.blockedMe;
+        _interactionBlocked = status.interactionBlocked;
+      });
+    } catch (_) {
+      // 状态失败不阻塞历史消息查看，实际互动仍由后端拦截
+    }
+  }
+
+  Future<void> _openMoreActions() async {
+    final targetUserId = _extractAppUserId(_peerUserId ?? widget.userId);
+    if (targetUserId == null || targetUserId <= 0) return;
+    final changed = await showUserMoreActions(
+      context: context,
+      targetUserId: targetUserId,
+      targetName: _peerDisplayName(),
+      scene: UserComplaintScene.chat,
+      blockedByMe: _blockedByMe,
+      blockedMe: _blockedMe,
+    );
+    if (changed == true) {
+      await _refreshBlockStatus();
     }
   }
 
@@ -405,6 +448,13 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
 
   void _sendMessage() async {
     if (_isSendingText) return;
+    if (_interactionBlocked) {
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('你们之间已存在黑名单关系，无法聊天')),
+      );
+      return;
+    }
     final text = _controller.text.trim();
     if (text.isEmpty) return;
 
@@ -512,6 +562,13 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
   }
 
   void _openGiftPanel() {
+    if (_interactionBlocked) {
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('你们之间已存在黑名单关系，无法送礼')),
+      );
+      return;
+    }
     if (_isCustomerServiceConversation) {
       AppToast.showSnackBar(
         context,
@@ -772,27 +829,9 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
         actions: _isCustomerServiceConversation
             ? const []
             : [
-                PopupMenuButton<String>(
+                IconButton(
                   icon: const Icon(Icons.more_horiz),
-                  onSelected: (value) {
-                    if (value == 'block') {
-                      AppToast.showSnackBar(
-                        context,
-                        const SnackBar(content: Text('拉黑功能开发中')),
-                      );
-                      return;
-                    }
-                    if (value == 'report') {
-                      AppToast.showSnackBar(
-                        context,
-                        const SnackBar(content: Text('投诉功能开发中')),
-                      );
-                    }
-                  },
-                  itemBuilder: (context) => const [
-                    PopupMenuItem<String>(value: 'block', child: Text('拉黑')),
-                    PopupMenuItem<String>(value: 'report', child: Text('投诉')),
-                  ],
+                  onPressed: _openMoreActions,
                 ),
               ],
       ),
@@ -804,6 +843,24 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
                   padding: EdgeInsets.only(bottom: keyboardInset),
                   child: Column(
                     children: [
+                      if (_interactionBlocked)
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 10,
+                          ),
+                          color: AppTheme.errorColor.withValues(alpha: 0.08),
+                          child: const Text(
+                            '你们之间已存在黑名单关系，当前会话只读',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: AppTheme.errorColor,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
                       Expanded(
                         child: _messages.isEmpty
                             ? const Center(
@@ -871,7 +928,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
                                     Icons.videocam_outlined,
                                     color: AppTheme.textSecondary,
                                   ),
-                                  onPressed: _isStartingCall
+                                  onPressed: _isStartingCall || _interactionBlocked
                                       ? null
                                       : _startVideoCall,
                                 ),
@@ -881,7 +938,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
                                     Icons.card_giftcard,
                                     color: AppTheme.textSecondary,
                                   ),
-                                  onPressed: _openGiftPanel,
+                                  onPressed: _interactionBlocked ? null : _openGiftPanel,
                                 ),
                               Expanded(
                                 child: TextField(
@@ -902,6 +959,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
                                   ),
                                   minLines: 1,
                                   maxLines: 4,
+                                  enabled: !_interactionBlocked,
                                   textInputAction: TextInputAction.send,
                                   onSubmitted: (_) => _sendMessage(),
                                 ),
@@ -919,7 +977,8 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
                                     Icons.send,
                                     color: Colors.white,
                                   ),
-                                  onPressed: _sendMessage,
+                                  onPressed: _interactionBlocked ? null : _sendMessage,
+                                  disabledColor: AppTheme.textHint,
                                 ),
                               ),
                             ],
