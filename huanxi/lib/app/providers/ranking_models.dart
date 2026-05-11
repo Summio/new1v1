@@ -30,9 +30,10 @@ Map<String, dynamic> buildRankingQueryParams({
 
 class RankingItem {
   final int rank;
-  final int userId;
+  final int? userId;
   final String nickname;
   final String avatar;
+  final bool isAnonymous;
   final double scoreGapFromTop;
   final String scoreGapText;
 
@@ -41,6 +42,7 @@ class RankingItem {
     required this.userId,
     required this.nickname,
     required this.avatar,
+    required this.isAnonymous,
     required this.scoreGapFromTop,
     required this.scoreGapText,
   });
@@ -48,9 +50,10 @@ class RankingItem {
   factory RankingItem.fromJson(Map<String, dynamic> json) {
     return RankingItem(
       rank: (json['rank'] as num?)?.toInt() ?? 0,
-      userId: (json['user_id'] as num?)?.toInt() ?? 0,
+      userId: (json['user_id'] as num?)?.toInt(),
       nickname: (json['nickname'] as String?)?.trim() ?? '',
       avatar: (json['avatar'] as String?)?.trim() ?? '',
+      isAnonymous: json['is_anonymous'] == true,
       scoreGapFromTop: _toDouble(json['score_gap_from_top']),
       scoreGapText: (json['score_gap_text'] as String?)?.trim() ?? '',
     );

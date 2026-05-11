@@ -14,6 +14,7 @@ from app.schemas.app_user import (
     UserFollowIn,
     UserFollowStatusOut,
 )
+from app.schemas.app_api import DndSettingsIn, DndSettingsOut
 from app.schemas.base import Fail, Success, SuccessExtra
 from app.services.gift_income_service import decimal_to_float_2
 from app.services.capability_limit_service import (
@@ -70,6 +71,16 @@ def _serialize_profile_review_snapshot(app_user: AppUser) -> dict:
         "album_photos": _normalize_album(app_user.album_photos),
         "cover_url": to_relative_media_url(app_user.cover_url),
     }
+
+
+def _serialize_dnd_settings(app_user: AppUser) -> dict:
+    return DndSettingsOut(
+        text_dnd_enabled=bool(getattr(app_user, "text_dnd_enabled", False)),
+        video_dnd_enabled=bool(getattr(app_user, "video_dnd_enabled", False)),
+        ranking_invisible_enabled=bool(
+            getattr(app_user, "ranking_invisible_enabled", False)
+        ),
+    ).model_dump()
 
 
 async def _is_following(current_user_id: int, target_user_id: int) -> bool:
@@ -159,9 +170,35 @@ async def get_user_info():
             "is_certified_user": app_user.is_certified_user,
             "certification_status": app_user.certification_status or "none",
             "certified_call_price": int(app_user.certified_call_price or 0),
+            **_serialize_dnd_settings(app_user),
             "created_at": app_user.created_at.isoformat() if app_user.created_at else None,
         }
     )
+
+
+@router.get("/user/dnd-settings", summary="获取勿扰设置", dependencies=[Depends(DependAppAuth)])
+async def get_dnd_settings():
+    app_user = CTX_APP_USER_OBJ.get()
+    if not app_user:
+        return Fail(code=401, msg="用户不存在")
+    return Success(data=_serialize_dnd_settings(app_user))
+
+
+@router.put("/user/dnd-settings", summary="更新勿扰设置", dependencies=[Depends(DependAppAuth)])
+async def update_dnd_settings(req_in: DndSettingsIn):
+    app_user = CTX_APP_USER_OBJ.get()
+    if not app_user:
+        return Fail(code=401, msg="用户不存在")
+
+    await AppUser.filter(id=app_user.id).update(
+        text_dnd_enabled=req_in.text_dnd_enabled,
+        video_dnd_enabled=req_in.video_dnd_enabled,
+        ranking_invisible_enabled=req_in.ranking_invisible_enabled,
+    )
+    app_user.text_dnd_enabled = req_in.text_dnd_enabled
+    app_user.video_dnd_enabled = req_in.video_dnd_enabled
+    app_user.ranking_invisible_enabled = req_in.ranking_invisible_enabled
+    return Success(data=_serialize_dnd_settings(app_user), msg="设置已保存")
 
 
 @router.post("/user/profile/update", summary="更新当前用户资料", dependencies=[Depends(DependAppAuth)])

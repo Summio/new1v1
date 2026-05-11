@@ -382,6 +382,7 @@ async def enrich_snapshot_rows(snapshots: list[RankingSnapshot]) -> list[dict[st
                 "nickname": (user.nickname or "").strip() or (user.phone or "").strip() or f"用户{user.id}",
                 "avatar": to_relative_media_url(user.avatar),
                 "is_certified_user": bool(user.is_certified_user),
+                "ranking_invisible_enabled": bool(user.ranking_invisible_enabled),
                 "board": item.board,
                 "period": item.period,
                 "score": _score(item.score),
@@ -403,12 +404,14 @@ def build_app_ranking_rows(rows: list[dict[str, Any]], *, board: str) -> list[di
     out: list[dict[str, Any]] = []
     for row in rows:
         gap = max(Decimal("0"), top_score - _score(row.get("score")))
+        is_anonymous = bool(row.get("ranking_invisible_enabled"))
         out.append(
             {
                 "rank": int(row.get("rank") or 0),
-                "user_id": int(row.get("user_id") or 0),
-                "nickname": str(row.get("nickname") or ""),
-                "avatar": str(row.get("avatar") or ""),
+                "user_id": None if is_anonymous else int(row.get("user_id") or 0),
+                "nickname": "神秘人" if is_anonymous else str(row.get("nickname") or ""),
+                "avatar": "" if is_anonymous else str(row.get("avatar") or ""),
+                "is_anonymous": is_anonymous,
                 "score_gap_from_top": decimal_to_float_2(gap),
                 "score_gap_text": f"距榜首 {format_score_value(gap)} {unit}",
             }

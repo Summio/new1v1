@@ -235,6 +235,9 @@ async def dialing(req_in: DialingIn):
     if caller_id == target_user.id:
         return Fail(code=400, msg="不能呼叫自己")
 
+    if bool(target_user.video_dnd_enabled):
+        return Fail(code=403, msg="对方已开启视频勿扰")
+
     # 使用 Redis 在线状态检查（WebSocket 方式）
     from app.websocket.presence import is_online as check_online
 

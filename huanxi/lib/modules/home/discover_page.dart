@@ -397,6 +397,8 @@ class _RankingTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isTopThree = item.rank <= 3;
+    final isMissingUserId = item.userId == null;
+    final canOpenProfile = !item.isAnonymous && !isMissingUserId;
     final rankColor = switch (item.rank) {
       1 => const Color(0xFFFFB300),
       2 => const Color(0xFF9EA7B3),
@@ -409,13 +411,15 @@ class _RankingTile extends StatelessWidget {
       borderRadius: BorderRadius.circular(14),
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        onTap: () {
-          final uri = Uri(
-            path: AppRoutes.certifiedUserDetail,
-            queryParameters: {'userId': item.userId.toString()},
-          );
-          context.push(uri.toString());
-        },
+        onTap: canOpenProfile
+            ? () {
+                final uri = Uri(
+                  path: AppRoutes.certifiedUserDetail,
+                  queryParameters: {'userId': item.userId.toString()},
+                );
+                context.push(uri.toString());
+              }
+            : null,
         child: Container(
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
@@ -456,7 +460,9 @@ class _RankingTile extends StatelessWidget {
                     Text(
                       item.nickname.isNotEmpty
                           ? item.nickname
-                          : '用户${item.userId}',
+                          : item.isAnonymous
+                          ? '神秘人'
+                          : '用户${item.userId ?? ''}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -465,14 +471,16 @@ class _RankingTile extends StatelessWidget {
                         fontWeight: FontWeight.w800,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'ID：${item.userId}',
-                      style: const TextStyle(
-                        color: AppTheme.textSecondary,
-                        fontSize: 12,
+                    if (!item.isAnonymous && item.userId != null) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'ID：${item.userId}',
+                        style: const TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 12,
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),

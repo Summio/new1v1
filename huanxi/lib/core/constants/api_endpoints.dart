@@ -13,6 +13,9 @@ class ApiEndpoints {
   /// 获取当前用户信息
   static const String userInfo = 'app/user/info';
 
+  /// 勿扰设置
+  static const String doNotDisturbSettings = 'app/user/dnd-settings';
+
   /// 更新当前用户资料
   static const String userProfileUpdate = 'app/user/profile/update';
 

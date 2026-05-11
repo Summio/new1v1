@@ -75,6 +75,24 @@ class DioClient {
     }
   }
 
+  Future<Response<T>> put<T>(
+    String path, {
+    dynamic data,
+    Map<String, dynamic>? queryParameters,
+    Options? options,
+  }) async {
+    try {
+      return await _dio.put<T>(
+        path,
+        data: data,
+        queryParameters: queryParameters,
+        options: options,
+      );
+    } on DioException catch (e) {
+      throw _handleError(e);
+    }
+  }
+
   Future<Response<T>> delete<T>(
     String path, {
     dynamic data,
@@ -116,6 +134,15 @@ class DioClient {
       path,
       data: data,
     );
+    return resp.data ?? {};
+  }
+
+  /// PUT 请求
+  Future<Map<String, dynamic>> apiPut(
+    String path, {
+    Map<String, dynamic>? data,
+  }) async {
+    final resp = await put<Map<String, dynamic>>(path, data: data);
     return resp.data ?? {};
   }
 

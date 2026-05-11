@@ -29,9 +29,10 @@ class RankingMetaOut(BaseModel):
 
 class AppRankingItemOut(BaseModel):
     rank: int
-    user_id: int
+    user_id: int | None
     nickname: str
     avatar: str = ""
+    is_anonymous: bool = False
     score_gap_from_top: float = 0
     score_gap_text: str = ""
 
