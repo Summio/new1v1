@@ -4,7 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../app/theme/app_theme.dart';
-import 'package:huanxi/core/utils/app_toast.dart';
+import '../../services/teen_mode_service.dart';
 
 /// 设置页面
 class SettingsPage extends ConsumerWidget {
@@ -13,6 +13,7 @@ class SettingsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final authState = ref.watch(authProvider);
+    final teenModeEnabled = TeenModeService.instance.isLocked;
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
@@ -57,12 +58,16 @@ class SettingsPage extends ConsumerWidget {
           _SettingsTile(
             icon: Icons.child_care,
             title: '青少年模式',
-            subtitle: '未开启',
-            onTap: () {
-              AppToast.showSnackBar(
-                context,
-                const SnackBar(content: Text('青少年模式功能开发中')),
-              );
+            subtitle: teenModeEnabled ? '已开启' : '未开启',
+            onTap: () async {
+              if (TeenModeService.instance.isLocked) {
+                context.go(AppRoutes.teenModeVerify);
+                return;
+              }
+              final enabled = await context.push<bool>(AppRoutes.teenModeSetup);
+              if (enabled == true && context.mounted) {
+                context.go(AppRoutes.teenModeVerify);
+              }
             },
           ),
 

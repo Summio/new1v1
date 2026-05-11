@@ -22,6 +22,8 @@ import '../../modules/settings/settings_page.dart';
 import '../../modules/settings/agreement_page.dart';
 import '../../modules/settings/privacy_page.dart';
 import '../../modules/settings/change_password_page.dart';
+import '../../modules/settings/teen_mode_setup_page.dart';
+import '../../modules/settings/teen_mode_verify_page.dart';
 import '../../modules/im/im_page.dart';
 import '../../modules/gift/gift_panel.dart';
 import '../../modules/home/my_moments_page.dart';
@@ -34,6 +36,7 @@ import '../../modules/home/call_page.dart';
 import '../../app/providers/certified_user_provider.dart';
 import '../../app/providers/wallet_provider.dart';
 import '../../core/storage/storage.dart';
+import '../../services/teen_mode_service.dart';
 
 class AppRoutes {
   AppRoutes._();
@@ -57,6 +60,8 @@ class AppRoutes {
   static const String settingsAgreement = '/settings/agreement';
   static const String settingsPrivacy = '/settings/privacy';
   static const String settingsPassword = '/settings/password';
+  static const String teenModeSetup = '/settings/teen-mode/setup';
+  static const String teenModeVerify = '/teen-mode/verify';
   static const String certificationCenter = '/profile/certification';
   static const String im = '/im';
   static const String giftPanel = '/gift';
@@ -82,8 +87,14 @@ final appRouter = GoRouter(
     final isOnSplash = state.matchedLocation == AppRoutes.splash;
     final isOnLogin = state.matchedLocation == AppRoutes.login;
     final isOnRegister = state.matchedLocation == AppRoutes.register;
+    final isOnTeenModeVerify =
+        state.matchedLocation == AppRoutes.teenModeVerify;
+    final isTeenModeLocked = TeenModeService.instance.isLocked;
     if (isOnSplash) {
       return null;
+    }
+    if (isTeenModeLocked && !isOnTeenModeVerify) {
+      return AppRoutes.teenModeVerify;
     }
     if (!isLoggedIn && !isOnLogin && !isOnRegister) {
       return AppRoutes.login;
@@ -266,6 +277,14 @@ final appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.settingsPassword,
       builder: (context, state) => const ChangePasswordPage(),
+    ),
+    GoRoute(
+      path: AppRoutes.teenModeSetup,
+      builder: (context, state) => const TeenModeSetupPage(),
+    ),
+    GoRoute(
+      path: AppRoutes.teenModeVerify,
+      builder: (context, state) => const TeenModeVerifyPage(),
     ),
     GoRoute(
       path: AppRoutes.certificationCenter,

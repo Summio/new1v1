@@ -6,6 +6,7 @@ import 'core/storage/storage.dart';
 import 'core/network/dio_client.dart';
 import 'app/theme/app_theme.dart';
 import 'app/routes/app_router.dart';
+import 'services/teen_mode_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +26,7 @@ void main() async {
 
   // 初始化本地存储
   await StorageService.init();
+  await TeenModeService.instance.repairInvalidState();
 
   // 初始化 Dio
   DioClient.instance.init();

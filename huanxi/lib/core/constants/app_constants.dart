@@ -25,6 +25,7 @@ class AppConstants {
   static const String storageCertifiedUserList = 'certified_user_list';
   static const String storageFirstLaunch = 'first_launch';
   static const String storageDarkMode = 'dark_mode';
+  static const String storageTeenModeState = 'teen_mode_state';
 
   /// Hive Box Names
   static const String hiveBoxUser = 'user_box';
