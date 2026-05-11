@@ -113,6 +113,9 @@ def test_complaint_migration_and_admin_web_exist() -> None:
     assert "多次被投诉" in web_view_text
     assert "处理投诉不会自动封禁用户" in web_view_text
     assert "查看用户" in web_view_text
+    assert "withStoppedClick" in web_view_text
+    assert "@click.stop" in web_view_text
+    assert "{{ renderStatus" not in web_view_text
     assert "提交时间" in web_view_text
     assert "pending" in web_view_text
     assert "processing" in web_view_text

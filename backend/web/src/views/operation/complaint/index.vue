@@ -101,6 +101,14 @@ function renderStatus(value) {
   return h(NTag, { type: item.type }, { default: () => item.text })
 }
 
+function statusText(value) {
+  return statusMap[value]?.text || value || '-'
+}
+
+function statusType(value) {
+  return statusMap[value]?.type || 'default'
+}
+
 function renderRisk(row) {
   if (row.target_risk_flag !== 'multiple_complaints') return '-'
   return h(NTag, { type: 'error' }, { default: () => '多次被投诉' })
@@ -125,6 +133,7 @@ async function fetchData(params = {}) {
 }
 
 async function openDetail(row) {
+  if (!row?.id) return
   try {
     const res = await api.getComplaintDetail({ id: row.id })
     currentComplaint.value = res.data || row
@@ -135,6 +144,7 @@ async function openDetail(row) {
 }
 
 function openHandle(row) {
+  if (!row?.id) return
   currentComplaint.value = row
   handleForm.id = row.id
   handleForm.status = row.status === 'pending' ? 'processing' : row.status || 'processing'
@@ -168,6 +178,13 @@ function viewTargetUser(row) {
   router.push({ path: '/operation/app-user', query: { user_id: userId } })
 }
 
+function withStoppedClick(handler) {
+  return (event) => {
+    event?.stopPropagation?.()
+    handler()
+  }
+}
+
 const columns = [
   { title: '投诉ID', key: 'id', width: 90, align: 'center' },
   {
@@ -199,7 +216,7 @@ const columns = [
             size: 'tiny',
             text: true,
             type: 'primary',
-            onClick: () => viewTargetUser(row),
+            onClick: withStoppedClick(() => viewTargetUser(row)),
           },
           { default: () => '查看用户' }
         ),
@@ -262,7 +279,7 @@ const columns = [
       return h(NSpace, { justify: 'center', size: 8 }, () => [
         h(
           NButton,
-          { size: 'small', secondary: true, onClick: () => openDetail(row) },
+          { size: 'small', secondary: true, onClick: withStoppedClick(() => openDetail(row)) },
           {
             default: () => '详情',
             icon: renderIcon('material-symbols:visibility-outline', { size: 16 }),
@@ -270,7 +287,12 @@ const columns = [
         ),
         h(
           NButton,
-          { size: 'small', type: 'primary', secondary: true, onClick: () => openHandle(row) },
+          {
+            size: 'small',
+            type: 'primary',
+            secondary: true,
+            onClick: withStoppedClick(() => openHandle(row)),
+          },
           {
             default: () => '处理',
             icon: renderIcon('material-symbols:fact-check-outline', { size: 16 }),
@@ -336,7 +358,9 @@ const columns = [
             <div class="detail-title">投诉 {{ currentComplaint.id }}</div>
             <div class="sub">{{ renderDate(currentComplaint.created_at) }}</div>
           </div>
-          <div>{{ renderStatus(currentComplaint.status) }}</div>
+          <NTag :type="statusType(currentComplaint.status)">
+            {{ statusText(currentComplaint.status) }}
+          </NTag>
         </div>
         <div class="detail-meta">
           <div>
@@ -346,7 +370,7 @@ const columns = [
           <div>
             被投诉用户：ID {{ currentComplaint.target_user_id }} /
             {{ currentComplaint.target_nickname || '-' }}
-            <NButton text type="primary" size="tiny" @click="viewTargetUser(currentComplaint)"
+            <NButton text type="primary" size="tiny" @click.stop="viewTargetUser(currentComplaint)"
               >查看用户</NButton
             >
           </div>
@@ -390,12 +414,12 @@ const columns = [
         处理投诉不会自动封禁用户；如需处置账号，请点击“查看用户”进入用户管理。
       </div>
       <template #action>
-        <NButton @click="handleVisible = false">取消</NButton>
+        <NButton @click.stop="handleVisible = false">取消</NButton>
         <NButton
           type="primary"
           :loading="handleLoading"
           style="margin-left: 8px"
-          @click="submitHandle"
+          @click.stop="submitHandle"
         >
           保存处理结果
         </NButton>
