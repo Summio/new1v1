@@ -118,6 +118,10 @@ def test_flutter_withdraw_account_review_state_is_surface_and_enforced() -> None
     provider_text = FLUTTER_PROVIDER.read_text(encoding="utf-8")
     withdraw_page_text = FLUTTER_WITHDRAW_PAGE.read_text(encoding="utf-8")
     account_page_text = FLUTTER_ACCOUNT_PAGE.read_text(encoding="utf-8")
+    edit_account_section = withdraw_page_text.split("Future<void> _editAccount() async", 1)[1].split(
+        "Future<void> _submitWithdraw() async",
+        1,
+    )[0]
 
     assert "status" in provider_text
     assert "canWithdraw" in provider_text
@@ -129,3 +133,6 @@ def test_flutter_withdraw_account_review_state_is_surface_and_enforced() -> None
     assert "_account.canWithdraw" in withdraw_page_text
     assert "saveWithdrawAccount" not in withdraw_page_text
     assert "提交审核" in account_page_text
+    assert "if (_account.isPending)" in edit_account_section
+    assert "提现账户待审核中，请勿重复提交" in edit_account_section
+    assert "return;" in edit_account_section

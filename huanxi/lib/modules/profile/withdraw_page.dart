@@ -117,6 +117,13 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
   }
 
   Future<void> _editAccount() async {
+    if (_account.isPending) {
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('提现账户待审核中，请勿重复提交')),
+      );
+      return;
+    }
     final account = await context.push<WithdrawAccount>(
       AppRoutes.withdrawAccount,
       extra: _account,
