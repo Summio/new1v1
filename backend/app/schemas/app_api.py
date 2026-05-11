@@ -274,3 +274,16 @@ class IMTextChargeOut(BaseModel):
     diamonds: int = 0
     receiver_user_id: int
     request_id: str
+
+
+# ===== 勿扰设置 =====
+
+
+class DndSettingsIn(BaseModel):
+    text_dnd_enabled: bool = False
+    video_dnd_enabled: bool = False
+    ranking_invisible_enabled: bool = False
+
+
+class DndSettingsOut(DndSettingsIn):
+    pass

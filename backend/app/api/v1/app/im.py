@@ -13,6 +13,7 @@ from app.services.im_text_billing_service import (
     IMTextBillingError,
     charge_im_text_message,
 )
+from app.services.customer_service import load_customer_service_config
 
 router = APIRouter()
 USER_SIG_EXPIRE_SECONDS = 3600 * 2
@@ -77,6 +78,10 @@ async def charge_text_message(req_in: IMTextChargeIn):
     receiver = await AppUser.filter(id=req_in.receiver_user_id, status="normal").first()
     if not receiver:
         return Fail(code=404, msg="目标用户不存在或状态异常")
+    customer_service = await load_customer_service_config()
+    is_customer_service_sender = customer_service.user_id == int(sender_id)
+    if bool(receiver.text_dnd_enabled) and not is_customer_service_sender:
+        return Fail(code=403, msg="对方已开启文字勿扰")
     try:
         await ensure_interaction_allowed(action="im_text", actor=sender, target=receiver)
     except InteractionRelationError as exc:

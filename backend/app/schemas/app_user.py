@@ -95,6 +95,9 @@ class AppUserInfoOut(BaseModel):
     is_certified_user: bool = False
     certification_status: str = "none"
     certified_call_price: int = 0
+    text_dnd_enabled: bool = False
+    video_dnd_enabled: bool = False
+    ranking_invisible_enabled: bool = False
     created_at: Optional[datetime] = None
 
 

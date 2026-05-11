@@ -71,7 +71,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                               height: 80,
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 3),
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 3,
+                                ),
                                 boxShadow: [
                                   BoxShadow(
                                     color: Colors.black.withValues(alpha: 0.1),
@@ -207,6 +210,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                         ? AppTheme.primaryColor
                         : AppTheme.textHint,
                     onTap: () => _openCustomerService(context, ref),
+                  ),
+                  _buildMenuTile(
+                    icon: Icons.do_not_disturb_on_outlined,
+                    title: '勿扰模式',
+                    iconColor: const Color(0xFF007AFF),
+                    onTap: () => context.push(AppRoutes.doNotDisturb),
                   ),
                   _buildMenuTile(
                     icon: Icons.feedback_outlined,

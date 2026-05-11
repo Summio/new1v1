@@ -27,6 +27,9 @@ class AuthState {
   final bool isCertifiedUser;
   final String certificationStatus;
   final int certifiedCallPrice;
+  final bool textDndEnabled;
+  final bool videoDndEnabled;
+  final bool rankingInvisibleEnabled;
   final double coins;
   final double diamonds;
   final Map<String, dynamic>? lastProfileUpdateData;
@@ -49,6 +52,9 @@ class AuthState {
     this.isCertifiedUser = false,
     this.certificationStatus = 'none',
     this.certifiedCallPrice = 0,
+    this.textDndEnabled = false,
+    this.videoDndEnabled = false,
+    this.rankingInvisibleEnabled = false,
     this.coins = 0,
     this.diamonds = 0,
     this.lastProfileUpdateData,
@@ -72,6 +78,9 @@ class AuthState {
     bool? isCertifiedUser,
     String? certificationStatus,
     int? certifiedCallPrice,
+    bool? textDndEnabled,
+    bool? videoDndEnabled,
+    bool? rankingInvisibleEnabled,
     double? coins,
     double? diamonds,
     Map<String, dynamic>? lastProfileUpdateData,
@@ -95,6 +104,10 @@ class AuthState {
       isCertifiedUser: isCertifiedUser ?? this.isCertifiedUser,
       certificationStatus: certificationStatus ?? this.certificationStatus,
       certifiedCallPrice: certifiedCallPrice ?? this.certifiedCallPrice,
+      textDndEnabled: textDndEnabled ?? this.textDndEnabled,
+      videoDndEnabled: videoDndEnabled ?? this.videoDndEnabled,
+      rankingInvisibleEnabled:
+          rankingInvisibleEnabled ?? this.rankingInvisibleEnabled,
       coins: coins ?? this.coins,
       diamonds: diamonds ?? this.diamonds,
       lastProfileUpdateData: clearLastProfileUpdateData
@@ -410,6 +423,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
               (cachedInfo['certification_status'] as String?) ?? 'none',
           certifiedCallPrice:
               _parseNullableInt(cachedInfo['certified_call_price']) ?? 0,
+          textDndEnabled: cachedInfo['text_dnd_enabled'] == true,
+          videoDndEnabled: cachedInfo['video_dnd_enabled'] == true,
+          rankingInvisibleEnabled:
+              cachedInfo['ranking_invisible_enabled'] == true,
           coins: _parseDouble(cachedInfo['coins']),
           diamonds: _parseDouble(cachedInfo['diamonds']),
         );
@@ -483,6 +500,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
             (respData['certification_status'] as String?) ?? 'none',
         certifiedCallPrice:
             _parseNullableInt(respData['certified_call_price']) ?? 0,
+        textDndEnabled: respData['text_dnd_enabled'] == true,
+        videoDndEnabled: respData['video_dnd_enabled'] == true,
+        rankingInvisibleEnabled: respData['ranking_invisible_enabled'] == true,
         coins: _parseDouble(respData['coins']),
         diamonds: _parseDouble(respData['diamonds']),
         isLoading: false,
@@ -542,6 +562,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
             (respData['certification_status'] as String?) ?? 'none',
         certifiedCallPrice:
             _parseNullableInt(respData['certified_call_price']) ?? 0,
+        textDndEnabled: respData['text_dnd_enabled'] == true,
+        videoDndEnabled: respData['video_dnd_enabled'] == true,
+        rankingInvisibleEnabled: respData['ranking_invisible_enabled'] == true,
         coins: _parseDouble(respData['coins']),
         diamonds: _parseDouble(respData['diamonds']),
       );

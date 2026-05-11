@@ -18,6 +18,7 @@ import '../../modules/profile/diamond_transactions_page.dart';
 import '../../modules/profile/withdraw_account_page.dart';
 import '../../modules/profile/withdraw_page.dart';
 import '../../modules/profile/edit_profile_page.dart';
+import '../../modules/profile/do_not_disturb_page.dart';
 import '../../modules/settings/settings_page.dart';
 import '../../modules/settings/agreement_page.dart';
 import '../../modules/settings/privacy_page.dart';
@@ -56,6 +57,7 @@ class AppRoutes {
   static const String diamondTransactions = '/profile/diamond/transactions';
   static const String callHistory = '/profile/call-history';
   static const String editProfile = '/profile/edit';
+  static const String doNotDisturb = '/profile/do-not-disturb';
   static const String settings = '/settings';
   static const String settingsAgreement = '/settings/agreement';
   static const String settingsPrivacy = '/settings/privacy';
@@ -261,6 +263,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.editProfile,
       builder: (context, state) => const EditProfilePage(),
+    ),
+    GoRoute(
+      path: AppRoutes.doNotDisturb,
+      builder: (context, state) => const DoNotDisturbPage(),
     ),
     GoRoute(
       path: AppRoutes.settings,

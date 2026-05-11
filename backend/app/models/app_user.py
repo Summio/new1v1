@@ -37,6 +37,9 @@ class AppUser(BaseModel, TimestampMixin):
     coins = fields.DecimalField(max_digits=18, decimal_places=2, default=0, description="金币余额")
     diamonds = fields.DecimalField(max_digits=18, decimal_places=2, default=0, description="钻石余额")
     frozen_diamonds = fields.DecimalField(max_digits=18, decimal_places=2, default=0, description="冻结钻石")
+    text_dnd_enabled = fields.BooleanField(default=False, description="文字勿扰开关")
+    video_dnd_enabled = fields.BooleanField(default=False, description="视频勿扰开关")
+    ranking_invisible_enabled = fields.BooleanField(default=False, description="榜单隐身开关")
     ban_reason = fields.CharField(max_length=500, null=True, description="封禁原因")
     last_login = fields.DatetimeField(null=True, description="最后登录时间")
 
