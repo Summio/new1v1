@@ -152,7 +152,9 @@ class GiftRecord(BaseModel, TimestampMixin):
     quantity = fields.IntField(default=1, description="礼物数量")
     total_price = fields.BigIntField(default=0, description="礼物总价(金币)")
     certified_user_share_bps = fields.IntField(default=10000, description="认证用户分成比例快照(万分比)")
-    certified_user_income_diamonds = fields.DecimalField(max_digits=18, decimal_places=2, default=0, description="认证用户礼物收益钻石")
+    certified_user_income_diamonds = fields.DecimalField(
+        max_digits=18, decimal_places=2, default=0, description="认证用户礼物收益钻石"
+    )
 
     class Meta:
         table = "gift_record"
@@ -220,7 +222,15 @@ class WithdrawAccount(BaseModel, TimestampMixin):
     real_name = fields.CharField(max_length=30, description="真实姓名")
     account_no = fields.CharField(max_length=80, description="支付宝账号")
     payment_qr_code = fields.CharField(max_length=500, description="收款码URL")
+    status = fields.CharField(
+        max_length=20,
+        default="pending",
+        description="审核状态: pending/approved/rejected",
+        db_index=True,
+    )
+    reviewed_by = fields.BigIntField(null=True, description="审核人后台用户ID")
+    reviewed_at = fields.DatetimeField(null=True, description="审核时间")
+    review_remark = fields.CharField(max_length=500, null=True, description="审核备注/驳回原因")
 
     class Meta:
         table = "withdraw_account"
-

@@ -131,12 +131,20 @@ class WithdrawAccount {
   final String accountNo;
   final String paymentQrCode;
   final bool hasAccount;
+  final String status;
+  final String reviewRemark;
+  final String reviewedAt;
+  final bool canWithdraw;
 
   const WithdrawAccount({
     this.realName = '',
     this.accountNo = '',
     this.paymentQrCode = '',
     this.hasAccount = false,
+    this.status = '',
+    this.reviewRemark = '',
+    this.reviewedAt = '',
+    this.canWithdraw = false,
   });
 
   factory WithdrawAccount.fromJson(Map<String, dynamic> json) {
@@ -145,11 +153,21 @@ class WithdrawAccount {
       accountNo: (json['account_no'] as String?)?.trim() ?? '',
       paymentQrCode: (json['payment_qr_code'] as String?)?.trim() ?? '',
       hasAccount: json['has_account'] == true,
+      status: (json['status'] as String?)?.trim() ?? '',
+      reviewRemark: (json['review_remark'] as String?)?.trim() ?? '',
+      reviewedAt: (json['reviewed_at'] as String?)?.trim() ?? '',
+      canWithdraw: json['can_withdraw'] == true,
     );
   }
 
   bool get isComplete =>
       realName.isNotEmpty && accountNo.isNotEmpty && paymentQrCode.isNotEmpty;
+
+  bool get isPending => status == 'pending';
+
+  bool get isApproved => status == 'approved';
+
+  bool get isRejected => status == 'rejected';
 }
 
 /// 钱包 Provider
@@ -274,22 +292,11 @@ class WalletNotifier extends StateNotifier<WalletState> {
   }
 
   /// 提现申请
-  Future<WithdrawResult?> withdraw({
-    required int amount,
-    required String accountNo,
-    required String realName,
-    required String paymentQrCode,
-  }) async {
+  Future<WithdrawResult?> withdraw({required int amount}) async {
     try {
       final data = await _dio.apiPost(
         ApiEndpoints.withdrawApply,
-        data: {
-          'amount': amount,
-          'bank_name': '支付宝',
-          'account_no': accountNo,
-          'real_name': realName,
-          'payment_qr_code': paymentQrCode,
-        },
+        data: {'amount': amount, 'bank_name': '支付宝'},
       );
       final respData = data['data'] as Map<String, dynamic>?;
       if (respData == null) return null;
@@ -374,7 +381,9 @@ class WalletNotifier extends StateNotifier<WalletState> {
       final url = (data['data'] as Map<String, dynamic>?)?['url'] as String?;
       return (url == null || url.trim().isEmpty) ? null : url.trim();
     } on ImageUploadPreprocessException catch (e) {
-      AppLogger.debug('wallet.uploadWithdrawQrCode preprocess error: ${e.message}');
+      AppLogger.debug(
+        'wallet.uploadWithdrawQrCode preprocess error: ${e.message}',
+      );
       return null;
     } on ApiException catch (e) {
       AppLogger.debug('wallet.uploadWithdrawQrCode ApiException: ${e.message}');

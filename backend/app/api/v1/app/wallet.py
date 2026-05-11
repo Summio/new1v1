@@ -81,6 +81,24 @@ def dump_withdraw_account(account: WithdrawAccount | None) -> WithdrawAccountOut
         account_no=account.account_no or "",
         payment_qr_code=to_relative_media_url(account.payment_qr_code),
         has_account=True,
+        status=account.status or "pending",
+        review_remark=account.review_remark or "",
+        reviewed_at=account.reviewed_at,
+        can_withdraw=account.status == "approved",
+    )
+
+
+def withdraw_account_payload_changed(
+    account: WithdrawAccount,
+    *,
+    real_name: str,
+    account_no: str,
+    payment_qr_code: str,
+) -> bool:
+    return (
+        (account.real_name or "") != real_name
+        or (account.account_no or "") != account_no
+        or to_relative_media_url(account.payment_qr_code) != payment_qr_code
     )
 
 
@@ -200,7 +218,7 @@ async def withdraw_account_get():
     return Success(data=dump_withdraw_account(account).model_dump())
 
 
-@router.post("/withdraw/account", summary="保存提现账户", dependencies=[Depends(DependAppAuth)])
+@router.post("/withdraw/account", summary="提交提现账户审核", dependencies=[Depends(DependAppAuth)])
 async def withdraw_account_save(req_in: WithdrawAccountIn):
     user_id = CTX_APP_USER_ID.get()
     real_name = req_in.real_name.strip()
@@ -215,18 +233,43 @@ async def withdraw_account_save(req_in: WithdrawAccountIn):
 
     account = await WithdrawAccount.filter(user_id=user_id).first()
     if account:
+        if account.status == "pending":
+            return Fail(code=400, msg="提现账户待审核中，请勿重复提交")
+        changed = withdraw_account_payload_changed(
+            account,
+            real_name=real_name,
+            account_no=account_no,
+            payment_qr_code=payment_qr_code,
+        )
+        if account.status == "approved" and not changed:
+            return Success(data=dump_withdraw_account(account).model_dump(), msg="提现账户已通过审核")
         account.real_name = real_name
         account.account_no = account_no
         account.payment_qr_code = payment_qr_code
-        await account.save(update_fields=["real_name", "account_no", "payment_qr_code"])
+        account.status = "pending"
+        account.reviewed_by = None
+        account.reviewed_at = None
+        account.review_remark = ""
+        await account.save(
+            update_fields=[
+                "real_name",
+                "account_no",
+                "payment_qr_code",
+                "status",
+                "reviewed_by",
+                "reviewed_at",
+                "review_remark",
+            ]
+        )
     else:
         account = await WithdrawAccount.create(
             user_id=user_id,
             real_name=real_name,
             account_no=account_no,
             payment_qr_code=payment_qr_code,
+            status="pending",
         )
-    return Success(data=dump_withdraw_account(account).model_dump(), msg="保存成功")
+    return Success(data=dump_withdraw_account(account).model_dump(), msg="提现账户已提交审核")
 
 
 @router.post("/withdraw/upload-qr-code", summary="上传提现收款码", dependencies=[Depends(DependAppAuth)])
@@ -256,6 +299,19 @@ async def withdraw_upload_qr_code(file: UploadFile = File(...)):
 async def withdraw_apply(req_in: WithdrawApplyIn):
     user_id = CTX_APP_USER_ID.get()
 
+    # P13-P15: 提现金额合法性校验
+    if req_in.amount <= 0:
+        return Fail(code=400, msg="提现金额必须大于 0")
+    config_value = await SystemConfig.get_value("withdraw_packages", "[]")
+    if not parse_withdraw_packages(config_value):
+        return Fail(code=400, msg="请先配置提现档位")
+    if not await is_configured_withdraw_amount(req_in.amount):
+        return Fail(code=400, msg="请选择有效的提现档位")
+
+    account = await WithdrawAccount.filter(user_id=user_id, status="approved").first()
+    if not account:
+        return Fail(code=400, msg="请先提交并通过提现账户审核")
+
     # P2-4: 提现幂等性——60 秒内同一用户不可重复提交
     try:
         redis_client = await get_redis()
@@ -268,39 +324,6 @@ async def withdraw_apply(req_in: WithdrawApplyIn):
         from app.log import logger
 
         logger.warning("withdraw idempotency check degraded: {}", str(e))
-
-    # P13-P15: 提现金额合法性校验
-    if req_in.amount <= 0:
-        return Fail(code=400, msg="提现金额必须大于 0")
-    config_value = await SystemConfig.get_value("withdraw_packages", "[]")
-    if not parse_withdraw_packages(config_value):
-        return Fail(code=400, msg="请先配置提现档位")
-    if not await is_configured_withdraw_amount(req_in.amount):
-        return Fail(code=400, msg="请选择有效的提现档位")
-
-    real_name = req_in.real_name.strip()
-    account_no = req_in.account_no.strip()
-    payment_qr_code = to_relative_media_url(req_in.payment_qr_code)
-    if not real_name:
-        return Fail(code=400, msg="请填写真实姓名")
-    if not account_no:
-        return Fail(code=400, msg="请填写支付宝账号")
-    if not payment_qr_code:
-        return Fail(code=400, msg="请上传收款码")
-
-    account = await WithdrawAccount.filter(user_id=user_id).first()
-    if account:
-        account.real_name = real_name
-        account.account_no = account_no
-        account.payment_qr_code = payment_qr_code
-        await account.save(update_fields=["real_name", "account_no", "payment_qr_code"])
-    else:
-        await WithdrawAccount.create(
-            user_id=user_id,
-            real_name=real_name,
-            account_no=account_no,
-            payment_qr_code=payment_qr_code,
-        )
 
     # H3 修复：所有业务逻辑在事务外执行，事务块内仅执行数据库操作，
     # 避免在 async with in_transaction() 块内 return 导致事务未正确提交/回滚
@@ -324,9 +347,9 @@ async def withdraw_apply(req_in: WithdrawApplyIn):
                 user_id=user_id,
                 amount=req_in.amount,
                 bank_name="支付宝",
-                account_no=account_no,
-                real_name=real_name,
-                payment_qr_code=payment_qr_code,
+                account_no=account.account_no,
+                real_name=account.real_name,
+                payment_qr_code=account.payment_qr_code,
                 status="pending",
                 using_db=conn,
             )

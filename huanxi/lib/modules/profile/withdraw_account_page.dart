@@ -9,25 +9,14 @@ import '../../app/theme/app_theme.dart';
 import '../../core/utils/app_toast.dart';
 import '../../core/utils/media_url.dart';
 
-class WithdrawAccountDraft {
-  final String realName;
-  final String accountNo;
-  final String paymentQrCode;
-
-  const WithdrawAccountDraft({
-    required this.realName,
-    required this.accountNo,
-    required this.paymentQrCode,
-  });
-}
-
 class WithdrawAccountPage extends ConsumerStatefulWidget {
   final WithdrawAccount? initialAccount;
 
   const WithdrawAccountPage({super.key, this.initialAccount});
 
   @override
-  ConsumerState<WithdrawAccountPage> createState() => _WithdrawAccountPageState();
+  ConsumerState<WithdrawAccountPage> createState() =>
+      _WithdrawAccountPageState();
 }
 
 class _WithdrawAccountPageState extends ConsumerState<WithdrawAccountPage> {
@@ -37,6 +26,7 @@ class _WithdrawAccountPageState extends ConsumerState<WithdrawAccountPage> {
   final _picker = ImagePicker();
   String _paymentQrCode = '';
   bool _isUploading = false;
+  bool _isSubmitting = false;
 
   @override
   void initState() {
@@ -71,19 +61,30 @@ class _WithdrawAccountPageState extends ConsumerState<WithdrawAccountPage> {
     setState(() => _paymentQrCode = url);
   }
 
-  void _submit() {
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     if (_paymentQrCode.isEmpty) {
-      AppToast.showSnackBar(context, const SnackBar(content: Text('请上传支付宝收款码')));
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('请上传支付宝收款码')),
+      );
       return;
     }
-    context.pop(
-      WithdrawAccountDraft(
-        realName: _realNameController.text.trim(),
-        accountNo: _accountNoController.text.trim(),
-        paymentQrCode: _paymentQrCode,
-      ),
-    );
+    setState(() => _isSubmitting = true);
+    final account = await ref
+        .read(walletProvider.notifier)
+        .saveWithdrawAccount(
+          realName: _realNameController.text.trim(),
+          accountNo: _accountNoController.text.trim(),
+          paymentQrCode: _paymentQrCode,
+        );
+    if (!mounted) return;
+    setState(() => _isSubmitting = false);
+    if (account == null) {
+      AppToast.showSnackBar(context, const SnackBar(content: Text('提现账户提交失败')));
+      return;
+    }
+    context.pop(account);
   }
 
   @override
@@ -101,24 +102,35 @@ class _WithdrawAccountPageState extends ConsumerState<WithdrawAccountPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('真实姓名', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              const Text(
+                '真实姓名',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 8),
               TextFormField(
                 controller: _realNameController,
                 decoration: _inputDecoration('请输入真实姓名'),
-                validator: (value) => (value == null || value.trim().isEmpty) ? '请输入真实姓名' : null,
+                validator: (value) =>
+                    (value == null || value.trim().isEmpty) ? '请输入真实姓名' : null,
               ),
               const SizedBox(height: 16),
-              const Text('支付宝账号', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              const Text(
+                '支付宝账号',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 8),
               TextFormField(
                 controller: _accountNoController,
                 keyboardType: TextInputType.emailAddress,
                 decoration: _inputDecoration('请输入支付宝账号'),
-                validator: (value) => (value == null || value.trim().isEmpty) ? '请输入支付宝账号' : null,
+                validator: (value) =>
+                    (value == null || value.trim().isEmpty) ? '请输入支付宝账号' : null,
               ),
               const SizedBox(height: 16),
-              const Text('收款码', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+              const Text(
+                '收款码',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+              ),
               const SizedBox(height: 8),
               GestureDetector(
                 onTap: _isUploading ? null : _pickQrCode,
@@ -133,22 +145,30 @@ class _WithdrawAccountPageState extends ConsumerState<WithdrawAccountPage> {
                   child: _isUploading
                       ? const Center(child: CircularProgressIndicator())
                       : _paymentQrCode.isEmpty
-                          ? const Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.add_photo_alternate_outlined, size: 44, color: AppTheme.textHint),
-                                SizedBox(height: 8),
-                                Text('上传支付宝收款码', style: TextStyle(color: AppTheme.textSecondary)),
-                              ],
-                            )
-                          : ClipRRect(
-                              borderRadius: BorderRadius.circular(16),
-                              child: CachedNetworkImage(
-                                imageUrl: toAbsoluteMediaUrl(_paymentQrCode),
-                                fit: BoxFit.contain,
-                                errorWidget: (context, url, error) => const Center(child: Text('收款码预览失败')),
-                              ),
+                      ? const Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.add_photo_alternate_outlined,
+                              size: 44,
+                              color: AppTheme.textHint,
                             ),
+                            SizedBox(height: 8),
+                            Text(
+                              '上传支付宝收款码',
+                              style: TextStyle(color: AppTheme.textSecondary),
+                            ),
+                          ],
+                        )
+                      : ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: CachedNetworkImage(
+                            imageUrl: toAbsoluteMediaUrl(_paymentQrCode),
+                            fit: BoxFit.contain,
+                            errorWidget: (context, url, error) =>
+                                const Center(child: Text('收款码预览失败')),
+                          ),
+                        ),
                 ),
               ),
             ],
@@ -171,16 +191,31 @@ class _WithdrawAccountPageState extends ConsumerState<WithdrawAccountPage> {
               borderRadius: BorderRadius.circular(28),
             ),
             child: ElevatedButton(
-              onPressed: _isUploading ? null : _submit,
+              onPressed: (_isUploading || _isSubmitting) ? null : _submit,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.transparent,
                 shadowColor: Colors.transparent,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(28),
+                ),
               ),
-              child: const Text(
-                '保存',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w600, color: Colors.white),
-              ),
+              child: _isSubmitting
+                  ? const SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text(
+                      '提交审核',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                      ),
+                    ),
             ),
           ),
         ),
