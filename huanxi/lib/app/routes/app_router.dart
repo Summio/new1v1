@@ -34,12 +34,14 @@ import '../../modules/home/certified_user_detail_page.dart';
 import '../../modules/home/my_following_page.dart';
 import '../../modules/home/user_search_page.dart';
 import '../../modules/home/feedback_page.dart';
+import '../../modules/home/complaint_page.dart';
 import '../../modules/home/call_page.dart';
 import '../../app/providers/certified_user_provider.dart';
 import '../../app/providers/wallet_provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/storage/storage.dart';
 import '../../services/teen_mode_service.dart';
+import '../../services/user_home_service.dart';
 
 class AppRoutes {
   AppRoutes._();
@@ -78,6 +80,7 @@ class AppRoutes {
   static const String callOutgoing = '/call/outgoing';
   static const String callIncoming = '/call/incoming';
   static const String feedback = '/profile/feedback';
+  static const String userComplaint = '/user/complaint';
 
   static CertifiedUserInfo? tryGetCertifiedUserInfo(Object? extra) {
     return extra is CertifiedUserInfo ? extra : null;
@@ -251,6 +254,28 @@ final appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.userSearch,
       builder: (context, state) => const UserSearchPage(),
+    ),
+    GoRoute(
+      path: AppRoutes.userComplaint,
+      builder: (context, state) {
+        final targetUserId = int.tryParse(
+          state.uri.queryParameters['targetUserId'] ?? '',
+        );
+        final targetName = state.uri.queryParameters['targetName'];
+        final sceneValue = state.uri.queryParameters['scene'];
+        UserComplaintScene? scene;
+        for (final item in UserComplaintScene.values) {
+          if (item.value == sceneValue) {
+            scene = item;
+            break;
+          }
+        }
+        return ComplaintPage(
+          targetUserId: targetUserId,
+          targetName: targetName,
+          scene: scene,
+        );
+      },
     ),
     GoRoute(
       path: AppRoutes.callHistory,

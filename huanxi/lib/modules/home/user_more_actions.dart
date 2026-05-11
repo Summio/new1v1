@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/utils/app_toast.dart';
@@ -18,6 +20,7 @@ Future<bool?> showUserMoreActions({
     showDragHandle: true,
     builder: (sheetContext) => SafeArea(
       child: _UserMoreActionsSheet(
+        parentContext: context,
         targetUserId: targetUserId,
         targetName: targetName,
         scene: scene,
@@ -29,6 +32,7 @@ Future<bool?> showUserMoreActions({
 }
 
 class _UserMoreActionsSheet extends StatefulWidget {
+  final BuildContext parentContext;
   final int targetUserId;
   final String targetName;
   final UserComplaintScene scene;
@@ -36,6 +40,7 @@ class _UserMoreActionsSheet extends StatefulWidget {
   final bool blockedMe;
 
   const _UserMoreActionsSheet({
+    required this.parentContext,
     required this.targetUserId,
     required this.targetName,
     required this.scene,
@@ -70,7 +75,9 @@ class _UserMoreActionsSheetState extends State<_UserMoreActionsSheet> {
           TextButton(
             onPressed: () => Navigator.pop(dialogContext, true),
             style: TextButton.styleFrom(
-              foregroundColor: blockedByMe ? AppTheme.primaryColor : AppTheme.errorColor,
+              foregroundColor: blockedByMe
+                  ? AppTheme.primaryColor
+                  : AppTheme.errorColor,
             ),
             child: Text(blockedByMe ? '解除拉黑' : '确认拉黑'),
           ),
@@ -105,16 +112,17 @@ class _UserMoreActionsSheetState extends State<_UserMoreActionsSheet> {
   }
 
   Future<void> _openComplaint() async {
-    final submitted = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => _ComplaintDialog(
-        targetUserId: widget.targetUserId,
-        scene: widget.scene,
-      ),
+    Navigator.pop(context, false);
+    await widget.parentContext.push(
+      Uri(
+        path: AppRoutes.userComplaint,
+        queryParameters: {
+          'targetUserId': widget.targetUserId.toString(),
+          'targetName': widget.targetName,
+          'scene': widget.scene.value,
+        },
+      ).toString(),
     );
-    if (submitted == true && mounted) {
-      Navigator.pop(context, false);
-    }
   }
 
   @override
@@ -126,16 +134,25 @@ class _UserMoreActionsSheetState extends State<_UserMoreActionsSheet> {
         children: [
           ListTile(
             leading: Icon(
-              widget.blockedByMe ? Icons.lock_open_rounded : Icons.block_rounded,
-              color: widget.blockedByMe ? AppTheme.primaryColor : AppTheme.errorColor,
+              widget.blockedByMe
+                  ? Icons.lock_open_rounded
+                  : Icons.block_rounded,
+              color: widget.blockedByMe
+                  ? AppTheme.primaryColor
+                  : AppTheme.errorColor,
             ),
             title: Text(widget.blockedByMe ? '解除拉黑' : '拉黑'),
-            subtitle: Text(widget.blockedByMe ? '恢复与 ${widget.targetName} 的互动' : '阻止双方继续互动'),
+            subtitle: Text(
+              widget.blockedByMe ? '恢复与 ${widget.targetName} 的互动' : '阻止双方继续互动',
+            ),
             enabled: !_loading && !widget.blockedMe,
             onTap: _toggleBlock,
           ),
           ListTile(
-            leading: const Icon(Icons.report_gmailerrorred_rounded, color: AppTheme.errorColor),
+            leading: const Icon(
+              Icons.report_gmailerrorred_rounded,
+              color: AppTheme.errorColor,
+            ),
             title: const Text('投诉'),
             subtitle: const Text('投诉用户'),
             enabled: !_loading,
@@ -143,117 +160,6 @@ class _UserMoreActionsSheetState extends State<_UserMoreActionsSheet> {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _ComplaintDialog extends StatefulWidget {
-  final int targetUserId;
-  final UserComplaintScene scene;
-
-  const _ComplaintDialog({required this.targetUserId, required this.scene});
-
-  @override
-  State<_ComplaintDialog> createState() => _ComplaintDialogState();
-}
-
-class _ComplaintDialogState extends State<_ComplaintDialog> {
-  static const List<String> _reasons = [
-    '骚扰辱骂',
-    '色情低俗',
-    '诈骗引流',
-    '虚假资料',
-    '其他',
-  ];
-  static const int _maxLength = 1000;
-
-  final TextEditingController _contentController = TextEditingController();
-  String _reason = _reasons.first;
-  bool _loading = false;
-
-  @override
-  void dispose() {
-    _contentController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    final content = _contentController.text.trim();
-    if (content.isEmpty) {
-      AppToast.show(context, '请填写投诉说明');
-      return;
-    }
-    setState(() => _loading = true);
-    try {
-      await UserHomeService.instance.createComplaint(
-        targetUserId: widget.targetUserId,
-        scene: widget.scene,
-        reason: _reason,
-        content: content,
-      );
-      if (!mounted) return;
-      AppToast.show(context, '投诉已提交', backgroundColor: AppTheme.onlineGreen);
-      Navigator.pop(context, true);
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      AppToast.show(context, e.message);
-    } catch (e) {
-      if (!mounted) return;
-      AppToast.error(context, e);
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('投诉用户'),
-      content: SizedBox(
-        width: 360,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            DropdownButtonFormField<String>(
-              initialValue: _reason,
-              decoration: const InputDecoration(labelText: '投诉原因'),
-              items: _reasons
-                  .map((reason) => DropdownMenuItem(value: reason, child: Text(reason)))
-                  .toList(),
-              onChanged: _loading
-                  ? null
-                  : (value) {
-                      if (value == null) return;
-                      setState(() => _reason = value);
-                    },
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _contentController,
-              enabled: !_loading,
-              maxLength: _maxLength,
-              maxLines: 5,
-              minLines: 3,
-              decoration: const InputDecoration(
-                labelText: '补充说明',
-                hintText: '请描述具体情况',
-                alignLabelWithHint: true,
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _loading ? null : () => Navigator.pop(context, false),
-          child: const Text('取消'),
-        ),
-        TextButton(
-          onPressed: _loading ? null : _submit,
-          child: Text(_loading ? '提交中' : '提交投诉'),
-        ),
-      ],
     );
   }
 }

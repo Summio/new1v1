@@ -28,6 +28,17 @@ def test_app_moment_feed_accepts_categories_without_certification_filter() -> No
     assert "certified_user_ids" not in source
 
 
+def test_app_moment_feed_filters_blocked_authors_before_pagination() -> None:
+    source = inspect.getsource(app_moment.get_moment_feed)
+
+    assert "exclude_blocked_user_ids" in inspect.getsource(app_moment)
+    assert "blocked_user_ids = await exclude_blocked_user_ids" in source
+    assert "query = Moment.filter(q)" in source
+    assert "query = query.exclude(user_id__in=blocked_user_ids)" in source
+    assert "total = await query.count()" in source
+    assert "await query.order_by" in source
+
+
 def test_app_moment_feed_recommend_rule_allows_single_moment_override() -> None:
     source = inspect.getsource(app_moment)
 
@@ -67,4 +78,3 @@ def test_moment_operation_migration_adds_fields() -> None:
     assert "pinned_at" in migration_text
     assert "recommend_override" in migration_text
     assert "idx_moments_feed_order" in migration_text
-

@@ -22,14 +22,21 @@ void main() {
     expect(imPage, contains('你们之间已存在黑名单关系'));
     expect(imPage, contains('scene: UserComplaintScene.chat'));
 
+    expect(moreActions, isNot(contains('_ComplaintDialog')));
+    expect(
+      moreActions,
+      isNot(contains('builder: (dialogContext) => _ComplaintDialog')),
+    );
+    expect(moreActions, contains('AppRoutes.userComplaint'));
+    expect(moreActions, contains('parentContext.push'));
     expect(moreActions, contains('确认拉黑用户'));
     expect(moreActions, contains('无法互相关注、聊天、通话和送礼'));
     expect(moreActions, contains('投诉用户'));
-    expect(moreActions, contains('骚扰辱骂'));
-    expect(moreActions, contains('色情低俗'));
-    expect(moreActions, contains('诈骗引流'));
-    expect(moreActions, contains('虚假资料'));
     expect(moreActions, contains('解除拉黑'));
+
+    final router = File('lib/app/routes/app_router.dart').readAsStringSync();
+    expect(router, contains('userComplaint'));
+    expect(router, contains('ComplaintPage'));
 
     expect(endpoints, contains('userBlock'));
     expect(endpoints, contains('app/user/block'));

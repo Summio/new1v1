@@ -24,5 +24,7 @@ void main() {
     expect(moreActions, contains('拉黑'));
     expect(moreActions, contains('解除拉黑'));
     expect(moreActions, contains('投诉'));
+    expect(moreActions, contains('AppRoutes.userComplaint'));
+    expect(moreActions, isNot(contains('_ComplaintDialog')));
   });
 }

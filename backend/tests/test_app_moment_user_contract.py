@@ -25,6 +25,19 @@ def test_user_moments_filters_by_target_user() -> None:
     assert '"user"' in serializer_source
 
 
+def test_user_moments_returns_empty_page_for_blocked_relation() -> None:
+    source = inspect.getsource(get_user_moments)
+
+    assert "CTX_APP_USER_OBJ.get()" in source
+    assert "exclude_blocked_user_ids" in source
+    assert "blocked_user_ids = await exclude_blocked_user_ids" in source
+    assert "user_id != int(app_user.id)" in source
+    assert "rows=[]" in source
+    assert "total=0" in source
+    assert "has_more=False" in source
+    assert "code=403" not in source
+
+
 def test_app_moment_serialization_uses_prefetched_media() -> None:
     serializer_source = inspect.getsource(_serialize_moment)
     prefetch_source = inspect.getsource(_prefetch_moment_media)

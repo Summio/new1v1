@@ -16,6 +16,7 @@ from app.services.review_entry_guard_service import (
     MOMENT_REVIEW_PENDING_MESSAGE,
     has_pending_moment_review,
 )
+from app.services.user_block_service import exclude_blocked_user_ids
 from app.settings.config import settings
 from app.utils.media_url import to_relative_media_url
 from app.utils.upload_files import (
@@ -310,13 +311,14 @@ async def get_moment_feed(
             Q(recommend_override__isnull=True) & Q(user_id__in=list(recommended_user_ids))
         )
 
-    total = await Moment.filter(q).count()
+    blocked_user_ids = await exclude_blocked_user_ids(int(app_user.id))
+    query = Moment.filter(q)
+    if blocked_user_ids:
+        query = query.exclude(user_id__in=blocked_user_ids)
+
+    total = await query.count()
     moments = (
-        await Moment.filter(q)
-        .order_by("-is_pinned", "-pinned_at", "-created_at", "-id")
-        .offset(offset)
-        .limit(page_size)
-        .all()
+        await query.order_by("-is_pinned", "-pinned_at", "-created_at", "-id").offset(offset).limit(page_size).all()
     )
     users = await _prefetch_moment_users(moments)
     media_by_moment = await _prefetch_moment_media(moments)
@@ -339,19 +341,22 @@ async def get_user_moments(
     page_size: int = Query(3, ge=1, le=20, description="每页数量"),
 ):
     """获取指定用户的动态列表，供个人详情页展示。"""
+    app_user = CTX_APP_USER_OBJ.get()
+    if not app_user:
+        return Fail(code=401, msg="用户不存在")
+
     offset = (page - 1) * page_size
     user = await AppUser.filter(id=user_id).first()
     if not user:
         return Fail(code=404, msg="用户不存在")
 
-    total = await Moment.filter(user_id=user_id, review_status="approved").count()
-    moments = (
-        await Moment.filter(user_id=user_id, review_status="approved")
-        .order_by("-created_at")
-        .offset(offset)
-        .limit(page_size)
-        .all()
-    )
+    blocked_user_ids = await exclude_blocked_user_ids(int(app_user.id))
+    if user_id != int(app_user.id) and user_id in blocked_user_ids:
+        return SuccessExtra(rows=[], total=0, has_more=False)
+
+    query = Moment.filter(user_id=user_id, review_status="approved")
+    total = await query.count()
+    moments = await query.order_by("-created_at").offset(offset).limit(page_size).all()
     media_by_moment = await _prefetch_moment_media(moments)
     rows = [await _serialize_moment(moment, user=user, media_by_moment=media_by_moment) for moment in moments]
 
