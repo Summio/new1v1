@@ -15,7 +15,7 @@ void main() {
     expect(detailPage, contains('Icons.more_horiz'));
     expect(detailPage, contains('showUserMoreActions'));
     expect(imPage, contains('showUserMoreActions'));
-    expect(detailPage, contains('scene: UserComplaintScene.profile'));
+    expect(detailPage, isNot(contains('UserComplaintScene.profile')));
     expect(detailPage, contains('blockedByMe'));
     expect(detailPage, contains('blockedMe'));
     expect(detailPage, contains('interactionBlocked'));

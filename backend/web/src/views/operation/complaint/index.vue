@@ -31,7 +31,6 @@ const queryItems = ref({
   complainant_id: '',
   target_user_id: '',
   status: null,
-  scene: null,
   keyword: '',
   start_time: null,
   end_time: null,
@@ -56,21 +55,11 @@ const handleStatusOptions = [
   { label: '已驳回', value: 'rejected' },
 ]
 
-const sceneOptions = [
-  { label: '聊天', value: 'chat' },
-  { label: '个人详情', value: 'profile' },
-]
-
 const statusMap = {
   pending: { type: 'warning', text: '待处理' },
   processing: { type: 'info', text: '处理中' },
   resolved: { type: 'success', text: '已处理' },
   rejected: { type: 'error', text: '已驳回' },
-}
-
-const sceneMap = {
-  chat: '聊天',
-  profile: '个人详情',
 }
 
 onMounted(() => {
@@ -109,11 +98,6 @@ function statusType(value) {
   return statusMap[value]?.type || 'default'
 }
 
-function renderRisk(row) {
-  if (row.target_risk_flag !== 'multiple_complaints') return '-'
-  return h(NTag, { type: 'error' }, { default: () => '多次被投诉' })
-}
-
 async function fetchData(params = {}) {
   const res = await api.getComplaintList({
     page: params.page,
@@ -121,7 +105,6 @@ async function fetchData(params = {}) {
     complainant_id: params.complainant_id || undefined,
     target_user_id: params.target_user_id || undefined,
     status: params.status || '',
-    scene: params.scene || '',
     keyword: params.keyword || '',
     start_time: params.start_time || undefined,
     end_time: params.end_time || undefined,
@@ -172,8 +155,7 @@ async function submitHandle() {
   }
 }
 
-function viewTargetUser(row) {
-  const userId = row?.target_user_id
+function viewUser(userId) {
   if (!userId) return
   router.push({ path: '/operation/app-user', query: { user_id: userId } })
 }
@@ -190,14 +172,24 @@ const columns = [
   {
     title: '投诉人',
     key: 'complainant',
-    width: 210,
+    width: 240,
     render(row) {
-      return h('div', {}, [
+      return h('div', { class: 'user-cell' }, [
         h('div', {}, `ID: ${row.complainant_id}`),
         h(
           'div',
           { class: 'sub' },
           `${row.complainant_nickname || '-'} / ${row.complainant_phone || '-'}`
+        ),
+        h(
+          NButton,
+          {
+            size: 'tiny',
+            text: true,
+            type: 'primary',
+            onClick: withStoppedClick(() => viewUser(row.complainant_id)),
+          },
+          { default: () => '查看用户' }
         ),
       ])
     },
@@ -207,7 +199,7 @@ const columns = [
     key: 'target',
     width: 240,
     render(row) {
-      return h('div', { class: 'target-user' }, [
+      return h('div', { class: 'user-cell' }, [
         h('div', {}, `ID: ${row.target_user_id}`),
         h('div', { class: 'sub' }, `${row.target_nickname || '-'} / ${row.target_phone || '-'}`),
         h(
@@ -216,7 +208,7 @@ const columns = [
             size: 'tiny',
             text: true,
             type: 'primary',
-            onClick: withStoppedClick(() => viewTargetUser(row)),
+            onClick: withStoppedClick(() => viewUser(row.target_user_id)),
           },
           { default: () => '查看用户' }
         ),
@@ -224,23 +216,6 @@ const columns = [
     },
   },
   { title: '累计被投诉次数', key: 'target_complaint_count', width: 130, align: 'center' },
-  { title: '待处理投诉次数', key: 'target_pending_complaint_count', width: 130, align: 'center' },
-  {
-    title: '风险标识',
-    key: 'target_risk_flag',
-    width: 120,
-    align: 'center',
-    render: renderRisk,
-  },
-  {
-    title: '来源',
-    key: 'scene',
-    width: 100,
-    align: 'center',
-    render(row) {
-      return sceneMap[row.scene] || row.scene || '-'
-    },
-  },
   { title: '原因', key: 'reason', width: 130, ellipsis: { tooltip: true } },
   {
     title: '状态',
@@ -311,7 +286,7 @@ const columns = [
       v-model:query-items="queryItems"
       :columns="columns"
       :get-data="fetchData"
-      :scroll-x="1680"
+      :scroll-x="1440"
     >
       <template #queryBar>
         <QueryBarItem label="投诉人ID" :label-width="70">
@@ -325,14 +300,6 @@ const columns = [
             v-model:value="queryItems.status"
             clearable
             :options="statusOptions"
-            style="width: 140px"
-          />
-        </QueryBarItem>
-        <QueryBarItem label="来源" :label-width="50">
-          <NSelect
-            v-model:value="queryItems.scene"
-            clearable
-            :options="sceneOptions"
             style="width: 140px"
           />
         </QueryBarItem>
@@ -370,18 +337,15 @@ const columns = [
           <div>
             被投诉用户：ID {{ currentComplaint.target_user_id }} /
             {{ currentComplaint.target_nickname || '-' }}
-            <NButton text type="primary" size="tiny" @click.stop="viewTargetUser(currentComplaint)"
+            <NButton
+              text
+              type="primary"
+              size="tiny"
+              @click.stop="viewUser(currentComplaint.target_user_id)"
               >查看用户</NButton
             >
           </div>
           <div>累计被投诉次数：{{ currentComplaint.target_complaint_count || 0 }}</div>
-          <div>待处理投诉次数：{{ currentComplaint.target_pending_complaint_count || 0 }}</div>
-          <div>
-            风险标识：{{
-              currentComplaint.target_risk_flag === 'multiple_complaints' ? '多次被投诉' : '-'
-            }}
-          </div>
-          <div>来源：{{ sceneMap[currentComplaint.scene] || currentComplaint.scene || '-' }}</div>
           <div>原因：{{ currentComplaint.reason || '-' }}</div>
           <div>处理时间：{{ renderDate(currentComplaint.handled_at) }}</div>
         </div>
@@ -435,7 +399,7 @@ const columns = [
   margin-top: 2px;
 }
 
-.target-user {
+.user-cell {
   display: flex;
   flex-direction: column;
   gap: 2px;

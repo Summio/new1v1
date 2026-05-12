@@ -10,15 +10,11 @@ from app.schemas.user_complaint import ComplaintHandleIn, ComplaintListItem
 
 router = APIRouter()
 
-_PENDING_STATUSES = {"pending", "processing"}
 
-
-async def _complaint_stats(target_user_ids: list[int]) -> dict[int, dict[str, int | str]]:
+async def _complaint_stats(target_user_ids: list[int]) -> dict[int, dict[str, int]]:
     stats = {
         int(user_id): {
             "target_complaint_count": 0,
-            "target_pending_complaint_count": 0,
-            "target_risk_flag": "",
         }
         for user_id in target_user_ids
     }
@@ -26,7 +22,6 @@ async def _complaint_stats(target_user_ids: list[int]) -> dict[int, dict[str, in
         return stats
     rows = await UserComplaint.filter(target_user_id__in=target_user_ids).values(
         "target_user_id",
-        "status",
     )
     for row in rows:
         user_id = int(row["target_user_id"])
@@ -34,16 +29,9 @@ async def _complaint_stats(target_user_ids: list[int]) -> dict[int, dict[str, in
             user_id,
             {
                 "target_complaint_count": 0,
-                "target_pending_complaint_count": 0,
-                "target_risk_flag": "",
             },
         )
         item["target_complaint_count"] = int(item["target_complaint_count"]) + 1
-        if str(row.get("status") or "") in _PENDING_STATUSES:
-            item["target_pending_complaint_count"] = int(item["target_pending_complaint_count"]) + 1
-    for item in stats.values():
-        if int(item["target_complaint_count"]) >= 3:
-            item["target_risk_flag"] = "multiple_complaints"
     return stats
 
 
@@ -54,7 +42,7 @@ async def _user_map(user_ids: list[int]) -> dict[int, dict]:
     return {int(row["id"]): row for row in users}
 
 
-def _build_item(row: UserComplaint, users: dict[int, dict], stats: dict[int, dict[str, int | str]]) -> dict:
+def _build_item(row: UserComplaint, users: dict[int, dict], stats: dict[int, dict[str, int]]) -> dict:
     complainant = users.get(int(row.complainant_id), {})
     target = users.get(int(row.target_user_id), {})
     target_stats = stats.get(int(row.target_user_id), {})
@@ -62,7 +50,6 @@ def _build_item(row: UserComplaint, users: dict[int, dict], stats: dict[int, dic
         id=int(row.id),
         complainant_id=int(row.complainant_id),
         target_user_id=int(row.target_user_id),
-        scene=row.scene or "",
         reason=row.reason or "",
         content=row.content or "",
         status=row.status or "pending",
@@ -75,8 +62,6 @@ def _build_item(row: UserComplaint, users: dict[int, dict], stats: dict[int, dic
         target_nickname=str(target.get("nickname") or ""),
         target_phone=str(target.get("phone") or ""),
         target_complaint_count=int(target_stats.get("target_complaint_count") or 0),
-        target_pending_complaint_count=int(target_stats.get("target_pending_complaint_count") or 0),
-        target_risk_flag=str(target_stats.get("target_risk_flag") or ""),
     ).model_dump(mode="json")
 
 
@@ -87,7 +72,6 @@ async def list_complaints(
     complainant_id: int | None = Query(None, description="投诉人ID"),
     target_user_id: int | None = Query(None, description="被投诉用户ID"),
     status: str = Query("", description="状态"),
-    scene: str = Query("", description="来源 chat/profile"),
     keyword: str = Query("", description="原因或内容关键词"),
     start_time: datetime | None = Query(None, description="提交开始时间"),
     end_time: datetime | None = Query(None, description="提交结束时间"),
@@ -99,8 +83,6 @@ async def list_complaints(
         q &= Q(target_user_id=target_user_id)
     if status:
         q &= Q(status=status.strip())
-    if scene:
-        q &= Q(scene=scene.strip())
     trimmed_keyword = keyword.strip()
     if trimmed_keyword:
         q &= Q(reason__contains=trimmed_keyword) | Q(content__contains=trimmed_keyword)

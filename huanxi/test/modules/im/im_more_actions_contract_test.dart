@@ -20,7 +20,7 @@ void main() {
     expect(imPage, contains('showUserMoreActions'));
     expect(imPage, contains('_interactionBlocked'));
     expect(imPage, contains('你们之间已存在黑名单关系'));
-    expect(imPage, contains('scene: UserComplaintScene.chat'));
+    expect(imPage, isNot(contains('UserComplaintScene.chat')));
 
     expect(moreActions, isNot(contains('_ComplaintDialog')));
     expect(
@@ -49,5 +49,7 @@ void main() {
     expect(service, contains('unblockUser'));
     expect(service, contains('getUserBlockStatus'));
     expect(service, contains('createComplaint'));
+    expect(service, isNot(contains("'scene'")));
+    expect(service, isNot(contains('UserComplaintScene')));
   });
 }

@@ -23,7 +23,6 @@ async def create_complaint(req_in: ComplaintCreateIn):
     complaint = await UserComplaint.create(
         complainant_id=complainant_id,
         target_user_id=int(target_user.id),
-        scene=req_in.scene,
         reason=req_in.reason.strip(),
         content=req_in.content.strip(),
         status="pending",

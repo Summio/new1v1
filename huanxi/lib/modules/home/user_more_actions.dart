@@ -11,7 +11,6 @@ Future<bool?> showUserMoreActions({
   required BuildContext context,
   required int targetUserId,
   required String targetName,
-  required UserComplaintScene scene,
   required bool blockedByMe,
   required bool blockedMe,
 }) {
@@ -23,7 +22,6 @@ Future<bool?> showUserMoreActions({
         parentContext: context,
         targetUserId: targetUserId,
         targetName: targetName,
-        scene: scene,
         blockedByMe: blockedByMe,
         blockedMe: blockedMe,
       ),
@@ -35,7 +33,6 @@ class _UserMoreActionsSheet extends StatefulWidget {
   final BuildContext parentContext;
   final int targetUserId;
   final String targetName;
-  final UserComplaintScene scene;
   final bool blockedByMe;
   final bool blockedMe;
 
@@ -43,7 +40,6 @@ class _UserMoreActionsSheet extends StatefulWidget {
     required this.parentContext,
     required this.targetUserId,
     required this.targetName,
-    required this.scene,
     required this.blockedByMe,
     required this.blockedMe,
   });
@@ -119,7 +115,6 @@ class _UserMoreActionsSheetState extends State<_UserMoreActionsSheet> {
         queryParameters: {
           'targetUserId': widget.targetUserId.toString(),
           'targetName': widget.targetName,
-          'scene': widget.scene.value,
         },
       ).toString(),
     );

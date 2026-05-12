@@ -10,13 +10,11 @@ import '../../services/user_home_service.dart';
 class ComplaintPage extends StatefulWidget {
   final int? targetUserId;
   final String? targetName;
-  final UserComplaintScene? scene;
 
   const ComplaintPage({
     super.key,
     required this.targetUserId,
     required this.targetName,
-    required this.scene,
   });
 
   @override
@@ -32,9 +30,7 @@ class _ComplaintPageState extends State<ComplaintPage> {
   bool _loading = false;
 
   bool get _hasValidParams =>
-      widget.targetUserId != null &&
-      widget.targetUserId! > 0 &&
-      widget.scene != null;
+      widget.targetUserId != null && widget.targetUserId! > 0;
 
   String get _displayName {
     final name = widget.targetName?.trim() ?? '';
@@ -60,7 +56,6 @@ class _ComplaintPageState extends State<ComplaintPage> {
     try {
       await UserHomeService.instance.createComplaint(
         targetUserId: widget.targetUserId!,
-        scene: widget.scene!,
         reason: _reason,
         content: content,
       );

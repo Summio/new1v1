@@ -274,7 +274,6 @@ class _CertifiedUserDetailPageState
       context: context,
       targetUserId: certifiedUser.userId,
       targetName: certifiedUser.username ?? '用户${certifiedUser.userId}',
-      scene: UserComplaintScene.profile,
       blockedByMe: _blockedByMe,
       blockedMe: _blockedMe,
     );

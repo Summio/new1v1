@@ -344,7 +344,6 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
       context: context,
       targetUserId: targetUserId,
       targetName: _peerDisplayName(),
-      scene: UserComplaintScene.chat,
       blockedByMe: _blockedByMe,
       blockedMe: _blockedMe,
     );

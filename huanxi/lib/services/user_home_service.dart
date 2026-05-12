@@ -180,7 +180,6 @@ class UserHomeService {
 
   Future<void> createComplaint({
     required int targetUserId,
-    required UserComplaintScene scene,
     required String reason,
     required String content,
   }) async {
@@ -189,7 +188,6 @@ class UserHomeService {
         ApiEndpoints.complaintCreate,
         data: {
           'target_user_id': targetUserId,
-          'scene': scene.value,
           'reason': reason,
           'content': content,
         },
@@ -292,14 +290,6 @@ class UserHomeService {
       throw ApiException(code: 500, message: errorMessage);
     }
   }
-}
-
-enum UserComplaintScene {
-  chat('chat'),
-  profile('profile');
-
-  final String value;
-  const UserComplaintScene(this.value);
 }
 
 class UserBlockStatus {

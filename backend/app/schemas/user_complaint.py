@@ -3,14 +3,12 @@ from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-ComplaintScene = Literal["chat", "profile"]
 ComplaintStatus = Literal["pending", "processing", "resolved", "rejected"]
 ComplaintHandleStatus = Literal["processing", "resolved", "rejected"]
 
 
 class ComplaintCreateIn(BaseModel):
     target_user_id: int = Field(..., ge=1, description="被投诉用户ID")
-    scene: ComplaintScene = Field(..., description="投诉来源")
     reason: str = Field(..., min_length=1, max_length=64, description="投诉原因")
     content: str = Field(..., min_length=1, max_length=1000, description="投诉补充说明")
 
@@ -35,7 +33,6 @@ class ComplaintListItem(BaseModel):
     id: int
     complainant_id: int
     target_user_id: int
-    scene: str
     reason: str
     content: str
     status: str
@@ -48,5 +45,3 @@ class ComplaintListItem(BaseModel):
     target_nickname: str = ""
     target_phone: str = ""
     target_complaint_count: int = 0
-    target_pending_complaint_count: int = 0
-    target_risk_flag: str = ""
