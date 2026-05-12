@@ -295,15 +295,14 @@ async function importNickname(gender, section) {
                 v-if="!state.avatarPool[gender].length"
                 :description="`${genderMeta[gender].label}头像池暂无素材`"
               />
-              <NGrid v-else cols="1 560:2 860:3 1180:4" :x-gap="12" :y-gap="12">
+              <NGrid v-else cols="2 560:4 860:6 1180:8 1440:10" :x-gap="10" :y-gap="10">
                 <NGridItem v-for="url in state.avatarPool[gender]" :key="url">
                   <div class="avatar-item">
                     <NCheckbox
                       :checked="state.selectedAvatars[gender].includes(url)"
                       @update:checked="toggleAvatar(gender, url)"
                     />
-                    <img :src="url" :alt="url" />
-                    <div class="avatar-url">{{ url }}</div>
+                    <img :src="url" alt="头像素材" />
                     <NButton
                       size="tiny"
                       tertiary
@@ -484,13 +483,13 @@ async function importNickname(gender, section) {
   position: relative;
   border: 1px solid var(--n-border-color);
   border-radius: 8px;
-  padding: 10px;
+  padding: 8px;
   cursor: pointer;
   background: var(--n-color);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 
 .avatar-item img {
@@ -499,12 +498,6 @@ async function importNickname(gender, section) {
   object-fit: cover;
   border-radius: 8px;
   background: #f5f5f5;
-}
-
-.avatar-url {
-  font-size: 11px;
-  color: var(--n-text-color-3);
-  word-break: break-all;
 }
 
 .nickname-layout {

@@ -57,8 +57,9 @@ class _SystemNotificationsPageState
           TextButton(
             onPressed: state.items.isEmpty
                 ? null
-                : () =>
-                    ref.read(systemNotificationListProvider.notifier).readAll(),
+                : () => ref
+                      .read(systemNotificationListProvider.notifier)
+                      .readAll(),
             child: const Text('全部已读'),
           ),
         ],
@@ -66,39 +67,36 @@ class _SystemNotificationsPageState
       body: state.isLoading
           ? StatusView.loading()
           : state.error != null
-              ? StatusView.error(
-                  message: state.error!,
-                  onRetry: () => ref
-                      .read(systemNotificationListProvider.notifier)
-                      .refresh(),
-                )
-              : state.items.isEmpty
-                  ? StatusView.empty(message: '暂无系统通知')
-                  : RefreshIndicator(
-                      onRefresh: () => ref
-                          .read(systemNotificationListProvider.notifier)
-                          .refresh(),
-                      child: ListView.separated(
-                        controller: _scrollController,
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        itemCount:
-                            state.items.length + (state.isLoadingMore ? 1 : 0),
-                        separatorBuilder: (context, index) =>
-                            const Divider(height: 1, indent: 72),
-                        itemBuilder: (context, index) {
-                          if (index >= state.items.length) {
-                            return const Padding(
-                              padding: EdgeInsets.all(16),
-                              child: Center(
-                                child: CircularProgressIndicator.adaptive(),
-                              ),
-                            );
-                          }
-                          final item = state.items[index];
-                          return _NotificationTile(item: item);
-                        },
+          ? StatusView.error(
+              message: state.error!,
+              onRetry: () =>
+                  ref.read(systemNotificationListProvider.notifier).refresh(),
+            )
+          : state.items.isEmpty
+          ? StatusView.empty(message: '暂无系统通知')
+          : RefreshIndicator(
+              onRefresh: () =>
+                  ref.read(systemNotificationListProvider.notifier).refresh(),
+              child: ListView.separated(
+                controller: _scrollController,
+                physics: const AlwaysScrollableScrollPhysics(),
+                itemCount: state.items.length + (state.isLoadingMore ? 1 : 0),
+                separatorBuilder: (context, index) =>
+                    const Divider(height: 1, indent: 72),
+                itemBuilder: (context, index) {
+                  if (index >= state.items.length) {
+                    return const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: Center(
+                        child: CircularProgressIndicator.adaptive(),
                       ),
-                    ),
+                    );
+                  }
+                  final item = state.items[index];
+                  return _NotificationTile(item: item);
+                },
+              ),
+            ),
     );
   }
 }
@@ -112,6 +110,7 @@ class _NotificationTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final iconData = _typeIcon(item.type);
     return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       leading: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -134,20 +133,36 @@ class _NotificationTile extends ConsumerWidget {
             ),
         ],
       ),
-      title: Text(
-        item.content.isEmpty ? '暂无内容' : item.content,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: TextStyle(
-          fontWeight: item.isRead ? FontWeight.w500 : FontWeight.w800,
-        ),
-      ),
-      subtitle: Column(
+      title: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Text(
+            _typeLabel(item.type),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: AppTheme.primaryColor,
+            ),
+          ),
           const SizedBox(height: 4),
           Text(
-            '${_typeLabel(item.type)} · ${item.publishAt}',
+            item.content.isEmpty ? '暂无内容' : item.content,
+            maxLines: 3,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 15,
+              height: 1.35,
+              color: AppTheme.textPrimary,
+              fontWeight: item.isRead ? FontWeight.w500 : FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            _formatNotificationTime(item.publishAt),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontSize: 12, color: AppTheme.textHint),
           ),
         ],
@@ -204,4 +219,28 @@ String _typeLabel(String type) {
     default:
       return '平台公告';
   }
+}
+
+String _formatNotificationTime(String raw) {
+  final value = raw.trim();
+  if (value.isEmpty) return '-';
+  final parsed = DateTime.tryParse(value);
+  if (parsed == null) return '-';
+  final now = DateTime.now();
+  final diff = now.difference(parsed);
+  if (!diff.isNegative) {
+    if (diff.inMinutes < 1) return '刚刚';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}分钟前';
+    if (diff.inHours < 24) return '${diff.inHours}小时前';
+    if (diff.inDays < 7) return '${diff.inDays}天前';
+  }
+
+  final month = parsed.month.toString().padLeft(2, '0');
+  final day = parsed.day.toString().padLeft(2, '0');
+  final hour = parsed.hour.toString().padLeft(2, '0');
+  final minute = parsed.minute.toString().padLeft(2, '0');
+  if (parsed.year == now.year) {
+    return '$month-$day $hour:$minute';
+  }
+  return '${parsed.year}-$month-$day $hour:$minute';
 }

@@ -9,10 +9,7 @@ import '../../services/system_notification_service.dart';
 class SystemNotificationDetailPage extends ConsumerStatefulWidget {
   final int notificationId;
 
-  const SystemNotificationDetailPage({
-    super.key,
-    required this.notificationId,
-  });
+  const SystemNotificationDetailPage({super.key, required this.notificationId});
 
   @override
   ConsumerState<SystemNotificationDetailPage> createState() =>
@@ -67,29 +64,15 @@ class _SystemNotificationDetailPageState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: [
-                    Icon(
-                      _typeIcon(detail.type),
-                      size: 16,
-                      color: AppTheme.textSecondary,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      _typeLabel(detail.type),
-                      style: const TextStyle(color: AppTheme.textSecondary),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        detail.publishAt,
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(color: AppTheme.textHint),
-                      ),
-                    ),
-                  ],
+                Text(
+                  _typeLabel(detail.type),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.primaryColor,
+                  ),
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 12),
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
@@ -107,26 +90,23 @@ class _SystemNotificationDetailPageState
                     ),
                   ),
                 ),
+                const SizedBox(height: 12),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    _formatNotificationTime(detail.publishAt),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppTheme.textHint,
+                    ),
+                  ),
+                ),
               ],
             ),
           );
         },
       ),
     );
-  }
-}
-
-IconData _typeIcon(String type) {
-  switch (type) {
-    case 'account':
-      return Icons.account_balance_wallet_outlined;
-    case 'review':
-      return Icons.fact_check_outlined;
-    case 'interaction':
-      return Icons.favorite_border_rounded;
-    case 'announcement':
-    default:
-      return Icons.campaign_outlined;
   }
 }
 
@@ -142,4 +122,28 @@ String _typeLabel(String type) {
     default:
       return '平台公告';
   }
+}
+
+String _formatNotificationTime(String raw) {
+  final value = raw.trim();
+  if (value.isEmpty) return '-';
+  final parsed = DateTime.tryParse(value);
+  if (parsed == null) return '-';
+  final now = DateTime.now();
+  final diff = now.difference(parsed);
+  if (!diff.isNegative) {
+    if (diff.inMinutes < 1) return '刚刚';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}分钟前';
+    if (diff.inHours < 24) return '${diff.inHours}小时前';
+    if (diff.inDays < 7) return '${diff.inDays}天前';
+  }
+
+  final month = parsed.month.toString().padLeft(2, '0');
+  final day = parsed.day.toString().padLeft(2, '0');
+  final hour = parsed.hour.toString().padLeft(2, '0');
+  final minute = parsed.minute.toString().padLeft(2, '0');
+  if (parsed.year == now.year) {
+    return '$month-$day $hour:$minute';
+  }
+  return '${parsed.year}-$month-$day $hour:$minute';
 }
