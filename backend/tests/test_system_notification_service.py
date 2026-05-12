@@ -218,3 +218,43 @@ async def test_admin_task_dump_is_json_serializable(monkeypatch: pytest.MonkeyPa
     assert data["next_run_at"] == "2026-05-12T18:00:00"
     assert data["created_at"] == "2026-05-12T17:00:00"
     assert data["estimated_count"] == 8
+
+
+@pytest.mark.asyncio
+async def test_admin_task_dump_normalizes_legacy_enum_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_estimate_target_count(**_: object) -> int:
+        return 8
+
+    monkeypatch.setattr("app.api.v1.notification.notification.estimate_target_count", fake_estimate_target_count)
+    task = SimpleNamespace(
+        id=3,
+        title="维护通知",
+        summary="今晚服务维护",
+        content="今晚 23:00 开始维护。",
+        type="NotificationType.ANNOUNCEMENT",
+        status="NotificationTaskStatus.SCHEDULED",
+        send_mode="NotificationSendMode.ONCE",
+        target_mode="NotificationTargetMode.ALL",
+        target_user_ids=[],
+        target_filters={},
+        publish_at=None,
+        repeat_type=None,
+        repeat_time=None,
+        repeat_weekday=None,
+        repeat_month_day=None,
+        start_at=None,
+        end_at=None,
+        max_runs=None,
+        run_count=0,
+        next_run_at=None,
+        last_run_at=None,
+        created_at=None,
+        updated_at=None,
+    )
+
+    data = await _dump_task(task)
+
+    assert data["type"] == "announcement"
+    assert data["status"] == "scheduled"
+    assert data["send_mode"] == "once"
+    assert data["target_mode"] == "all"

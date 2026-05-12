@@ -240,23 +240,6 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
               ),
             ),
           ),
-          const SliverToBoxAdapter(child: SizedBox(height: 24)),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: TextButton(
-                onPressed: () => _handleLogout(context, ref),
-                style: TextButton.styleFrom(
-                  foregroundColor: AppTheme.errorColor,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                child: const Text(
-                  '退出登录',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                ),
-              ),
-            ),
-          ),
           const SliverToBoxAdapter(child: SizedBox(height: 40)),
         ],
       ),
@@ -456,30 +439,5 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
           ),
       ],
     );
-  }
-
-  Future<void> _handleLogout(BuildContext context, WidgetRef ref) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('退出登录'),
-        content: const Text('确定要退出当前账号吗？'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('取消'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: AppTheme.errorColor),
-            child: const Text('退出'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
-      await ref.read(authProvider.notifier).logout();
-      if (context.mounted) context.go(AppRoutes.login);
-    }
   }
 }

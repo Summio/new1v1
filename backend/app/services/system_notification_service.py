@@ -44,6 +44,16 @@ def _scalar_value(value: Any, default: str = "") -> str:
     return str(value).strip()
 
 
+def normalize_notification_choice(value: Any, choices: set[str], default: str = "") -> str:
+    raw_value = _scalar_value(value, default)
+    if raw_value in choices:
+        return raw_value
+    legacy_value = raw_value.rsplit(".", 1)[-1].lower()
+    if legacy_value in choices:
+        return legacy_value
+    return raw_value
+
+
 def _normalize_target_filters(target_mode: str, raw_filters: dict[str, Any] | None) -> dict[str, Any] | None:
     if target_mode != "filter":
         return None
@@ -172,10 +182,10 @@ def validate_task_payload(data: dict[str, Any]) -> dict[str, Any]:
     title = str(data.get("title") or "").strip()
     summary = str(data.get("summary") or "").strip()
     content = str(data.get("content") or "").strip()
-    notification_type = _scalar_value(data.get("type"))
-    send_mode = _scalar_value(data.get("send_mode"), "immediate")
-    target_mode = _scalar_value(data.get("target_mode"), "all")
-    status = _scalar_value(data.get("status"), "draft")
+    notification_type = normalize_notification_choice(data.get("type"), NOTIFICATION_TYPES)
+    send_mode = normalize_notification_choice(data.get("send_mode"), SEND_MODES, "immediate")
+    target_mode = normalize_notification_choice(data.get("target_mode"), TARGET_MODES, "all")
+    status = normalize_notification_choice(data.get("status"), TASK_STATUSES, "draft")
 
     if not title or not summary or not content:
         raise NotificationValidationError("标题、摘要和正文不能为空")
@@ -200,7 +210,7 @@ def validate_task_payload(data: dict[str, Any]) -> dict[str, Any]:
         raise NotificationValidationError("一次性定时必须选择发布时间")
 
     if send_mode == "repeat":
-        repeat_type = _scalar_value(data.get("repeat_type"))
+        repeat_type = normalize_notification_choice(data.get("repeat_type"), REPEAT_TYPES)
         if repeat_type not in REPEAT_TYPES:
             raise NotificationValidationError("周期类型仅支持每日、每周、每月")
         _parse_repeat_time(data.get("repeat_time"))
@@ -221,7 +231,7 @@ def validate_task_payload(data: dict[str, Any]) -> dict[str, Any]:
             "target_user_ids": normalize_user_ids(data.get("target_user_ids")),
             "target_filters": target_filters,
             "status": status,
-            "repeat_type": _scalar_value(data.get("repeat_type")) or None,
+            "repeat_type": normalize_notification_choice(data.get("repeat_type"), REPEAT_TYPES) or None,
         }
     )
     return data

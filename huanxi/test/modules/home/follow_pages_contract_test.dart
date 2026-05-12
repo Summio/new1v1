@@ -65,6 +65,16 @@ void main() {
     expect(editProfilePage, contains('profileEditRestrictionMessage'));
   });
 
+  test('profile page does not expose logout entry', () {
+    final profilePage = File(
+      'lib/modules/home/profile_page.dart',
+    ).readAsStringSync();
+
+    expect(profilePage, isNot(contains('退出登录')));
+    expect(profilePage, isNot(contains('_handleLogout')));
+    expect(profilePage, isNot(contains('authProvider.notifier).logout')));
+  });
+
   test(
     'profile page guards certification center entry with capability limits',
     () {
