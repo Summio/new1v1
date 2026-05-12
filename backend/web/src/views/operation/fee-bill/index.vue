@@ -85,6 +85,18 @@ function handleDateRangeChange(value) {
   queryItems.value.end_time = formatTimestamp(value[1])
 }
 
+function getFeeBillList(params = {}) {
+  return api.getFeeBillList({
+    ...params,
+    biz_type: params.biz_type || undefined,
+    status: params.status || undefined,
+    user_id: params.user_id || undefined,
+    record_id: params.record_id || undefined,
+    start_time: params.start_time || undefined,
+    end_time: params.end_time || undefined,
+  })
+}
+
 const columns = [
   {
     title: '业务',
@@ -205,7 +217,7 @@ const columns = [
       ref="$table"
       v-model:query-items="queryItems"
       :columns="columns"
-      :get-data="api.getFeeBillList"
+      :get-data="getFeeBillList"
       :scroll-x="1490"
     >
       <template #queryBar>

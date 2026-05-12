@@ -577,6 +577,19 @@ async function fetchUserCallRecords() {
   }
 }
 
+function getAppUserList(params = {}) {
+  return api.getAppUserList({
+    ...params,
+    user_id: params.user_id || undefined,
+    phone: params.phone || undefined,
+    nickname: params.nickname || undefined,
+    status: params.status || undefined,
+    certification_status: params.certification_status || undefined,
+    gender: params.gender || undefined,
+    location_city: params.location_city || undefined,
+  })
+}
+
 async function handleSearchUserCallRecords() {
   callRecordPagination.page = 1
   await fetchUserCallRecords()
@@ -1008,7 +1021,7 @@ const columns = [
       ref="$table"
       v-model:query-items="queryItems"
       :columns="columns"
-      :get-data="api.getAppUserList"
+      :get-data="getAppUserList"
     >
       <template #queryBar>
         <QueryBarItem label="用户ID" :label-width="60">

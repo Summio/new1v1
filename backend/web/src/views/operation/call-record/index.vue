@@ -57,6 +57,20 @@ function formatDuration(seconds) {
   return `${sVal}秒`
 }
 
+function getCallRecordList(params = {}) {
+  return api.getCallRecordList({
+    ...params,
+    call_id: params.call_id || undefined,
+    user_id: params.user_id || undefined,
+    caller_id: params.caller_id || undefined,
+    callee_id: params.callee_id || undefined,
+    status: params.status || undefined,
+    end_reason: params.end_reason || undefined,
+    start_time: params.start_time || undefined,
+    end_time: params.end_time || undefined,
+  })
+}
+
 const columns = [
   { title: '通话ID', key: 'id', width: 90, align: 'center' },
   {
@@ -201,7 +215,7 @@ const columns = [
       ref="$table"
       v-model:query-items="queryItems"
       :columns="columns"
-      :get-data="api.getCallRecordList"
+      :get-data="getCallRecordList"
       :scroll-x="2010"
     >
       <template #queryBar>

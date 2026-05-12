@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 
 from fastapi import APIRouter, Query
 from tortoise.expressions import Q
@@ -7,6 +8,16 @@ from app.models import AppUser, CallRecord
 from app.schemas.base import Fail, SuccessExtra
 
 router = APIRouter()
+
+
+def _json_safe(value):
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, dict):
+        return {key: _json_safe(item) for key, item in value.items()}
+    return value
 
 
 def _parse_dt(dt_str: str, field_name: str) -> datetime:
@@ -64,7 +75,7 @@ async def list_call_record(
 
     data = []
     for row in records:
-        item = await row.to_dict()
+        item = _json_safe(await row.to_dict())
         caller = user_map.get(int(row.caller_id))
         callee = user_map.get(int(row.callee_id))
         item["caller_phone"] = caller.phone if caller else ""
