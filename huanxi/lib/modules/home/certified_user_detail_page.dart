@@ -16,7 +16,21 @@ import 'package:huanxi/core/utils/app_toast.dart';
 import 'moment_media_grid.dart';
 import 'moment_image_preview_page.dart';
 import 'moment_video_preview_page.dart';
+import 'main_shell.dart';
 import 'user_more_actions.dart';
+
+Color _availabilityColor(String status) {
+  switch (status) {
+    case 'online':
+      return AppTheme.onlineGreen;
+    case 'busy':
+      return const Color(0xFFFF3B30);
+    case 'dnd':
+      return const Color(0xFFAF52DE);
+    default:
+      return AppTheme.offlineGray;
+  }
+}
 
 /// 认证用户详情页 (Momo 风格)
 class CertifiedUserDetailPage extends ConsumerStatefulWidget {
@@ -41,6 +55,7 @@ class _CertifiedUserDetailPageState
   bool _blockedMe = false;
   bool _interactionBlocked = false;
   String? _error;
+  StreamSubscription<PresenceEvent>? _presenceSubscription;
 
   CertifiedUserInfo? get _resolvedCertifiedUser =>
       _certifiedUser ?? widget.certifiedUser;
@@ -49,7 +64,30 @@ class _CertifiedUserDetailPageState
   void initState() {
     super.initState();
     _certifiedUser = widget.certifiedUser;
+    _presenceSubscription = MainShell.presenceStream.listen(
+      _handlePresenceEvent,
+    );
     _loadProfile();
+  }
+
+  @override
+  void dispose() {
+    _presenceSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _handlePresenceEvent(PresenceEvent event) {
+    final current = _resolvedCertifiedUser;
+    if (!mounted || current == null || current.userId != event.userId) return;
+    setState(() {
+      _certifiedUser = current.copyWith(
+        isOnline: event.online,
+        isBusy: event.isBusy,
+        videoDndEnabled: event.videoDndEnabled,
+        availabilityStatus: event.availabilityStatus,
+        availabilityLabel: event.availabilityLabel,
+      );
+    });
   }
 
   Future<void> _openIm({required CertifiedUserInfo certifiedUser}) async {
@@ -528,14 +566,15 @@ class _CertifiedUserDetailPageState
                           ),
                         ),
                         Container(
+                          // 状态必须同时显示颜色和文字，不能只依赖色点。
                           padding: const EdgeInsets.symmetric(
                             horizontal: 12,
                             vertical: 6,
                           ),
                           decoration: BoxDecoration(
-                            color: (certifiedUser.isOnline ?? false)
-                                ? AppTheme.onlineGreen.withValues(alpha: 0.1)
-                                : AppTheme.offlineGray.withValues(alpha: 0.1),
+                            color: _availabilityColor(
+                              certifiedUser.availabilityStatus,
+                            ).withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Row(
@@ -544,19 +583,19 @@ class _CertifiedUserDetailPageState
                                 width: 8,
                                 height: 8,
                                 decoration: BoxDecoration(
-                                  color: (certifiedUser.isOnline ?? false)
-                                      ? AppTheme.onlineGreen
-                                      : AppTheme.offlineGray,
+                                  color: _availabilityColor(
+                                    certifiedUser.availabilityStatus,
+                                  ),
                                   shape: BoxShape.circle,
                                 ),
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                (certifiedUser.isOnline ?? false) ? '在线' : '离线',
+                                certifiedUser.availabilityLabel,
                                 style: TextStyle(
-                                  color: (certifiedUser.isOnline ?? false)
-                                      ? AppTheme.onlineGreen
-                                      : AppTheme.textSecondary,
+                                  color: _availabilityColor(
+                                    certifiedUser.availabilityStatus,
+                                  ),
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -664,8 +703,7 @@ class _CertifiedUserDetailPageState
                         child: Tooltip(
                           message: _isFollowing ? '取消关注' : '关注',
                           child: OutlinedButton(
-                            onPressed: _isFollowLoading
-                                || _interactionBlocked
+                            onPressed: _isFollowLoading || _interactionBlocked
                                 ? null
                                 : () => _toggleFollow(certifiedUser),
                             style: OutlinedButton.styleFrom(

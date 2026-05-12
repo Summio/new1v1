@@ -6,6 +6,10 @@ from tortoise.expressions import Q
 from app.core.ctx import CTX_APP_USER_ID
 from app.models import AppUser
 from app.schemas.base import SuccessExtra
+from app.services.user_availability_service import (
+    build_availability_payload_map,
+    resolve_availability_payload,
+)
 from app.services.user_block_service import exclude_blocked_user_ids
 from app.utils.media_url import normalize_media_list, to_relative_media_url
 
@@ -171,9 +175,19 @@ async def certified_user_list(
 
     from app.websocket.presence import is_online as _is_online_user
 
+    online_ids: set[int] = set()
+    for user in users:
+        if await _is_online_user(int(user.id)):
+            online_ids.add(int(user.id))
+    availability_payloads = await build_availability_payload_map(users, online_ids=online_ids)
+
     rows = []
     for user in users:
-        is_online = await _is_online_user(int(user.id))
+        user_id = int(user.id)
+        availability_payload = availability_payloads.get(
+            user_id,
+            resolve_availability_payload(user, is_online=False, is_busy=False),
+        )
         rows.append(
             {
                 "id": user.id,
@@ -191,7 +205,7 @@ async def certified_user_list(
                 "intro": user.certified_intro or "",
                 "tags": _normalize_certified_tags(user.certified_tags),
                 "call_price": int(user.certified_call_price or 0),
-                "is_online": is_online,
+                **availability_payload,
                 "status": user.status or "normal",
                 "is_certified_user": bool(user.is_certified_user),
                 "is_recommended": bool(user.is_recommended),

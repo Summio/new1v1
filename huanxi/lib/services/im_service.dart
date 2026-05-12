@@ -500,6 +500,9 @@ class IMService {
     }
     final trace = parseCallTraceMessage(message);
     if (trace != null) {
+      if (!trace.isFinalResult) {
+        return '';
+      }
       return trace.toDisplayText(currentUserId: currentUserId);
     }
     final text = message?.textElem?.text?.trim() ?? '';

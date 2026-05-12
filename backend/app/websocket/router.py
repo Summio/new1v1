@@ -21,7 +21,10 @@ from app.core.call_presence import update_last_seen
 from app.core.call_watchdog import process_ongoing_call_billing_once
 from app.log import logger
 from app.models import CallRecord
-from app.services.balance_event_service import maybe_push_call_balance_low_for_user, publish_balance_changed
+from app.services.balance_event_service import (
+    maybe_push_call_balance_low_for_user,
+    publish_balance_changed,
+)
 from app.websocket import events as ws_events
 from app.websocket.manager import get_manager
 
@@ -281,6 +284,12 @@ async def _handle_call_heartbeat_message(*, user_id: int, msg: dict[str, Any]) -
                 call_id=int(ended_record.id),
                 end_reason=ended_record.end_reason or "normal",
             )
+        await ws_events.push_presence_for_users(
+            {
+                int(ended_record.caller_id),
+                int(ended_record.callee_id),
+            }
+        )
         return CallHeartbeatResult(
             ok=False,
             end_event={

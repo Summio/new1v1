@@ -93,6 +93,36 @@ class MyFollowingNotifier extends StateNotifier<MyFollowingState> {
     );
   }
 
+  void applyAvailabilityUpdate({
+    required int userId,
+    required bool online,
+    required bool isBusy,
+    required bool videoDndEnabled,
+    required String availabilityStatus,
+    required String availabilityLabel,
+  }) {
+    var changed = false;
+    final nextUsers = state.users
+        .map((item) {
+          if (item.user.userId != userId) return item;
+          changed = true;
+          return FollowingUserItem(
+            user: item.user.copyWith(
+              isOnline: online,
+              isBusy: isBusy,
+              videoDndEnabled: videoDndEnabled,
+              availabilityStatus: availabilityStatus,
+              availabilityLabel: availabilityLabel,
+            ),
+            followedAt: item.followedAt,
+            blockedAt: item.blockedAt,
+          );
+        })
+        .toList(growable: false);
+    if (!changed) return;
+    state = state.copyWith(users: nextUsers, error: null);
+  }
+
   Future<void> _fetch({required bool refresh, String? keyword}) async {
     if (state.isLoading || state.isLoadingMore) return;
     if (!refresh && !state.hasMore) return;

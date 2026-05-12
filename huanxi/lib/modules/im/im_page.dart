@@ -203,6 +203,9 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
       }
 
       final trace = _imService.parseCallTraceMessage(message);
+      if (trace != null && !trace.isFinalResult) {
+        return;
+      }
       final giftNotify = _imService.parseGiftNotifyMessage(message);
       final text = (message?.textElem?.text as String?)?.trim() ?? '';
       if (trace == null && giftNotify == null && text.isEmpty) return;
@@ -385,6 +388,9 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
           _messageIds.add(msgId);
         }
         final trace = _imService.parseCallTraceMessage(msg);
+        if (trace != null && !trace.isFinalResult) {
+          continue;
+        }
         final giftNotify = _imService.parseGiftNotifyMessage(msg);
         final text = msg.textElem?.text?.trim() ?? '';
         if (trace == null && giftNotify == null && text.isEmpty) continue;

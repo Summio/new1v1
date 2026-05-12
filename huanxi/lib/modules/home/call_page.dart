@@ -190,6 +190,7 @@ class _CallPageState extends ConsumerState<CallPage> {
     for (final message in messages) {
       final trace = _imService.parseCallTraceMessage(message);
       if (trace == null) continue;
+      if (!trace.isFinalResult) continue;
       if (seenEventIds.contains(trace.eventId)) continue;
       seenEventIds.add(trace.eventId);
       records.add(

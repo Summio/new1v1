@@ -1,11 +1,27 @@
+import 'dart:async';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'dart:typed_data';
 import '../../app/routes/app_router.dart';
 import '../../app/providers/certified_user_provider.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/widgets/status_view.dart';
+import 'main_shell.dart';
+
+Color availabilityColor(String status) {
+  switch (status) {
+    case 'online':
+      return AppTheme.onlineGreen;
+    case 'busy':
+      return const Color(0xFFFF3B30);
+    case 'dnd':
+      return const Color(0xFFAF52DE);
+    default:
+      return Colors.grey;
+  }
+}
 
 String _sectionForIndex(int index) {
   switch (index) {
@@ -62,7 +78,9 @@ class _HomePageState extends ConsumerState<HomePage>
   void _selectCategory(int index, {required bool animatePage}) {
     if (_currentIndex != index) {
       setState(() => _currentIndex = index);
-      ref.read(certifiedUserListProvider.notifier).setSection(_sectionForIndex(index));
+      ref
+          .read(certifiedUserListProvider.notifier)
+          .setSection(_sectionForIndex(index));
     }
 
     if (_tabController.index != index) {
@@ -187,26 +205,46 @@ class _CertifiedUserListPage extends ConsumerStatefulWidget {
   });
 
   @override
-  ConsumerState<_CertifiedUserListPage> createState() => _CertifiedUserListPageState();
+  ConsumerState<_CertifiedUserListPage> createState() =>
+      _CertifiedUserListPageState();
 }
 
-class _CertifiedUserListPageState extends ConsumerState<_CertifiedUserListPage> {
+class _CertifiedUserListPageState
+    extends ConsumerState<_CertifiedUserListPage> {
   static const Duration _contentFadeDuration = Duration(milliseconds: 180);
 
   late ScrollController _scrollController;
+  StreamSubscription<PresenceEvent>? _presenceSubscription;
 
   @override
   void initState() {
     super.initState();
     _scrollController = ScrollController();
     _scrollController.addListener(_onScroll);
+    _presenceSubscription = MainShell.presenceStream.listen(
+      _handlePresenceEvent,
+    );
   }
 
   @override
   void dispose() {
+    _presenceSubscription?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  void _handlePresenceEvent(PresenceEvent event) {
+    ref
+        .read(certifiedUserListProvider.notifier)
+        .applyAvailabilityUpdate(
+          userId: event.userId,
+          online: event.online,
+          isBusy: event.isBusy,
+          videoDndEnabled: event.videoDndEnabled,
+          availabilityStatus: event.availabilityStatus,
+          availabilityLabel: event.availabilityLabel,
+        );
   }
 
   void _onScroll() {
@@ -226,9 +264,11 @@ class _CertifiedUserListPageState extends ConsumerState<_CertifiedUserListPage> 
     Widget content;
     if (!isCurrentSection) {
       content = StatusView.loading();
-    } else if (certifiedUserState.isLoading && certifiedUserState.certifiedUsers.isEmpty) {
+    } else if (certifiedUserState.isLoading &&
+        certifiedUserState.certifiedUsers.isEmpty) {
       content = StatusView.loading();
-    } else if (certifiedUserState.error != null && certifiedUserState.certifiedUsers.isEmpty) {
+    } else if (certifiedUserState.error != null &&
+        certifiedUserState.certifiedUsers.isEmpty) {
       content = StatusView.error(
         message: certifiedUserState.error!,
         onRetry: () => ref.read(certifiedUserListProvider.notifier).refresh(),
@@ -363,7 +403,10 @@ class _CertifiedUserCardState extends State<_CertifiedUserCard> {
     if (_isNavigating) return;
     _isNavigating = true;
     try {
-      await context.push(AppRoutes.certifiedUserDetail, extra: widget.certifiedUser);
+      await context.push(
+        AppRoutes.certifiedUserDetail,
+        extra: widget.certifiedUser,
+      );
     } finally {
       if (mounted) {
         _isNavigating = false;
@@ -374,7 +417,9 @@ class _CertifiedUserCardState extends State<_CertifiedUserCard> {
   @override
   Widget build(BuildContext context) {
     final certifiedUser = widget.certifiedUser;
-    final isOnline = certifiedUser.isOnline ?? false;
+    final availabilityStatus = certifiedUser.availabilityStatus;
+    final statusColor = availabilityColor(availabilityStatus);
+    final statusLabel = certifiedUser.availabilityLabel;
     final coverUrl = certifiedUser.coverUrl?.trim() ?? '';
 
     return GestureDetector(
@@ -466,15 +511,13 @@ class _CertifiedUserCardState extends State<_CertifiedUserCard> {
                           width: 6,
                           height: 6,
                           decoration: BoxDecoration(
-                            color: isOnline
-                                ? AppTheme.onlineGreen
-                                : Colors.grey,
+                            color: statusColor,
                             shape: BoxShape.circle,
                           ),
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          isOnline ? '在线' : '离线',
+                          statusLabel,
                           style: const TextStyle(
                             color: Colors.black,
                             fontSize: 9,

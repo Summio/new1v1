@@ -27,6 +27,15 @@ class CallTraceMessage {
   final double certifiedUserIncomeDiamonds;
   final String? reason;
 
+  bool get isFinalResult => const <String>{
+    'rejected',
+    'cancelled',
+    'ended',
+    'timeout',
+    'balance_empty',
+    'force_exit',
+  }.contains(phase);
+
   const CallTraceMessage({
     required this.eventId,
     required this.callId,

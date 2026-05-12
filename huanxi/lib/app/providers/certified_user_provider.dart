@@ -21,6 +21,10 @@ class CertifiedUserInfo {
   final String? certifiedIntro;
   final double? callPrice;
   final bool? isOnline;
+  final bool isBusy;
+  final bool videoDndEnabled;
+  final String availabilityStatus;
+  final String availabilityLabel;
   final String? lastActive;
   final String? status;
   final bool isCertifiedUser;
@@ -45,6 +49,10 @@ class CertifiedUserInfo {
     this.certifiedIntro,
     this.callPrice,
     this.isOnline,
+    this.isBusy = false,
+    this.videoDndEnabled = false,
+    String? availabilityStatus,
+    String? availabilityLabel,
     this.lastActive,
     this.status,
     this.isCertifiedUser = true,
@@ -52,7 +60,10 @@ class CertifiedUserInfo {
     this.blockedByMe = false,
     this.blockedMe = false,
     this.interactionBlocked = false,
-  });
+  }) : availabilityStatus =
+           availabilityStatus ?? ((isOnline ?? false) ? 'online' : 'offline'),
+       availabilityLabel =
+           availabilityLabel ?? ((isOnline ?? false) ? '在线' : '离线');
 
   factory CertifiedUserInfo.fromJson(Map<String, dynamic> json) {
     final rawAlbum = json['album_photos'];
@@ -63,6 +74,20 @@ class CertifiedUserInfo {
               .where((item) => item.isNotEmpty)
               .toList()
         : const <String>[];
+    final isOnline = json['is_online'] as bool?;
+    final rawStatus = (json['availability_status'] as String?)?.trim();
+    final fallbackStatus = (isOnline ?? false) ? 'online' : 'offline';
+    final availabilityStatus =
+        rawStatus == 'online' ||
+            rawStatus == 'busy' ||
+            rawStatus == 'dnd' ||
+            rawStatus == 'offline'
+        ? rawStatus!
+        : fallbackStatus;
+    final rawLabel = (json['availability_label'] as String?)?.trim();
+    final availabilityLabel = rawLabel?.isNotEmpty == true
+        ? rawLabel!
+        : _availabilityLabelForStatus(availabilityStatus);
     return CertifiedUserInfo(
       id: json['id'] as int,
       userId: json['user_id'] as int,
@@ -78,7 +103,12 @@ class CertifiedUserInfo {
       signature: (json['signature'] as String?)?.trim(),
       certifiedIntro: (json['intro'] ?? json['certified_intro']) as String?,
       callPrice: (json['call_price'] as num?)?.toDouble(),
-      isOnline: json['is_online'] as bool?,
+      isOnline: isOnline,
+      isBusy: json['is_busy'] as bool? ?? availabilityStatus == 'busy',
+      videoDndEnabled:
+          json['video_dnd_enabled'] as bool? ?? availabilityStatus == 'dnd',
+      availabilityStatus: availabilityStatus,
+      availabilityLabel: availabilityLabel,
       lastActive: json['last_active'] as String?,
       status: json['status'] as String?,
       isCertifiedUser: json['is_certified_user'] as bool? ?? true,
@@ -86,6 +116,58 @@ class CertifiedUserInfo {
       blockedByMe: json['blocked_by_me'] as bool? ?? false,
       blockedMe: json['blocked_me'] as bool? ?? false,
       interactionBlocked: json['interaction_blocked'] as bool? ?? false,
+    );
+  }
+
+  static String _availabilityLabelForStatus(String status) {
+    switch (status) {
+      case 'online':
+        return '在线';
+      case 'busy':
+        return '忙碌';
+      case 'dnd':
+        return '勿扰';
+      default:
+        return '离线';
+    }
+  }
+
+  CertifiedUserInfo copyWith({
+    bool? isOnline,
+    bool? isBusy,
+    bool? videoDndEnabled,
+    String? availabilityStatus,
+    String? availabilityLabel,
+  }) {
+    final nextStatus = availabilityStatus ?? this.availabilityStatus;
+    return CertifiedUserInfo(
+      id: id,
+      userId: userId,
+      avatar: avatar,
+      coverUrl: coverUrl,
+      albumPhotos: albumPhotos,
+      username: username,
+      gender: gender,
+      birthDate: birthDate,
+      heightCm: heightCm,
+      weightKg: weightKg,
+      locationCity: locationCity,
+      signature: signature,
+      certifiedIntro: certifiedIntro,
+      callPrice: callPrice,
+      isOnline: isOnline ?? this.isOnline,
+      isBusy: isBusy ?? this.isBusy,
+      videoDndEnabled: videoDndEnabled ?? this.videoDndEnabled,
+      availabilityStatus: nextStatus,
+      availabilityLabel:
+          availabilityLabel ?? _availabilityLabelForStatus(nextStatus),
+      lastActive: lastActive,
+      status: status,
+      isCertifiedUser: isCertifiedUser,
+      diamonds: diamonds,
+      blockedByMe: blockedByMe,
+      blockedMe: blockedMe,
+      interactionBlocked: interactionBlocked,
     );
   }
 }
@@ -182,7 +264,9 @@ class CertifiedUserListNotifier extends StateNotifier<CertifiedUserListState> {
       }
 
       state = state.copyWith(
-        certifiedUsers: refresh ? newCertifiedUsers : [...state.certifiedUsers, ...newCertifiedUsers],
+        certifiedUsers: refresh
+            ? newCertifiedUsers
+            : [...state.certifiedUsers, ...newCertifiedUsers],
         isLoading: false,
         hasMore: hasMore,
         currentPage: page + 1,
@@ -201,11 +285,38 @@ class CertifiedUserListNotifier extends StateNotifier<CertifiedUserListState> {
 
   /// 加载更多
   Future<void> loadMore() => fetchCertifiedUsers(refresh: false);
+
+  void applyAvailabilityUpdate({
+    required int userId,
+    required bool online,
+    required bool isBusy,
+    required bool videoDndEnabled,
+    required String availabilityStatus,
+    required String availabilityLabel,
+  }) {
+    var changed = false;
+    final nextUsers = state.certifiedUsers
+        .map((item) {
+          if (item.userId != userId) return item;
+          changed = true;
+          return item.copyWith(
+            isOnline: online,
+            isBusy: isBusy,
+            videoDndEnabled: videoDndEnabled,
+            availabilityStatus: availabilityStatus,
+            availabilityLabel: availabilityLabel,
+          );
+        })
+        .toList(growable: false);
+    if (!changed) return;
+    state = state.copyWith(certifiedUsers: nextUsers);
+  }
 }
 
 /// 认证用户列表 Provider
 final certifiedUserListProvider =
-    StateNotifierProvider<CertifiedUserListNotifier, CertifiedUserListState>((ref) {
+    StateNotifierProvider<CertifiedUserListNotifier, CertifiedUserListState>((
+      ref,
+    ) {
       return CertifiedUserListNotifier(DioClient.instance);
     });
-

@@ -432,6 +432,7 @@ async def _close_timeout_pending(config: WatchdogConfig) -> None:
             )
             # 推送 WebSocket 事件
             asyncio.create_task(_ws_push_call_timeout(call_record))
+            asyncio.create_task(_ws_push_presence_updates(call_record))
 
 
 async def _close_stale_ongoing(config: WatchdogConfig) -> None:
@@ -497,6 +498,7 @@ async def _close_stale_ongoing(config: WatchdogConfig) -> None:
                 **trace_args,
             )
             asyncio.create_task(_ws_push_call_force_exit(call_record))
+            asyncio.create_task(_ws_push_presence_updates(call_record))
             continue
 
         await trace_service.append(
@@ -505,6 +507,7 @@ async def _close_stale_ongoing(config: WatchdogConfig) -> None:
         )
         # 推送 WebSocket 事件
         asyncio.create_task(_ws_push_call_balance_empty(call_record))
+        asyncio.create_task(_ws_push_presence_updates(call_record))
 
     # 推送成功扣费的余额更新（fire-and-forget）
     for call_record, payer_id in charged_records:
@@ -904,6 +907,21 @@ async def _ws_push_call_force_exit(call_record: CallRecord) -> None:
         )
     except Exception as e:  # noqa: BLE001
         logger.warning("ws push force_exit failed: {}", str(e))
+
+
+async def _ws_push_presence_updates(call_record: CallRecord) -> None:
+    """推送通话状态变化后的在线可用状态（fire-and-forget）。"""
+    try:
+        from app.websocket import events as ws_events
+
+        await ws_events.push_presence_for_users(
+            {
+                int(call_record.caller_id),
+                int(call_record.callee_id),
+            }
+        )
+    except Exception as e:  # noqa: BLE001
+        logger.warning("ws push presence updates failed: {}", str(e))
 
 
 async def _ws_push_balance_updated_for_charge(payer_id: int) -> None:

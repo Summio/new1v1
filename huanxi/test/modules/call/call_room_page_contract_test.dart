@@ -62,6 +62,22 @@ void main() {
     expect(text, contains("_asInt(event.data['call_id'])"));
   });
 
+  test('IM and call record pages filter non-final call traces', () {
+    final imPageText = File(
+      'lib/modules/im/im_page.dart',
+    ).readAsStringSync().replaceAll('\r\n', '\n');
+    final callPageText = File(
+      'lib/modules/home/call_page.dart',
+    ).readAsStringSync().replaceAll('\r\n', '\n');
+    final imServiceText = File(
+      'lib/services/im_service.dart',
+    ).readAsStringSync().replaceAll('\r\n', '\n');
+
+    expect(imPageText, contains('trace != null && !trace.isFinalResult'));
+    expect(callPageText, contains('!trace.isFinalResult'));
+    expect(imServiceText, contains('!trace.isFinalResult'));
+  });
+
   test(
     'call room dispose releases rtc without provider state notification',
     () {

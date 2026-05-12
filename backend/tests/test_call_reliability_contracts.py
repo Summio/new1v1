@@ -50,6 +50,42 @@ def test_call_accepted_is_pushed_as_critical_event() -> None:
     assert "critical=True" in accepted_source
 
 
+def test_call_api_does_not_send_non_final_trace_phases() -> None:
+    source = _read(CALL_API)
+    dialing_source = source.split("async def dialing(req_in: DialingIn):", 1)[1].split(
+        "async def accept_call(req_in: CallActionIn):",
+        1,
+    )[0]
+    accept_source = source.split("async def accept_call(req_in: CallActionIn):", 1)[1].split(
+        "async def reject_call(req_in: CallActionIn):",
+        1,
+    )[0]
+
+    assert 'phase="dialing"' not in dialing_source
+    assert 'phase="accepted"' not in accept_source
+
+
+def test_call_api_still_sends_final_trace_phases() -> None:
+    source = _read(CALL_API)
+    reject_source = source.split("async def reject_call(req_in: CallActionIn):", 1)[1].split(
+        "async def cancel_call(req_in: CallActionIn):",
+        1,
+    )[0]
+    cancel_source = source.split("async def cancel_call(req_in: CallActionIn):", 1)[1].split(
+        '@router.post("/call/end"',
+        1,
+    )[0]
+    end_source = source.split("async def call_end(req_in: CallEndIn):", 1)[1].split(
+        "# ===== WebSocket 推送辅助函数",
+        1,
+    )[0]
+
+    assert 'phase="rejected"' in reject_source
+    assert 'phase="cancelled"' in cancel_source
+    assert 'phase="ended"' in end_source
+    assert 'phase="balance_empty"' in source
+
+
 @pytest.mark.asyncio
 async def test_call_heartbeat_broadcasts_end_event_when_billing_closes_call(monkeypatch: pytest.MonkeyPatch) -> None:
     from types import SimpleNamespace

@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import asyncio
 
+from app.services.user_availability_service import build_user_availability_event_payload
 from app.websocket.manager import get_manager
+from app.websocket.presence import get_online_user_ids
 
 # ===== 类型别名 =====
 
@@ -229,12 +231,42 @@ async def push_presence(
     user_id: int,
     online: bool,
 ) -> PushResult:
-    """推送用户在线/离线状态变更。"""
-    data = {
-        "user_id": int(user_id),
-        "online": bool(online),
-    }
-    return await get_manager().push_to_user(int(user_id), "presence", data, critical=True)
+    """广播用户在线可用状态变更给当前在线用户。"""
+    data = await build_user_availability_event_payload(int(user_id))
+    target_user_ids = sorted(await get_online_user_ids())
+    if not target_user_ids:
+        return True
+    results = await asyncio.gather(
+        *[
+            get_manager().push_to_user(int(target_user_id), "presence", data, critical=True)
+            for target_user_id in target_user_ids
+        ],
+        return_exceptions=True,
+    )
+    return all(result is True for result in results)
+
+
+async def push_presence_for_users(user_ids: list[int] | tuple[int, ...] | set[int]) -> PushResult:
+    """逐个广播多个用户的在线可用状态，失败不影响调用方主流程。"""
+    normalized_ids: list[int] = []
+    seen: set[int] = set()
+    for raw_user_id in user_ids:
+        try:
+            user_id = int(raw_user_id)
+        except (TypeError, ValueError):
+            continue
+        if user_id <= 0 or user_id in seen:
+            continue
+        seen.add(user_id)
+        normalized_ids.append(user_id)
+
+    ok = True
+    for user_id in normalized_ids:
+        try:
+            ok = bool(await push_presence(user_id=user_id, online=True)) and ok
+        except Exception:  # noqa: BLE001
+            ok = False
+    return ok
 
 
 async def push_system_notification_unread_changed(

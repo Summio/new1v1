@@ -76,6 +76,7 @@ async def _mark_timeout_if_needed(call_record: CallRecord) -> bool:
             actor_user_id=int(call_record.caller_id),
             reason="timeout",
         )
+        _schedule_presence_updates([int(call_record.caller_id), int(call_record.callee_id)])
         return True
     return False
 
@@ -129,6 +130,17 @@ def _schedule_call_trace(
             reason=reason,
         )
     )
+
+
+def _schedule_presence_updates(user_ids) -> None:
+    async def _push() -> None:
+        try:
+            normalized_ids = {int(user_id) for user_id in user_ids if int(user_id) > 0}
+            await ws_events.push_presence_for_users(normalized_ids)
+        except Exception:  # noqa: BLE001
+            pass
+
+    asyncio.create_task(_push())
 
 
 async def _get_reject_inbound_protect_seconds() -> int:
@@ -392,11 +404,6 @@ async def dialing(req_in: DialingIn):
         else f"用户{target_user.id}"
     )
     callee_avatar = to_relative_media_url(callee_user.avatar) if callee_user else None
-    await _append_call_trace(
-        call_record,
-        phase="dialing",
-        actor_user_id=int(caller_id),
-    )
     # 推送 WebSocket 来电通知给被叫方（fire-and-forget）
     asyncio.create_task(
         _ws_push_call_incoming(
@@ -409,6 +416,7 @@ async def dialing(req_in: DialingIn):
             left_seconds=CALL_RING_TIMEOUT_SECONDS,
         )
     )
+    _schedule_presence_updates([int(caller_id), int(target_user.id)])
 
     return Success(
         data=DialingOut(
@@ -429,7 +437,6 @@ async def dialing(req_in: DialingIn):
 @router.post("/call/accept", summary="接听通话", dependencies=[Depends(DependAppAuth)])
 async def accept_call(req_in: CallActionIn):
     user_id = CTX_APP_USER_ID.get()
-    trace_call_record: CallRecord | None = None
 
     # 事务包裹 + SELECT FOR UPDATE：防止并发接听导致多重计费
     async with in_transaction() as conn:
@@ -478,7 +485,6 @@ async def accept_call(req_in: CallActionIn):
                 call_record.force_exit_user_id = None
                 call_record.payer_user_id = payer_user_id
                 await call_record.save(using_db=conn)
-                trace_call_record = call_record
                 asyncio.create_task(
                     _ws_push_call_balance_empty(
                         caller_id=int(call_record.caller_id),
@@ -492,6 +498,7 @@ async def accept_call(req_in: CallActionIn):
                     actor_user_id=int(user_id),
                     reason="balance_empty",
                 )
+                _schedule_presence_updates([int(call_record.caller_id), int(call_record.callee_id)])
                 return Fail(code=501, msg="余额不足，请先充值")
 
         call_record.status = "ongoing"
@@ -512,7 +519,6 @@ async def accept_call(req_in: CallActionIn):
             await get_call_service_fee_config(),
         )
         await call_record.save(using_db=conn)
-        trace_call_record = call_record
         # 推送 WebSocket 事件给主叫方（fire-and-forget）
         asyncio.create_task(
             _ws_push_call_accepted(
@@ -521,12 +527,7 @@ async def accept_call(req_in: CallActionIn):
             )
         )
 
-    if trace_call_record:
-        _schedule_call_trace(
-            trace_call_record,
-            phase="accepted",
-            actor_user_id=int(user_id),
-        )
+    _schedule_presence_updates([int(call_record.caller_id), int(call_record.callee_id)])
 
     return Success(
         data=CallActionOut(next_status="ongoing", msg="已接听").model_dump(),
@@ -568,6 +569,7 @@ async def reject_call(req_in: CallActionIn):
         )
 
     if trace_call_record:
+        _schedule_presence_updates([int(trace_call_record.caller_id), int(trace_call_record.callee_id)])
         _schedule_call_trace(
             trace_call_record,
             phase="rejected",
@@ -615,6 +617,7 @@ async def cancel_call(req_in: CallActionIn):
         )
 
     if trace_call_record:
+        _schedule_presence_updates([int(trace_call_record.caller_id), int(trace_call_record.callee_id)])
         _schedule_call_trace(
             trace_call_record,
             phase="cancelled",
@@ -795,6 +798,7 @@ async def call_end(req_in: CallEndIn):
             )
         )
     if trace_call_record:
+        _schedule_presence_updates([int(trace_call_record.caller_id), int(trace_call_record.callee_id)])
         _schedule_call_trace(
             trace_call_record,
             phase="ended",

@@ -21,8 +21,30 @@ void main() {
     expect(trace, isNotNull);
     expect(trace!.callId, 101);
     expect(trace.phase, 'dialing');
+    expect(trace.isFinalResult, isFalse);
     expect(trace.toDisplayText(currentUserId: 1001), '你发起了视频通话');
     expect(trace.toDisplayText(currentUserId: 2002), '对方发起了视频通话');
+  });
+
+  test('CallTraceMessage keeps accepted parseable but not final', () {
+    final trace = CallTraceMessage.fromJsonMap({
+      'protocol': 'call_trace.v1',
+      'event_id': 'call:trace:101:accepted',
+      'call_id': 101,
+      'phase': 'accepted',
+      'actor_user_id': 2002,
+      'peer_user_id': 1001,
+      'ts': 1720000000,
+      'duration_seconds': 0,
+      'total_fee_coins': 0,
+      'income_certified_user_id': 2002,
+      'certified_user_income_diamonds': 50,
+      'reason': null,
+    });
+
+    expect(trace, isNotNull);
+    expect(trace!.phase, 'accepted');
+    expect(trace.isFinalResult, isFalse);
   });
 
   test('CallTraceMessage.fromJsonMap returns null for invalid protocol', () {
@@ -61,7 +83,8 @@ void main() {
     });
 
     expect(trace, isNotNull);
-    expect(trace!.toDisplayText(currentUserId: 1001), '对方已拒绝视频通话');
+    expect(trace!.isFinalResult, isTrue);
+    expect(trace.toDisplayText(currentUserId: 1001), '对方已拒绝视频通话');
   });
 
   test('detailText shows income for certified user view', () {
@@ -156,7 +179,38 @@ void main() {
     });
 
     expect(trace, isNotNull);
-    expect(trace!.toDisplayText(currentUserId: 1001), '你已离开，通话已结束');
+    expect(trace!.isFinalResult, isTrue);
+    expect(trace.toDisplayText(currentUserId: 1001), '你已离开，通话已结束');
+  });
+
+  test('CallTraceMessage final result phases are explicit', () {
+    const finalPhases = <String>{
+      'rejected',
+      'cancelled',
+      'ended',
+      'timeout',
+      'balance_empty',
+      'force_exit',
+    };
+    for (final phase in CallTraceMessage.validPhases) {
+      final trace = CallTraceMessage.fromJsonMap({
+        'protocol': 'call_trace.v1',
+        'event_id': 'call:trace:101:$phase',
+        'call_id': 101,
+        'phase': phase,
+        'actor_user_id': 1001,
+        'peer_user_id': 2002,
+        'ts': 1720000000,
+        'duration_seconds': 0,
+        'total_fee_coins': 0,
+        'income_certified_user_id': 0,
+        'certified_user_income_diamonds': 0,
+        'reason': phase,
+      });
+
+      expect(trace, isNotNull);
+      expect(trace!.isFinalResult, finalPhases.contains(phase));
+    }
   });
 }
 

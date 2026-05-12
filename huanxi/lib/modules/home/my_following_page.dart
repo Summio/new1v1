@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -9,6 +11,20 @@ import '../../app/widgets/status_view.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/utils/app_toast.dart';
 import '../../services/user_home_service.dart';
+import 'main_shell.dart';
+
+Color _availabilityColor(String status) {
+  switch (status) {
+    case 'online':
+      return AppTheme.onlineGreen;
+    case 'busy':
+      return const Color(0xFFFF3B30);
+    case 'dnd':
+      return const Color(0xFFAF52DE);
+    default:
+      return AppTheme.offlineGray;
+  }
+}
 
 class MyFollowingPage extends ConsumerStatefulWidget {
   final bool fansMode;
@@ -46,19 +62,22 @@ class MyFansPage extends MyFollowingPage {
 class MyBlacklistPage extends MyFollowingPage {
   const MyBlacklistPage({super.key}) : super.blacklist();
 
-  const MyBlacklistPage.embedded({super.key})
-    : super.blacklist(embedded: true);
+  const MyBlacklistPage.embedded({super.key}) : super.blacklist(embedded: true);
 }
 
 class _MyFollowingPageState extends ConsumerState<MyFollowingPage> {
   final TextEditingController _keywordController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   int? _processingUserId;
+  StreamSubscription<PresenceEvent>? _presenceSubscription;
 
   @override
   void initState() {
     super.initState();
     _scrollController.addListener(_onScroll);
+    _presenceSubscription = MainShell.presenceStream.listen(
+      _handlePresenceEvent,
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref.read(_provider.notifier).refresh();
@@ -67,10 +86,24 @@ class _MyFollowingPageState extends ConsumerState<MyFollowingPage> {
 
   @override
   void dispose() {
+    _presenceSubscription?.cancel();
     _scrollController.removeListener(_onScroll);
     _scrollController.dispose();
     _keywordController.dispose();
     super.dispose();
+  }
+
+  void _handlePresenceEvent(PresenceEvent event) {
+    ref
+        .read(_provider.notifier)
+        .applyAvailabilityUpdate(
+          userId: event.userId,
+          online: event.online,
+          isBusy: event.isBusy,
+          videoDndEnabled: event.videoDndEnabled,
+          availabilityStatus: event.availabilityStatus,
+          availabilityLabel: event.availabilityLabel,
+        );
   }
 
   void _onScroll() {
@@ -351,7 +384,8 @@ class _MyFollowingPageState extends ConsumerState<MyFollowingPage> {
           return _FollowingTile(
             item: item,
             isProcessing: _processingUserId == item.user.userId,
-            onTap: () => context.push(AppRoutes.certifiedUserDetail, extra: item.user),
+            onTap: () =>
+                context.push(AppRoutes.certifiedUserDetail, extra: item.user),
             onCancel: widget.blacklistMode
                 ? () => _unblockUser(item)
                 : (widget.fansMode ? null : () => _cancelFollowing(item)),
@@ -394,7 +428,9 @@ class _FollowingTile extends StatelessWidget {
     final name = user.username?.trim().isNotEmpty == true
         ? user.username!.trim()
         : '用户${user.userId}';
-    final isOnline = user.isOnline ?? false;
+    final availabilityStatus = user.availabilityStatus;
+    final statusColor = _availabilityColor(availabilityStatus);
+    final statusLabel = user.availabilityLabel;
 
     return Material(
       color: Colors.white,
@@ -460,21 +496,14 @@ class _FollowingTile extends StatelessWidget {
                           width: 8,
                           height: 8,
                           decoration: BoxDecoration(
-                            color: isOnline
-                                ? AppTheme.onlineGreen
-                                : AppTheme.offlineGray,
+                            color: statusColor,
                             shape: BoxShape.circle,
                           ),
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          isOnline ? '在线' : '离线',
-                          style: TextStyle(
-                            color: isOnline
-                                ? AppTheme.onlineGreen
-                                : AppTheme.textHint,
-                            fontSize: 12,
-                          ),
+                          statusLabel,
+                          style: TextStyle(color: statusColor, fontSize: 12),
                         ),
                         if ((item.blockedAt ?? item.followedAt) != null) ...[
                           const SizedBox(width: 10),
@@ -551,7 +580,9 @@ class _UserTypeBadge extends StatelessWidget {
       child: Text(
         isCertifiedUser ? '认证用户' : '用户',
         style: TextStyle(
-          color: isCertifiedUser ? AppTheme.primaryColor : AppTheme.textSecondary,
+          color: isCertifiedUser
+              ? AppTheme.primaryColor
+              : AppTheme.textSecondary,
           fontSize: 11,
           fontWeight: FontWeight.w700,
         ),

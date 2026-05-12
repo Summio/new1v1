@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date, datetime
 from pathlib import Path
 
@@ -33,6 +34,10 @@ from app.services.review_entry_guard_service import (
     PROFILE_REVIEW_PENDING_MESSAGE,
     has_pending_profile_review,
 )
+from app.services.user_availability_service import (
+    build_availability_payload_map,
+    resolve_availability_payload,
+)
 from app.services.user_block_service import (
     UserBlockError,
     ensure_not_blocked,
@@ -48,6 +53,18 @@ from app.utils.upload_files import (
 
 router = APIRouter()
 _ALLOWED_IMAGE_SUFFIX = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+def _schedule_presence_update(user_id: int) -> None:
+    async def _push() -> None:
+        try:
+            from app.websocket import events as ws_events
+
+            await ws_events.push_presence_for_users({int(user_id)})
+        except Exception:
+            return
+
+    asyncio.create_task(_push())
 
 
 def _mask_phone(phone: str | None) -> str:
@@ -101,12 +118,23 @@ async def _is_following(current_user_id: int, target_user_id: int) -> bool:
     ).exists()
 
 
+async def _build_availability_payloads(users: list[AppUser]) -> dict[int, dict]:
+    from app.websocket.presence import is_online as _is_online_user
+
+    online_ids: set[int] = set()
+    for user in users:
+        if await _is_online_user(int(user.id)):
+            online_ids.add(int(user.id))
+    return await build_availability_payload_map(users, online_ids=online_ids)
+
+
 async def _serialize_user_home(
     app_user: AppUser,
     *,
     is_following: bool,
     is_online: bool,
     block_relation=None,
+    availability_payload: dict | None = None,
 ) -> dict:
     relation_payload = {}
     if block_relation is not None:
@@ -115,6 +143,11 @@ async def _serialize_user_home(
             "blocked_me": bool(block_relation.blocked_me),
             "interaction_blocked": bool(block_relation.interaction_blocked),
         }
+    availability_payload = availability_payload or resolve_availability_payload(
+        app_user,
+        is_online=is_online,
+        is_busy=False,
+    )
     return {
         "id": app_user.id,
         "user_id": app_user.id,
@@ -133,7 +166,7 @@ async def _serialize_user_home(
         "intro": app_user.certified_intro or "",
         "tags": _normalize_certified_tags(app_user.certified_tags),
         "call_price": int(app_user.certified_call_price or 0),
-        "is_online": is_online,
+        **availability_payload,
         "last_active": app_user.last_login.isoformat() if app_user.last_login else None,
         "status": app_user.status or "normal",
         "is_certified_user": bool(app_user.is_certified_user),
@@ -214,6 +247,7 @@ async def update_dnd_settings(req_in: DndSettingsIn):
     if not app_user:
         return Fail(code=401, msg="用户不存在")
 
+    previous_video_dnd_enabled = bool(getattr(app_user, "video_dnd_enabled", False))
     await AppUser.filter(id=app_user.id).update(
         text_dnd_enabled=req_in.text_dnd_enabled,
         video_dnd_enabled=req_in.video_dnd_enabled,
@@ -222,6 +256,8 @@ async def update_dnd_settings(req_in: DndSettingsIn):
     app_user.text_dnd_enabled = req_in.text_dnd_enabled
     app_user.video_dnd_enabled = req_in.video_dnd_enabled
     app_user.ranking_invisible_enabled = req_in.ranking_invisible_enabled
+    if previous_video_dnd_enabled != bool(req_in.video_dnd_enabled):
+        _schedule_presence_update(int(app_user.id))
     return Success(data=_serialize_dnd_settings(app_user), msg="设置已保存")
 
 
@@ -446,18 +482,21 @@ async def get_user_public_profile(
     if not app_user:
         return Fail(code=404, msg="用户不存在")
 
-    from app.websocket.presence import is_online as _is_online_user
-
     is_following = await _is_following(current_user_id, int(app_user.id))
     block_relation = await get_block_relation(current_user_id, int(app_user.id))
-    is_online = await _is_online_user(int(app_user.id))
+    availability_payloads = await _build_availability_payloads([app_user])
+    availability_payload = availability_payloads.get(
+        int(app_user.id),
+        resolve_availability_payload(app_user, is_online=False, is_busy=False),
+    )
 
     return Success(
         data=await _serialize_user_home(
             app_user,
             is_following=is_following,
-            is_online=is_online,
+            is_online=bool(availability_payload["is_online"]),
             block_relation=block_relation,
+            availability_payload=availability_payload,
         )
     )
 
@@ -653,20 +692,25 @@ async def list_user_blocked(
 
     users = await AppUser.filter(id__in=blocked_ids).all()
     user_map = {int(user.id): user for user in users}
-    from app.websocket.presence import is_online as _is_online_user
+    availability_payloads = await _build_availability_payloads(list(users))
 
     rows: list[dict] = []
     for relation in relations:
         app_user = user_map.get(int(relation.blocked_id))
         if not app_user:
             continue
+        availability_payload = availability_payloads.get(
+            int(app_user.id),
+            resolve_availability_payload(app_user, is_online=False, is_busy=False),
+        )
         rows.append(
             {
                 **await _serialize_user_home(
                     app_user,
                     is_following=False,
-                    is_online=await _is_online_user(int(app_user.id)),
+                    is_online=bool(availability_payload["is_online"]),
                     block_relation=await get_block_relation(current_user_id, int(app_user.id)),
+                    availability_payload=availability_payload,
                 ),
                 "blocked_at": relation.created_at.isoformat() if relation.created_at else None,
             }
@@ -719,19 +763,24 @@ async def list_user_following(
 
     users = await AppUser.filter(id__in=following_ids).all()
     user_map = {int(user.id): user for user in users}
-    from app.websocket.presence import is_online as _is_online_user
+    availability_payloads = await _build_availability_payloads(list(users))
 
     rows: list[dict] = []
     for relation in relations:
         app_user = user_map.get(int(relation.following_id))
         if not app_user:
             continue
+        availability_payload = availability_payloads.get(
+            int(app_user.id),
+            resolve_availability_payload(app_user, is_online=False, is_busy=False),
+        )
         rows.append(
             {
                 **await _serialize_user_home(
                     app_user,
                     is_following=True,
-                    is_online=await _is_online_user(int(app_user.id)),
+                    is_online=bool(availability_payload["is_online"]),
+                    availability_payload=availability_payload,
                 ),
                 "followed_at": relation.created_at.isoformat() if relation.created_at else None,
             }
@@ -784,19 +833,24 @@ async def list_user_fans(
 
     users = await AppUser.filter(id__in=fan_ids).all()
     user_map = {int(user.id): user for user in users}
-    from app.websocket.presence import is_online as _is_online_user
+    availability_payloads = await _build_availability_payloads(list(users))
 
     rows: list[dict] = []
     for relation in relations:
         app_user = user_map.get(int(relation.follower_id))
         if not app_user:
             continue
+        availability_payload = availability_payloads.get(
+            int(app_user.id),
+            resolve_availability_payload(app_user, is_online=False, is_busy=False),
+        )
         rows.append(
             {
                 **await _serialize_user_home(
                     app_user,
                     is_following=await _is_following(current_user_id, int(app_user.id)),
-                    is_online=await _is_online_user(int(app_user.id)),
+                    is_online=bool(availability_payload["is_online"]),
+                    availability_payload=availability_payload,
                 ),
                 "followed_at": relation.created_at.isoformat() if relation.created_at else None,
             }

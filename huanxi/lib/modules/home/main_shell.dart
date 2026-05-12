@@ -39,7 +39,19 @@ class MainShell extends ConsumerStatefulWidget {
 class PresenceEvent {
   final int userId;
   final bool online;
-  const PresenceEvent({required this.userId, required this.online});
+  final bool isBusy;
+  final bool videoDndEnabled;
+  final String availabilityStatus;
+  final String availabilityLabel;
+
+  const PresenceEvent({
+    required this.userId,
+    required this.online,
+    required this.isBusy,
+    required this.videoDndEnabled,
+    required this.availabilityStatus,
+    required this.availabilityLabel,
+  });
 }
 
 class _MainShellState extends ConsumerState<MainShell>
@@ -355,9 +367,41 @@ class _MainShellState extends ConsumerState<MainShell>
     final userId = data['user_id'] as int?;
     final online = data['online'] as bool?;
     if (userId == null || online == null) return;
+    final rawStatus = (data['availability_status'] as String?)?.trim();
+    final availabilityStatus =
+        rawStatus == 'online' ||
+            rawStatus == 'busy' ||
+            rawStatus == 'dnd' ||
+            rawStatus == 'offline'
+        ? rawStatus!
+        : (online ? 'online' : 'offline');
+    final rawLabel = (data['availability_label'] as String?)?.trim();
     MainShell._presenceStreamController.add(
-      PresenceEvent(userId: userId, online: online),
+      PresenceEvent(
+        userId: userId,
+        online: online,
+        isBusy: data['is_busy'] as bool? ?? availabilityStatus == 'busy',
+        videoDndEnabled:
+            data['video_dnd_enabled'] as bool? ?? availabilityStatus == 'dnd',
+        availabilityStatus: availabilityStatus,
+        availabilityLabel: rawLabel?.isNotEmpty == true
+            ? rawLabel!
+            : _availabilityLabelForStatus(availabilityStatus),
+      ),
     );
+  }
+
+  String _availabilityLabelForStatus(String status) {
+    switch (status) {
+      case 'online':
+        return '在线';
+      case 'busy':
+        return '忙碌';
+      case 'dnd':
+        return '勿扰';
+      default:
+        return '离线';
+    }
   }
 
   void _handleSystemNotificationUnreadChanged(Map<String, dynamic> data) {
@@ -436,8 +480,7 @@ class _MainShellState extends ConsumerState<MainShell>
       _handleRouteBasedUnreadRefresh(currentLocation);
     }
     final currentIndex = _getCurrentIndex(context);
-    final combinedChatUnread =
-        _imUnreadCount + _systemNotificationUnreadCount;
+    final combinedChatUnread = _imUnreadCount + _systemNotificationUnreadCount;
 
     return Scaffold(
       body: widget.child,
