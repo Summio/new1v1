@@ -35,6 +35,17 @@ void main() {
     expect(router, contains("'/notifications'"));
     expect(router, contains('SystemNotificationsPage'));
     expect(router, contains('SystemNotificationDetailPage'));
+    final shellMatch = RegExp(
+      r'ShellRoute\([\s\S]*?\],\s*\),',
+      multiLine: true,
+    ).firstMatch(router);
+    expect(shellMatch, isNotNull);
+    final shellSection = shellMatch!.group(0)!;
+    expect(
+      shellSection,
+      isNot(contains('path: AppRoutes.systemNotifications')),
+      reason: '系统通知列表页应该是独立二级页，不应挂在带底部导航的 ShellRoute 内',
+    );
 
     expect(service, contains('SystemNotificationService'));
     expect(service, contains('fetchUnreadSummary'));

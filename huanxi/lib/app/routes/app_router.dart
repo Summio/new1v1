@@ -171,15 +171,10 @@ final appRouter = GoRouter(
           pageBuilder: (context, state) =>
               NoTransitionPage(child: ProfilePage()),
         ),
-    GoRoute(
-      path: AppRoutes.feedback,
-      pageBuilder: (context, state) =>
-          NoTransitionPage(child: FeedbackPage()),
-    ),
         GoRoute(
-          path: AppRoutes.systemNotifications,
+          path: AppRoutes.feedback,
           pageBuilder: (context, state) =>
-              const NoTransitionPage(child: SystemNotificationsPage()),
+              NoTransitionPage(child: FeedbackPage()),
         ),
       ],
     ),
@@ -276,11 +271,13 @@ final appRouter = GoRouter(
       },
     ),
     GoRoute(
+      path: AppRoutes.systemNotifications,
+      builder: (context, state) => const SystemNotificationsPage(),
+    ),
+    GoRoute(
       path: '${AppRoutes.systemNotifications}/:notificationId',
       builder: (context, state) {
-        final id = int.tryParse(
-          state.pathParameters['notificationId'] ?? '',
-        );
+        final id = int.tryParse(state.pathParameters['notificationId'] ?? '');
         if (id == null || id <= 0) {
           return Scaffold(
             appBar: AppBar(title: const Text('提示')),

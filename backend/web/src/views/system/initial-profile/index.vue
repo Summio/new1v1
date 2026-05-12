@@ -3,28 +3,35 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import {
   NButton,
   NCard,
-  NCheckbox,
   NEmpty,
   NGrid,
   NGridItem,
   NInput,
+  NModal,
+  NRadio,
+  NRadioGroup,
   NScrollbar,
   NSpace,
   NTabPane,
   NTabs,
-  NTag,
   useMessage,
 } from 'naive-ui'
 
 import CommonPage from '@/components/page/CommonPage.vue'
 import { renderIcon } from '@/utils'
 import api from '@/api'
+import { nicknameUploadTargets, resolveNicknameUploadTarget } from './nickname-upload-targets.mjs'
 
 defineOptions({ name: '初始资料管理' })
 
 const message = useMessage()
 const loading = ref(false)
 const saving = ref(false)
+const uploadDialogVisible = ref(false)
+const uploadTargetGender = ref('male')
+const nicknameUploadDialogVisible = ref(false)
+const nicknameUploadTarget = ref('male-prefixes')
+const nicknameUploadContent = ref('')
 const avatarUploadRefs = {
   male: ref(null),
   female: ref(null),
@@ -36,13 +43,13 @@ const state = reactive({
     male: { prefixes: [], suffixes: [] },
     female: { prefixes: [], suffixes: [] },
   },
-  nicknameDrafts: {
-    male: { prefixes: '', suffixes: '' },
-    female: { prefixes: '', suffixes: '' },
-  },
   selectedAvatars: {
     male: [],
     female: [],
+  },
+  selectedNicknames: {
+    male: { prefixes: [], suffixes: [] },
+    female: { prefixes: [], suffixes: [] },
   },
 })
 
@@ -70,6 +77,13 @@ const stats = computed(() => {
   ]
 })
 
+const nicknameUploadPlaceholder = computed(() => {
+  const { section } = resolveNicknameUploadTarget(nicknameUploadTarget.value)
+  return section === 'prefixes'
+    ? '用、隔开多个前缀，例如：阳光、清爽、温柔'
+    : '用、隔开多个后缀，例如：少年、先生、小哥'
+})
+
 onMounted(loadConfig)
 
 async function loadConfig() {
@@ -81,6 +95,10 @@ async function loadConfig() {
     state.nicknamePool = normalizeNicknamePool(data.nickname_pool)
     state.selectedAvatars.male = []
     state.selectedAvatars.female = []
+    state.selectedNicknames.male.prefixes = []
+    state.selectedNicknames.male.suffixes = []
+    state.selectedNicknames.female.prefixes = []
+    state.selectedNicknames.female.suffixes = []
   } catch (error) {
     message.error('加载初始资料配置失败')
     console.error(error)
@@ -111,6 +129,27 @@ function normalizeNicknamePool(pool = {}) {
 
 function openAvatarPicker(gender) {
   avatarUploadRefs[gender].value?.click()
+}
+
+function openUploadDialog(defaultGender = 'male') {
+  uploadTargetGender.value = defaultGender
+  uploadDialogVisible.value = true
+}
+
+function confirmUploadTarget() {
+  uploadDialogVisible.value = false
+  openAvatarPicker(uploadTargetGender.value)
+}
+
+function openNicknameUploadDialog(defaultTarget = 'male-prefixes') {
+  nicknameUploadTarget.value = defaultTarget
+  nicknameUploadContent.value = ''
+  nicknameUploadDialogVisible.value = true
+}
+
+function closeNicknameUploadDialog() {
+  nicknameUploadDialogVisible.value = false
+  nicknameUploadContent.value = ''
 }
 
 async function handleAvatarFilesChange(gender, event) {
@@ -162,12 +201,6 @@ async function saveAvatarPool() {
   }
 }
 
-async function removeAvatar(gender, url) {
-  state.avatarPool[gender] = state.avatarPool[gender].filter((item) => item !== url)
-  state.selectedAvatars[gender] = state.selectedAvatars[gender].filter((item) => item !== url)
-  await saveAvatarPool()
-}
-
 async function removeSelectedAvatars(gender) {
   const selected = new Set(state.selectedAvatars[gender])
   if (!selected.size) return
@@ -200,18 +233,27 @@ async function saveNicknamePool() {
   }
 }
 
-async function removeNickname(gender, section, value) {
+function toggleNickname(gender, section, value) {
+  const picked = state.selectedNicknames[gender][section]
+  state.selectedNicknames[gender][section] = picked.includes(value)
+    ? picked.filter((item) => item !== value)
+    : [...picked, value]
+}
+
+async function removeSelectedNicknames(gender, section) {
+  const selected = new Set(state.selectedNicknames[gender][section])
+  if (!selected.size) return
   state.nicknamePool[gender][section] = state.nicknamePool[gender][section].filter(
-    (item) => item !== value
+    (item) => !selected.has(item)
   )
+  state.selectedNicknames[gender][section] = []
   await saveNicknamePool()
 }
 
-async function importNickname(gender, section) {
-  const content = state.nicknameDrafts[gender][section]
+async function importNickname(gender, section, content) {
   if (!content.trim()) {
     message.warning('请先输入素材')
-    return
+    return false
   }
   saving.value = true
   try {
@@ -222,13 +264,23 @@ async function importNickname(gender, section) {
     })
     const added = res.data?.added ?? 0
     message.success(`已导入 ${added} 条素材`)
-    state.nicknameDrafts[gender][section] = ''
     await loadConfig()
+    return true
   } catch (error) {
     message.error(error?.message || '导入失败')
     console.error(error)
+    return false
   } finally {
     saving.value = false
+  }
+}
+
+async function submitNicknameUpload() {
+  const { gender, section } = resolveNicknameUploadTarget(nicknameUploadTarget.value)
+  const content = nicknameUploadContent.value
+  const imported = await importNickname(gender, section, content)
+  if (imported) {
+    closeNicknameUploadDialog()
   }
 }
 </script>
@@ -245,6 +297,14 @@ async function importNickname(gender, section) {
     <NTabs type="line" animated>
       <NTabPane name="avatar" tab="头像池">
         <NSpace vertical size="large">
+          <div class="toolbar-row">
+            <NButton :loading="saving" type="primary" @click="openUploadDialog()">
+              <template #icon>
+                <component :is="renderIcon('material-symbols:upload')" />
+              </template>
+              上传
+            </NButton>
+          </div>
           <NCard v-for="gender in ['male', 'female']" :key="gender" size="small" :bordered="false">
             <template #header>
               <div class="panel-header">
@@ -253,12 +313,6 @@ async function importNickname(gender, section) {
                   <div class="panel-subtitle">批量上传、按选中删除、直接保存分组结果</div>
                 </div>
                 <NSpace>
-                  <NButton :loading="saving" type="primary" @click="openAvatarPicker(gender)">
-                    <template #icon>
-                      <component :is="renderIcon('material-symbols:upload')" />
-                    </template>
-                    批量上传
-                  </NButton>
                   <NButton
                     :disabled="!state.selectedAvatars[gender].length"
                     :loading="saving"
@@ -270,12 +324,6 @@ async function importNickname(gender, section) {
                       <component :is="renderIcon('material-symbols:delete-outline')" />
                     </template>
                     删除选中
-                  </NButton>
-                  <NButton :loading="saving" @click="saveAvatarPool">
-                    <template #icon>
-                      <component :is="renderIcon('material-symbols:save')" />
-                    </template>
-                    保存
                   </NButton>
                 </NSpace>
               </div>
@@ -297,25 +345,14 @@ async function importNickname(gender, section) {
               />
               <NGrid v-else cols="2 560:4 860:6 1180:8 1440:10" :x-gap="10" :y-gap="10">
                 <NGridItem v-for="url in state.avatarPool[gender]" :key="url">
-                  <div class="avatar-item">
-                    <NCheckbox
-                      :checked="state.selectedAvatars[gender].includes(url)"
-                      @update:checked="toggleAvatar(gender, url)"
-                    />
+                  <div
+                    class="avatar-item"
+                    :class="{
+                      'avatar-item--selected': state.selectedAvatars[gender].includes(url),
+                    }"
+                    @click="toggleAvatar(gender, url)"
+                  >
                     <img :src="url" alt="头像素材" />
-                    <NButton
-                      size="tiny"
-                      tertiary
-                      type="error"
-                      @click.stop="removeAvatar(gender, url)"
-                    >
-                      <template #icon>
-                        <component
-                          :is="renderIcon('material-symbols:delete-outline', { size: 14 })"
-                        />
-                      </template>
-                      删除
-                    </NButton>
                   </div>
                 </NGridItem>
               </NGrid>
@@ -326,6 +363,14 @@ async function importNickname(gender, section) {
 
       <NTabPane name="nickname" tab="昵称池">
         <NSpace vertical size="large">
+          <div class="toolbar-row">
+            <NButton :loading="saving" type="primary" @click="openNicknameUploadDialog()">
+              <template #icon>
+                <component :is="renderIcon('material-symbols:upload')" />
+              </template>
+              上传
+            </NButton>
+          </div>
           <NCard v-for="gender in ['male', 'female']" :key="gender" size="small" :bordered="false">
             <template #header>
               <div class="panel-header">
@@ -333,90 +378,82 @@ async function importNickname(gender, section) {
                   <div class="panel-title">{{ genderMeta[gender].label }}昵称</div>
                   <div class="panel-subtitle">前缀和后缀分开维护，批量粘贴后自动去重</div>
                 </div>
-                <NButton :loading="saving" @click="saveNicknamePool">
-                  <template #icon>
-                    <component :is="renderIcon('material-symbols:save')" />
-                  </template>
-                  保存
-                </NButton>
               </div>
             </template>
 
             <div class="nickname-layout">
               <div class="nickname-column">
-                <div class="column-title">前缀列表</div>
+                <div class="column-header">
+                  <div class="column-title">前缀列表</div>
+                  <NButton
+                    :disabled="!state.selectedNicknames[gender].prefixes.length"
+                    :loading="saving"
+                    tertiary
+                    type="error"
+                    size="small"
+                    @click="removeSelectedNicknames(gender, 'prefixes')"
+                  >
+                    删除选中
+                  </NButton>
+                </div>
                 <div class="tag-panel">
                   <NEmpty
                     v-if="!state.nicknamePool[gender].prefixes.length"
                     description="暂无素材"
                   />
                   <div v-else class="tag-flow">
-                    <NTag
+                    <button
                       v-for="item in state.nicknamePool[gender].prefixes"
                       :key="item"
-                      closable
-                      :round="false"
-                      size="small"
-                      type="success"
-                      @close="removeNickname(gender, 'prefixes', item)"
+                      type="button"
+                      class="nickname-chip nickname-chip--prefix"
+                      :class="{
+                        'nickname-chip--selected':
+                          state.selectedNicknames[gender].prefixes.includes(item),
+                      }"
+                      @click="toggleNickname(gender, 'prefixes', item)"
                     >
                       {{ item }}
-                    </NTag>
+                    </button>
                   </div>
                 </div>
-                <NInput
-                  v-model:value="state.nicknameDrafts[gender].prefixes"
-                  type="textarea"
-                  :rows="4"
-                  placeholder="用、隔开多个前缀，例如：阳光、清爽、温柔"
-                />
-                <NSpace justify="end">
-                  <NButton
-                    :loading="saving"
-                    type="primary"
-                    @click="importNickname(gender, 'prefixes')"
-                  >
-                    批量新增前缀
-                  </NButton>
-                </NSpace>
               </div>
 
               <div class="nickname-column">
-                <div class="column-title">后缀列表</div>
+                <div class="column-header">
+                  <div class="column-title">后缀列表</div>
+                  <NButton
+                    :disabled="!state.selectedNicknames[gender].suffixes.length"
+                    :loading="saving"
+                    tertiary
+                    type="error"
+                    size="small"
+                    @click="removeSelectedNicknames(gender, 'suffixes')"
+                  >
+                    删除选中
+                  </NButton>
+                </div>
                 <div class="tag-panel">
                   <NEmpty
                     v-if="!state.nicknamePool[gender].suffixes.length"
                     description="暂无素材"
                   />
                   <div v-else class="tag-flow">
-                    <NTag
+                    <button
                       v-for="item in state.nicknamePool[gender].suffixes"
                       :key="item"
-                      closable
-                      :round="false"
-                      size="small"
-                      type="info"
-                      @close="removeNickname(gender, 'suffixes', item)"
+                      type="button"
+                      class="nickname-chip nickname-chip--suffix"
+                      :class="{
+                        'nickname-chip--selected':
+                          state.selectedNicknames[gender].suffixes.includes(item),
+                      }"
+                      @click="toggleNickname(gender, 'suffixes', item)"
                     >
                       {{ item }}
-                    </NTag>
+                    </button>
                   </div>
                 </div>
-                <NInput
-                  v-model:value="state.nicknameDrafts[gender].suffixes"
-                  type="textarea"
-                  :rows="4"
-                  placeholder="用、隔开多个后缀，例如：少年、先生、小哥"
-                />
-                <NSpace justify="end">
-                  <NButton
-                    :loading="saving"
-                    type="primary"
-                    @click="importNickname(gender, 'suffixes')"
-                  >
-                    批量新增后缀
-                  </NButton>
-                </NSpace>
               </div>
             </div>
           </NCard>
@@ -428,9 +465,83 @@ async function importNickname(gender, section) {
       <div class="page-footer-hint">头像和昵称仅支持运营素材池，不支持用户自定义。</div>
     </template>
   </CommonPage>
+
+  <NModal
+    v-model:show="uploadDialogVisible"
+    preset="card"
+    title="选择上传类型"
+    style="width: 420px"
+  >
+    <NSpace vertical size="large">
+      <div class="upload-dialog-desc">上传入口已统一，请先选择要导入的头像分组。</div>
+      <NRadioGroup v-model:value="uploadTargetGender" name="uploadTargetGender">
+        <NSpace vertical size="medium">
+          <div
+            class="upload-option"
+            :class="{ 'upload-option--active': uploadTargetGender === 'male' }"
+            @click="uploadTargetGender = 'male'"
+          >
+            <NRadio value="male">男生头像</NRadio>
+          </div>
+          <div
+            class="upload-option"
+            :class="{ 'upload-option--active': uploadTargetGender === 'female' }"
+            @click="uploadTargetGender = 'female'"
+          >
+            <NRadio value="female">女生头像</NRadio>
+          </div>
+        </NSpace>
+      </NRadioGroup>
+      <NSpace justify="end">
+        <NButton @click="uploadDialogVisible = false">取消</NButton>
+        <NButton type="primary" :loading="saving" @click="confirmUploadTarget">继续上传</NButton>
+      </NSpace>
+    </NSpace>
+  </NModal>
+
+  <NModal
+    v-model:show="nicknameUploadDialogVisible"
+    preset="card"
+    title="上传昵称素材"
+    style="width: 520px"
+  >
+    <NSpace vertical size="large">
+      <div class="upload-dialog-desc">
+        上传入口已统一，请先选择要导入的昵称类型，再粘贴素材内容。
+      </div>
+      <NRadioGroup v-model:value="nicknameUploadTarget" name="nicknameUploadTarget">
+        <div class="nickname-upload-grid">
+          <div
+            v-for="item in nicknameUploadTargets"
+            :key="item.value"
+            class="upload-option"
+            :class="{ 'upload-option--active': nicknameUploadTarget === item.value }"
+            @click="nicknameUploadTarget = item.value"
+          >
+            <NRadio :value="item.value">{{ item.label }}</NRadio>
+          </div>
+        </div>
+      </NRadioGroup>
+      <NInput
+        v-model:value="nicknameUploadContent"
+        type="textarea"
+        :rows="6"
+        :placeholder="nicknameUploadPlaceholder"
+      />
+      <NSpace justify="end">
+        <NButton @click="closeNicknameUploadDialog">取消</NButton>
+        <NButton type="primary" :loading="saving" @click="submitNicknameUpload">确认上传</NButton>
+      </NSpace>
+    </NSpace>
+  </NModal>
 </template>
 
 <style scoped>
+.toolbar-row {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .summary-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
@@ -490,6 +601,37 @@ async function importNickname(gender, section) {
   flex-direction: column;
   align-items: center;
   gap: 6px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.avatar-item:hover {
+  border-color: #ff6a3d;
+  box-shadow: 0 6px 18px rgba(255, 106, 61, 0.12);
+}
+
+.avatar-item--selected {
+  border-color: #ff6a3d;
+  background: rgba(255, 106, 61, 0.06);
+  box-shadow: 0 0 0 2px rgba(255, 106, 61, 0.18);
+}
+
+.avatar-item--selected::after {
+  content: '✓';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: #ff6a3d;
+  box-shadow: 0 0 0 2px #fff;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .avatar-item img {
@@ -512,6 +654,13 @@ async function importNickname(gender, section) {
   gap: 12px;
 }
 
+.column-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
 .column-title {
   font-weight: 600;
 }
@@ -530,7 +679,63 @@ async function importNickname(gender, section) {
   gap: 8px;
 }
 
+.nickname-chip {
+  border: 1px solid transparent;
+  border-radius: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  cursor: pointer;
+  background: transparent;
+  transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.nickname-chip--prefix {
+  border-color: #8fd3a8;
+  background: #effbf3;
+  color: #27834f;
+}
+
+.nickname-chip--suffix {
+  border-color: #9bc2ff;
+  background: #eff5ff;
+  color: #2b6edc;
+}
+
+.nickname-chip--selected {
+  border-color: #ff6a3d;
+  background: rgba(255, 106, 61, 0.1);
+  color: #c7441a;
+  box-shadow: 0 0 0 1px rgba(255, 106, 61, 0.12);
+}
+
+.nickname-upload-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
 .page-footer-hint {
   color: var(--n-text-color-3);
+}
+
+.upload-dialog-desc {
+  color: var(--n-text-color-2);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.upload-option {
+  border: 1px solid var(--n-border-color);
+  border-radius: 8px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.upload-option--active {
+  border-color: #ff6a3d;
+  background: rgba(255, 106, 61, 0.06);
 }
 </style>
