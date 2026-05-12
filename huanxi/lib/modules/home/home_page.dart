@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../app/routes/app_router.dart';
+import '../../app/providers/auth_provider.dart';
 import '../../app/providers/certified_user_provider.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/widgets/status_view.dart';
@@ -32,6 +33,10 @@ String _sectionForIndex(int index) {
     default:
       return 'recommend';
   }
+}
+
+String _formatCallPrice(num? price, String coinName) {
+  return '${price?.toStringAsFixed(0) ?? '0'}$coinName/分钟';
 }
 
 /// 首页 - 认证用户列表 + 分类 Tab
@@ -258,6 +263,7 @@ class _CertifiedUserListPageState
   @override
   Widget build(BuildContext context) {
     final certifiedUserState = ref.watch(certifiedUserListProvider);
+    final coinName = ref.watch(tokenNamesProvider).coinName;
     final expectedSection = _sectionForIndex(widget.pageIndex);
     final isCurrentSection = certifiedUserState.section == expectedSection;
 
@@ -296,6 +302,7 @@ class _CertifiedUserListPageState
                 'certified_user_card_${certifiedUser.userId}_${certifiedUser.coverUrl ?? ''}',
               ),
               certifiedUser: certifiedUser,
+              coinName: coinName,
             );
           },
         ),
@@ -318,8 +325,13 @@ class _CertifiedUserListPageState
 
 class _CertifiedUserCard extends StatefulWidget {
   final CertifiedUserInfo certifiedUser;
+  final String coinName;
 
-  const _CertifiedUserCard({super.key, required this.certifiedUser});
+  const _CertifiedUserCard({
+    super.key,
+    required this.certifiedUser,
+    required this.coinName,
+  });
 
   @override
   State<_CertifiedUserCard> createState() => _CertifiedUserCardState();
@@ -556,7 +568,10 @@ class _CertifiedUserCardState extends State<_CertifiedUserCard> {
                           ),
                           const SizedBox(width: 2),
                           Text(
-                            '${certifiedUser.callPrice?.toStringAsFixed(0) ?? '0'}/分',
+                            _formatCallPrice(
+                              certifiedUser.callPrice,
+                              widget.coinName,
+                            ),
                             style: TextStyle(
                               fontSize: 10,
                               color: AppTheme.textSecondaryFaint,

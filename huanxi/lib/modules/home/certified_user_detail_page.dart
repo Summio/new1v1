@@ -32,6 +32,10 @@ Color _availabilityColor(String status) {
   }
 }
 
+String _formatCallPrice(num? price, String coinName) {
+  return '${price?.toStringAsFixed(0) ?? '0'}$coinName/分钟';
+}
+
 /// 认证用户详情页 (Momo 风格)
 class CertifiedUserDetailPage extends ConsumerStatefulWidget {
   final CertifiedUserInfo? certifiedUser;
@@ -324,6 +328,7 @@ class _CertifiedUserDetailPageState
   Widget build(BuildContext context) {
     final certifiedUser = _resolvedCertifiedUser;
     final authState = ref.watch(authProvider);
+    final tokenNames = ref.watch(tokenNamesProvider);
     if (_isLoading && certifiedUser == null) {
       return const Scaffold(
         backgroundColor: Colors.white,
@@ -791,7 +796,7 @@ class _CertifiedUserDetailPageState
                                 const SizedBox(width: 8),
                                 Flexible(
                                   child: Text(
-                                    '立即通话 (${certifiedUser.callPrice?.toStringAsFixed(0) ?? '0'}/分)',
+                                    '立即通话 (${_formatCallPrice(certifiedUser.callPrice, tokenNames.coinName)})',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(

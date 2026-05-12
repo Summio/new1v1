@@ -21,6 +21,11 @@ CERTIFIED_CALL_PRICE_CONFIG_VIEW = (
     ROOT / "web" / "src" / "views" / "system" / "certified-call-price-config" / "index.vue"
 )
 CERTIFICATION_CENTER_PAGE = ROOT.parent / "huanxi" / "lib" / "modules" / "home" / "certification_center_page.dart"
+HOME_PAGE = ROOT.parent / "huanxi" / "lib" / "modules" / "home" / "home_page.dart"
+CERTIFIED_USER_DETAIL_PAGE = (
+    ROOT.parent / "huanxi" / "lib" / "modules" / "home" / "certified_user_detail_page.dart"
+)
+CALL_OUTGOING_PAGE = ROOT.parent / "huanxi" / "lib" / "modules" / "call" / "call_outgoing_page.dart"
 AUTH_PROVIDER = ROOT.parent / "huanxi" / "lib" / "app" / "providers" / "auth_provider.dart"
 MIGRATIONS_DIR = ROOT / "migrations" / "models"
 
@@ -102,6 +107,9 @@ def test_call_price_unit_is_coin_per_minute_across_active_surfaces() -> None:
         APP_USER_VIEW,
         CALL_RECORD_VIEW,
         CERTIFICATION_CENTER_PAGE,
+        HOME_PAGE,
+        CERTIFIED_USER_DETAIL_PAGE,
+        CALL_OUTGOING_PAGE,
     ]
     combined = "\n".join(path.read_text(encoding="utf-8") for path in checked_files)
 
@@ -110,6 +118,17 @@ def test_call_price_unit_is_coin_per_minute_across_active_surfaces() -> None:
     assert "元/分钟" not in combined
     assert "price / 100" not in combined
     assert "${value / 100}元/分钟" not in combined
+
+
+def test_app_call_price_surfaces_use_dynamic_coin_name_per_minute() -> None:
+    checked_files = [HOME_PAGE, CERTIFIED_USER_DETAIL_PAGE, CALL_OUTGOING_PAGE]
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in checked_files)
+
+    assert "tokenNamesProvider" in combined
+    assert "coinName" in combined
+    assert "$coinName/分钟" in combined
+    assert "/分'" not in combined
+    assert '/分"' not in combined
 
 
 def test_certified_call_price_config_independent_page_removed() -> None:

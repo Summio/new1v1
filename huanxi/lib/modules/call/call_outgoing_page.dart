@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/providers/auth_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/constants/api_endpoints.dart';
@@ -15,6 +16,10 @@ import '../../services/websocket_service.dart';
 import 'call_end_reason.dart';
 import 'call_event_mapper.dart';
 import 'controllers/call_outgoing_controller.dart';
+
+String _formatCallPrice(int price, String coinName) {
+  return '$price$coinName/分钟';
+}
 
 class CallOutgoingPage extends ConsumerStatefulWidget {
   final int? callId;
@@ -374,11 +379,12 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
   @override
   Widget build(BuildContext context) {
     final outgoingState = ref.watch(callOutgoingControllerProvider);
+    final tokenNames = ref.watch(tokenNamesProvider);
     final hasCallId = _callId != null && _callId! > 0;
     final countdownText = !hasCallId
         ? '正在发起呼叫...'
         : _callPrice > 0
-        ? '${outgoingState.leftSeconds} 秒后自动结束 · $_callPrice/分'
+        ? '${outgoingState.leftSeconds} 秒后自动结束 · ${_formatCallPrice(_callPrice, tokenNames.coinName)}'
         : '${outgoingState.leftSeconds} 秒后自动结束';
     return PopScope(
       canPop: false,
