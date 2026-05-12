@@ -5,11 +5,11 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../app/providers/auth_provider.dart';
 import '../../app/routes/app_router.dart';
-import '../../core/data/china_location_data.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/utils/formatters.dart';
 import '../../core/utils/capability_limit_guard.dart';
 import 'package:huanxi/core/utils/app_toast.dart';
+import '../../services/location_service.dart';
 import '../../services/review_entry_guard_service.dart';
 
 class EditProfilePage extends ConsumerStatefulWidget {
@@ -97,7 +97,33 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
   }
 
   Future<void> _pickLocationCity() async {
-    final result = await _showCityPicker(context, initialValue: _locationCity);
+    late final Map<String, List<String>> locations;
+    try {
+      locations = await LocationService.instance.fetchChinaLocationMap();
+    } catch (_) {
+      if (!mounted) return;
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('所在地加载失败，请稍后重试')),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    if (locations.isEmpty) {
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('所在地配置为空，请稍后重试')),
+      );
+      return;
+    }
+
+    final result = await _showCityPicker(
+      context,
+      locations: locations,
+      initialValue: _locationCity,
+    );
+    if (!mounted) return;
     if (result == null) return;
     setState(() {
       _locationCity = result;
@@ -789,22 +815,34 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
 
 Future<String?> _showCityPicker(
   BuildContext context, {
+  required Map<String, List<String>> locations,
   String initialValue = '',
 }) async {
-  final cityMap = chinaProvinceCityMap;
-  final provinces = cityMap.keys.toList();
+  if (locations.isEmpty) {
+    return null;
+  }
+
+  final provinces = locations.keys.toList();
   String selectedProvince = provinces.first;
-  String selectedCity = cityMap[selectedProvince]!.first;
+  String selectedCity = locations[selectedProvince]!.first;
 
   if (initialValue.contains('-')) {
     final split = initialValue.split('-');
-    if (split.length == 2 && cityMap.containsKey(split[0])) {
+    if (split.length == 2 && locations.containsKey(split[0])) {
       selectedProvince = split[0];
-      final cities = cityMap[selectedProvince]!;
+      final cities = locations[selectedProvince]!;
       if (cities.contains(split[1])) {
         selectedCity = split[1];
       } else {
         selectedCity = cities.first;
+      }
+    }
+  } else if (initialValue.trim().isNotEmpty) {
+    for (final entry in locations.entries) {
+      if (entry.value.contains(initialValue.trim())) {
+        selectedProvince = entry.key;
+        selectedCity = initialValue.trim();
+        break;
       }
     }
   }
@@ -815,7 +853,7 @@ Future<String?> _showCityPicker(
     builder: (sheetContext) {
       return StatefulBuilder(
         builder: (context, setSheetState) {
-          final cities = cityMap[selectedProvince] ?? const <String>[];
+          final cities = locations[selectedProvince] ?? const <String>[];
           if (!cities.contains(selectedCity) && cities.isNotEmpty) {
             selectedCity = cities.first;
           }
@@ -848,7 +886,7 @@ Future<String?> _showCityPicker(
                       setSheetState(() {
                         selectedProvince = value;
                         final nextCities =
-                            cityMap[selectedProvince] ?? const <String>[];
+                            locations[selectedProvince] ?? const <String>[];
                         selectedCity = nextCities.isEmpty
                             ? ''
                             : nextCities.first;

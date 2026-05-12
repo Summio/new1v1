@@ -12,6 +12,7 @@ from .feedback import router as feedback_router
 from .gift import router as gift_router
 from .im import router as im_router
 from .initial_profile import router as initial_profile_router
+from .location import router as location_router
 from .moment import router as moment_router
 from .notification import router as notification_router
 from .password import router as password_router
@@ -33,6 +34,7 @@ app_router.include_router(
 # user_router: /login 无需认证，/user/info 需要 DependAppAuth
 app_router.include_router(user_router, prefix="")
 app_router.include_router(bootstrap_router, prefix="")
+app_router.include_router(location_router, prefix="", dependencies=[Depends(DependAppAuth)])
 app_router.include_router(certified_user_router, prefix="", dependencies=[Depends(DependAppAuth)])
 app_router.include_router(certification_router, prefix="", dependencies=[Depends(DependAppAuth)])
 app_router.include_router(call_router, prefix="", dependencies=[Depends(DependAppAuth)])

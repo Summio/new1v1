@@ -29,6 +29,9 @@ class ApiEndpoints {
   /// 获取当前用户信息
   static const String userInfo = 'app/user/info';
 
+  /// 中国省市所在地选项
+  static const String chinaLocations = 'app/location/china';
+
   /// 勿扰设置
   static const String doNotDisturbSettings = 'app/user/dnd-settings';
 
@@ -192,6 +195,5 @@ class ApiEndpoints {
       'app/notifications/unread-count';
 
   /// 全部系统通知已读
-  static const String systemNotificationReadAll =
-      'app/notifications/read-all';
+  static const String systemNotificationReadAll = 'app/notifications/read-all';
 }

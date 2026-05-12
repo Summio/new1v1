@@ -1,9 +1,7 @@
-import re
 import sys
 from pathlib import Path
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
-REPO_ROOT = BACKEND_ROOT.parent
 if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
@@ -13,18 +11,10 @@ from app.core.china_locations import (  # noqa: E402
 )
 
 
-def _parse_flutter_locations() -> dict[str, list[str]]:
-    source = (REPO_ROOT / "huanxi/lib/core/data/china_location_data.dart").read_text(encoding="utf-8")
-    locations: dict[str, list[str]] = {}
-    for match in re.finditer(r"'([^']+)'\s*:\s*\[([\s\S]*?)\]", source):
-        province = match.group(1)
-        cities = re.findall(r"'([^']+)'", match.group(2))
-        locations[province] = cities
-    return locations
-
-
-def test_backend_location_data_matches_flutter_location_data() -> None:
-    assert CHINA_PROVINCE_CITY_MAP == _parse_flutter_locations()
+def test_backend_location_data_contains_expected_city_options() -> None:
+    assert CHINA_PROVINCE_CITY_MAP["北京市"] == ["北京市"]
+    assert "深圳市" in CHINA_PROVINCE_CITY_MAP["广东省"]
+    assert "阿拉善盟" in CHINA_PROVINCE_CITY_MAP["内蒙古自治区"]
 
 
 def test_normalize_location_city_accepts_valid_province_city_values() -> None:
@@ -54,6 +44,16 @@ def test_profile_update_apis_use_shared_location_validation() -> None:
     for source in (app_user_api, admin_user_api):
         assert "normalize_location_city" in source
         assert "所在地不合法" in source
+
+
+def test_app_location_options_api_is_registered() -> None:
+    app_router = (BACKEND_ROOT / "app/api/v1/app/__init__.py").read_text(encoding="utf-8")
+    location_api = (BACKEND_ROOT / "app/api/v1/app/location.py").read_text(encoding="utf-8")
+
+    assert "location_router" in app_router
+    assert "CHINA_PROVINCE_CITY_MAP" in location_api
+    assert '"/location/china"' in location_api
+    assert "Success(data=CHINA_PROVINCE_CITY_MAP" in location_api
 
 
 def test_location_city_normalization_migration_exists() -> None:

@@ -3,13 +3,26 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('edit profile page uses a shared china location data source', () {
+  test('edit profile page loads china location data from backend', () {
     final page = File(
       'lib/modules/profile/edit_profile_page.dart',
     ).readAsStringSync();
+    final endpoints = File(
+      'lib/core/constants/api_endpoints.dart',
+    ).readAsStringSync();
+    final service = File(
+      'lib/services/location_service.dart',
+    ).readAsStringSync();
 
-    expect(page, contains('chinaProvinceCityMap'));
-    expect(page, isNot(contains('const cityMap = <String, List<String>>{')));
+    expect(page, contains('LocationService.instance.fetchChinaLocationMap()'));
+    expect(page, isNot(contains('chinaProvinceCityMap')));
+    expect(page, isNot(contains("core/data/china_location_data.dart")));
+    expect(service, contains('fetchChinaLocationMap'));
+    expect(service, contains('ApiEndpoints.chinaLocations'));
+    expect(
+      endpoints,
+      contains("static const String chinaLocations = 'app/location/china';"),
+    );
     expect(page, contains("选择所在地（到市/州/盟/地区）"));
     expect(page, contains("市/州/盟/地区"));
   });

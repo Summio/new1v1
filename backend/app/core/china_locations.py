@@ -1,4 +1,4 @@
-# Generated from huanxi/lib/core/data/china_location_data.dart. Keep both sides aligned.
+# 后端所在地唯一数据源；App 通过 /app/location/china 获取选项。
 
 CHINA_PROVINCE_CITY_MAP = {
     "北京市": ["北京市"],
