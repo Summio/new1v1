@@ -6,8 +6,6 @@ from .base import BaseModel, TimestampMixin
 class SystemNotificationTask(BaseModel, TimestampMixin):
     """后台系统通知任务/模板。"""
 
-    title = fields.CharField(max_length=100, description="通知标题")
-    summary = fields.CharField(max_length=200, description="通知摘要")
     content = fields.TextField(description="通知正文，纯文本")
     type = fields.CharField(max_length=20, description="announcement/account/review/interaction", db_index=True)
     status = fields.CharField(
@@ -38,8 +36,6 @@ class SystemNotification(BaseModel):
     """一次实际发送出的系统通知实例。"""
 
     task_id = fields.BigIntField(null=True, description="后台通知任务ID", db_index=True)
-    title = fields.CharField(max_length=100, description="通知标题")
-    summary = fields.CharField(max_length=200, description="通知摘要")
     content = fields.TextField(description="通知正文，纯文本")
     type = fields.CharField(max_length=20, description="announcement/account/review/interaction", db_index=True)
     source = fields.CharField(max_length=20, default="admin", description="admin/system", db_index=True)

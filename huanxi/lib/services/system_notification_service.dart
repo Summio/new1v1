@@ -3,8 +3,7 @@ import '../core/network/dio_client.dart';
 
 class SystemNotificationItem {
   final int id;
-  final String title;
-  final String summary;
+  final String content;
   final String type;
   final String publishAt;
   final String? readAt;
@@ -12,8 +11,7 @@ class SystemNotificationItem {
 
   const SystemNotificationItem({
     required this.id,
-    required this.title,
-    required this.summary,
+    required this.content,
     required this.type,
     required this.publishAt,
     this.readAt,
@@ -23,8 +21,7 @@ class SystemNotificationItem {
   factory SystemNotificationItem.fromJson(Map<String, dynamic> json) {
     return SystemNotificationItem(
       id: int.tryParse('${json['id'] ?? 0}') ?? 0,
-      title: (json['title'] as String?)?.trim() ?? '',
-      summary: (json['summary'] as String?)?.trim() ?? '',
+      content: (json['content'] as String?)?.trim() ?? '',
       type: (json['type'] as String?)?.trim() ?? '',
       publishAt: (json['publish_at'] as String?)?.trim() ?? '',
       readAt: (json['read_at'] as String?)?.trim(),
@@ -35,8 +32,7 @@ class SystemNotificationItem {
   SystemNotificationItem copyWith({bool? isRead, String? readAt}) {
     return SystemNotificationItem(
       id: id,
-      title: title,
-      summary: summary,
+      content: content,
       type: type,
       publishAt: publishAt,
       readAt: readAt ?? this.readAt,
@@ -46,30 +42,24 @@ class SystemNotificationItem {
 }
 
 class SystemNotificationDetail extends SystemNotificationItem {
-  final String content;
-
   const SystemNotificationDetail({
     required super.id,
-    required super.title,
-    required super.summary,
+    required super.content,
     required super.type,
     required super.publishAt,
     super.readAt,
     required super.isRead,
-    required this.content,
   });
 
   factory SystemNotificationDetail.fromJson(Map<String, dynamic> json) {
     final base = SystemNotificationItem.fromJson(json);
     return SystemNotificationDetail(
       id: base.id,
-      title: base.title,
-      summary: base.summary,
+      content: base.content,
       type: base.type,
       publishAt: base.publishAt,
       readAt: base.readAt,
       isRead: base.isRead,
-      content: (json['content'] as String?) ?? '',
     );
   }
 }

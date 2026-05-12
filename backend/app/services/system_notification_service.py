@@ -179,16 +179,14 @@ def build_business_notification_key(biz_type: str, biz_id: int | str, user_id: i
 
 
 def validate_task_payload(data: dict[str, Any]) -> dict[str, Any]:
-    title = str(data.get("title") or "").strip()
-    summary = str(data.get("summary") or "").strip()
     content = str(data.get("content") or "").strip()
     notification_type = normalize_notification_choice(data.get("type"), NOTIFICATION_TYPES)
     send_mode = normalize_notification_choice(data.get("send_mode"), SEND_MODES, "immediate")
     target_mode = normalize_notification_choice(data.get("target_mode"), TARGET_MODES, "all")
     status = normalize_notification_choice(data.get("status"), TASK_STATUSES, "draft")
 
-    if not title or not summary or not content:
-        raise NotificationValidationError("标题、摘要和正文不能为空")
+    if not content:
+        raise NotificationValidationError("正文不能为空")
     if notification_type not in NOTIFICATION_TYPES:
         raise NotificationValidationError("通知类型不正确")
     if send_mode not in SEND_MODES:
@@ -222,8 +220,6 @@ def validate_task_payload(data: dict[str, Any]) -> dict[str, Any]:
     data = dict(data)
     data.update(
         {
-            "title": title,
-            "summary": summary,
             "content": content,
             "type": notification_type,
             "send_mode": send_mode,
@@ -351,8 +347,6 @@ async def create_notification_task(data: dict[str, Any], *, created_by: int | No
 
 def _task_payload(task: SystemNotificationTask, *, status: str | None = None) -> dict[str, Any]:
     return {
-        "title": task.title,
-        "summary": task.summary,
         "content": task.content,
         "type": task.type,
         "send_mode": task.send_mode,
@@ -413,8 +407,6 @@ async def publish_task_once(
         try:
             notification = await SystemNotification.create(
                 task_id=task.id,
-                title=task.title,
-                summary=task.summary,
                 content=task.content,
                 type=task.type,
                 source="admin",
@@ -493,8 +485,6 @@ async def publish_due_notifications(*, now: datetime | None = None, limit: int =
 async def create_business_notification(
     *,
     user_id: int,
-    title: str,
-    summary: str,
     content: str,
     type: str,
     biz_key: str,
@@ -503,8 +493,6 @@ async def create_business_notification(
         return await SystemNotification.filter(biz_key=biz_key).first()
     try:
         notification = await SystemNotification.create(
-            title=title.strip(),
-            summary=summary.strip(),
             content=content.strip(),
             type=type,
             source="system",
@@ -548,8 +536,7 @@ async def get_user_unread_summary(*, user_id: int) -> dict[str, Any]:
         if notification:
             latest = {
                 "id": int(notification.id),
-                "title": notification.title,
-                "summary": notification.summary,
+                "content": notification.content,
                 "type": notification.type,
                 "publish_at": format_notification_datetime(notification.published_at or notification.publish_at),
             }
@@ -608,15 +595,12 @@ def _dump_user_notification(
 ) -> dict[str, Any]:
     data = {
         "id": int(notification.id),
-        "title": notification.title,
-        "summary": notification.summary,
+        "content": notification.content,
         "type": notification.type,
         "publish_at": format_notification_datetime(notification.published_at or notification.publish_at),
         "read_at": format_notification_datetime(receipt.read_at),
         "is_read": receipt.read_at is not None,
     }
-    if include_content:
-        data["content"] = notification.content
     return data
 
 

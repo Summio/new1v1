@@ -149,8 +149,7 @@ class SystemNotificationListNotifier
           .map((item) => item.id == notificationId
               ? SystemNotificationItem(
                   id: item.id,
-                  title: item.title,
-                  summary: item.summary,
+                  content: item.content,
                   type: item.type,
                   publishAt: item.publishAt,
                   isRead: false,

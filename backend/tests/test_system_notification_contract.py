@@ -13,6 +13,7 @@ WS_EVENTS_FILE = ROOT / "app/websocket/events.py"
 INIT_APP_FILE = ROOT / "app/core/init_app.py"
 WEB_API_FILE = ROOT / "web/src/api/index.js"
 WEB_VIEW_FILE = ROOT / "web/src/views/operation/system-notification/index.vue"
+WEB_QUERY_BAR_ITEM_FILE = ROOT / "web/src/components/query-bar/QueryBarItem.vue"
 MIGRATIONS_DIR = ROOT / "migrations/models"
 
 
@@ -30,6 +31,8 @@ def test_system_notification_backend_files_and_models_exist() -> None:
     assert "scheduled_run_at" in model_text
     assert "biz_key" in model_text
     assert "read_at" in model_text
+    assert "title = fields.CharField" not in model_text
+    assert "summary = fields.CharField" not in model_text
 
     assert SCHEMA_FILE.exists()
     schema_text = SCHEMA_FILE.read_text(encoding="utf-8")
@@ -37,6 +40,8 @@ def test_system_notification_backend_files_and_models_exist() -> None:
     assert "SystemNotificationTaskCreateIn" in schema_text
     assert "SystemNotificationUnreadOut" in schema_text
     assert "SystemNotificationLatestOut" in schema_text
+    assert "title: str" not in schema_text
+    assert "summary: str" not in schema_text
 
     assert SERVICE_FILE.exists()
     service_text = SERVICE_FILE.read_text(encoding="utf-8")
@@ -45,6 +50,8 @@ def test_system_notification_backend_files_and_models_exist() -> None:
     assert "estimate_target_count" in service_text
     assert "create_business_notification" in service_text
     assert "mark_notification_unread" in service_text
+    assert '"title":' not in service_text
+    assert '"summary":' not in service_text
 
     init_text = MODEL_INIT_FILE.read_text(encoding="utf-8")
     assert "from .system_notification import *" in init_text
@@ -69,6 +76,8 @@ def test_system_notification_routes_and_websocket_are_registered() -> None:
     assert '@router.post("/pause"' in admin_api_text
     assert '@router.post("/resume"' in admin_api_text
     assert '@router.post("/cancel"' in admin_api_text
+    assert "title__contains" not in admin_api_text
+    assert "content__contains" in admin_api_text
 
     app_init_text = APP_INIT_FILE.read_text(encoding="utf-8")
     v1_init_text = V1_INIT_FILE.read_text(encoding="utf-8")
@@ -91,6 +100,8 @@ def test_system_notification_migration_and_admin_web_exist() -> None:
     assert "CREATE TABLE `system_notification_receipt`" in migration_text
     assert "system_notification_task_scheduled_run" in migration_text
     assert "system_notification_biz_key" in migration_text
+    assert "DROP COLUMN `title`" in migration_text
+    assert "DROP COLUMN `summary`" in migration_text
     assert "/api/v1/app/notifications/unread-count" in migration_text
     assert "/api/v1/notification/estimate-target-count" in migration_text
     assert "/api/v1/notification/update" in migration_text
@@ -128,3 +139,20 @@ def test_system_notification_migration_and_admin_web_exist() -> None:
     assert "#tableHeader" not in web_view_text
     assert "openEdit" in web_view_text
     assert "publishSystemNotification" in web_view_text
+    assert "标题关键词" not in web_view_text
+    assert "正文关键词" in web_view_text
+    assert "form.title" not in web_view_text
+    assert "form.summary" not in web_view_text
+    assert "detail.title" not in web_view_text
+    assert "detail.summary" not in web_view_text
+    assert '<QueryBarItem label="类型" :label-width="45" :content-width="140">' in web_view_text
+    assert '<QueryBarItem label="状态" :label-width="45" :content-width="140">' in web_view_text
+    assert '<QueryBarItem label="发送模式" :label-width="70" :content-width="160">' in web_view_text
+
+
+def test_admin_query_bar_item_applies_content_width() -> None:
+    assert WEB_QUERY_BAR_ITEM_FILE.exists()
+    query_bar_item_text = WEB_QUERY_BAR_ITEM_FILE.read_text(encoding="utf-8")
+
+    assert "contentWidth + 'px'" in query_bar_item_text
+    assert "minWidth: contentWidth + 'px'" in query_bar_item_text

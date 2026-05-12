@@ -63,8 +63,6 @@ const form = ref(defaultForm())
 
 function defaultForm() {
   return {
-    title: '',
-    summary: '',
     content: '',
     type: 'announcement',
     status: 'scheduled',
@@ -226,7 +224,7 @@ async function handleDelete(row) {
 
 const columns = [
   { title: 'ID', key: 'id', width: 80, align: 'center' },
-  { title: '标题', key: 'title', minWidth: 180, ellipsis: { tooltip: true } },
+  { title: '正文', key: 'content', minWidth: 240, ellipsis: { tooltip: true } },
   {
     title: '类型',
     key: 'type',
@@ -376,9 +374,9 @@ const columns = [
     >
       <template #queryBar>
         <QueryBarItem label="关键词" :label-width="60">
-          <NInput v-model:value="queryItems.keyword" clearable placeholder="标题关键词" />
+          <NInput v-model:value="queryItems.keyword" clearable placeholder="正文关键词" />
         </QueryBarItem>
-        <QueryBarItem label="类型" :label-width="45">
+        <QueryBarItem label="类型" :label-width="45" :content-width="140">
           <NSelect
             v-model:value="queryItems.type"
             clearable
@@ -386,7 +384,7 @@ const columns = [
             placeholder="全部"
           />
         </QueryBarItem>
-        <QueryBarItem label="状态" :label-width="45">
+        <QueryBarItem label="状态" :label-width="45" :content-width="140">
           <NSelect
             v-model:value="queryItems.status"
             clearable
@@ -394,7 +392,7 @@ const columns = [
             placeholder="全部"
           />
         </QueryBarItem>
-        <QueryBarItem label="发送模式" :label-width="70">
+        <QueryBarItem label="发送模式" :label-width="70" :content-width="160">
           <NSelect
             v-model:value="queryItems.send_mode"
             clearable
@@ -402,7 +400,7 @@ const columns = [
             placeholder="全部"
           />
         </QueryBarItem>
-        <QueryBarItem :label-width="0">
+        <QueryBarItem :label-width="0" :content-width="108">
           <NButton type="primary" @click="openCreate">
             <template #icon>
               <component :is="renderIcon('material-symbols:add-rounded')" />
@@ -415,8 +413,6 @@ const columns = [
 
     <NModal v-model:show="modalVisible" preset="card" :title="modalTitle" style="width: 820px">
       <NForm ref="formRef" :model="form" label-placement="left" label-width="110">
-        <NFormItem label="标题"><NInput v-model:value="form.title" maxlength="100" /></NFormItem>
-        <NFormItem label="摘要"><NInput v-model:value="form.summary" maxlength="200" /></NFormItem>
         <NFormItem label="正文"
           ><NInput v-model:value="form.content" type="textarea" :autosize="{ minRows: 5 }"
         /></NFormItem>
@@ -510,11 +506,9 @@ const columns = [
 
     <NModal v-model:show="detailVisible" preset="card" title="系统通知详情" style="width: 760px">
       <div v-if="detail" class="detail">
-        <h3>{{ detail.title }}</h3>
         <div class="sub">
           {{ labelOf(typeOptions, detail.type) }} / {{ renderDate(detail.created_at) }}
         </div>
-        <p>{{ detail.summary }}</p>
         <pre>{{ detail.content }}</pre>
       </div>
     </NModal>

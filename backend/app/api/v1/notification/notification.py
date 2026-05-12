@@ -39,8 +39,6 @@ async def _dump_task(task: SystemNotificationTask) -> dict:
         estimated_count = 0
     return {
         "id": int(task.id),
-        "title": task.title,
-        "summary": task.summary,
         "content": task.content,
         "type": normalize_notification_choice(task.type, NOTIFICATION_TYPES),
         "status": normalize_notification_choice(task.status, TASK_STATUSES),
@@ -76,7 +74,7 @@ async def list_notification_tasks(
 ):
     q = Q()
     if keyword.strip():
-        q &= Q(title__contains=keyword.strip())
+        q &= Q(content__contains=keyword.strip())
     if type.strip():
         q &= Q(type=type.strip())
     if status.strip():

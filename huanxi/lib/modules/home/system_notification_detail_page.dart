@@ -41,7 +41,7 @@ class _SystemNotificationDetailPageState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(title: const Text('通知详情')),
+      appBar: AppBar(title: const Text('系统通知')),
       body: FutureBuilder<SystemNotificationDetail>(
         future: _future,
         builder: (context, snapshot) {
@@ -67,15 +67,6 @@ class _SystemNotificationDetailPageState
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  detail.title,
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                    color: AppTheme.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 12),
                 Row(
                   children: [
                     Icon(

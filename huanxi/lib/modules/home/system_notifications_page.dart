@@ -135,8 +135,8 @@ class _NotificationTile extends ConsumerWidget {
         ],
       ),
       title: Text(
-        item.title,
-        maxLines: 1,
+        item.content.isEmpty ? '暂无内容' : item.content,
+        maxLines: 2,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
           fontWeight: item.isRead ? FontWeight.w500 : FontWeight.w800,
@@ -146,10 +146,8 @@ class _NotificationTile extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const SizedBox(height: 4),
-          Text(item.summary, maxLines: 2, overflow: TextOverflow.ellipsis),
-          const SizedBox(height: 4),
           Text(
-            item.publishAt,
+            '${_typeLabel(item.type)} · ${item.publishAt}',
             style: const TextStyle(fontSize: 12, color: AppTheme.textHint),
           ),
         ],
@@ -191,5 +189,19 @@ IconData _typeIcon(String type) {
     case 'announcement':
     default:
       return Icons.campaign_outlined;
+  }
+}
+
+String _typeLabel(String type) {
+  switch (type) {
+    case 'account':
+      return '账户通知';
+    case 'review':
+      return '审核通知';
+    case 'interaction':
+      return '互动通知';
+    case 'announcement':
+    default:
+      return '平台公告';
   }
 }

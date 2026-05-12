@@ -46,8 +46,6 @@ class NotificationTargetIn(BaseModel):
 
 
 class SystemNotificationTaskCreateIn(NotificationTargetIn):
-    title: str = Field(..., min_length=1, max_length=100)
-    summary: str = Field(..., min_length=1, max_length=200)
     content: str = Field(..., min_length=1)
     type: NotificationType
     send_mode: NotificationSendMode = NotificationSendMode.IMMEDIATE
@@ -61,7 +59,7 @@ class SystemNotificationTaskCreateIn(NotificationTargetIn):
     end_at: datetime | None = None
     max_runs: int | None = Field(default=None, ge=1)
 
-    @field_validator("title", "summary", "content")
+    @field_validator("content")
     @classmethod
     def strip_text(cls, value: str) -> str:
         return value.strip()
@@ -87,8 +85,7 @@ class SystemNotificationEstimateIn(NotificationTargetIn):
 
 class SystemNotificationLatestOut(BaseModel):
     id: int
-    title: str
-    summary: str
+    content: str
     type: str
     publish_at: datetime | None = None
 
@@ -100,8 +97,7 @@ class SystemNotificationUnreadOut(BaseModel):
 
 class SystemNotificationListItemOut(BaseModel):
     id: int
-    title: str
-    summary: str
+    content: str
     type: str
     publish_at: datetime | None = None
     read_at: datetime | None = None
@@ -109,13 +105,12 @@ class SystemNotificationListItemOut(BaseModel):
 
 
 class SystemNotificationDetailOut(SystemNotificationListItemOut):
-    content: str
+    pass
 
 
 class SystemNotificationTaskOut(BaseModel):
     id: int
-    title: str
-    summary: str
+    content: str
     type: str
     status: str
     send_mode: str

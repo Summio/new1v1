@@ -504,8 +504,8 @@ class _SystemNotificationEntryCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(systemNotificationUnreadProvider);
     final latest = state.latest;
-    final subtitle = latest?.summary.trim().isNotEmpty == true
-        ? latest!.summary.trim()
+    final subtitle = latest?.content.trim().isNotEmpty == true
+        ? latest!.content.trim()
         : '暂无系统通知';
     return InkWell(
       onTap: () => context.push(AppRoutes.systemNotifications),

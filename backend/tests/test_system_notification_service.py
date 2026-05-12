@@ -74,8 +74,6 @@ def test_validate_task_payload_requires_once_publish_at_before_activation() -> N
     with pytest.raises(NotificationValidationError, match="一次性定时必须选择发布时间"):
         validate_task_payload(
             {
-                "title": "提现结果通知",
-                "summary": "你的提现申请已通过",
                 "content": "你的提现申请已通过。\n请注意查收。",
                 "type": "account",
                 "send_mode": "once",
@@ -88,8 +86,6 @@ def test_validate_task_payload_requires_once_publish_at_before_activation() -> N
 def test_validate_task_payload_preserves_plain_text_newlines() -> None:
     payload = validate_task_payload(
         {
-            "title": "维护通知",
-            "summary": "今晚服务维护",
             "content": "今晚 23:00 开始维护。\n预计 30 分钟。",
             "type": "announcement",
             "send_mode": "immediate",
@@ -99,12 +95,25 @@ def test_validate_task_payload_preserves_plain_text_newlines() -> None:
     )
 
     assert payload["content"] == "今晚 23:00 开始维护。\n预计 30 分钟。"
+    assert "title" not in payload
+    assert "summary" not in payload
+
+
+def test_validate_task_payload_rejects_empty_content() -> None:
+    with pytest.raises(NotificationValidationError, match="正文不能为空"):
+        validate_task_payload(
+            {
+                "content": "  ",
+                "type": "announcement",
+                "send_mode": "immediate",
+                "status": "scheduled",
+                "target_mode": "all",
+            }
+        )
 
 
 def test_validate_task_payload_rejects_removed_target_filters() -> None:
     base = {
-        "title": "维护通知",
-        "summary": "今晚服务维护",
         "content": "今晚 23:00 开始维护。",
         "type": "announcement",
         "send_mode": "immediate",
@@ -122,8 +131,6 @@ def test_validate_task_payload_rejects_removed_target_filters() -> None:
 def test_validate_task_payload_accepts_online_target_filter() -> None:
     payload = validate_task_payload(
         {
-            "title": "维护通知",
-            "summary": "今晚服务维护",
             "content": "今晚 23:00 开始维护。",
             "type": "announcement",
             "send_mode": "immediate",
@@ -138,8 +145,6 @@ def test_validate_task_payload_accepts_online_target_filter() -> None:
 
 def test_validate_task_payload_accepts_admin_schema_enum_dump() -> None:
     req = SystemNotificationTaskCreateIn(
-        title="维护通知",
-        summary="今晚服务维护",
         content="今晚 23:00 开始维护。\n预计 30 分钟。",
         type="announcement",
         send_mode="immediate",
@@ -153,6 +158,8 @@ def test_validate_task_payload_accepts_admin_schema_enum_dump() -> None:
     assert payload["send_mode"] == "immediate"
     assert payload["status"] == "scheduled"
     assert payload["target_mode"] == "all"
+    assert "title" not in payload
+    assert "summary" not in payload
 
 
 def test_notification_datetime_formatter_returns_json_safe_text() -> None:
@@ -163,8 +170,6 @@ def test_notification_datetime_formatter_returns_json_safe_text() -> None:
 def test_app_notification_dump_is_json_serializable() -> None:
     notification = SimpleNamespace(
         id=12,
-        title="提现结果通知",
-        summary="你的提现申请已通过",
         type="account",
         published_at=datetime(2026, 5, 12, 18, 0),
         publish_at=datetime(2026, 5, 12, 18, 0),
@@ -177,6 +182,9 @@ def test_app_notification_dump_is_json_serializable() -> None:
     json.dumps(data)
     assert data["publish_at"] == "2026-05-12T18:00:00"
     assert data["read_at"] == "2026-05-12T18:05:00"
+    assert data["content"] == "你的提现申请已通过。\n请注意查收。"
+    assert "title" not in data
+    assert "summary" not in data
 
 
 @pytest.mark.asyncio
@@ -187,8 +195,6 @@ async def test_admin_task_dump_is_json_serializable(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr("app.api.v1.notification.notification.estimate_target_count", fake_estimate_target_count)
     task = SimpleNamespace(
         id=3,
-        title="维护通知",
-        summary="今晚服务维护",
         content="今晚 23:00 开始维护。",
         type="announcement",
         status="scheduled",
@@ -218,6 +224,9 @@ async def test_admin_task_dump_is_json_serializable(monkeypatch: pytest.MonkeyPa
     assert data["next_run_at"] == "2026-05-12T18:00:00"
     assert data["created_at"] == "2026-05-12T17:00:00"
     assert data["estimated_count"] == 8
+    assert data["content"] == "今晚 23:00 开始维护。"
+    assert "title" not in data
+    assert "summary" not in data
 
 
 @pytest.mark.asyncio
@@ -228,8 +237,6 @@ async def test_admin_task_dump_normalizes_legacy_enum_text(monkeypatch: pytest.M
     monkeypatch.setattr("app.api.v1.notification.notification.estimate_target_count", fake_estimate_target_count)
     task = SimpleNamespace(
         id=3,
-        title="维护通知",
-        summary="今晚服务维护",
         content="今晚 23:00 开始维护。",
         type="NotificationType.ANNOUNCEMENT",
         status="NotificationTaskStatus.SCHEDULED",
