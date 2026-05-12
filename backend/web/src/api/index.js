@@ -42,6 +42,8 @@ export default {
     }),
   // call record
   getCallRecordList: (params = {}) => request.get('/call_record/list', { params }),
+  // fee bill
+  getFeeBillList: (params = {}) => request.get('/fee_bill/list', { params }),
   // moment manage
   getMomentList: (params = {}) => request.get('/moment/list', { params }),
   deleteMoment: (params = {}) => request.delete('/moment/delete', { params }),

@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any
 
 from tortoise.expressions import F
 
 from app.core.time_utils import now_local_naive
 from app.models import AppUser, SystemConfig
+from app.services.service_fee_service import (
+    calc_net_call_income_diamonds,
+    quantize_decimal_2,
+)
 from app.utils.parse import clamp_int, safe_parse_int
 
 DEFAULT_CERTIFIED_USER_SHARE_BPS = 5000
@@ -17,6 +22,7 @@ MAX_CERTIFIED_USER_SHARE_BPS = 10000
 class CallIncomeSettlement:
     certified_user_id: int = 0
     certified_user_income_diamonds: int = 0
+    service_fee_diamonds: Decimal = Decimal("0.00")
     settled: bool = False
 
 
@@ -102,13 +108,28 @@ async def settle_call_certified_user_income_once(
     call_record.income_certified_user_id = income_certified_user_id or None
     call_record.certified_user_share_bps = certified_user_share_bps
     call_record.certified_user_income_diamonds = 0
+    call_record.service_fee_income_actual_diamonds = quantize_decimal_2(
+        getattr(call_record, "service_fee_income_actual_diamonds", 0)
+    )
 
     if final_fee <= 0 or income_certified_user_id <= 0:
         return CallIncomeSettlement(certified_user_id=income_certified_user_id)
 
-    certified_user_income = calc_certified_user_income_diamonds(final_fee, certified_user_share_bps)
-    if certified_user_income <= 0:
+    gross_certified_user_income = calc_certified_user_income_diamonds(final_fee, certified_user_share_bps)
+    if gross_certified_user_income <= 0:
         return CallIncomeSettlement(certified_user_id=income_certified_user_id)
+
+    service_fee_diamonds = quantize_decimal_2(getattr(call_record, "service_fee_income_actual_diamonds", 0))
+    certified_user_income = calc_net_call_income_diamonds(gross_certified_user_income, service_fee_diamonds)
+    call_record.certified_user_income_diamonds = gross_certified_user_income
+    if certified_user_income <= 0:
+        call_record.income_settled_at = now_local_naive()
+        return CallIncomeSettlement(
+            certified_user_id=income_certified_user_id,
+            certified_user_income_diamonds=gross_certified_user_income,
+            service_fee_diamonds=service_fee_diamonds,
+            settled=False,
+        )
 
     certified_user = await AppUser.filter(id=income_certified_user_id).using_db(conn).select_for_update().first()
     if not certified_user:
@@ -117,10 +138,10 @@ async def settle_call_certified_user_income_once(
     await AppUser.filter(id=income_certified_user_id).using_db(conn).update(
         diamonds=F("diamonds") + certified_user_income
     )
-    call_record.certified_user_income_diamonds = certified_user_income
     call_record.income_settled_at = now_local_naive()
     return CallIncomeSettlement(
         certified_user_id=income_certified_user_id,
-        certified_user_income_diamonds=certified_user_income,
+        certified_user_income_diamonds=gross_certified_user_income,
+        service_fee_diamonds=service_fee_diamonds,
         settled=True,
     )

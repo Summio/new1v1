@@ -32,6 +32,11 @@ from app.services.interaction_relation_service import (
     InteractionRelationError,
     ensure_interaction_allowed,
 )
+from app.services.service_fee_service import (
+    apply_call_service_fee_config_snapshot,
+    apply_call_service_fee_final_adjustment,
+    get_call_service_fee_config,
+)
 from app.services.user_block_service import UserBlockError, ensure_not_blocked
 from app.utils.billing import calc_due_minutes as _calc_due_minutes_with_free
 from app.utils.media_url import to_relative_media_url
@@ -502,6 +507,10 @@ async def accept_call(req_in: CallActionIn):
         call_record.effective_ended_at = None
         call_record.end_basis = None
         call_record.force_exit_user_id = None
+        apply_call_service_fee_config_snapshot(
+            call_record,
+            await get_call_service_fee_config(),
+        )
         await call_record.save(using_db=conn)
         trace_call_record = call_record
         # 推送 WebSocket 事件给主叫方（fire-and-forget）
@@ -721,7 +730,11 @@ async def call_end(req_in: CallEndIn):
                 _payer_id_for_balance_push = payer_id
                 _balance_changed_for_push = True
 
-            call_record.deducted_minutes = due_minutes
+            if payer_id > 0 and int(call_record.call_price or 0) > 0:
+                settled_minutes = charged_amount // int(call_record.call_price or 0)
+            else:
+                settled_minutes = due_minutes
+            call_record.deducted_minutes = settled_minutes
             call_record.deducted_amount = charged_amount
             call_record.total_fee = charged_amount
             call_record.status = "ended"
@@ -730,6 +743,14 @@ async def call_end(req_in: CallEndIn):
             call_record.effective_ended_at = call_record.ended_at
             call_record.end_basis = "manual_end"
             call_record.force_exit_user_id = None
+            service_fee_adjustment = await apply_call_service_fee_final_adjustment(
+                call_record=call_record,
+                conn=conn,
+                payer_id=payer_id,
+            )
+            if service_fee_adjustment.payer_balance_changed and payer_id > 0:
+                _payer_id_for_balance_push = payer_id
+                _balance_changed_for_push = True
             settlement = await settle_call_certified_user_income_once(
                 call_record=call_record,
                 conn=conn,

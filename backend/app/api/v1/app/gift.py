@@ -7,6 +7,7 @@ from tortoise.transactions import in_transaction
 from app.core.app_auth import DependAppAuth
 from app.core.ctx import CTX_APP_USER_ID
 from app.core.redis import get_redis
+from app.core.time_utils import now_local_naive
 from app.models import AppUser, CallRecord, Gift, GiftRecord
 from app.schemas.app_api import GiftSendIn, GiftSendOut
 from app.schemas.base import Fail, Success, SuccessExtra
@@ -19,6 +20,11 @@ from app.services.gift_income_service import (
 from app.services.interaction_relation_service import (
     InteractionRelationError,
     ensure_interaction_allowed,
+)
+from app.services.service_fee_service import (
+    calc_gift_service_fee,
+    get_gift_service_fee_config,
+    quantize_decimal_2,
 )
 from app.services.tim_service import send_gift_notification
 from app.services.user_block_service import UserBlockError, ensure_not_blocked
@@ -126,6 +132,8 @@ async def gift_send(req_in: GiftSendIn):
         return Fail(code=exc.code, msg=exc.message)
 
     quantity = int(req_in.quantity or 1)
+    if quantity != 1:
+        return Fail(code=400, msg="礼物当前仅支持单次发送1件")
     total_price = int(gift.price) * quantity
     if total_price <= 0:
         return Fail(code=400, msg="礼物金额异常")
@@ -150,11 +158,17 @@ async def gift_send(req_in: GiftSendIn):
 
     receiver_is_certified_user = bool(target_user.is_certified_user)
     certified_user_share_bps = await get_gift_certified_user_share_bps()
+    service_fee_config = await get_gift_service_fee_config()
     certified_user_income_diamonds = (
         calc_gift_certified_user_income_diamonds(total_price, certified_user_share_bps)
         if receiver_is_certified_user
         else calc_gift_certified_user_income_diamonds(0, certified_user_share_bps)
     )
+    service_fee_threshold_coins = 0
+    service_fee_rate_bps = 0
+    service_fee_sender_expected_coins = quantize_decimal_2(0)
+    service_fee_sender_actual_coins = quantize_decimal_2(0)
+    service_fee_sender_status = None
     current_coins = 0.0
     try:
         async with in_transaction() as conn:
@@ -174,6 +188,32 @@ async def gift_send(req_in: GiftSendIn):
                     diamonds=F("diamonds") + certified_user_income_diamonds,
                 )
 
+            if (
+                service_fee_config.enabled
+                and service_fee_config.rate_bps > 0
+                and int(gift.price or 0) > service_fee_config.threshold_coins
+            ):
+                service_fee_threshold_coins = int(service_fee_config.threshold_coins)
+                service_fee_rate_bps = int(service_fee_config.rate_bps)
+                service_fee_sender_expected_coins = calc_gift_service_fee(
+                    unit_price=int(gift.price or 0),
+                    rate_bps=service_fee_rate_bps,
+                )
+                if service_fee_sender_expected_coins > 0:
+                    updated_fee = (
+                        await AppUser.filter(
+                            id=sender_id,
+                            coins__gte=service_fee_sender_expected_coins,
+                        )
+                        .using_db(conn)
+                        .update(coins=F("coins") - service_fee_sender_expected_coins)
+                    )
+                    if updated_fee > 0:
+                        service_fee_sender_actual_coins = service_fee_sender_expected_coins
+                        service_fee_sender_status = "charged"
+                    else:
+                        service_fee_sender_status = "skipped_insufficient"
+
             await GiftRecord.create(
                 sender_id=sender_id,
                 receiver_id=target_user.id,
@@ -184,6 +224,12 @@ async def gift_send(req_in: GiftSendIn):
                 total_price=total_price,
                 certified_user_share_bps=certified_user_share_bps,
                 certified_user_income_diamonds=certified_user_income_diamonds,
+                service_fee_threshold_coins=service_fee_threshold_coins,
+                service_fee_rate_bps=service_fee_rate_bps,
+                service_fee_sender_expected_coins=service_fee_sender_expected_coins,
+                service_fee_sender_actual_coins=service_fee_sender_actual_coins,
+                service_fee_sender_status=service_fee_sender_status,
+                service_fee_sender_settled_at=now_local_naive() if service_fee_sender_status else None,
                 using_db=conn,
             )
 

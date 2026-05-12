@@ -136,6 +136,25 @@ class CallRecord(BaseModel, TimestampMixin):
     certified_user_share_bps = fields.IntField(default=5000, description="本次通话认证用户分成比例快照（万分比）")
     certified_user_income_diamonds = fields.BigIntField(default=0, description="本次通话认证用户收益钻石")
     income_settled_at = fields.DatetimeField(null=True, description="认证用户收益结算时间")
+    service_fee_threshold_minutes = fields.IntField(default=0, description="通话手续费阈值分钟快照")
+    service_fee_rate_bps = fields.IntField(default=0, description="通话手续费比例快照(万分比)")
+    service_fee_processed_chargeable_minutes = fields.IntField(default=0, description="已处理手续费分钟数")
+    service_fee_payer_expected_coins = fields.DecimalField(
+        max_digits=18, decimal_places=2, default=0, description="付费方理论手续费金币"
+    )
+    service_fee_payer_actual_coins = fields.DecimalField(
+        max_digits=18, decimal_places=2, default=0, description="付费方实扣手续费金币"
+    )
+    service_fee_payer_status = fields.CharField(max_length=32, null=True, description="付费方手续费状态")
+    service_fee_payer_settled_at = fields.DatetimeField(null=True, description="付费方手续费结算时间")
+    service_fee_income_expected_diamonds = fields.DecimalField(
+        max_digits=18, decimal_places=2, default=0, description="收益方理论手续费钻石"
+    )
+    service_fee_income_actual_diamonds = fields.DecimalField(
+        max_digits=18, decimal_places=2, default=0, description="收益方实扣手续费钻石"
+    )
+    service_fee_income_status = fields.CharField(max_length=32, null=True, description="收益方手续费状态")
+    service_fee_income_settled_at = fields.DatetimeField(null=True, description="收益方手续费结算时间")
 
     class Meta:
         table = "call_record"
@@ -155,6 +174,16 @@ class GiftRecord(BaseModel, TimestampMixin):
     certified_user_income_diamonds = fields.DecimalField(
         max_digits=18, decimal_places=2, default=0, description="认证用户礼物收益钻石"
     )
+    service_fee_threshold_coins = fields.BigIntField(default=0, description="礼物手续费阈值快照(金币)")
+    service_fee_rate_bps = fields.IntField(default=0, description="礼物手续费比例快照(万分比)")
+    service_fee_sender_expected_coins = fields.DecimalField(
+        max_digits=18, decimal_places=2, default=0, description="送礼方理论手续费金币"
+    )
+    service_fee_sender_actual_coins = fields.DecimalField(
+        max_digits=18, decimal_places=2, default=0, description="送礼方实扣手续费金币"
+    )
+    service_fee_sender_status = fields.CharField(max_length=32, null=True, description="送礼方手续费状态")
+    service_fee_sender_settled_at = fields.DatetimeField(null=True, description="送礼方手续费结算时间")
 
     class Meta:
         table = "gift_record"

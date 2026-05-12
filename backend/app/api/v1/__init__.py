@@ -12,6 +12,7 @@ from .base import base_router
 from .call_records import call_records_router
 from .complaint import complaint_router
 from .depts import depts_router
+from .fee_bill import fee_bill_router
 from .feedback import feedback_router
 from .gift import gift_router
 from .menus import menus_router
@@ -40,6 +41,7 @@ v1_router.include_router(system_config_spec_router, prefix="/apis", dependencies
 v1_router.include_router(withdraw_router, prefix="/withdraw", dependencies=[DependPermission])
 v1_router.include_router(app_users_router, prefix="/app_user", dependencies=[DependPermission])
 v1_router.include_router(feedback_router, prefix="/feedback", dependencies=[DependPermission])
+v1_router.include_router(fee_bill_router, prefix="/fee_bill", dependencies=[DependPermission])
 v1_router.include_router(call_records_router, prefix="/call_record", dependencies=[DependPermission])
 v1_router.include_router(complaint_router, prefix="/complaint", dependencies=[DependPermission])
 v1_router.include_router(gift_router, prefix="/gift", dependencies=[DependPermission])

@@ -246,13 +246,19 @@ const billBizTypeOptions = [
   { label: '全部业务', value: null },
   { label: '充值', value: 'recharge' },
   { label: '通话', value: 'call' },
+  { label: '通话手续费', value: 'call_fee' },
   { label: '礼物', value: 'gift' },
+  { label: '礼物手续费', value: 'gift_fee' },
+  { label: '文字聊天', value: 'im_text' },
   { label: '提现', value: 'withdraw' },
 ]
 const billBizTypeTextMap = {
   recharge: '充值',
   call: '通话',
+  call_fee: '通话手续费',
   gift: '礼物',
+  gift_fee: '礼物手续费',
+  im_text: '文字聊天',
   withdraw: '提现',
 }
 const billAssetTypeTextMap = {
@@ -952,24 +958,10 @@ const columns = [
       )
     },
   },
-  {
-    title: '金币',
-    key: 'coins',
-    width: 150,
-    align: 'center',
-    render(row) {
-      return renderBalanceActions(row, 'coins')
-    },
-  },
-  {
-    title: '钻石',
-    key: 'diamonds',
-    width: 150,
-    align: 'center',
-    render(row) {
-      return renderBalanceActions(row, 'diamonds')
-    },
-  },
+  // prettier-ignore
+  { title: '金币', key: 'coins', width: 150, align: 'center', render: (row) => renderBalanceActions(row, 'coins') },
+  // prettier-ignore
+  { title: '钻石', key: 'diamonds', width: 150, align: 'center', render: (row) => renderBalanceActions(row, 'diamonds') },
   { title: '冻结钻石', key: 'frozen_diamonds', width: 100, align: 'center' },
   {
     title: '创建时间',

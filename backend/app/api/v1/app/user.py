@@ -193,7 +193,7 @@ async def get_user_info():
             "is_certified_user": app_user.is_certified_user,
             "certification_status": app_user.certification_status or "none",
             "certified_call_price": int(app_user.certified_call_price or 0),
-            "initial_profile_completed": bool(app_user.initial_profile_completed),
+            "initial_profile_completed": bool(getattr(app_user, "initial_profile_completed", False)),
             **_serialize_dnd_settings(app_user),
             "created_at": app_user.created_at.isoformat() if app_user.created_at else None,
         }
@@ -234,16 +234,16 @@ async def update_user_profile(req_in: AppUserProfileUpdateIn):
     if app_user.status == "banned":
         return Fail(code=403, msg=f"账号已被封禁，原因：{app_user.ban_reason or '未知'}")
 
-    capability_limits = await load_capability_limit_config()
-    denial_message = profile_edit_denial_message(app_user, capability_limits)
-    if denial_message:
-        return Fail(code=403, msg=denial_message)
-
     if req_in.gender is not None:
         current_gender = app_user.gender or "male"
         requested_gender = str(req_in.gender.value)
         if requested_gender != current_gender:
             return Fail(code=400, msg="性别注册后不可修改")
+
+    capability_limits = await load_capability_limit_config()
+    denial_message = profile_edit_denial_message(app_user, capability_limits)
+    if denial_message:
+        return Fail(code=403, msg=denial_message)
 
     has_pending_review = await has_pending_profile_review(int(app_user.id))
     if has_pending_review:
@@ -284,22 +284,23 @@ async def update_user_profile(req_in: AppUserProfileUpdateIn):
     }
     review_payload = build_profile_review_payload(current_snapshot, target_snapshot)
     review_items = review_payload["review_items"]
-    direct_update_data = {}
+    update_data = {}
+    direct_update_data = update_data
 
     if req_in.birth_date is not None:
         if req_in.birth_date > date.today():
             return Fail(code=400, msg="出生日期不能晚于今天")
-        direct_update_data["birth_date"] = req_in.birth_date
+        update_data["birth_date"] = req_in.birth_date
 
     if req_in.height_cm is not None:
-        direct_update_data["height_cm"] = req_in.height_cm
+        update_data["height_cm"] = req_in.height_cm
 
     if req_in.weight_kg is not None:
-        direct_update_data["weight_kg"] = req_in.weight_kg
+        update_data["weight_kg"] = req_in.weight_kg
 
     if req_in.location_city is not None:
         city = req_in.location_city.strip()
-        direct_update_data["location_city"] = city or None
+        update_data["location_city"] = city or None
 
     direct_album = target_album
     if req_in.album_photos is not None and review_items:
@@ -308,7 +309,7 @@ async def update_user_profile(req_in: AppUserProfileUpdateIn):
 
     if req_in.album_photos is not None:
         if direct_album != current_album:
-            direct_update_data["album_photos"] = direct_album
+            update_data["album_photos"] = direct_album
 
     should_update_cover = False
     direct_cover = current_cover
@@ -324,6 +325,11 @@ async def update_user_profile(req_in: AppUserProfileUpdateIn):
             )
         else:
             direct_cover = target_cover or None
+    elif req_in.album_photos is not None and not review_items:
+        if current_cover and current_cover in target_album:
+            update_data["cover_url"] = current_cover
+        else:
+            update_data["cover_url"] = target_album[0] if target_album else None
     elif req_in.album_photos is not None:
         should_update_cover = True
         direct_cover = (
@@ -333,15 +339,15 @@ async def update_user_profile(req_in: AppUserProfileUpdateIn):
         )
     if should_update_cover:
         if direct_cover != current_cover:
-            direct_update_data["cover_url"] = direct_cover
+            update_data["cover_url"] = direct_cover
 
     if not review_items:
         if req_in.nickname is not None:
-            direct_update_data["nickname"] = target_nickname or None
+            update_data["nickname"] = target_nickname or None
         if req_in.avatar is not None:
-            direct_update_data["avatar"] = target_avatar or None
+            update_data["avatar"] = target_avatar or None
         if req_in.signature is not None:
-            direct_update_data["signature"] = target_signature or None
+            update_data["signature"] = target_signature or None
 
     apply = None
     if review_items:

@@ -129,20 +129,19 @@ class GiftListNotifier extends StateNotifier<GiftListState> {
   Future<GiftSendResult> _sendGiftInternal({
     required int giftId,
     required int targetUserId,
-    required int quantity,
     required String scene,
     int? callId,
   }) async {
     _requestSeq++;
     final requestId =
-        '${DateTime.now().microsecondsSinceEpoch}_${_requestSeq}_${_random.nextInt(1 << 31)}_${giftId}_${targetUserId}_${quantity}_${scene}_${callId ?? 0}';
+        '${DateTime.now().microsecondsSinceEpoch}_${_requestSeq}_${_random.nextInt(1 << 31)}_${giftId}_${targetUserId}_1_${scene}_${callId ?? 0}';
     try {
       final data = await _dio.apiPost(
         ApiEndpoints.giftSend,
         data: {
           'gift_id': giftId,
           'target_user_id': targetUserId,
-          'quantity': quantity,
+          'quantity': 1,
           'scene': scene,
           'call_id': callId,
           'request_id': requestId,
@@ -156,7 +155,9 @@ class GiftListNotifier extends StateNotifier<GiftListState> {
         quantity: resultData['quantity'] as int?,
         unitPrice: resultData['unit_price'] as int?,
         totalPrice: resultData['total_price'] as int?,
-        certifiedUserIncomeDiamonds: _parseDouble(resultData['certified_user_income_diamonds']),
+        certifiedUserIncomeDiamonds: _parseDouble(
+          resultData['certified_user_income_diamonds'],
+        ),
         giftId: resultData['gift_id'] as int?,
         giftName: resultData['gift_name'] as String?,
         giftIcon: resultData['gift_icon'] as String?,
@@ -185,7 +186,6 @@ class GiftListNotifier extends StateNotifier<GiftListState> {
     return _sendGiftInternal(
       giftId: giftId,
       targetUserId: targetUserId,
-      quantity: quantity,
       scene: scene,
       callId: callId,
     );
@@ -198,4 +198,3 @@ final giftListProvider = StateNotifierProvider<GiftListNotifier, GiftListState>(
     return GiftListNotifier(DioClient.instance);
   },
 );
-

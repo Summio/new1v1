@@ -110,7 +110,7 @@ class GiftSendIn(BaseModel):
     target_user_id: Optional[int] = Field(default=None, description="目标用户ID(app_user.id)")
     target_id: Optional[int] = Field(default=None, description="兼容字段: 目标用户ID")
     gift_id: int = Field(..., description="礼物ID")
-    quantity: int = Field(default=1, ge=1, le=999, description="赠送数量")
+    quantity: int = Field(default=1, ge=1, le=1, description="赠送数量，仅支持单次1件")
     scene: str = Field(default="chat", description="送礼场景: chat/call")
     call_id: Optional[int] = Field(default=None, ge=1, description="通话ID(scene=call时可传)")
     request_id: Optional[str] = Field(default=None, min_length=8, max_length=64, description="客户端请求幂等ID")

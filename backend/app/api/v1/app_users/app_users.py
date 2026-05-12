@@ -551,7 +551,7 @@ async def list_app_user_bill(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(10, ge=1, le=100, description="每页数量"),
     direction: str = Query("all", description="方向 all/income/expense"),
-    biz_type: str = Query("", description="业务类型 recharge/call/gift/withdraw/im_text"),
+    biz_type: str = Query("", description="业务类型 recharge/call/gift/withdraw/im_text/call_fee/gift_fee"),
 ):
     user = await AppUser.filter(id=user_id).first()
     if not user:
@@ -575,6 +575,31 @@ async def list_app_user_bill(
         "created_at",
         "income_settled_at",
     )
+    call_fee_payer_expenses = await CallRecord.filter(
+        (Q(payer_user_id=user_id) | (Q(payer_user_id__isnull=True) & Q(caller_id=user_id)))
+        & Q(service_fee_payer_actual_coins__gt=0)
+    ).values(
+        "id",
+        "caller_id",
+        "callee_id",
+        "payer_user_id",
+        "service_fee_payer_actual_coins",
+        "created_at",
+        "service_fee_payer_settled_at",
+    )
+    call_fee_income_expenses = await CallRecord.filter(
+        income_certified_user_id=user_id,
+        service_fee_income_actual_diamonds__gt=0,
+    ).values(
+        "id",
+        "caller_id",
+        "callee_id",
+        "payer_user_id",
+        "income_certified_user_id",
+        "service_fee_income_actual_diamonds",
+        "created_at",
+        "service_fee_income_settled_at",
+    )
     gift_expenses = await GiftRecord.filter(sender_id=user_id, total_price__gt=0).values(
         "id", "sender_id", "receiver_id", "gift_name", "total_price", "created_at"
     )
@@ -585,6 +610,15 @@ async def list_app_user_bill(
         "gift_name",
         "certified_user_income_diamonds",
         "created_at",
+    )
+    gift_fee_expenses = await GiftRecord.filter(sender_id=user_id, service_fee_sender_actual_coins__gt=0).values(
+        "id",
+        "sender_id",
+        "receiver_id",
+        "gift_name",
+        "service_fee_sender_actual_coins",
+        "created_at",
+        "service_fee_sender_settled_at",
     )
     im_text_expenses = await ImTextMessageChargeRecord.filter(sender_id=user_id, price__gt=0).values(
         "id", "sender_id", "receiver_id", "price", "created_at"
@@ -619,12 +653,31 @@ async def list_app_user_bill(
             related_user_id = callee_id if callee_id != user_id else caller_id
         if related_user_id > 0:
             related_user_ids.add(related_user_id)
+    for row in call_fee_payer_expenses:
+        caller_id = int(row.get("caller_id") or 0)
+        callee_id = int(row.get("callee_id") or 0)
+        related_user_id = callee_id if caller_id == user_id else caller_id
+        if related_user_id > 0:
+            related_user_ids.add(related_user_id)
+    for row in call_fee_income_expenses:
+        payer_user_id = int(row.get("payer_user_id") or 0)
+        caller_id = int(row.get("caller_id") or 0)
+        callee_id = int(row.get("callee_id") or 0)
+        related_user_id = payer_user_id or caller_id
+        if related_user_id == user_id:
+            related_user_id = callee_id if callee_id != user_id else caller_id
+        if related_user_id > 0:
+            related_user_ids.add(related_user_id)
     for row in gift_expenses:
         related_user_id = int(row.get("receiver_id") or 0)
         if related_user_id > 0:
             related_user_ids.add(related_user_id)
     for row in gift_incomes:
         related_user_id = int(row.get("sender_id") or 0)
+        if related_user_id > 0:
+            related_user_ids.add(related_user_id)
+    for row in gift_fee_expenses:
+        related_user_id = int(row.get("receiver_id") or 0)
         if related_user_id > 0:
             related_user_ids.add(related_user_id)
     for row in im_text_expenses:
@@ -713,6 +766,51 @@ async def list_app_user_bill(
                 "created_at": _format_bill_dt(row.get("income_settled_at") or row.get("created_at")),
             }
         )
+    for row in call_fee_payer_expenses:
+        amount = decimal_to_float_2(row.get("service_fee_payer_actual_coins"))
+        caller_id = int(row.get("caller_id") or 0)
+        callee_id = int(row.get("callee_id") or 0)
+        related_user_id = callee_id if caller_id == user_id else caller_id
+        related_id, related_nickname = _resolve_related_user(related_user_id)
+        bills.append(
+            {
+                "id": f"call_fee_payer_{row['id']}",
+                "biz_id": row["id"],
+                "biz_type": "call_fee",
+                "title": "通话手续费",
+                "direction": "expense",
+                "is_income": False,
+                "asset_type": "coins",
+                "amount": amount,
+                "related_user_id": related_id,
+                "related_user_nickname": related_nickname,
+                "created_at": _format_bill_dt(row.get("service_fee_payer_settled_at") or row.get("created_at")),
+            }
+        )
+    for row in call_fee_income_expenses:
+        amount = decimal_to_float_2(row.get("service_fee_income_actual_diamonds"))
+        payer_user_id = int(row.get("payer_user_id") or 0)
+        caller_id = int(row.get("caller_id") or 0)
+        callee_id = int(row.get("callee_id") or 0)
+        related_user_id = payer_user_id or caller_id
+        if related_user_id == user_id:
+            related_user_id = callee_id if callee_id != user_id else caller_id
+        related_id, related_nickname = _resolve_related_user(related_user_id)
+        bills.append(
+            {
+                "id": f"call_fee_income_{row['id']}",
+                "biz_id": row["id"],
+                "biz_type": "call_fee",
+                "title": "通话收益手续费",
+                "direction": "expense",
+                "is_income": False,
+                "asset_type": "diamonds",
+                "amount": amount,
+                "related_user_id": related_id,
+                "related_user_nickname": related_nickname,
+                "created_at": _format_bill_dt(row.get("service_fee_income_settled_at") or row.get("created_at")),
+            }
+        )
     for row in gift_expenses:
         amount = decimal_to_float_2(row.get("total_price"))
         gift_name = (row.get("gift_name") or "").strip()
@@ -749,6 +847,25 @@ async def list_app_user_bill(
                 "related_user_id": related_id,
                 "related_user_nickname": related_nickname,
                 "created_at": _format_bill_dt(row.get("created_at")),
+            }
+        )
+    for row in gift_fee_expenses:
+        amount = decimal_to_float_2(row.get("service_fee_sender_actual_coins"))
+        gift_name = (row.get("gift_name") or "").strip()
+        related_id, related_nickname = _resolve_related_user(int(row.get("receiver_id") or 0))
+        bills.append(
+            {
+                "id": f"gift_fee_{row['id']}",
+                "biz_id": row["id"],
+                "biz_type": "gift_fee",
+                "title": f"礼物手续费{f'({gift_name})' if gift_name else ''}",
+                "direction": "expense",
+                "is_income": False,
+                "asset_type": "coins",
+                "amount": amount,
+                "related_user_id": related_id,
+                "related_user_nickname": related_nickname,
+                "created_at": _format_bill_dt(row.get("service_fee_sender_settled_at") or row.get("created_at")),
             }
         )
     for row in im_text_expenses:
@@ -812,9 +929,9 @@ async def list_app_user_bill(
 
     normalized_biz_type = (biz_type or "").strip().lower()
     if normalized_biz_type:
-        allowed_types = {"recharge", "call", "gift", "withdraw", "im_text"}
+        allowed_types = {"recharge", "call", "gift", "withdraw", "im_text", "call_fee", "gift_fee"}
         if normalized_biz_type not in allowed_types:
-            return Fail(code=400, msg="biz_type 仅支持 recharge/call/gift/withdraw/im_text")
+            return Fail(code=400, msg="biz_type 仅支持 recharge/call/gift/withdraw/im_text/call_fee/gift_fee")
 
     filtered = bills
     if normalized_direction == "income":

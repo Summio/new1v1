@@ -18,6 +18,14 @@ from app.models.system_config import SystemConfig
 from app.services.balance_event_service import publish_balance_changed
 from app.services.call_income_service import settle_call_certified_user_income_once
 from app.services.call_trace_service import CallTraceService
+from app.services.service_fee_service import (
+    apply_call_service_fee_final_adjustment,
+    calc_call_income_service_fee_for_minutes,
+    calc_call_service_fee_for_minutes,
+    calc_incremental_chargeable_minutes,
+    quantize_decimal_2,
+    resolve_call_service_fee_payer_status,
+)
 from app.utils.parse import clamp_int, safe_parse_int
 
 FREE_SECONDS_BEFORE_BILLING = 10
@@ -146,6 +154,66 @@ def _resolve_payer_user_id(raw_snapshot: int | None) -> int | None:
 
 def _build_coins_decrement_expr(amount: int):
     return F("coins") - int(amount)
+
+
+async def _apply_incremental_call_service_fee(
+    *,
+    call_record: CallRecord,
+    payer: AppUser | None,
+    conn,
+) -> bool:
+    rate_bps = int(getattr(call_record, "service_fee_rate_bps", 0) or 0)
+    threshold_minutes = int(getattr(call_record, "service_fee_threshold_minutes", 0) or 0)
+    if rate_bps <= 0:
+        return False
+
+    deducted_minutes = int(getattr(call_record, "deducted_minutes", 0) or 0)
+    processed_minutes = int(getattr(call_record, "service_fee_processed_chargeable_minutes", 0) or 0)
+    incremental_minutes = calc_incremental_chargeable_minutes(
+        previous_processed=processed_minutes,
+        deducted_minutes=deducted_minutes,
+        threshold_minutes=threshold_minutes,
+    )
+    if incremental_minutes <= 0:
+        return False
+
+    payer_fee_per_minute = calc_call_service_fee_for_minutes(
+        call_price=int(getattr(call_record, "call_price", 0) or 0),
+        chargeable_minutes=1,
+        rate_bps=rate_bps,
+    )
+    income_fee_per_minute = calc_call_income_service_fee_for_minutes(
+        call_price=int(getattr(call_record, "call_price", 0) or 0),
+        certified_user_share_bps=int(getattr(call_record, "certified_user_share_bps", 0) or 0),
+        chargeable_minutes=1,
+        rate_bps=rate_bps,
+    )
+
+    payer_expected = quantize_decimal_2(getattr(call_record, "service_fee_payer_expected_coins", 0))
+    payer_actual = quantize_decimal_2(getattr(call_record, "service_fee_payer_actual_coins", 0))
+    income_expected = quantize_decimal_2(getattr(call_record, "service_fee_income_expected_diamonds", 0))
+    payer_balance_changed = False
+
+    for _ in range(incremental_minutes):
+        payer_expected = quantize_decimal_2(payer_expected + payer_fee_per_minute)
+        income_expected = quantize_decimal_2(income_expected + income_fee_per_minute)
+        if payer and payer_fee_per_minute > 0 and quantize_decimal_2(payer.coins) >= payer_fee_per_minute:
+            payer.coins = quantize_decimal_2(quantize_decimal_2(payer.coins) - payer_fee_per_minute)
+            payer_actual = quantize_decimal_2(payer_actual + payer_fee_per_minute)
+            payer_balance_changed = True
+
+    call_record.service_fee_processed_chargeable_minutes = processed_minutes + incremental_minutes
+    call_record.service_fee_payer_expected_coins = payer_expected
+    call_record.service_fee_payer_actual_coins = payer_actual
+    call_record.service_fee_payer_status = resolve_call_service_fee_payer_status(
+        expected_amount=payer_expected,
+        actual_amount=payer_actual,
+    )
+    call_record.service_fee_payer_settled_at = now_local_naive() if call_record.service_fee_payer_status else None
+    call_record.service_fee_income_expected_diamonds = income_expected
+    if payer and payer_balance_changed:
+        await payer.save(using_db=conn, update_fields=["coins"])
+    return payer_balance_changed
 
 
 def _resolve_income_certified_user_id(
@@ -557,7 +625,10 @@ async def _process_stale_batch(
                 call_record.status = "ended"
                 call_record.end_reason = "force_exit"
                 call_record.duration = duration
-                call_record.deducted_minutes = due_minutes
+                if payer_id is not None and payer_id > 0 and int(call_record.call_price or 0) > 0:
+                    call_record.deducted_minutes = charged_amount // int(call_record.call_price or 0)
+                else:
+                    call_record.deducted_minutes = due_minutes
                 call_record.deducted_amount = charged_amount
                 call_record.total_fee = charged_amount
                 call_record.ended_at = effective_ended_at
@@ -574,6 +645,21 @@ async def _process_stale_batch(
                         )
                         or None
                     )
+                service_fee_adjustment = await apply_call_service_fee_final_adjustment(
+                    call_record=call_record,
+                    conn=conn,
+                    payer_id=payer_id,
+                )
+                if (
+                    service_fee_adjustment.payer_balance_changed
+                    and payer_id is not None
+                    and payer_id > 0
+                    and not any(
+                        int(existing.id) == int(call_record.id) and existing_payer_id == payer_id
+                        for existing, existing_payer_id in charged_records
+                    )
+                ):
+                    charged_records.append((call_record, payer_id))
                 settlement = await settle_call_certified_user_income_once(
                     call_record=call_record,
                     conn=conn,
@@ -632,6 +718,17 @@ async def _process_stale_batch(
                         )
                         or None
                     )
+                service_fee_adjustment = await apply_call_service_fee_final_adjustment(
+                    call_record=call_record,
+                    conn=conn,
+                    payer_id=payer_id,
+                    payer=payer,
+                )
+                if service_fee_adjustment.payer_balance_changed and not any(
+                    int(existing.id) == int(call_record.id) and existing_payer_id == payer_id
+                    for existing, existing_payer_id in charged_records
+                ):
+                    charged_records.append((call_record, payer_id))
                 settlement = await settle_call_certified_user_income_once(
                     call_record=call_record,
                     conn=conn,
@@ -679,6 +776,16 @@ async def _process_stale_batch(
                         )
                         or None
                     )
+                service_fee_adjustment = await apply_call_service_fee_final_adjustment(
+                    call_record=call_record,
+                    conn=conn,
+                    payer_id=payer_id,
+                )
+                if service_fee_adjustment.payer_balance_changed and not any(
+                    int(existing.id) == int(call_record.id) and existing_payer_id == payer_id
+                    for existing, existing_payer_id in charged_records
+                ):
+                    charged_records.append((call_record, payer_id))
                 settlement = await settle_call_certified_user_income_once(
                     call_record=call_record,
                     conn=conn,
@@ -701,6 +808,12 @@ async def _process_stale_batch(
             call_record.deducted_minutes = due_minutes
             call_record.deducted_amount = int(call_record.deducted_amount or 0) + charge_amount
             call_record.last_renew_at = now_local_naive()
+            payer.coins = quantize_decimal_2(quantize_decimal_2(payer.coins) - charge_amount)
+            await _apply_incremental_call_service_fee(
+                call_record=call_record,
+                payer=payer,
+                conn=conn,
+            )
             await call_record.save(using_db=conn)
             logger.info(
                 "watchdog charged call_id={} payer={} minutes={} amount={}",
