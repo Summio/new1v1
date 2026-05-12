@@ -1,5 +1,5 @@
 <script setup>
-import { h, onMounted, ref } from 'vue'
+import { computed, h, onMounted, ref } from 'vue'
 import {
   NButton,
   NDatePicker,
@@ -31,6 +31,8 @@ const modalVisible = ref(false)
 const detailVisible = ref(false)
 const detail = ref(null)
 const estimatedCount = ref(null)
+const editingId = ref(null)
+const modalTitle = computed(() => (editingId.value ? '编辑系统通知' : '新建系统通知'))
 
 const typeOptions = [
   { label: '平台公告', value: 'announcement' },
@@ -106,13 +108,41 @@ async function fetchData(params = {}) {
 
 function openCreate() {
   form.value = defaultForm()
+  editingId.value = null
   estimatedCount.value = null
   modalVisible.value = true
 }
 
-function openDetail(row) {
-  detail.value = row
-  detailVisible.value = true
+function toDatePickerValue(value) {
+  if (!value) return null
+  const time = new Date(value).getTime()
+  return Number.isNaN(time) ? null : time
+}
+
+function openEdit(row) {
+  editingId.value = row.id
+  estimatedCount.value = null
+  form.value = {
+    ...defaultForm(),
+    ...row,
+    target_user_ids: Array.isArray(row.target_user_ids)
+      ? row.target_user_ids.join(',')
+      : row.target_user_ids || '',
+    target_filters: row.target_filters || {},
+    publish_at: toDatePickerValue(row.publish_at),
+    end_at: toDatePickerValue(row.end_at),
+  }
+  modalVisible.value = true
+}
+
+async function openDetail(row) {
+  try {
+    const res = await api.getSystemNotificationDetail({ id: row.id })
+    detail.value = res.data || row
+    detailVisible.value = true
+  } catch (error) {
+    window.$message?.error(error?.message || '获取详情失败')
+  }
 }
 
 function buildPayload() {
@@ -153,18 +183,24 @@ async function estimateTargetCount() {
 
 async function submitTask(asDraft = false) {
   const payload = buildPayload()
+  if (editingId.value) payload.id = editingId.value
+  if (!editingId.value && !asDraft) payload.status = 'scheduled'
   if (asDraft) payload.status = 'draft'
   if (payload.send_mode === 'repeat' && !payload.end_at && !payload.max_runs) {
     window.$message?.warning('周期重复必须填写结束时间或最大发送次数')
     return
   }
   try {
-    await api.createSystemNotification(payload)
-    window.$message?.success(asDraft ? '草稿已保存' : '创建成功')
+    if (editingId.value) {
+      await api.updateSystemNotification(payload)
+    } else {
+      await api.createSystemNotification(payload)
+    }
+    window.$message?.success(editingId.value ? '保存成功' : asDraft ? '草稿已保存' : '创建成功')
     modalVisible.value = false
     $table.value?.handleSearch()
   } catch (error) {
-    window.$message?.error(error?.message || '创建失败')
+    window.$message?.error(error?.message || '保存失败')
   }
 }
 
@@ -216,7 +252,13 @@ const columns = [
     },
   },
   { title: '目标范围', key: 'target_mode', width: 110 },
-  { title: '预计触达人数', key: 'estimated_count', width: 120, render: () => '-' },
+  {
+    title: '预计触达人数',
+    key: 'estimated_count',
+    width: 120,
+    align: 'center',
+    render: (row) => row.estimated_count ?? '-',
+  },
   {
     title: '下次发送时间',
     key: 'next_run_at',
@@ -261,6 +303,29 @@ const columns = [
               onClick: () => doAction(row, 'resumeSystemNotification', '已恢复'),
             },
             { default: () => '恢复' }
+          )
+        )
+      }
+      if (['draft', 'scheduled', 'paused'].includes(row.status)) {
+        actions.push(
+          h(
+            NButton,
+            { size: 'small', secondary: true, onClick: () => openEdit(row) },
+            { default: () => '编辑' }
+          )
+        )
+      }
+      if (['draft', 'scheduled'].includes(row.status)) {
+        actions.push(
+          h(
+            NButton,
+            {
+              size: 'small',
+              type: 'primary',
+              secondary: true,
+              onClick: () => doAction(row, 'publishSystemNotification', '已发布'),
+            },
+            { default: () => '发布' }
           )
         )
       }
@@ -337,18 +402,18 @@ const columns = [
             placeholder="全部"
           />
         </QueryBarItem>
-      </template>
-      <template #tableHeader>
-        <NButton type="primary" @click="openCreate">
-          <template #icon>
-            <component :is="renderIcon('material-symbols:add-rounded')" />
-          </template>
-          新建通知
-        </NButton>
+        <QueryBarItem :label-width="0">
+          <NButton type="primary" @click="openCreate">
+            <template #icon>
+              <component :is="renderIcon('material-symbols:add-rounded')" />
+            </template>
+            新建通知
+          </NButton>
+        </QueryBarItem>
       </template>
     </CrudTable>
 
-    <NModal v-model:show="modalVisible" preset="card" title="新建系统通知" style="width: 820px">
+    <NModal v-model:show="modalVisible" preset="card" :title="modalTitle" style="width: 820px">
       <NForm ref="formRef" :model="form" label-placement="left" label-width="110">
         <NFormItem label="标题"><NInput v-model:value="form.title" maxlength="100" /></NFormItem>
         <NFormItem label="摘要"><NInput v-model:value="form.summary" maxlength="200" /></NFormItem>
@@ -389,25 +454,13 @@ const columns = [
               ]"
             />
           </NFormItem>
-          <NFormItem label="认证状态">
+          <NFormItem label="在线状态">
             <NSelect
-              v-model:value="form.target_filters.certification_status"
+              v-model:value="form.target_filters.is_online"
               clearable
               :options="[
-                { label: '无', value: 'none' },
-                { label: '待审核', value: 'pending' },
-                { label: '已通过', value: 'approved' },
-                { label: '已拒绝', value: 'rejected' },
-              ]"
-            />
-          </NFormItem>
-          <NFormItem label="账号状态">
-            <NSelect
-              v-model:value="form.target_filters.status"
-              clearable
-              :options="[
-                { label: '正常', value: 'normal' },
-                { label: '封禁', value: 'banned' },
+                { label: '在线', value: true },
+                { label: '离线', value: false },
               ]"
             />
           </NFormItem>
@@ -447,8 +500,10 @@ const columns = [
       </NForm>
       <template #footer>
         <NSpace justify="end">
-          <NButton @click="submitTask(true)">保存草稿</NButton>
-          <NButton type="primary" @click="submitTask(false)">提交</NButton>
+          <NButton v-if="!editingId" @click="submitTask(true)">保存草稿</NButton>
+          <NButton type="primary" @click="submitTask(false)">{{
+            editingId ? '保存' : '提交'
+          }}</NButton>
         </NSpace>
       </template>
     </NModal>

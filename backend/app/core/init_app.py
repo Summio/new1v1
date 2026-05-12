@@ -561,6 +561,23 @@ async def init_roles():
     if ranking_apis and all_roles:
         for role in all_roles:
             await role.apis.add(*ranking_apis)
+    system_notification_apis = await Api.filter(
+        path__in=[
+            "/api/v1/notification/list",
+            "/api/v1/notification/get",
+            "/api/v1/notification/estimate-target-count",
+            "/api/v1/notification/create",
+            "/api/v1/notification/update",
+            "/api/v1/notification/publish",
+            "/api/v1/notification/pause",
+            "/api/v1/notification/resume",
+            "/api/v1/notification/cancel",
+            "/api/v1/notification/delete",
+        ],
+    ).all()
+    if system_notification_apis and all_roles:
+        for role in all_roles:
+            await role.apis.add(*system_notification_apis)
     withdraw_config_menu = await Menu.filter(path="withdraw-config").first()
     withdraw_config_apis = await Api.filter(
         path__in=[

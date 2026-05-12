@@ -93,6 +93,12 @@ def test_system_notification_migration_and_admin_web_exist() -> None:
     assert "system_notification_biz_key" in migration_text
     assert "/api/v1/app/notifications/unread-count" in migration_text
     assert "/api/v1/notification/estimate-target-count" in migration_text
+    assert "/api/v1/notification/update" in migration_text
+    assert "/api/v1/notification/publish" in migration_text
+    assert "/api/v1/notification/pause" in migration_text
+    assert "/api/v1/notification/resume" in migration_text
+    assert "/api/v1/notification/cancel" in migration_text
+    assert "/api/v1/notification/delete" in migration_text
     assert "系统通知" in migration_text
 
     init_app_text = INIT_APP_FILE.read_text(encoding="utf-8")
@@ -113,3 +119,12 @@ def test_system_notification_migration_and_admin_web_exist() -> None:
     assert "预计触达人数" in web_view_text
     assert "周期重复" in web_view_text
     assert "max_runs" in web_view_text
+    assert "在线状态" in web_view_text
+    assert "form.target_filters.is_online" in web_view_text
+    assert "认证状态" not in web_view_text
+    assert "form.target_filters.certification_status" not in web_view_text
+    assert "账号状态" not in web_view_text
+    assert "form.target_filters.status" not in web_view_text
+    assert "#tableHeader" not in web_view_text
+    assert "openEdit" in web_view_text
+    assert "publishSystemNotification" in web_view_text

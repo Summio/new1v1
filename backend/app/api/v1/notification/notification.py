@@ -14,6 +14,7 @@ from app.services.system_notification_service import (
     activate_notification_task,
     create_notification_task,
     estimate_target_count,
+    format_notification_datetime,
     recalculate_task_next_run_at,
     validate_task_payload,
 )
@@ -21,7 +22,15 @@ from app.services.system_notification_service import (
 router = APIRouter()
 
 
-def _dump_task(task: SystemNotificationTask) -> dict:
+async def _dump_task(task: SystemNotificationTask) -> dict:
+    try:
+        estimated_count = await estimate_target_count(
+            target_mode=task.target_mode,
+            target_user_ids=task.target_user_ids or [],
+            target_filters=task.target_filters or None,
+        )
+    except NotificationValidationError:
+        estimated_count = 0
     return {
         "id": int(task.id),
         "title": task.title,
@@ -33,19 +42,20 @@ def _dump_task(task: SystemNotificationTask) -> dict:
         "target_mode": task.target_mode,
         "target_user_ids": task.target_user_ids or [],
         "target_filters": task.target_filters or {},
-        "publish_at": task.publish_at,
+        "publish_at": format_notification_datetime(task.publish_at),
         "repeat_type": task.repeat_type,
         "repeat_time": task.repeat_time,
         "repeat_weekday": task.repeat_weekday,
         "repeat_month_day": task.repeat_month_day,
-        "start_at": task.start_at,
-        "end_at": task.end_at,
+        "start_at": format_notification_datetime(task.start_at),
+        "end_at": format_notification_datetime(task.end_at),
         "max_runs": task.max_runs,
         "run_count": int(task.run_count or 0),
-        "next_run_at": task.next_run_at,
-        "last_run_at": task.last_run_at,
-        "created_at": task.created_at,
-        "updated_at": task.updated_at,
+        "next_run_at": format_notification_datetime(task.next_run_at),
+        "last_run_at": format_notification_datetime(task.last_run_at),
+        "created_at": format_notification_datetime(task.created_at),
+        "updated_at": format_notification_datetime(task.updated_at),
+        "estimated_count": estimated_count,
     }
 
 
@@ -74,7 +84,7 @@ async def list_notification_tasks(
         .offset((page - 1) * page_size)
         .limit(page_size)
     )
-    return SuccessExtra(data=[_dump_task(row) for row in rows], total=total, page=page, page_size=page_size)
+    return SuccessExtra(data=[await _dump_task(row) for row in rows], total=total, page=page, page_size=page_size)
 
 
 @router.get("/get", summary="系统通知任务详情")
@@ -82,7 +92,7 @@ async def get_notification_task(id: int = Query(..., ge=1)):
     task = await SystemNotificationTask.filter(id=id).first()
     if not task:
         return Fail(code=404, msg="系统通知不存在")
-    return Success(data=_dump_task(task))
+    return Success(data=await _dump_task(task))
 
 
 @router.post("/estimate-target-count", summary="预计系统通知触达人数")
@@ -104,7 +114,7 @@ async def create_notification(req_in: SystemNotificationTaskCreateIn):
         task = await create_notification_task(req_in.model_dump())
     except NotificationValidationError as exc:
         return Fail(code=400, msg=str(exc))
-    return Success(data=_dump_task(task), msg="创建成功")
+    return Success(data=await _dump_task(task), msg="创建成功")
 
 
 @router.post("/update", summary="更新系统通知任务")
@@ -116,13 +126,13 @@ async def update_notification(req_in: SystemNotificationTaskUpdateIn):
         return Fail(code=400, msg="当前状态不可编辑")
     data = req_in.model_dump(exclude={"id"})
     try:
-        validate_task_payload(data)
+        data = validate_task_payload(data)
     except NotificationValidationError as exc:
         return Fail(code=400, msg=str(exc))
     for key, value in data.items():
         setattr(task, key, value)
     await recalculate_task_next_run_at(task)
-    return Success(data=_dump_task(task), msg="更新成功")
+    return Success(data=await _dump_task(task), msg="更新成功")
 
 
 @router.post("/publish", summary="发布系统通知任务")
@@ -136,7 +146,7 @@ async def publish_notification(req_in: SystemNotificationTaskActionIn):
         await activate_notification_task(task)
     except NotificationValidationError as exc:
         return Fail(code=400, msg=str(exc))
-    return Success(data=_dump_task(task), msg="发布成功")
+    return Success(data=await _dump_task(task), msg="发布成功")
 
 
 @router.post("/pause", summary="暂停系统通知周期任务")
@@ -160,7 +170,7 @@ async def resume_notification(req_in: SystemNotificationTaskActionIn):
         return Fail(code=400, msg="仅暂停中的周期任务可恢复")
     task.status = "running"
     await recalculate_task_next_run_at(task)
-    return Success(data=_dump_task(task), msg="恢复成功")
+    return Success(data=await _dump_task(task), msg="恢复成功")
 
 
 @router.post("/cancel", summary="取消系统通知任务")

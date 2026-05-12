@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import calendar
 from datetime import datetime, time, timedelta
+from enum import Enum
 from typing import Any
 
 from tortoise.exceptions import IntegrityError
@@ -22,10 +23,50 @@ SEND_MODES = {"immediate", "once", "repeat"}
 TASK_STATUSES = {"draft", "scheduled", "running", "paused", "completed", "cancelled"}
 TARGET_MODES = {"all", "user_ids", "filter"}
 REPEAT_TYPES = {"daily", "weekly", "monthly"}
+TARGET_FILTER_KEYS = {"gender", "is_certified_user", "is_online"}
 
 
 class NotificationValidationError(ValueError):
     pass
+
+
+def format_notification_datetime(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return value.isoformat(timespec="seconds")
+
+
+def _scalar_value(value: Any, default: str = "") -> str:
+    if value is None:
+        return default
+    if isinstance(value, Enum):
+        return str(value.value).strip()
+    return str(value).strip()
+
+
+def _normalize_target_filters(target_mode: str, raw_filters: dict[str, Any] | None) -> dict[str, Any] | None:
+    if target_mode != "filter":
+        return None
+
+    filters = raw_filters or {}
+    normalized: dict[str, Any] = {}
+    for key, value in filters.items():
+        if value is None or value == "":
+            continue
+        if key not in TARGET_FILTER_KEYS:
+            raise NotificationValidationError("不支持的筛选条件")
+        if key == "gender":
+            if value not in {"male", "female"}:
+                raise NotificationValidationError("性别筛选条件不正确")
+            normalized[key] = value
+        elif key == "is_certified_user":
+            normalized[key] = bool(value)
+        elif key == "is_online":
+            normalized[key] = bool(value)
+
+    if not normalized:
+        raise NotificationValidationError("请至少选择一个筛选条件")
+    return normalized
 
 
 def normalize_user_ids(value: list[int | str] | str | None) -> list[int]:
@@ -131,10 +172,10 @@ def validate_task_payload(data: dict[str, Any]) -> dict[str, Any]:
     title = str(data.get("title") or "").strip()
     summary = str(data.get("summary") or "").strip()
     content = str(data.get("content") or "").strip()
-    notification_type = str(data.get("type") or "").strip()
-    send_mode = str(data.get("send_mode") or "immediate").strip()
-    target_mode = str(data.get("target_mode") or "all").strip()
-    status = str(data.get("status") or "draft").strip()
+    notification_type = _scalar_value(data.get("type"))
+    send_mode = _scalar_value(data.get("send_mode"), "immediate")
+    target_mode = _scalar_value(data.get("target_mode"), "all")
+    status = _scalar_value(data.get("status"), "draft")
 
     if not title or not summary or not content:
         raise NotificationValidationError("标题、摘要和正文不能为空")
@@ -153,14 +194,13 @@ def validate_task_payload(data: dict[str, Any]) -> dict[str, Any]:
     )
     if target_mode == "user_ids" and not normalize_user_ids(data.get("target_user_ids")):
         raise NotificationValidationError("请填写目标用户ID")
-    if target_mode == "filter" and not (data.get("target_filters") or {}):
-        raise NotificationValidationError("请至少选择一个筛选条件")
+    target_filters = _normalize_target_filters(target_mode, data.get("target_filters"))
 
     if send_mode == "once" and data.get("publish_at") is None:
         raise NotificationValidationError("一次性定时必须选择发布时间")
 
     if send_mode == "repeat":
-        repeat_type = data.get("repeat_type")
+        repeat_type = _scalar_value(data.get("repeat_type"))
         if repeat_type not in REPEAT_TYPES:
             raise NotificationValidationError("周期类型仅支持每日、每周、每月")
         _parse_repeat_time(data.get("repeat_time"))
@@ -179,8 +219,9 @@ def validate_task_payload(data: dict[str, Any]) -> dict[str, Any]:
             "send_mode": send_mode,
             "target_mode": target_mode,
             "target_user_ids": normalize_user_ids(data.get("target_user_ids")),
-            "target_filters": data.get("target_filters") or None,
+            "target_filters": target_filters,
             "status": status,
+            "repeat_type": _scalar_value(data.get("repeat_type")) or None,
         }
     )
     return data
@@ -196,11 +237,19 @@ def _target_query(target_mode: str, target_user_ids: list[int] | None, target_fi
             q &= Q(gender=str(filters["gender"]))
         if "is_certified_user" in filters and filters["is_certified_user"] is not None:
             q &= Q(is_certified_user=bool(filters["is_certified_user"]))
-        if "certification_status" in filters and filters["certification_status"]:
-            q &= Q(certification_status=str(filters["certification_status"]))
-        if "status" in filters and filters["status"]:
-            q &= Q(status=str(filters["status"]))
     return q
+
+
+async def _apply_online_filter(user_ids: list[int], target_filters: dict[str, Any] | None) -> list[int]:
+    if not target_filters or "is_online" not in target_filters:
+        return user_ids
+    from app.websocket.presence import get_online_user_ids
+
+    online_ids = await get_online_user_ids()
+    wants_online = bool(target_filters["is_online"])
+    if wants_online:
+        return [user_id for user_id in user_ids if user_id in online_ids]
+    return [user_id for user_id in user_ids if user_id not in online_ids]
 
 
 async def resolve_target_user_ids(
@@ -209,9 +258,12 @@ async def resolve_target_user_ids(
     target_user_ids: list[int] | None,
     target_filters: dict[str, Any] | None,
 ) -> list[int]:
+    if target_mode == "filter":
+        target_filters = _normalize_target_filters(target_mode, target_filters)
     q = _target_query(target_mode, target_user_ids, target_filters)
     rows = await AppUser.filter(q).values("id")
-    return [int(row["id"]) for row in rows]
+    user_ids = [int(row["id"]) for row in rows]
+    return await _apply_online_filter(user_ids, target_filters if target_mode == "filter" else None)
 
 
 async def estimate_target_count(
@@ -221,7 +273,17 @@ async def estimate_target_count(
     target_filters: dict[str, Any] | None = None,
 ) -> int:
     normalized = normalize_user_ids(target_user_ids)
+    if target_mode == "filter":
+        target_filters = _normalize_target_filters(target_mode, target_filters)
     q = _target_query(target_mode, normalized, target_filters)
+    if target_mode == "filter" and target_filters and "is_online" in target_filters:
+        return len(
+            await resolve_target_user_ids(
+                target_mode=target_mode,
+                target_user_ids=normalized,
+                target_filters=target_filters,
+            )
+        )
     return await AppUser.filter(q).count()
 
 
@@ -479,7 +541,7 @@ async def get_user_unread_summary(*, user_id: int) -> dict[str, Any]:
                 "title": notification.title,
                 "summary": notification.summary,
                 "type": notification.type,
-                "publish_at": notification.published_at or notification.publish_at,
+                "publish_at": format_notification_datetime(notification.published_at or notification.publish_at),
             }
     return {"count": unread_count, "latest": latest}
 
@@ -539,8 +601,8 @@ def _dump_user_notification(
         "title": notification.title,
         "summary": notification.summary,
         "type": notification.type,
-        "publish_at": notification.published_at or notification.publish_at,
-        "read_at": receipt.read_at,
+        "publish_at": format_notification_datetime(notification.published_at or notification.publish_at),
+        "read_at": format_notification_datetime(receipt.read_at),
         "is_read": receipt.read_at is not None,
     }
     if include_content:
