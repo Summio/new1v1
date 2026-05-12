@@ -159,6 +159,17 @@ def build_operation_children(parent_id: int) -> list[Menu]:
             component="/system/initial-profile",
             keepalive=False,
         ),
+        Menu(
+            menu_type=MenuType.MENU,
+            name="系统通知",
+            path="system-notification",
+            order=12,
+            parent_id=parent_id,
+            icon="material-symbols:notifications-outline-rounded",
+            is_hidden=False,
+            component="/operation/system-notification",
+            keepalive=False,
+        ),
     ]
 
 
@@ -478,6 +489,7 @@ async def init_roles():
             "certification-review",
             "profile-review",
             "ranking",
+            "system-notification",
         ]
     ).all()
     if all_roles and operation_menus:

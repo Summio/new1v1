@@ -235,3 +235,16 @@ async def push_presence(
         "online": bool(online),
     }
     return await get_manager().push_to_user(int(user_id), "presence", data, critical=True)
+
+
+async def push_system_notification_unread_changed(
+    user_id: int,
+    unread_count: int,
+) -> PushResult:
+    """推送系统通知未读数变化。"""
+    data = {"unread_count": int(unread_count)}
+    return await get_manager().push_to_user(
+        int(user_id),
+        "system_notification_unread_changed",
+        data,
+    )

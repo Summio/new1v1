@@ -182,4 +182,16 @@ class ApiEndpoints {
   // ========== 反馈模块 ==========
   /// 提交意见反馈
   static const String feedbackCreate = 'app/feedback/create';
+
+  // ========== 系统通知模块 ==========
+  /// 系统通知列表
+  static const String systemNotifications = 'app/notifications';
+
+  /// 系统通知未读数和最近摘要
+  static const String systemNotificationUnreadCount =
+      'app/notifications/unread-count';
+
+  /// 全部系统通知已读
+  static const String systemNotificationReadAll =
+      'app/notifications/read-all';
 }

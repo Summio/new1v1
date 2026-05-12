@@ -34,6 +34,8 @@ import '../../modules/home/certified_user_detail_page.dart';
 import '../../modules/home/my_following_page.dart';
 import '../../modules/home/user_search_page.dart';
 import '../../modules/home/feedback_page.dart';
+import '../../modules/home/system_notification_detail_page.dart';
+import '../../modules/home/system_notifications_page.dart';
 import '../../modules/home/complaint_page.dart';
 import '../../modules/home/call_page.dart';
 import '../../app/providers/certified_user_provider.dart';
@@ -79,6 +81,7 @@ class AppRoutes {
   static const String callOutgoing = '/call/outgoing';
   static const String callIncoming = '/call/incoming';
   static const String feedback = '/profile/feedback';
+  static const String systemNotifications = '/notifications';
   static const String userComplaint = '/user/complaint';
 
   static CertifiedUserInfo? tryGetCertifiedUserInfo(Object? extra) {
@@ -168,10 +171,15 @@ final appRouter = GoRouter(
           pageBuilder: (context, state) =>
               NoTransitionPage(child: ProfilePage()),
         ),
+    GoRoute(
+      path: AppRoutes.feedback,
+      pageBuilder: (context, state) =>
+          NoTransitionPage(child: FeedbackPage()),
+    ),
         GoRoute(
-          path: AppRoutes.feedback,
+          path: AppRoutes.systemNotifications,
           pageBuilder: (context, state) =>
-              NoTransitionPage(child: FeedbackPage()),
+              const NoTransitionPage(child: SystemNotificationsPage()),
         ),
       ],
     ),
@@ -265,6 +273,21 @@ final appRouter = GoRouter(
           targetUserId: targetUserId,
           targetName: targetName,
         );
+      },
+    ),
+    GoRoute(
+      path: '${AppRoutes.systemNotifications}/:notificationId',
+      builder: (context, state) {
+        final id = int.tryParse(
+          state.pathParameters['notificationId'] ?? '',
+        );
+        if (id == null || id <= 0) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('提示')),
+            body: const Center(child: Text('通知参数无效，请返回重试')),
+          );
+        }
+        return SystemNotificationDetailPage(notificationId: id);
       },
     ),
     GoRoute(
