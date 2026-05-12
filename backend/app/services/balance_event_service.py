@@ -53,7 +53,7 @@ async def maybe_push_call_balance_low_for_user(
     calls = await CallRecord.filter(
         status="ongoing",
         payer_user_id=normalized_user_id,
-    ).values("id", "call_price")
+    ).values("id", "caller_id", "callee_id", "call_price")
 
     current_coins = Decimal(str(coins))
     for call in calls:
@@ -72,7 +72,9 @@ async def maybe_push_call_balance_low_for_user(
             continue
 
         await ws_events.push_call_balance_low(
-            user_id=normalized_user_id,
+            caller_id=int(call["caller_id"]),
+            callee_id=int(call["callee_id"]),
+            payer_user_id=normalized_user_id,
             call_id=call_id,
             coins=decimal_to_float_2(current_coins),
             required_coins=call_price,

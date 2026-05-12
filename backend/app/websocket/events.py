@@ -119,20 +119,28 @@ async def push_call_balance_empty(
 
 
 async def push_call_balance_low(
-    user_id: int,
+    caller_id: int,
+    callee_id: int,
+    payer_user_id: int,
     call_id: int,
     coins: float,
     required_coins: int,
     source: str,
 ) -> PushResult:
-    """推送通话中余额不足下一分钟费用的预警给付费方。"""
+    """推送通话中余额不足下一分钟费用的预警给双方。"""
     data = {
         "call_id": int(call_id),
+        "payer_user_id": int(payer_user_id),
         "coins": coins,
         "required_coins": int(required_coins),
         "source": source,
     }
-    return await get_manager().push_to_user(int(user_id), "call_balance_low", data)
+    tasks = [
+        get_manager().push_to_user(int(caller_id), "call_balance_low", data),
+        get_manager().push_to_user(int(callee_id), "call_balance_low", data),
+    ]
+    results = await asyncio.gather(*tasks)
+    return all(results)
 
 
 # ===== 礼物事件 =====
