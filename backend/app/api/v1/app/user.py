@@ -7,6 +7,7 @@ from tortoise.expressions import Q
 from tortoise.transactions import in_transaction
 
 from app.core.app_auth import DependAppAuth, logout_app_user
+from app.core.china_locations import normalize_location_city
 from app.core.ctx import CTX_APP_USER_ID, CTX_APP_USER_OBJ
 from app.models import AppUser, AppUserProfileReviewApply, UserBlock, UserFollow
 from app.schemas.app_api import DndSettingsIn, DndSettingsOut
@@ -336,7 +337,10 @@ async def update_user_profile(req_in: AppUserProfileUpdateIn):
 
     if req_in.location_city is not None:
         city = req_in.location_city.strip()
-        update_data["location_city"] = city or None
+        normalized_city = normalize_location_city(city)
+        if city and normalized_city is None:
+            return Fail(code=400, msg="所在地不合法")
+        update_data["location_city"] = normalized_city
 
     direct_album = target_album
     if req_in.album_photos is not None and review_items:

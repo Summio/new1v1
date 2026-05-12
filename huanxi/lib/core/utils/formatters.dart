@@ -41,13 +41,23 @@ class Formatters {
     return '${phone.substring(0, 3)}****${phone.substring(7)}';
   }
 
-  /// 所在地展示只显示市，原始值仍可保留为“省-市”。
+  /// 所在地展示只显示简洁城市名，原始值仍可保留为“省-市”。
   static String locationCity(String? value) {
     final raw = value?.trim() ?? '';
     if (raw.isEmpty) return '';
 
     final parts = raw.split('-');
     final city = parts.isEmpty ? raw : parts.last.trim();
-    return city.isEmpty ? raw : city;
+    if (city.isEmpty) return raw;
+
+    const suffixes = ['地区', '自治州', '市', '盟', '州'];
+    for (final suffix in suffixes) {
+      if (!city.endsWith(suffix)) continue;
+
+      final displayCity = city.substring(0, city.length - suffix.length);
+      return displayCity.isEmpty ? city : displayCity;
+    }
+
+    return city;
   }
 }

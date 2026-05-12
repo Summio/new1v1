@@ -7,6 +7,7 @@ from fastapi import APIRouter, File, Query, UploadFile
 from tortoise.expressions import F, Q
 from tortoise.transactions import in_transaction
 
+from app.core.china_locations import normalize_location_city
 from app.core.ctx import CTX_USER_ID
 from app.models import (
     AppUser,
@@ -242,7 +243,10 @@ async def update_app_user(req_in: AppUserAdminUpdateIn):
         update_data["weight_kg"] = req_in.weight_kg
     if req_in.location_city is not None:
         v = req_in.location_city.strip()
-        update_data["location_city"] = v or None
+        normalized_location_city = normalize_location_city(v)
+        if v and normalized_location_city is None:
+            return Fail(code=400, msg="所在地不合法")
+        update_data["location_city"] = normalized_location_city
     if req_in.status is not None:
         update_data["status"] = req_in.status
     if req_in.is_certified_user is not None:
