@@ -1,0 +1,195 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../app/providers/system_notification_provider.dart';
+import '../../app/routes/app_router.dart';
+import '../../app/theme/app_theme.dart';
+import '../../app/widgets/status_view.dart';
+import '../../services/system_notification_service.dart';
+
+class SystemNotificationsPage extends ConsumerStatefulWidget {
+  const SystemNotificationsPage({super.key});
+
+  @override
+  ConsumerState<SystemNotificationsPage> createState() =>
+      _SystemNotificationsPageState();
+}
+
+class _SystemNotificationsPageState
+    extends ConsumerState<SystemNotificationsPage> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(systemNotificationListProvider.notifier).refresh();
+    });
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_onScroll)
+      ..dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 120) {
+      ref.read(systemNotificationListProvider.notifier).loadMore();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(systemNotificationListProvider);
+    return Scaffold(
+      backgroundColor: AppTheme.backgroundColor,
+      appBar: AppBar(
+        title: const Text('系统通知'),
+        actions: [
+          TextButton(
+            onPressed: state.items.isEmpty
+                ? null
+                : () =>
+                    ref.read(systemNotificationListProvider.notifier).readAll(),
+            child: const Text('全部已读'),
+          ),
+        ],
+      ),
+      body: state.isLoading
+          ? StatusView.loading()
+          : state.error != null
+              ? StatusView.error(
+                  message: state.error!,
+                  onRetry: () => ref
+                      .read(systemNotificationListProvider.notifier)
+                      .refresh(),
+                )
+              : state.items.isEmpty
+                  ? StatusView.empty(message: '暂无系统通知')
+                  : RefreshIndicator(
+                      onRefresh: () => ref
+                          .read(systemNotificationListProvider.notifier)
+                          .refresh(),
+                      child: ListView.separated(
+                        controller: _scrollController,
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        itemCount:
+                            state.items.length + (state.isLoadingMore ? 1 : 0),
+                        separatorBuilder: (context, index) =>
+                            const Divider(height: 1, indent: 72),
+                        itemBuilder: (context, index) {
+                          if (index >= state.items.length) {
+                            return const Padding(
+                              padding: EdgeInsets.all(16),
+                              child: Center(
+                                child: CircularProgressIndicator.adaptive(),
+                              ),
+                            );
+                          }
+                          final item = state.items[index];
+                          return _NotificationTile(item: item);
+                        },
+                      ),
+                    ),
+    );
+  }
+}
+
+class _NotificationTile extends ConsumerWidget {
+  final SystemNotificationItem item;
+
+  const _NotificationTile({required this.item});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final iconData = _typeIcon(item.type);
+    return ListTile(
+      leading: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          CircleAvatar(
+            backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.12),
+            child: Icon(iconData, color: AppTheme.primaryColor),
+          ),
+          if (!item.isRead)
+            Positioned(
+              right: -1,
+              top: -1,
+              child: Container(
+                width: 9,
+                height: 9,
+                decoration: const BoxDecoration(
+                  color: Colors.redAccent,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ),
+        ],
+      ),
+      title: Text(
+        item.title,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontWeight: item.isRead ? FontWeight.w500 : FontWeight.w800,
+        ),
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 4),
+          Text(item.summary, maxLines: 2, overflow: TextOverflow.ellipsis),
+          const SizedBox(height: 4),
+          Text(
+            item.publishAt,
+            style: const TextStyle(fontSize: 12, color: AppTheme.textHint),
+          ),
+        ],
+      ),
+      trailing: PopupMenuButton<String>(
+        onSelected: (value) {
+          if (value == 'read') {
+            ref.read(systemNotificationListProvider.notifier).markRead(item.id);
+          } else if (value == 'unread') {
+            ref
+                .read(systemNotificationListProvider.notifier)
+                .markUnread(item.id);
+          }
+        },
+        itemBuilder: (context) => [
+          if (!item.isRead)
+            const PopupMenuItem(value: 'read', child: Text('标记已读')),
+          if (item.isRead)
+            const PopupMenuItem(value: 'unread', child: Text('标记未读')),
+        ],
+      ),
+      onTap: () async {
+        await context.push('${AppRoutes.systemNotifications}/${item.id}');
+        if (!context.mounted) return;
+        ref.read(systemNotificationListProvider.notifier).refresh();
+      },
+    );
+  }
+}
+
+IconData _typeIcon(String type) {
+  switch (type) {
+    case 'account':
+      return Icons.account_balance_wallet_outlined;
+    case 'review':
+      return Icons.fact_check_outlined;
+    case 'interaction':
+      return Icons.favorite_border_rounded;
+    case 'announcement':
+    default:
+      return Icons.campaign_outlined;
+  }
+}

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/providers/auth_provider.dart';
 import '../../app/providers/certified_user_provider.dart';
+import '../../app/providers/system_notification_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/constants/api_endpoints.dart';
@@ -47,6 +48,7 @@ class _MainShellState extends ConsumerState<MainShell>
   bool _incomingRouteOpening = false;
   String? _lastHandledIncomingKey;
   int _imUnreadCount = 0;
+  int _systemNotificationUnreadCount = 0;
   void Function(int)? _imUnreadListener;
   Function(dynamic)? _imMessageListener;
   bool _isInitGlobalIMUnreadRunning = false;
@@ -75,6 +77,7 @@ class _MainShellState extends ConsumerState<MainShell>
       if (!mounted) return;
       ref.read(authProvider.notifier).refreshBalance();
       ref.read(authProvider.notifier).fetchUserInfo();
+      _refreshSystemNotificationUnreadCount();
     });
   }
 
@@ -92,6 +95,7 @@ class _MainShellState extends ConsumerState<MainShell>
       } else {
         _initGlobalIMUnread();
       }
+      _refreshSystemNotificationUnreadCount();
     }
   }
 
@@ -149,6 +153,19 @@ class _MainShellState extends ConsumerState<MainShell>
       await _imService.syncTotalUnreadCount();
     } catch (e) {
       debugPrint('mainShell.refreshUnreadCount error: $e');
+    }
+  }
+
+  Future<void> _refreshSystemNotificationUnreadCount() async {
+    try {
+      await ref.read(systemNotificationUnreadProvider.notifier).refresh();
+      final count = ref.read(systemNotificationUnreadProvider).count;
+      if (!mounted || count == _systemNotificationUnreadCount) return;
+      setState(() {
+        _systemNotificationUnreadCount = count;
+      });
+    } catch (e) {
+      debugPrint('mainShell.refreshSystemNotificationUnreadCount error: $e');
     }
   }
 
@@ -266,6 +283,9 @@ class _MainShellState extends ConsumerState<MainShell>
       case 'presence':
         _handlePresenceEvent(event.data);
         break;
+      case 'system_notification_unread_changed':
+        _handleSystemNotificationUnreadChanged(event.data);
+        break;
     }
   }
 
@@ -340,6 +360,16 @@ class _MainShellState extends ConsumerState<MainShell>
     );
   }
 
+  void _handleSystemNotificationUnreadChanged(Map<String, dynamic> data) {
+    final raw = data['unread_count'];
+    final count = raw is int ? raw : int.tryParse('$raw') ?? 0;
+    ref.read(systemNotificationUnreadProvider.notifier).syncCount(count);
+    if (!mounted || count == _systemNotificationUnreadCount) return;
+    setState(() {
+      _systemNotificationUnreadCount = count < 0 ? 0 : count;
+    });
+  }
+
   int _getCurrentIndex(BuildContext context) {
     try {
       final location = GoRouterState.of(context).matchedLocation;
@@ -364,6 +394,7 @@ class _MainShellState extends ConsumerState<MainShell>
       case 2:
         context.go(AppRoutes.messages);
         _refreshUnreadCount();
+        _refreshSystemNotificationUnreadCount();
         break;
       case 3:
         ref.read(authProvider.notifier).refreshBalance();
@@ -405,6 +436,8 @@ class _MainShellState extends ConsumerState<MainShell>
       _handleRouteBasedUnreadRefresh(currentLocation);
     }
     final currentIndex = _getCurrentIndex(context);
+    final combinedChatUnread =
+        _imUnreadCount + _systemNotificationUnreadCount;
 
     return Scaffold(
       body: widget.child,
@@ -445,7 +478,7 @@ class _MainShellState extends ConsumerState<MainShell>
                   activeIcon: Icons.chat_bubble_rounded,
                   label: '聊天',
                   isActive: currentIndex == 2,
-                  badgeCount: _imUnreadCount,
+                  badgeCount: combinedChatUnread,
                   onTap: () => _onTap(context, 2),
                 ),
                 _NavItem(

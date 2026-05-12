@@ -104,6 +104,18 @@ export default {
   // feedback manage
   getFeedbackList: (params = {}) => request.get('/feedback/list', { params }),
   deleteFeedback: (params = {}) => request.delete('/feedback/delete', { params }),
+  // system notification manage
+  getSystemNotificationList: (params = {}) => request.get('/notification/list', { params }),
+  getSystemNotificationDetail: (params = {}) => request.get('/notification/get', { params }),
+  estimateSystemNotificationTargetCount: (data = {}) =>
+    request.post('/notification/estimate-target-count', data),
+  createSystemNotification: (data = {}) => request.post('/notification/create', data),
+  updateSystemNotification: (data = {}) => request.post('/notification/update', data),
+  publishSystemNotification: (data = {}) => request.post('/notification/publish', data),
+  pauseSystemNotification: (data = {}) => request.post('/notification/pause', data),
+  resumeSystemNotification: (data = {}) => request.post('/notification/resume', data),
+  cancelSystemNotification: (data = {}) => request.post('/notification/cancel', data),
+  deleteSystemNotification: (params = {}) => request.delete('/notification/delete', { params }),
   // complaint manage
   getComplaintList: (params = {}) => request.get('/complaint/list', { params }),
   getComplaintDetail: (params = {}) => request.get('/complaint/detail', { params }),

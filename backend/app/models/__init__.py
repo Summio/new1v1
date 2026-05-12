@@ -6,6 +6,7 @@ from .feedback import *
 from .moments import *
 from .ranking import *
 from .system_config import *
+from .system_notification import *
 from .user_block import *
 from .user_complaint import *
 from .user_follow import *

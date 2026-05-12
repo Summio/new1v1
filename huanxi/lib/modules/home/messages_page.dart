@@ -8,6 +8,7 @@ import 'package:tencent_cloud_chat_sdk/models/v2_tim_user_full_info.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/widgets/status_view.dart';
 import '../../app/providers/auth_provider.dart';
+import '../../app/providers/system_notification_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/dio_client.dart';
@@ -76,6 +77,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
       _imService.removeTotalUnreadListener(_totalUnreadListener!);
       _imService.addTotalUnreadListener(_totalUnreadListener!);
       await _loadConversations(force: true);
+      await ref.read(systemNotificationUnreadProvider.notifier).refresh();
     } catch (e) {
       debugPrint('消息页 IM 初始化失败: $e');
       if (mounted) {
@@ -336,55 +338,71 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
       body: _isLoading
           ? StatusView.loading()
           : _conversations.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 120,
-                    height: 120,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          AppTheme.primaryColor.withValues(alpha: 0.1),
-                          AppTheme.accentColor.withValues(alpha: 0.1),
-                        ],
-                      ),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.chat_bubble_outline_rounded,
-                      size: 56,
-                      color: AppTheme.primaryColor.withValues(alpha: 0.6),
+          ? Column(
+              children: [
+                const _SystemNotificationEntryCard(),
+                Expanded(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          width: 120,
+                          height: 120,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                AppTheme.primaryColor.withValues(alpha: 0.1),
+                                AppTheme.accentColor.withValues(alpha: 0.1),
+                              ],
+                            ),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            Icons.chat_bubble_outline_rounded,
+                            size: 56,
+                            color: AppTheme.primaryColor.withValues(alpha: 0.6),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        const Text(
+                          '暂无消息',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          '和认证用户互动后将在此处收到消息',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  const Text(
-                    '暂无消息',
-                    style: TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    '和认证用户互动后将在此处收到消息',
-                    style: TextStyle(
-                      fontSize: 14,
-                      color: AppTheme.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             )
           : RefreshIndicator(
-              onRefresh: () => _loadConversations(force: true),
+              onRefresh: () async {
+                await _loadConversations(force: true);
+                await ref
+                    .read(systemNotificationUnreadProvider.notifier)
+                    .refresh();
+              },
               child: ListView.separated(
-                itemCount: _conversations.length,
+                itemCount: _conversations.length + 1,
                 separatorBuilder: (_, itemIndex) => const Divider(height: 1),
                 itemBuilder: (context, index) {
-                  final conv = _conversations[index];
+                  if (index == 0) {
+                    return const _SystemNotificationEntryCard();
+                  }
+                  final convIndex = index - 1;
+                  final conv = _conversations[convIndex];
                   final avatarUrl = _avatarUrl(conv);
                   return ListTile(
                     leading: CircleAvatar(
@@ -477,4 +495,107 @@ class _PeerAppProfile {
   final String? avatarUrl;
 
   const _PeerAppProfile({this.nickname, this.avatarUrl});
+}
+
+class _SystemNotificationEntryCard extends ConsumerWidget {
+  const _SystemNotificationEntryCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(systemNotificationUnreadProvider);
+    final latest = state.latest;
+    final subtitle = latest?.summary.trim().isNotEmpty == true
+        ? latest!.summary.trim()
+        : '暂无系统通知';
+    return InkWell(
+      onTap: () => context.push(AppRoutes.systemNotifications),
+      child: Container(
+        color: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Row(
+          children: [
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                CircleAvatar(
+                  radius: 22,
+                  backgroundColor: AppTheme.primaryColor.withValues(
+                    alpha: 0.12,
+                  ),
+                  child: const Icon(
+                    Icons.notifications_none_rounded,
+                    color: AppTheme.primaryColor,
+                  ),
+                ),
+                if (state.count > 0)
+                  Positioned(
+                    right: -6,
+                    top: -6,
+                    child: _NotificationBadge(count: state.count),
+                  ),
+              ],
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    '系统通知',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.chevron_right_rounded,
+              color: AppTheme.textHint,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NotificationBadge extends StatelessWidget {
+  final int count;
+
+  const _NotificationBadge({required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    final text = count > 99 ? '99+' : '$count';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      constraints: const BoxConstraints(minWidth: 17, minHeight: 17),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: Colors.redAccent,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
 }
