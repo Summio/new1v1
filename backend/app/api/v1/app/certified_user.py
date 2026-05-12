@@ -30,16 +30,28 @@ def _normalize_certified_tags(raw_value) -> list[str]:
 
 
 def _certified_user_sort_key(user, section: str, online_ids: set[int], online_since_map: dict[int, int]):
-    is_online = user.id in online_ids
+    availability_rank = _availability_sort_rank(user, online_ids)
     recommend_weight = int(user.recommend_weight or 0)
 
     if section == "active":
-        if is_online:
-            return (True, online_since_map.get(user.id, 0), user.id)
-        return (False, *_offline_review_sort_key(user))
+        if availability_rank > 0:
+            return (availability_rank, online_since_map.get(user.id, 0), user.id)
+        return (availability_rank, *_offline_review_sort_key(user))
     if section == "new":
-        return (is_online, *_offline_review_sort_key(user))
-    return (is_online, recommend_weight, *_offline_review_sort_key(user))
+        return (availability_rank, *_offline_review_sort_key(user))
+    return (availability_rank, recommend_weight, *_offline_review_sort_key(user))
+
+
+def _availability_sort_rank(user, online_ids: set[int]) -> int:
+    try:
+        user_id = int(user.id)
+    except (TypeError, ValueError):
+        return 0
+    if user_id not in online_ids:
+        return 0
+    if bool(getattr(user, "video_dnd_enabled", False)):
+        return 1
+    return 2
 
 
 def _offline_review_sort_key(user):
@@ -48,8 +60,7 @@ def _offline_review_sort_key(user):
 
 
 async def _fetch_sorted_certified_user_page(q, section: str, page: int, page_size: int):
-    from app.websocket.presence import count_online_user_ids, get_online_user_id_page
-    from app.websocket.presence import is_online as _is_online_user
+    from app.websocket.presence import count_online_user_ids, filter_online_user_ids, get_online_user_id_page
 
     total = await q.count()
     offset = (page - 1) * page_size
@@ -59,71 +70,90 @@ async def _fetch_sorted_certified_user_page(q, section: str, page: int, page_siz
         "new": ["-certification_reviewed_at", "-id"],
     }[section]
 
-    online_total = await count_online_user_ids()
-
-    async def fetch_online_by_db_order() -> list[AppUser]:
-        needed = offset + page_size
-        batch_size = min(max(needed * 2, page_size), 200)
-        scan_offset = 0
-        online_users: list[AppUser] = []
-        while len(online_users) < needed and scan_offset < 1000:
-            candidates = list(await q.order_by(*order_fields).offset(scan_offset).limit(batch_size))
-            if not candidates:
-                break
-            for candidate in candidates:
-                if await _is_online_user(int(candidate.id)):
-                    online_users.append(candidate)
-                    if len(online_users) >= needed:
-                        break
-            scan_offset += len(candidates)
-            if len(candidates) < batch_size:
-                break
-        return online_users[offset : offset + page_size]
-
-    async def fetch_offline_by_db_order(offline_offset: int, limit: int) -> list[AppUser]:
+    async def fetch_rank_by_db_order(rank: int, rank_offset: int, limit: int) -> tuple[int, list[AppUser]]:
         if limit <= 0:
-            return []
-        batch_size = min(max(limit * 4, 50), 200)
+            return 0, []
+        batch_size = 200
         scan_offset = 0
-        skipped = 0
+        seen = 0
         users: list[AppUser] = []
-        while len(users) < limit and scan_offset < offline_offset + 1000:
+        while True:
             candidates = list(await q.order_by(*order_fields).offset(scan_offset).limit(batch_size))
             if not candidates:
                 break
+            online_ids = await filter_online_user_ids(int(candidate.id) for candidate in candidates)
             for candidate in candidates:
-                if await _is_online_user(int(candidate.id)):
+                if _availability_sort_rank(candidate, online_ids) != rank:
                     continue
-                if skipped < offline_offset:
-                    skipped += 1
+                if seen < rank_offset:
+                    seen += 1
                     continue
                 users.append(candidate)
+                seen += 1
                 if len(users) >= limit:
-                    break
+                    return seen, users
             scan_offset += len(candidates)
             if len(candidates) < batch_size:
                 break
+        return seen, users
+
+    async def fetch_active_online_rank(rank: int, rank_offset: int, limit: int, online_total: int) -> tuple[int, list[AppUser]]:
+        if limit <= 0:
+            return 0, []
+        batch_size = 200
+        scan_offset = 0
+        seen = 0
+        users: list[AppUser] = []
+        while scan_offset < online_total:
+            online_ids = await get_online_user_id_page(scan_offset, batch_size)
+            scan_offset += batch_size
+            if not online_ids:
+                continue
+            online_user_map = {int(user.id): user for user in await q.filter(id__in=online_ids)}
+            for user_id in online_ids:
+                candidate = online_user_map.get(user_id)
+                if candidate is None:
+                    continue
+                if _availability_sort_rank(candidate, set(online_ids)) != rank:
+                    continue
+                if seen < rank_offset:
+                    seen += 1
+                    continue
+                users.append(candidate)
+                seen += 1
+                if len(users) >= limit:
+                    return seen, users
+        return seen, users
+
+    async def append_ranked_page(rank_fetchers) -> list[AppUser]:
+        remaining_offset = offset
+        users: list[AppUser] = []
+        for fetcher in rank_fetchers:
+            seen, rank_users = await fetcher(remaining_offset, page_size - len(users))
+            users.extend(rank_users)
+            if len(users) >= page_size:
+                break
+            remaining_offset = max(0, remaining_offset - seen)
         return users
 
-    if online_total <= 0:
-        users = await fetch_offline_by_db_order(offset, page_size)
+    if section == "active":
+        online_total = await count_online_user_ids()
+        users = await append_ranked_page(
+            [
+                lambda rank_offset, limit: fetch_active_online_rank(2, rank_offset, limit, online_total),
+                lambda rank_offset, limit: fetch_active_online_rank(1, rank_offset, limit, online_total),
+                lambda rank_offset, limit: fetch_rank_by_db_order(0, rank_offset, limit),
+            ]
+        )
         return total, users
 
-    if offset < online_total:
-        if section == "active":
-            online_ids = await get_online_user_id_page(offset, page_size)
-            online_map = {int(user.id): user for user in await q.filter(id__in=online_ids)}
-            users = [online_map[user_id] for user_id in online_ids if user_id in online_map]
-        else:
-            users = await fetch_online_by_db_order()
-        remaining = page_size - len(users)
-        if remaining > 0:
-            offline_users = await fetch_offline_by_db_order(0, remaining)
-            users.extend(list(offline_users))
-        return total, users
-
-    offline_offset = offset - online_total
-    users = await fetch_offline_by_db_order(offline_offset, page_size)
+    users = await append_ranked_page(
+        [
+            lambda rank_offset, limit: fetch_rank_by_db_order(2, rank_offset, limit),
+            lambda rank_offset, limit: fetch_rank_by_db_order(1, rank_offset, limit),
+            lambda rank_offset, limit: fetch_rank_by_db_order(0, rank_offset, limit),
+        ]
+    )
     return total, users
 
 
@@ -173,12 +203,9 @@ async def certified_user_list(
             page_size=page_size,
         )
 
-    from app.websocket.presence import is_online as _is_online_user
+    from app.websocket.presence import filter_online_user_ids
 
-    online_ids: set[int] = set()
-    for user in users:
-        if await _is_online_user(int(user.id)):
-            online_ids.add(int(user.id))
+    online_ids = await filter_online_user_ids(int(user.id) for user in users)
     availability_payloads = await build_availability_payload_map(users, online_ids=online_ids)
 
     rows = []

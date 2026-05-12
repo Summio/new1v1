@@ -37,13 +37,16 @@ def test_certified_user_list_supports_online_section_sorting() -> None:
     assert "users = await q.all()" not in text
     assert "_fetch_sorted_certified_user_page" in text
     assert "online_ids" in text
-    assert "user.id in online_ids" in text
+    assert "user_id not in online_ids" in text
     assert "is_recommended" in text
     assert "True" in text
     assert "recommend_weight" in text
     assert "certification_reviewed_at" in text
     assert "get_online_user_id_page" in text
     assert "count_online_user_ids" in text
+    assert "filter_online_user_ids" in text
+    assert "_availability_sort_rank" in text
+    assert "video_dnd_enabled" in text
 
 
 def test_presence_records_online_since_for_active_sorting() -> None:

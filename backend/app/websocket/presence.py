@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 from app.core.redis import get_redis
@@ -37,6 +38,21 @@ _WS_ONLINE_CERTIFIED_USER_SINCE_KEY = "ws:online_certified_user_since"
 _WS_ONLINE_ANCHOR_SINCE_KEY = "ws:online_anchor_since"  # legacy key
 _MANUAL_OFFLINE_KEY_PREFIX = "ws:manual_offline:"
 _MANUAL_OFFLINE_TTL = 24 * 60 * 60  # 24 小时，手动离线状态超时自动清除
+
+
+def _normalize_user_ids(user_ids: Iterable[int]) -> list[int]:
+    ids: list[int] = []
+    seen: set[int] = set()
+    for raw_id in user_ids:
+        try:
+            user_id = int(raw_id)
+        except (TypeError, ValueError):
+            continue
+        if user_id <= 0 or user_id in seen:
+            continue
+        seen.add(user_id)
+        ids.append(user_id)
+    return ids
 
 
 async def _sync_legacy_certified_online_since(redis) -> None:
@@ -55,6 +71,26 @@ async def is_online(user_id: int) -> bool:
         return False
     offline = await redis.exists(f"{_MANUAL_OFFLINE_KEY_PREFIX}{user_id}")
     return not bool(offline)
+
+
+async def filter_online_user_ids(user_ids: Iterable[int]) -> set[int]:
+    """批量获取业务在线用户 ID（WS 已连接 且 未手动离线）。"""
+    ids = _normalize_user_ids(user_ids)
+    if not ids:
+        return set()
+
+    redis = await get_redis()
+    pipe = redis.pipeline()
+    for user_id in ids:
+        pipe.sismember(_WS_ONLINE_KEY, user_id)
+    connected_flags = await pipe.execute()
+    connected_ids = [user_id for user_id, connected in zip(ids, connected_flags) if connected]
+    if not connected_ids:
+        return set()
+
+    manual_offline_keys = [f"{_MANUAL_OFFLINE_KEY_PREFIX}{user_id}" for user_id in connected_ids]
+    flags = await redis.mget(manual_offline_keys)
+    return {user_id for user_id, flag in zip(connected_ids, flags) if flag is None}
 
 
 async def set_manual_offline(user_id: int) -> None:

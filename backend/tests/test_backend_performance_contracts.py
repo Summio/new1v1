@@ -27,16 +27,19 @@ def test_certified_user_list_uses_bounded_online_page_helpers() -> None:
     source = inspect.getsource(certified_user.certified_user_list)
     fetch_source = inspect.getsource(certified_user._fetch_sorted_certified_user_page)
     page_helper_source = inspect.getsource(presence.get_online_user_id_page)
+    batch_helper_source = inspect.getsource(presence.filter_online_user_ids)
 
     assert "get_online_user_ids" not in source
     assert "get_online_since_map" not in source
     assert "get_online_user_id_page" in fetch_source
     assert "count_online_user_ids" in fetch_source
+    assert "filter_online_user_ids" in fetch_source
     assert "smembers(_WS_ONLINE_KEY)" not in page_helper_source
     assert "zrange(_WS_ONLINE_SINCE_KEY, 0, -1" not in page_helper_source
+    assert "smembers(_WS_ONLINE_KEY)" not in batch_helper_source
     assert "get_online_user_id_page" in presence_text
     assert "count_online_user_ids" in presence_text
-    assert "_is_online_user" in certified_user_text
+    assert "filter_online_user_ids" in presence_text
 
 
 def test_audit_log_excludes_app_business_routes() -> None:
