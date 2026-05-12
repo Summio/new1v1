@@ -70,6 +70,41 @@ class WatchdogBillingResult:
     certified_user_balance_pushes: list[int]
 
 
+def _call_trace_args_for_ended_record(call_record: CallRecord) -> dict[str, int | str]:
+    end_reason = (getattr(call_record, "end_reason", None) or "normal").strip()
+    if end_reason == "balance_empty":
+        return {
+            "phase": "balance_empty",
+            "actor_user_id": int(call_record.caller_id),
+            "reason": "balance_empty",
+        }
+    if end_reason == "force_exit":
+        return {
+            "phase": "force_exit",
+            "actor_user_id": int(call_record.force_exit_user_id or call_record.caller_id),
+            "reason": "force_exit",
+        }
+    return {
+        "phase": "ended",
+        "actor_user_id": int(call_record.caller_id),
+        "reason": end_reason or "normal",
+    }
+
+
+async def _append_call_trace_for_ended_record_safely(call_record: CallRecord) -> None:
+    try:
+        trace_service = CallTraceService()
+        trace_args = _call_trace_args_for_ended_record(call_record)
+        await trace_service.append(call_record=call_record, **trace_args)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("watchdog call trace append failed: {}", str(exc))
+
+
+def _schedule_call_trace_for_ended_records(ended_records: list[CallRecord]) -> None:
+    for call_record in ended_records:
+        asyncio.create_task(_append_call_trace_for_ended_record_safely(call_record))
+
+
 def _clamp_seconds(value: int) -> int:
     return clamp_int(value, MIN_WATCHDOG_SECONDS, MAX_WATCHDOG_SECONDS)
 
@@ -455,21 +490,18 @@ async def _close_stale_ongoing(config: WatchdogConfig) -> None:
 
     # 追踪写入移出事务
     for call_record in ended_records:
+        trace_args = _call_trace_args_for_ended_record(call_record)
         if call_record.end_reason == "force_exit":
             await trace_service.append(
                 call_record=call_record,
-                phase="force_exit",
-                actor_user_id=int(call_record.force_exit_user_id or call_record.caller_id),
-                reason="force_exit",
+                **trace_args,
             )
             asyncio.create_task(_ws_push_call_force_exit(call_record))
             continue
 
         await trace_service.append(
             call_record=call_record,
-            phase="balance_empty",
-            actor_user_id=int(call_record.caller_id),
-            reason="balance_empty",
+            **trace_args,
         )
         # 推送 WebSocket 事件
         asyncio.create_task(_ws_push_call_balance_empty(call_record))
@@ -517,6 +549,7 @@ async def process_ongoing_call_billing_once(call_id: int) -> WatchdogBillingResu
         raw_records,
         certified_user_ids,
     )
+    _schedule_call_trace_for_ended_records(ended_records)
     return WatchdogBillingResult(
         ended_records=ended_records,
         charged_payer_ids=[payer_id for _, payer_id in charged_records],

@@ -3,6 +3,7 @@ from tortoise.expressions import CombinedExpression, F
 from app.core.call_watchdog import (
     _build_coins_decrement_expr,
     _calc_due_minutes,
+    _call_trace_args_for_ended_record,
     _clamp_renew_grace_seconds,
     _next_due_second,
     _resolve_billing_free_seconds,
@@ -60,3 +61,54 @@ def test_build_coins_decrement_expr_uses_f_expression() -> None:
     assert isinstance(expr.left, F)
     assert expr.left.name == "coins"
     assert getattr(expr.right, "value", None) == 120
+
+
+def test_call_trace_args_maps_balance_empty_to_balance_empty_phase() -> None:
+    class Record:
+        id = 99
+        caller_id = 11
+        callee_id = 22
+        end_reason = "balance_empty"
+        force_exit_user_id = None
+
+    args = _call_trace_args_for_ended_record(Record())
+
+    assert args == {
+        "phase": "balance_empty",
+        "actor_user_id": 11,
+        "reason": "balance_empty",
+    }
+
+
+def test_call_trace_args_maps_force_exit_to_force_exit_actor() -> None:
+    class Record:
+        id = 100
+        caller_id = 11
+        callee_id = 22
+        end_reason = "force_exit"
+        force_exit_user_id = 22
+
+    args = _call_trace_args_for_ended_record(Record())
+
+    assert args == {
+        "phase": "force_exit",
+        "actor_user_id": 22,
+        "reason": "force_exit",
+    }
+
+
+def test_call_trace_args_falls_back_to_ended_phase() -> None:
+    class Record:
+        id = 101
+        caller_id = 11
+        callee_id = 22
+        end_reason = "normal"
+        force_exit_user_id = None
+
+    args = _call_trace_args_for_ended_record(Record())
+
+    assert args == {
+        "phase": "ended",
+        "actor_user_id": 11,
+        "reason": "normal",
+    }

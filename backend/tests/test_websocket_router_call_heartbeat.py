@@ -171,3 +171,68 @@ async def test_call_heartbeat_returns_end_event_when_billing_closes_call() -> No
     }
     update_last_seen.assert_awaited()
     process_billing.assert_awaited_once_with(call_id=10)
+
+
+@pytest.mark.asyncio
+async def test_process_ongoing_call_billing_once_schedules_trace_for_ended_records(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.core import call_watchdog
+
+    ended_record = SimpleNamespace(
+        id=10,
+        caller_id=1,
+        callee_id=2,
+        status="ended",
+        end_reason="balance_empty",
+        force_exit_user_id=None,
+    )
+
+    class _CallRecordQuery:
+        async def values(self, *args: str) -> list[dict]:
+            return [
+                {
+                    "id": 10,
+                    "caller_id": 1,
+                    "callee_id": 2,
+                    "connected_at": None,
+                    "deducted_minutes": 0,
+                    "deducted_amount": 0,
+                    "call_price": 100,
+                    "billing_free_seconds": 10,
+                    "payer_user_id": 1,
+                }
+            ]
+
+    class _UserQuery:
+        async def values_list(self, *args: str, **kwargs: object) -> list[int]:
+            return []
+
+    monkeypatch.setattr(call_watchdog, "_load_watchdog_config", AsyncMock(return_value=SimpleNamespace()))
+    monkeypatch.setattr(
+        call_watchdog,
+        "CallRecord",
+        SimpleNamespace(filter=lambda **kwargs: _CallRecordQuery()),
+    )
+    monkeypatch.setattr(
+        call_watchdog,
+        "AppUser",
+        SimpleNamespace(filter=lambda **kwargs: _UserQuery()),
+    )
+    monkeypatch.setattr(
+        call_watchdog,
+        "_process_stale_batch",
+        AsyncMock(return_value=([ended_record], [], [])),
+    )
+    scheduled_records: list[object] = []
+    monkeypatch.setattr(
+        call_watchdog,
+        "_schedule_call_trace_for_ended_records",
+        lambda records: scheduled_records.extend(records),
+        raising=False,
+    )
+
+    result = await call_watchdog.process_ongoing_call_billing_once(call_id=10)
+
+    assert result.ended_records == [ended_record]
+    assert scheduled_records == [ended_record]
