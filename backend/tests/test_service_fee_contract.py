@@ -11,6 +11,8 @@ def test_models_expose_service_fee_fields() -> None:
     content = _read_backend_file("app/models/admin.py")
 
     assert "service_fee_processed_chargeable_minutes" in content
+    assert "service_fee_payer_rate_bps" in content
+    assert "service_fee_income_rate_bps" in content
     assert "service_fee_payer_expected_coins" in content
     assert "service_fee_income_actual_diamonds" in content
     assert "service_fee_sender_status" in content

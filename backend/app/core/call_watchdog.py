@@ -162,9 +162,11 @@ async def _apply_incremental_call_service_fee(
     payer: AppUser | None,
     conn,
 ) -> bool:
-    rate_bps = int(getattr(call_record, "service_fee_rate_bps", 0) or 0)
+    legacy_rate_bps = int(getattr(call_record, "service_fee_rate_bps", 0) or 0)
+    payer_rate_bps = int(getattr(call_record, "service_fee_payer_rate_bps", legacy_rate_bps) or legacy_rate_bps)
+    income_rate_bps = int(getattr(call_record, "service_fee_income_rate_bps", legacy_rate_bps) or legacy_rate_bps)
     threshold_minutes = int(getattr(call_record, "service_fee_threshold_minutes", 0) or 0)
-    if rate_bps <= 0:
+    if payer_rate_bps <= 0 and income_rate_bps <= 0:
         return False
 
     deducted_minutes = int(getattr(call_record, "deducted_minutes", 0) or 0)
@@ -180,13 +182,13 @@ async def _apply_incremental_call_service_fee(
     payer_fee_per_minute = calc_call_service_fee_for_minutes(
         call_price=int(getattr(call_record, "call_price", 0) or 0),
         chargeable_minutes=1,
-        rate_bps=rate_bps,
+        rate_bps=payer_rate_bps,
     )
     income_fee_per_minute = calc_call_income_service_fee_for_minutes(
         call_price=int(getattr(call_record, "call_price", 0) or 0),
         certified_user_share_bps=int(getattr(call_record, "certified_user_share_bps", 0) or 0),
         chargeable_minutes=1,
-        rate_bps=rate_bps,
+        rate_bps=income_rate_bps,
     )
 
     payer_expected = quantize_decimal_2(getattr(call_record, "service_fee_payer_expected_coins", 0))

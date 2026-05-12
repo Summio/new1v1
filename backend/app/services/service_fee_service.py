@@ -10,6 +10,8 @@ DECIMAL_2 = Decimal("0.01")
 MAX_RATE_BPS = 10000
 DEFAULT_CALL_SERVICE_FEE_THRESHOLD_MINUTES = 0
 DEFAULT_CALL_SERVICE_FEE_RATE_BPS = 0
+DEFAULT_CALL_SERVICE_FEE_PAYER_RATE_BPS = 0
+DEFAULT_CALL_SERVICE_FEE_INCOME_RATE_BPS = 0
 DEFAULT_GIFT_SERVICE_FEE_THRESHOLD_COINS = 0
 DEFAULT_GIFT_SERVICE_FEE_RATE_BPS = 0
 
@@ -18,7 +20,8 @@ DEFAULT_GIFT_SERVICE_FEE_RATE_BPS = 0
 class CallServiceFeeConfig:
     enabled: bool
     threshold_minutes: int
-    rate_bps: int
+    payer_rate_bps: int
+    income_rate_bps: int
 
 
 @dataclass(frozen=True)
@@ -104,9 +107,13 @@ def calc_gift_service_fee(*, unit_price: int, rate_bps: int) -> Decimal:
 
 
 def apply_call_service_fee_config_snapshot(call_record: Any, config: CallServiceFeeConfig) -> None:
-    enabled = bool(config.enabled and int(config.rate_bps or 0) > 0)
+    payer_rate_bps = clamp_int(int(config.payer_rate_bps or 0), 0, MAX_RATE_BPS)
+    income_rate_bps = clamp_int(int(config.income_rate_bps or 0), 0, MAX_RATE_BPS)
+    enabled = bool(config.enabled and (payer_rate_bps > 0 or income_rate_bps > 0))
     call_record.service_fee_threshold_minutes = int(config.threshold_minutes or 0) if enabled else 0
-    call_record.service_fee_rate_bps = int(config.rate_bps or 0) if enabled else 0
+    call_record.service_fee_rate_bps = payer_rate_bps if enabled else 0
+    call_record.service_fee_payer_rate_bps = payer_rate_bps if enabled else 0
+    call_record.service_fee_income_rate_bps = income_rate_bps if enabled else 0
     call_record.service_fee_processed_chargeable_minutes = 0
     call_record.service_fee_payer_expected_coins = Decimal("0.00")
     call_record.service_fee_payer_actual_coins = Decimal("0.00")
@@ -183,9 +190,22 @@ def build_call_service_fee_final_state(
     certified_user_share_bps: int,
     deducted_minutes: int,
     threshold_minutes: int,
-    rate_bps: int,
     payer_actual_coins: Decimal | int | float | str | None,
+    rate_bps: int | None = None,
+    payer_rate_bps: int | None = None,
+    income_rate_bps: int | None = None,
 ) -> CallServiceFeeFinalState:
+    fallback_rate_bps = clamp_int(int(rate_bps or 0), 0, MAX_RATE_BPS)
+    resolved_payer_rate_bps = clamp_int(
+        int(fallback_rate_bps if payer_rate_bps is None else payer_rate_bps or 0),
+        0,
+        MAX_RATE_BPS,
+    )
+    resolved_income_rate_bps = clamp_int(
+        int(fallback_rate_bps if income_rate_bps is None else income_rate_bps or 0),
+        0,
+        MAX_RATE_BPS,
+    )
     chargeable_minutes = calc_call_chargeable_minutes(
         deducted_minutes=deducted_minutes,
         threshold_minutes=threshold_minutes,
@@ -193,13 +213,13 @@ def build_call_service_fee_final_state(
     payer_expected_coins = calc_call_service_fee_for_minutes(
         call_price=call_price,
         chargeable_minutes=chargeable_minutes,
-        rate_bps=rate_bps,
+        rate_bps=resolved_payer_rate_bps,
     )
     income_expected_diamonds = calc_call_income_service_fee_for_minutes(
         call_price=call_price,
         certified_user_share_bps=certified_user_share_bps,
         chargeable_minutes=chargeable_minutes,
-        rate_bps=rate_bps,
+        rate_bps=resolved_income_rate_bps,
     )
     raw_payer_actual_coins = quantize_decimal_2(payer_actual_coins)
     payer_actual_coins_final = raw_payer_actual_coins
@@ -240,7 +260,17 @@ async def apply_call_service_fee_final_adjustment(
 
     call_price = max(0, int(getattr(call_record, "call_price", 0) or 0))
     threshold_minutes = max(0, int(getattr(call_record, "service_fee_threshold_minutes", 0) or 0))
-    rate_bps = clamp_int(int(getattr(call_record, "service_fee_rate_bps", 0) or 0), 0, MAX_RATE_BPS)
+    legacy_rate_bps = clamp_int(int(getattr(call_record, "service_fee_rate_bps", 0) or 0), 0, MAX_RATE_BPS)
+    payer_rate_bps = clamp_int(
+        int(getattr(call_record, "service_fee_payer_rate_bps", legacy_rate_bps) or legacy_rate_bps),
+        0,
+        MAX_RATE_BPS,
+    )
+    income_rate_bps = clamp_int(
+        int(getattr(call_record, "service_fee_income_rate_bps", legacy_rate_bps) or legacy_rate_bps),
+        0,
+        MAX_RATE_BPS,
+    )
     certified_user_share_bps = clamp_int(
         safe_parse_int(getattr(call_record, "certified_user_share_bps", 0), 0),
         0,
@@ -261,18 +291,18 @@ async def apply_call_service_fee_final_adjustment(
     payer_charged_additional_coins = Decimal("0.00")
     payer_balance_changed = False
 
-    if rate_bps > 0 and final_chargeable_minutes > processed_chargeable_minutes:
+    if (payer_rate_bps > 0 or income_rate_bps > 0) and final_chargeable_minutes > processed_chargeable_minutes:
         delta_minutes = final_chargeable_minutes - processed_chargeable_minutes
         payer_fee_per_minute = calc_call_service_fee_for_minutes(
             call_price=call_price,
             chargeable_minutes=1,
-            rate_bps=rate_bps,
+            rate_bps=payer_rate_bps,
         )
         income_fee_per_minute = calc_call_income_service_fee_for_minutes(
             call_price=call_price,
             certified_user_share_bps=certified_user_share_bps,
             chargeable_minutes=1,
-            rate_bps=rate_bps,
+            rate_bps=income_rate_bps,
         )
         locked_payer = payer
         if payer_fee_per_minute > 0 and (locked_payer is None) and payer_id and int(payer_id) > 0:
@@ -300,8 +330,9 @@ async def apply_call_service_fee_final_adjustment(
         certified_user_share_bps=certified_user_share_bps,
         deducted_minutes=final_deducted_minutes,
         threshold_minutes=threshold_minutes,
-        rate_bps=rate_bps,
         payer_actual_coins=payer_actual_coins,
+        payer_rate_bps=payer_rate_bps,
+        income_rate_bps=income_rate_bps,
     )
 
     if final_state.payer_refund_coins > 0 and payer_id and int(payer_id) > 0:
@@ -338,18 +369,35 @@ async def get_call_service_fee_config() -> CallServiceFeeConfig:
     from app.models.system_config import SystemConfig
 
     enabled_raw = await SystemConfig.get_value("call_service_fee_enabled", "0")
+    legacy_rate_raw = await SystemConfig.get_value(
+        "call_service_fee_rate_bps",
+        str(DEFAULT_CALL_SERVICE_FEE_RATE_BPS),
+    )
     threshold_raw = await SystemConfig.get_value(
         "call_service_fee_threshold_minutes",
         str(DEFAULT_CALL_SERVICE_FEE_THRESHOLD_MINUTES),
     )
-    rate_raw = await SystemConfig.get_value(
-        "call_service_fee_rate_bps",
-        str(DEFAULT_CALL_SERVICE_FEE_RATE_BPS),
+    payer_rate_raw = await SystemConfig.get_value(
+        "call_service_fee_payer_rate_bps",
+        legacy_rate_raw,
+    )
+    income_rate_raw = await SystemConfig.get_value(
+        "call_service_fee_income_rate_bps",
+        legacy_rate_raw,
     )
     return CallServiceFeeConfig(
         enabled=safe_parse_bool(enabled_raw, False),
         threshold_minutes=max(0, safe_parse_int(threshold_raw, DEFAULT_CALL_SERVICE_FEE_THRESHOLD_MINUTES)),
-        rate_bps=clamp_int(safe_parse_int(rate_raw, DEFAULT_CALL_SERVICE_FEE_RATE_BPS), 0, MAX_RATE_BPS),
+        payer_rate_bps=clamp_int(
+            safe_parse_int(payer_rate_raw, DEFAULT_CALL_SERVICE_FEE_PAYER_RATE_BPS),
+            0,
+            MAX_RATE_BPS,
+        ),
+        income_rate_bps=clamp_int(
+            safe_parse_int(income_rate_raw, DEFAULT_CALL_SERVICE_FEE_INCOME_RATE_BPS),
+            0,
+            MAX_RATE_BPS,
+        ),
     )
 
 

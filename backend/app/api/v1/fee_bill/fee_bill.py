@@ -125,6 +125,22 @@ async def list_fee_bill(
                     "threshold_minutes": int(row.service_fee_threshold_minutes or 0),
                     "rate_bps": int(row.service_fee_rate_bps or 0),
                     "rate_percent": _bps_percent(row.service_fee_rate_bps),
+                    "payer_rate_bps": int(
+                        getattr(row, "service_fee_payer_rate_bps", row.service_fee_rate_bps) or row.service_fee_rate_bps or 0
+                    ),
+                    "payer_rate_percent": _bps_percent(
+                        getattr(row, "service_fee_payer_rate_bps", row.service_fee_rate_bps)
+                        or row.service_fee_rate_bps
+                    ),
+                    "income_rate_bps": int(
+                        getattr(row, "service_fee_income_rate_bps", row.service_fee_rate_bps)
+                        or row.service_fee_rate_bps
+                        or 0
+                    ),
+                    "income_rate_percent": _bps_percent(
+                        getattr(row, "service_fee_income_rate_bps", row.service_fee_rate_bps)
+                        or row.service_fee_rate_bps
+                    ),
                     "processed_chargeable_minutes": int(row.service_fee_processed_chargeable_minutes or 0),
                     "payer_expected_coins": _money(row.service_fee_payer_expected_coins),
                     "payer_actual_coins": _money(row.service_fee_payer_actual_coins),

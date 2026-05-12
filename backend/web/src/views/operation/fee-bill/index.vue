@@ -61,7 +61,11 @@ function formatMoney(value, unit) {
 }
 
 function formatRate(row) {
-  const bps = Number(row.rate_bps || 0)
+  return formatRateValue(row.rate_bps)
+}
+
+function formatRateValue(value) {
+  const bps = Number(value || 0)
   if (!Number.isFinite(bps) || bps <= 0) return '-'
   return `${(bps / 100).toFixed(2)}%`
 }
@@ -140,7 +144,8 @@ const columns = [
       if (row.biz_type === 'call') {
         return h('div', { class: 'meta-wrap' }, [
           h('div', {}, `阈值：${row.threshold_minutes || 0}分钟`),
-          h('div', {}, `费率：${formatRate(row)}`),
+          h('div', {}, `付费方费率：${formatRateValue(row.payer_rate_bps ?? row.rate_bps)}`),
+          h('div', {}, `收益方费率：${formatRateValue(row.income_rate_bps ?? row.rate_bps)}`),
           h('div', { class: 'sub' }, `已处理：${row.processed_chargeable_minutes || 0}分钟`),
         ])
       }
@@ -158,6 +163,7 @@ const columns = [
       if (row.biz_type === 'call') {
         return h('div', { class: 'meta-wrap' }, [
           h('div', {}, `付费方：${userText(row.payer_user)}`),
+          h('div', {}, `费率：${formatRateValue(row.payer_rate_bps ?? row.rate_bps)}`),
           h('div', {}, `理论：${formatMoney(row.payer_expected_coins, '金币')}`),
           h('div', {}, `实扣：${formatMoney(row.payer_actual_coins, '金币')}`),
           h('div', {}, ['状态：', statusTag(row.payer_status)]),
@@ -178,6 +184,7 @@ const columns = [
       if (row.biz_type !== 'call') return '-'
       return h('div', { class: 'meta-wrap' }, [
         h('div', {}, `收益方：${userText(row.income_user)}`),
+        h('div', {}, `费率：${formatRateValue(row.income_rate_bps ?? row.rate_bps)}`),
         h('div', {}, `理论：${formatMoney(row.income_expected_diamonds, '钻石')}`),
         h('div', {}, `实扣：${formatMoney(row.income_actual_diamonds, '钻石')}`),
         h('div', {}, ['状态：', statusTag(row.income_status)]),

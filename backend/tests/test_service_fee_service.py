@@ -14,6 +14,8 @@ calc_call_service_fee_for_minutes = service_fee_service.calc_call_service_fee_fo
 calc_gift_service_fee = service_fee_service.calc_gift_service_fee
 calc_net_call_income_diamonds = service_fee_service.calc_net_call_income_diamonds
 build_call_service_fee_final_state = service_fee_service.build_call_service_fee_final_state
+apply_call_service_fee_config_snapshot = service_fee_service.apply_call_service_fee_config_snapshot
+CallServiceFeeConfig = service_fee_service.CallServiceFeeConfig
 
 
 def test_incremental_chargeable_minutes_only_counts_minutes_above_threshold() -> None:
@@ -96,3 +98,42 @@ def test_build_call_service_fee_final_state_marks_skipped_when_actual_is_zero() 
     assert result.income_expected_diamonds == Decimal("9.00")
     assert result.income_actual_diamonds == Decimal("9.00")
     assert result.income_status == "charged"
+
+
+def test_build_call_service_fee_final_state_uses_separate_call_payer_and_income_rates() -> None:
+    result = build_call_service_fee_final_state(
+        call_price=100,
+        certified_user_share_bps=5000,
+        deducted_minutes=4,
+        threshold_minutes=1,
+        payer_rate_bps=1000,
+        income_rate_bps=2000,
+        payer_actual_coins=Decimal("30.00"),
+    )
+
+    assert result.chargeable_minutes == 3
+    assert result.payer_expected_coins == Decimal("30.00")
+    assert result.payer_actual_coins == Decimal("30.00")
+    assert result.income_expected_diamonds == Decimal("30.00")
+    assert result.income_actual_diamonds == Decimal("30.00")
+
+
+def test_apply_call_service_fee_config_snapshot_stores_separate_rates() -> None:
+    class DummyCallRecord:
+        pass
+
+    call_record = DummyCallRecord()
+
+    apply_call_service_fee_config_snapshot(
+        call_record,
+        CallServiceFeeConfig(
+            enabled=True,
+            threshold_minutes=2,
+            payer_rate_bps=1000,
+            income_rate_bps=2500,
+        ),
+    )
+
+    assert call_record.service_fee_threshold_minutes == 2
+    assert call_record.service_fee_payer_rate_bps == 1000
+    assert call_record.service_fee_income_rate_bps == 2500

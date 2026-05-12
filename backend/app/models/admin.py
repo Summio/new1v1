@@ -138,6 +138,8 @@ class CallRecord(BaseModel, TimestampMixin):
     income_settled_at = fields.DatetimeField(null=True, description="认证用户收益结算时间")
     service_fee_threshold_minutes = fields.IntField(default=0, description="通话手续费阈值分钟快照")
     service_fee_rate_bps = fields.IntField(default=0, description="通话手续费比例快照(万分比)")
+    service_fee_payer_rate_bps = fields.IntField(default=0, description="通话付费方手续费比例快照(万分比)")
+    service_fee_income_rate_bps = fields.IntField(default=0, description="通话收益方手续费比例快照(万分比)")
     service_fee_processed_chargeable_minutes = fields.IntField(default=0, description="已处理手续费分钟数")
     service_fee_payer_expected_coins = fields.DecimalField(
         max_digits=18, decimal_places=2, default=0, description="付费方理论手续费金币"
