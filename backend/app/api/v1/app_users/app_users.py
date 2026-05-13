@@ -17,10 +17,12 @@ from app.core.profile_basic_fields import (
 from app.models import (
     AppUser,
     AppUserProfileReviewApply,
+    AppUserTokenAdjustRecord,
     CallRecord,
     GiftRecord,
     ImTextMessageChargeRecord,
     RechargeOrder,
+    User,
     WithdrawApply,
 )
 from app.schemas.app_user import (
@@ -168,39 +170,55 @@ async def get_app_user(id: int = Query(..., ge=1, description="用户ID")):
 
 @router.post("/balance/adjust", summary="调整App用户余额")
 async def adjust_app_user_balance(req_in: AppUserBalanceAdjustIn):
-    should_publish_balance = req_in.asset_type == "coins"
+    reason = req_in.reason.strip()
+    if not reason:
+        return Fail(code=400, msg="请填写操作原因")
+
+    operator_user_id = int(CTX_USER_ID.get() or 0)
+    operator = await User.filter(id=operator_user_id).first() if operator_user_id else None
+    operator_username = ""
+    if operator:
+        operator_username = (operator.username or operator.alias or "").strip()
+
     async with in_transaction() as conn:
-        app_user = await AppUser.filter(id=req_in.id).using_db(conn).first()
+        app_user = await AppUser.filter(id=req_in.id).using_db(conn).select_for_update().first()
         if not app_user:
             return Fail(code=404, msg="用户不存在")
+
+        amount = Decimal(str(req_in.amount))
+        before_amount = Decimal(str(getattr(app_user, req_in.asset_type) or "0"))
 
         if req_in.asset_type == "coins":
             if req_in.action == "increase":
                 await AppUser.filter(id=req_in.id).using_db(conn).update(coins=F("coins") + req_in.amount)
             else:
-                updated_count = (
-                    await AppUser.filter(id=req_in.id, coins__gte=req_in.amount)
-                    .using_db(conn)
-                    .update(coins=F("coins") - req_in.amount)
-                )
-                if not updated_count:
+                if before_amount < amount:
                     return Fail(code=501, msg="金币余额不足，无法扣除")
+                await AppUser.filter(id=req_in.id).using_db(conn).update(coins=F("coins") - req_in.amount)
         else:
             if req_in.action == "increase":
                 await AppUser.filter(id=req_in.id).using_db(conn).update(diamonds=F("diamonds") + req_in.amount)
             else:
-                updated_count = (
-                    await AppUser.filter(id=req_in.id, diamonds__gte=req_in.amount)
-                    .using_db(conn)
-                    .update(diamonds=F("diamonds") - req_in.amount)
-                )
-                if not updated_count:
+                if before_amount < amount:
                     return Fail(code=501, msg="钻石余额不足，无法扣除")
+                await AppUser.filter(id=req_in.id).using_db(conn).update(diamonds=F("diamonds") - req_in.amount)
 
         refreshed = await AppUser.filter(id=req_in.id).using_db(conn).first()
+        after_amount = Decimal(str(getattr(refreshed, req_in.asset_type) if refreshed else before_amount))
+        await AppUserTokenAdjustRecord.create(
+            app_user_id=req_in.id,
+            operator_user_id=operator_user_id,
+            operator_username=operator_username,
+            asset_type=req_in.asset_type,
+            action=req_in.action,
+            amount=amount,
+            before_amount=before_amount,
+            after_amount=after_amount,
+            reason=reason,
+            using_db=conn,
+        )
 
-    if should_publish_balance:
-        await publish_balance_changed(int(req_in.id), source="balance_adjust")
+    await publish_balance_changed(int(req_in.id), source="balance_adjust")
 
     return Success(
         data={
@@ -567,7 +585,7 @@ async def list_app_user_bill(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(10, ge=1, le=100, description="每页数量"),
     direction: str = Query("all", description="方向 all/income/expense"),
-    biz_type: str = Query("", description="业务类型 recharge/call/gift/withdraw/im_text/call_fee/gift_fee"),
+    biz_type: str = Query("", description="业务类型 recharge/call/gift/withdraw/im_text/call_fee/gift_fee/token_adjust"),
 ):
     user = await AppUser.filter(id=user_id).first()
     if not user:
@@ -650,6 +668,13 @@ async def list_app_user_bill(
     )
     withdraw_expenses = await WithdrawApply.filter(user_id=user_id, amount__gt=0).values(
         "id", "amount", "status", "created_at"
+    )
+    token_adjust_records = await AppUserTokenAdjustRecord.filter(app_user_id=user_id, amount__gt=0).values(
+        "id",
+        "asset_type",
+        "action",
+        "amount",
+        "created_at",
     )
 
     related_user_ids: set[int] = set()
@@ -938,6 +963,32 @@ async def list_app_user_bill(
                 "created_at": _format_bill_dt(row.get("created_at")),
             }
         )
+    for row in token_adjust_records:
+        amount = decimal_to_float_2(row.get("amount"))
+        asset_type = (row.get("asset_type") or "").strip()
+        action = (row.get("action") or "").strip()
+        is_income = action == "increase"
+        title_map = {
+            ("coins", "increase"): "后台增加金币",
+            ("coins", "decrease"): "后台扣除金币",
+            ("diamonds", "increase"): "后台增加钻石",
+            ("diamonds", "decrease"): "后台扣除钻石",
+        }
+        bills.append(
+            {
+                "id": f"token_adjust_{row['id']}",
+                "biz_id": row["id"],
+                "biz_type": "token_adjust",
+                "title": title_map.get((asset_type, action), "后台调整"),
+                "direction": "income" if is_income else "expense",
+                "is_income": is_income,
+                "asset_type": asset_type,
+                "amount": amount,
+                "related_user_id": None,
+                "related_user_nickname": "后台调整",
+                "created_at": _format_bill_dt(row.get("created_at")),
+            }
+        )
 
     normalized_direction = (direction or "all").strip().lower()
     if normalized_direction not in {"all", "income", "expense"}:
@@ -945,9 +996,9 @@ async def list_app_user_bill(
 
     normalized_biz_type = (biz_type or "").strip().lower()
     if normalized_biz_type:
-        allowed_types = {"recharge", "call", "gift", "withdraw", "im_text", "call_fee", "gift_fee"}
+        allowed_types = {"recharge", "call", "gift", "withdraw", "im_text", "call_fee", "gift_fee", "token_adjust"}
         if normalized_biz_type not in allowed_types:
-            return Fail(code=400, msg="biz_type 仅支持 recharge/call/gift/withdraw/im_text/call_fee/gift_fee")
+            return Fail(code=400, msg="biz_type 仅支持 recharge/call/gift/withdraw/im_text/call_fee/gift_fee/token_adjust")
 
     filtered = bills
     if normalized_direction == "income":

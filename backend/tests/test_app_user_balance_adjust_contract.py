@@ -16,14 +16,16 @@ def test_app_user_balance_adjust_contract() -> None:
     assert '@router.post("/balance/adjust"' in api_src
     assert "AppUserBalanceAdjustIn" in api_src
     assert 'coins=F("coins") + req_in.amount' in api_src
-    assert 'coins__gte=req_in.amount' in api_src
     assert 'diamonds=F("diamonds") + req_in.amount' in api_src
-    assert 'diamonds__gte=req_in.amount' in api_src
+    assert "select_for_update()" in api_src
+    assert "before_amount < amount" in api_src
+    assert "AppUserTokenAdjustRecord.create" in api_src
 
     assert "class AppUserBalanceAdjustIn" in schema_src
     assert 'asset_type: Literal["coins", "diamonds"]' in schema_src
     assert 'action: Literal["increase", "decrease"]' in schema_src
     assert 'amount: int = Field(..., gt=0' in schema_src
+    assert 'reason: str = Field(..., min_length=1, max_length=500' in schema_src
 
     assert "adjustAppUserBalance" in web_api_src
     assert "balance/adjust" in web_api_src
@@ -35,3 +37,4 @@ def test_app_user_balance_adjust_contract() -> None:
     assert "钻石" in web_view_src
     assert "增加" in web_view_src
     assert "扣除" in web_view_src
+    assert "请填写操作原因" in web_view_src

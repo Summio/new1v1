@@ -181,6 +181,17 @@ def build_operation_children(parent_id: int) -> list[Menu]:
             component="/operation/system-notification",
             keepalive=False,
         ),
+        Menu(
+            menu_type=MenuType.MENU,
+            name="代币修改记录",
+            path="token-adjust-record",
+            order=14,
+            parent_id=parent_id,
+            icon="material-symbols:currency-exchange-rounded",
+            is_hidden=False,
+            component="/operation/token-adjust-record",
+            keepalive=False,
+        ),
     ]
 
 
@@ -502,6 +513,7 @@ async def init_roles():
             "profile-review",
             "ranking",
             "system-notification",
+            "token-adjust-record",
         ]
     ).all()
     if all_roles and operation_menus:
@@ -594,6 +606,10 @@ async def init_roles():
     if system_notification_apis and all_roles:
         for role in all_roles:
             await role.apis.add(*system_notification_apis)
+    token_adjust_record_api = await Api.filter(method="GET", path="/api/v1/token_adjust_record/list").first()
+    if token_adjust_record_api and all_roles:
+        for role in all_roles:
+            await role.apis.add(token_adjust_record_api)
     withdraw_config_menu = await Menu.filter(path="withdraw-config").first()
     withdraw_config_apis = await Api.filter(
         path__in=[

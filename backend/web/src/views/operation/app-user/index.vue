@@ -67,6 +67,7 @@ const balanceAdjustModal = reactive({
   assetType: 'coins',
   action: 'increase',
   amount: 1,
+  reason: '',
   loading: false,
 })
 const callRecordLoading = ref(false)
@@ -251,6 +252,7 @@ const billBizTypeOptions = [
   { label: '礼物手续费', value: 'gift_fee' },
   { label: '文字聊天', value: 'im_text' },
   { label: '提现', value: 'withdraw' },
+  { label: '后台调整', value: 'token_adjust' },
 ]
 const billBizTypeTextMap = {
   recharge: '充值',
@@ -260,6 +262,7 @@ const billBizTypeTextMap = {
   gift_fee: '礼物手续费',
   im_text: '文字聊天',
   withdraw: '提现',
+  token_adjust: '后台调整',
 }
 const billAssetTypeTextMap = {
   coins: '金币',
@@ -818,6 +821,7 @@ function openBalanceAdjustModal(row, assetType, action) {
   balanceAdjustModal.assetType = assetType
   balanceAdjustModal.action = action
   balanceAdjustModal.amount = 1
+  balanceAdjustModal.reason = ''
 }
 
 function handleAdjustBalance(row, assetType, action) {
@@ -831,6 +835,11 @@ async function handleSubmitBalanceAdjust() {
     window.$message?.warning('请输入调整数量')
     return
   }
+  const reason = (balanceAdjustModal.reason || '').trim()
+  if (!reason) {
+    window.$message?.warning('请填写操作原因')
+    return
+  }
 
   balanceAdjustModal.loading = true
   try {
@@ -839,6 +848,7 @@ async function handleSubmitBalanceAdjust() {
       asset_type: balanceAdjustModal.assetType,
       action: balanceAdjustModal.action,
       amount,
+      reason,
     })
     const data = res?.data || {}
     if (Number(modalForm.value.id || 0) === Number(balanceAdjustModal.userId)) {
@@ -1108,6 +1118,16 @@ const columns = [
             :precision="0"
           />
         </NFormItem>
+        <NFormItem label="原因">
+          <NInput
+            v-model:value="balanceAdjustModal.reason"
+            type="textarea"
+            :autosize="{ minRows: 3, maxRows: 5 }"
+            maxlength="500"
+            show-count
+            placeholder="请填写本次调整原因"
+          />
+        </NFormItem>
       </NForm>
 
       <template #action>
@@ -1333,6 +1353,7 @@ const columns = [
             <NButton @click="handleResetUserCallRecords">重置</NButton>
           </div>
           <NDataTable
+            :remote="true"
             :loading="callRecordLoading"
             :columns="callRecordColumns"
             :data="callRecordRows"
@@ -1380,6 +1401,7 @@ const columns = [
             </div>
           </div>
           <NDataTable
+            :remote="true"
             :loading="billLoading"
             :columns="billColumns"
             :data="billRows"

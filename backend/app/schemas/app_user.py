@@ -150,6 +150,7 @@ class AppUserBalanceAdjustIn(BaseModel):
     asset_type: Literal["coins", "diamonds"] = Field(..., description="资产类型")
     action: Literal["increase", "decrease"] = Field(..., description="调整方向")
     amount: int = Field(..., gt=0, description="调整数量")
+    reason: str = Field(..., min_length=1, max_length=500, description="操作原因")
 
 
 # ===== 真人认证 =====

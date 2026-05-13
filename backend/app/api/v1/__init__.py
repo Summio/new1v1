@@ -22,6 +22,7 @@ from .ranking import router as ranking_router
 from .recharge import router as recharge_router
 from .roles import roles_router
 from .system_config import system_config_router, system_config_spec_router
+from .token_adjust_record import token_adjust_record_router
 from .users import users_router
 from .withdraw import router as withdraw_router
 
@@ -38,6 +39,7 @@ v1_router.include_router(depts_router, prefix="/dept", dependencies=[DependPermi
 v1_router.include_router(auditlog_router, prefix="/auditlog", dependencies=[DependPermission])
 v1_router.include_router(system_config_router, prefix="/system_config", dependencies=[DependPermission])
 v1_router.include_router(system_config_spec_router, prefix="/apis", dependencies=[DependPermission])
+v1_router.include_router(token_adjust_record_router, prefix="/token_adjust_record", dependencies=[DependPermission])
 v1_router.include_router(withdraw_router, prefix="/withdraw", dependencies=[DependPermission])
 v1_router.include_router(app_users_router, prefix="/app_user", dependencies=[DependPermission])
 v1_router.include_router(feedback_router, prefix="/feedback", dependencies=[DependPermission])

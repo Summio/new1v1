@@ -26,6 +26,7 @@ export default {
   adjustAppUserBalance: (data = {}) => request.post('/app_user/balance/adjust', data),
   updateAppUser: (data = {}) => request.post('/app_user/update', data),
   getAppUserBillList: (params = {}) => request.get('/app_user/bill/list', { params }),
+  getTokenAdjustRecordList: (params = {}) => request.get('/token_adjust_record/list', { params }),
   reviewCertification: (data = {}) => request.post('/app_user/certification/review', data),
   getProfileReviewList: (params = {}) => request.get('/app_user/profile-review/list', { params }),
   getProfileReviewById: (params = {}) => request.get('/app_user/profile-review/get', { params }),
