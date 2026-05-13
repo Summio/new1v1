@@ -8,7 +8,7 @@ import CrudTable from '@/components/table/CrudTable.vue'
 import api from '@/api'
 import { formatDate } from '@/utils'
 
-defineOptions({ name: '全量业务流水' })
+defineOptions({ name: '代币流水' })
 
 const $table = ref(null)
 const datetimeRange = ref(null)
@@ -205,7 +205,7 @@ const columns = [
 </script>
 
 <template>
-  <CommonPage show-footer title="全量业务流水">
+  <CommonPage show-footer title="代币流水">
     <CrudTable
       ref="$table"
       v-model:query-items="queryItems"

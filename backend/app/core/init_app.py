@@ -182,9 +182,20 @@ def build_finance_children(parent_id: int) -> list[Menu]:
         ),
         Menu(
             menu_type=MenuType.MENU,
+            name="代币流水",
+            path="business-ledger",
+            order=2,
+            parent_id=parent_id,
+            icon="material-symbols:data-table-outline-rounded",
+            is_hidden=False,
+            component="/operation/business-ledger",
+            keepalive=False,
+        ),
+        Menu(
+            menu_type=MenuType.MENU,
             name="提现管理",
             path="withdraw",
-            order=2,
+            order=3,
             parent_id=parent_id,
             icon="material-symbols:payments-outline-rounded",
             is_hidden=False,
@@ -195,22 +206,11 @@ def build_finance_children(parent_id: int) -> list[Menu]:
             menu_type=MenuType.MENU,
             name="手续费账单",
             path="fee-bill",
-            order=3,
+            order=4,
             parent_id=parent_id,
             icon="material-symbols:receipt-long-outline-rounded",
             is_hidden=False,
             component="/operation/fee-bill",
-            keepalive=False,
-        ),
-        Menu(
-            menu_type=MenuType.MENU,
-            name="全量业务流水",
-            path="business-ledger",
-            order=4,
-            parent_id=parent_id,
-            icon="material-symbols:data-table-outline-rounded",
-            is_hidden=False,
-            component="/operation/business-ledger",
             keepalive=False,
         ),
         Menu(
@@ -608,22 +608,22 @@ async def sync_business_ledger_admin_entries() -> None:
         redirect="/finance/recharge",
     )
     business_ledger_menu = await _ensure_menu_exists(
-        name="全量业务流水",
+        name="代币流水",
         parent_id=finance_parent.id,
         menu_type=MenuType.MENU,
         path="business-ledger",
-        order=4,
+        order=2,
         icon="material-symbols:data-table-outline-rounded",
         is_hidden=False,
         component="/operation/business-ledger",
         keepalive=False,
     )
     update_fields = {
-        "name": "全量业务流水",
+        "name": "代币流水",
         "parent_id": finance_parent.id,
         "menu_type": MenuType.MENU,
         "path": "business-ledger",
-        "order": 4,
+        "order": 2,
         "icon": "material-symbols:data-table-outline-rounded",
         "is_hidden": False,
         "component": "/operation/business-ledger",
@@ -637,17 +637,28 @@ async def sync_business_ledger_admin_entries() -> None:
     if changed:
         await business_ledger_menu.save()
 
+    for path, order in {
+        "recharge": 1,
+        "withdraw": 3,
+        "fee-bill": 4,
+        "token-adjust-record": 5,
+    }.items():
+        menu = await Menu.filter(path=path, parent_id=finance_parent.id).first()
+        if menu and menu.order != order:
+            menu.order = order
+            await menu.save(update_fields=["order"])
+
     business_ledger_api = await Api.filter(method="GET", path="/api/v1/business_ledger/list").first()
     if business_ledger_api:
-        business_ledger_api.summary = "全量业务流水列表"
-        business_ledger_api.tags = "全量业务流水"
+        business_ledger_api.summary = "代币流水列表"
+        business_ledger_api.tags = "代币流水"
         await business_ledger_api.save(update_fields=["summary", "tags"])
     else:
         business_ledger_api = await Api.create(
             method="GET",
             path="/api/v1/business_ledger/list",
-            summary="全量业务流水列表",
-            tags="全量业务流水",
+            summary="代币流水列表",
+            tags="代币流水",
         )
 
     all_roles = await Role.all()

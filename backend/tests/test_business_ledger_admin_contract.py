@@ -27,8 +27,9 @@ def test_business_ledger_finance_menu_and_permission_seed_exist() -> None:
     init_app_src = _read_backend_file("app/core/init_app.py")
 
     assert any(
-        menu.name == "全量业务流水"
+        menu.name == "代币流水"
         and menu.path == "business-ledger"
+        and menu.order == 2
         and menu.component == "/operation/business-ledger"
         for menu in children
     )
@@ -45,7 +46,7 @@ def test_business_ledger_web_api_and_page_exist() -> None:
     assert "/business_ledger/list" in web_api_src
 
     for expected in [
-        "全量业务流水",
+        "代币流水",
         "用户ID",
         "关联用户ID",
         "资产",

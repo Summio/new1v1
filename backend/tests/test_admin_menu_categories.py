@@ -14,6 +14,10 @@ def _menu_icons(menus):
     return {menu.name: menu.icon for menu in menus}
 
 
+def _menu_orders(menus):
+    return {menu.name: menu.order for menu in menus}
+
+
 def test_operation_menu_keeps_only_daily_operation_children() -> None:
     children = init_app.build_operation_children(parent_id=100)
 
@@ -37,11 +41,12 @@ def test_review_finance_and_settings_menu_blueprints_exist() -> None:
     }
     assert _menu_summary(init_app.build_finance_children(parent_id=300)) == {
         ("充值管理", "recharge", "/operation/recharge"),
+        ("代币流水", "business-ledger", "/operation/business-ledger"),
         ("提现管理", "withdraw", "/operation/withdraw"),
         ("手续费账单", "fee-bill", "/operation/fee-bill"),
-        ("全量业务流水", "business-ledger", "/operation/business-ledger"),
         ("代币修改记录", "token-adjust-record", "/operation/token-adjust-record"),
     }
+    assert _menu_orders(init_app.build_finance_children(parent_id=300))["代币流水"] == 2
     assert _menu_summary(init_app.build_settings_children(parent_id=400)) == {
         ("充值配置", "recharge-config", "/system/recharge-config"),
         ("提现配置", "withdraw-config", "/system/withdraw-config"),
@@ -92,9 +97,9 @@ def test_admin_menu_icons_match_menu_purpose() -> None:
     }
     assert _menu_icons(init_app.build_finance_children(parent_id=300)) == {
         "充值管理": "material-symbols:add-card-outline-rounded",
+        "代币流水": "material-symbols:data-table-outline-rounded",
         "提现管理": "material-symbols:payments-outline-rounded",
         "手续费账单": "material-symbols:receipt-long-outline-rounded",
-        "全量业务流水": "material-symbols:data-table-outline-rounded",
         "代币修改记录": "material-symbols:currency-exchange-rounded",
     }
     assert _menu_icons(init_app.build_settings_children(parent_id=400)) == {

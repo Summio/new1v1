@@ -393,7 +393,7 @@ def _business_ledger_union_sql() -> str:
     """
 
 
-@router.get("/list", summary="全量业务流水列表")
+@router.get("/list", summary="代币流水列表")
 async def list_business_ledger(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(10, ge=1, le=100, description="每页数量"),
