@@ -342,6 +342,17 @@ const configDefs = [
     description: '开启后，只有通过真人认证的用户才能发布动态',
   },
   {
+    group: '曝光配置',
+    name: '活跃页置顶冷却时间',
+    key: 'active_pin_cooldown_minutes',
+    type: 'number',
+    unit: '分钟',
+    min: 0,
+    max: 10080,
+    defaultValue: '60',
+    description: '真人认证用户在活跃页手动置顶的冷却时间，0 表示不限制',
+  },
+  {
     group: '通话保护',
     name: '拒绝后禁止呼入',
     key: 'call_reject_inbound_protect_seconds',
@@ -627,6 +638,7 @@ function groupTagType(group) {
     计费配置: 'error',
     互动限制: 'warning',
     用户能力限制: 'warning',
+    曝光配置: 'info',
     通话保护: 'warning',
     'Watchdog 配置': 'default',
   }

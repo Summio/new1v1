@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:huanxi/core/network/api_exception.dart';
 import 'package:huanxi/core/network/api_interceptor.dart';
 
 void main() {
@@ -99,6 +100,31 @@ void main() {
       expect(output, isNot(contains('response-token')));
       expect(output, contains('***'));
     });
+
+    test('should keep business error data for cooldown responses', () {
+      final interceptor = ApiInterceptor();
+      final handler = _TestResponseHandler();
+      final options = RequestOptions(path: '/active-pin', method: 'POST');
+
+      interceptor.onResponse(
+        Response(
+          requestOptions: options,
+          statusCode: 200,
+          data: {
+            'code': 429,
+            'msg': '置顶太频繁，请稍后再试',
+            'data': {'remaining_seconds': 1439},
+          },
+        ),
+        handler,
+      );
+
+      final error = handler.rejectedException?.error;
+      expect(error, isA<ApiException>());
+      final apiException = error! as ApiException;
+      expect(apiException.code, 429);
+      expect(apiException.data, {'remaining_seconds': 1439});
+    });
   });
 }
 
@@ -131,9 +157,18 @@ class _TestRequestHandler extends RequestInterceptorHandler {
 
 class _TestResponseHandler extends ResponseInterceptorHandler {
   Response<dynamic>? nextResponse;
+  DioException? rejectedException;
 
   @override
   void next(Response<dynamic> response) {
     nextResponse = response;
+  }
+
+  @override
+  void reject(
+    DioException error, [
+    bool callFollowingErrorInterceptor = false,
+  ]) {
+    rejectedException = error;
   }
 }

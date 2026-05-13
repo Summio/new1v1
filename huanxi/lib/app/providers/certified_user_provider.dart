@@ -2,7 +2,39 @@ import 'package:flutter/painting.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/constants/api_endpoints.dart';
+import '../../core/network/api_exception.dart';
 import '../../core/utils/app_logger.dart';
+
+String formatActivePinCooldownMessage(int remainingSeconds) {
+  final seconds = remainingSeconds <= 0 ? 1 : remainingSeconds;
+  if (seconds < 60) {
+    return '置顶太频繁，请 $seconds 秒后再试';
+  }
+  final roundedMinutes = (seconds / 60).ceil();
+  if (roundedMinutes < 60) {
+    return '置顶太频繁，请 $roundedMinutes 分钟后再试';
+  }
+  final hours = roundedMinutes ~/ 60;
+  final minutes = roundedMinutes % 60;
+  if (minutes == 0) {
+    return '置顶太频繁，请 $hours 小时后再试';
+  }
+  return '置顶太频繁，请 $hours 小时 $minutes 分钟后再试';
+}
+
+int _parseRemainingSeconds(dynamic data) {
+  if (data is Map<String, dynamic>) {
+    final raw = data['remaining_seconds'];
+    if (raw is num) return raw.toInt();
+    if (raw is String) return int.tryParse(raw.trim()) ?? 0;
+  }
+  if (data is Map) {
+    final raw = data['remaining_seconds'];
+    if (raw is num) return raw.toInt();
+    if (raw is String) return int.tryParse(raw.trim()) ?? 0;
+  }
+  return 0;
+}
 
 /// 认证用户信息
 class CertifiedUserInfo {
@@ -285,6 +317,32 @@ class CertifiedUserListNotifier extends StateNotifier<CertifiedUserListState> {
 
   /// 加载更多
   Future<void> loadMore() => fetchCertifiedUsers(refresh: false);
+
+  Future<String?> pinActiveCertifiedUser() async {
+    try {
+      await _dio.apiPost(ApiEndpoints.certifiedUserActivePin);
+      if (state.section == 'active') {
+        await fetchCertifiedUsers(refresh: true);
+      }
+      return null;
+    } on ApiException catch (e) {
+      if (e.code == 429) {
+        final remainingSeconds = _parseRemainingSeconds(e.data);
+        if (remainingSeconds > 0) {
+          return formatActivePinCooldownMessage(remainingSeconds);
+        }
+      }
+      final message = e.message.trim();
+      if (message.isNotEmpty) return message;
+      if (e.code == 400) return '当前为勿扰状态，请关闭勿扰后再置顶';
+      return '置顶失败，请稍后重试';
+    } on NetworkException catch (e) {
+      return e.message;
+    } catch (e) {
+      AppLogger.debug('certifiedUser.pinActiveCertifiedUser error: $e');
+      return '置顶失败，请稍后重试';
+    }
+  }
 
   void applyAvailabilityUpdate({
     required int userId,

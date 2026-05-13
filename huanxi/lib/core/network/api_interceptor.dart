@@ -140,7 +140,11 @@ class ApiInterceptor extends Interceptor {
             handler.reject(
               DioException(
                 requestOptions: response.requestOptions,
-                error: ApiException(code: code ?? 0, message: msg),
+                error: ApiException(
+                  code: code ?? 0,
+                  message: msg,
+                  data: data['data'],
+                ),
                 type: DioExceptionType.badResponse,
                 response: response,
               ),
