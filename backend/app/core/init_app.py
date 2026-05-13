@@ -64,11 +64,131 @@ def build_operation_children(parent_id: int) -> list[Menu]:
             menu_type=MenuType.MENU,
             name="礼物管理",
             path="gift",
-            order=4,
+            order=3,
             parent_id=parent_id,
             icon="material-symbols:featured-play-list-outline",
             is_hidden=False,
             component="/operation/gift",
+            keepalive=False,
+        ),
+        Menu(
+            menu_type=MenuType.MENU,
+            name="动态管理",
+            path="moment",
+            order=4,
+            parent_id=parent_id,
+            icon="material-symbols:dynamic-feed-rounded",
+            is_hidden=False,
+            component="/operation/moment",
+            keepalive=False,
+        ),
+        Menu(
+            menu_type=MenuType.MENU,
+            name="排行榜",
+            path="ranking",
+            order=5,
+            parent_id=parent_id,
+            icon="material-symbols:leaderboard-outline-rounded",
+            is_hidden=False,
+            component="/operation/ranking",
+            keepalive=False,
+        ),
+        Menu(
+            menu_type=MenuType.MENU,
+            name="系统通知",
+            path="system-notification",
+            order=6,
+            parent_id=parent_id,
+            icon="material-symbols:notifications-outline-rounded",
+            is_hidden=False,
+            component="/operation/system-notification",
+            keepalive=False,
+        ),
+        Menu(
+            menu_type=MenuType.MENU,
+            name="投诉管理",
+            path="complaint",
+            order=7,
+            parent_id=parent_id,
+            icon="material-symbols:report-problem-outline-rounded",
+            is_hidden=False,
+            component="/operation/complaint",
+            keepalive=False,
+        ),
+        Menu(
+            menu_type=MenuType.MENU,
+            name="意见反馈",
+            path="feedback",
+            order=8,
+            parent_id=parent_id,
+            icon="material-symbols:feedback-outline-rounded",
+            is_hidden=False,
+            component="/operation/feedback",
+            keepalive=False,
+        ),
+    ]
+
+
+def build_review_children(parent_id: int) -> list[Menu]:
+    return [
+        Menu(
+            menu_type=MenuType.MENU,
+            name="真人认证审核",
+            path="certification-review",
+            order=1,
+            parent_id=parent_id,
+            icon="material-symbols:verified-user-outline-rounded",
+            is_hidden=False,
+            component="/operation/certification-review",
+            keepalive=False,
+        ),
+        Menu(
+            menu_type=MenuType.MENU,
+            name="资料编辑审核",
+            path="profile-review",
+            order=2,
+            parent_id=parent_id,
+            icon="material-symbols:fact-check-outline-rounded",
+            is_hidden=False,
+            component="/operation/profile-review",
+            keepalive=False,
+        ),
+        Menu(
+            menu_type=MenuType.MENU,
+            name="提现账户审核",
+            path="withdraw-account",
+            order=3,
+            parent_id=parent_id,
+            icon="material-symbols:fact-check-outline-rounded",
+            is_hidden=False,
+            component="/operation/withdraw-account",
+            keepalive=False,
+        ),
+    ]
+
+
+def build_finance_children(parent_id: int) -> list[Menu]:
+    return [
+        Menu(
+            menu_type=MenuType.MENU,
+            name="充值管理",
+            path="recharge",
+            order=1,
+            parent_id=parent_id,
+            icon="material-symbols:account-balance-wallet-outline-rounded",
+            is_hidden=False,
+            component="/operation/recharge",
+            keepalive=False,
+        ),
+        Menu(
+            menu_type=MenuType.MENU,
+            name="提现管理",
+            path="withdraw",
+            order=2,
+            parent_id=parent_id,
+            icon="material-symbols:payments-outline-rounded",
+            is_hidden=False,
+            component="/operation/withdraw",
             keepalive=False,
         ),
         Menu(
@@ -84,123 +204,62 @@ def build_operation_children(parent_id: int) -> list[Menu]:
         ),
         Menu(
             menu_type=MenuType.MENU,
-            name="动态管理",
-            path="moment",
-            order=5,
+            name="全量业务流水",
+            path="business-ledger",
+            order=4,
             parent_id=parent_id,
-            icon="material-symbols:dynamic-feed-rounded",
+            icon="material-symbols:receipt-long-outline-rounded",
             is_hidden=False,
-            component="/operation/moment",
-            keepalive=False,
-        ),
-        Menu(
-            menu_type=MenuType.MENU,
-            name="充值管理",
-            path="recharge",
-            order=6,
-            parent_id=parent_id,
-            icon="material-symbols:account-balance-wallet-outline-rounded",
-            is_hidden=False,
-            component="/operation/recharge",
-            keepalive=False,
-        ),
-        Menu(
-            menu_type=MenuType.MENU,
-            name="提现管理",
-            path="withdraw",
-            order=7,
-            parent_id=parent_id,
-            icon="material-symbols:payments-outline-rounded",
-            is_hidden=False,
-            component="/operation/withdraw",
-            keepalive=False,
-        ),
-        Menu(
-            menu_type=MenuType.MENU,
-            name="提现账户审核",
-            path="withdraw-account",
-            order=8,
-            parent_id=parent_id,
-            icon="material-symbols:fact-check-outline-rounded",
-            is_hidden=False,
-            component="/operation/withdraw-account",
-            keepalive=False,
-        ),
-        Menu(
-            menu_type=MenuType.MENU,
-            name="真人认证审核",
-            path="certification-review",
-            order=9,
-            parent_id=parent_id,
-            icon="material-symbols:verified-user-outline-rounded",
-            is_hidden=False,
-            component="/operation/certification-review",
-            keepalive=False,
-        ),
-        Menu(
-            menu_type=MenuType.MENU,
-            name="资料编辑审核",
-            path="profile-review",
-            order=10,
-            parent_id=parent_id,
-            icon="material-symbols:fact-check-outline-rounded",
-            is_hidden=False,
-            component="/operation/profile-review",
-            keepalive=False,
-        ),
-        Menu(
-            menu_type=MenuType.MENU,
-            name="排行榜",
-            path="ranking",
-            order=11,
-            parent_id=parent_id,
-            icon="material-symbols:leaderboard-outline-rounded",
-            is_hidden=False,
-            component="/operation/ranking",
-            keepalive=False,
-        ),
-        Menu(
-            menu_type=MenuType.MENU,
-            name="初始资料管理",
-            path="initial-profile",
-            order=12,
-            parent_id=parent_id,
-            icon="material-symbols:badge-outline-rounded",
-            is_hidden=False,
-            component="/system/initial-profile",
-            keepalive=False,
-        ),
-        Menu(
-            menu_type=MenuType.MENU,
-            name="系统通知",
-            path="system-notification",
-            order=13,
-            parent_id=parent_id,
-            icon="material-symbols:notifications-outline-rounded",
-            is_hidden=False,
-            component="/operation/system-notification",
+            component="/operation/business-ledger",
             keepalive=False,
         ),
         Menu(
             menu_type=MenuType.MENU,
             name="代币修改记录",
             path="token-adjust-record",
-            order=14,
+            order=5,
             parent_id=parent_id,
             icon="material-symbols:currency-exchange-rounded",
             is_hidden=False,
             component="/operation/token-adjust-record",
             keepalive=False,
         ),
+    ]
+
+
+def build_settings_children(parent_id: int) -> list[Menu]:
+    return [
         Menu(
             menu_type=MenuType.MENU,
-            name="全量业务流水",
-            path="business-ledger",
-            order=15,
+            name="充值配置",
+            path="recharge-config",
+            order=1,
             parent_id=parent_id,
-            icon="material-symbols:receipt-long-outline-rounded",
+            icon="material-symbols:account-balance-wallet-outline-rounded",
             is_hidden=False,
-            component="/operation/business-ledger",
+            component="/system/recharge-config",
+            keepalive=False,
+        ),
+        Menu(
+            menu_type=MenuType.MENU,
+            name="提现配置",
+            path="withdraw-config",
+            order=2,
+            parent_id=parent_id,
+            icon="material-symbols:payments-outline-rounded",
+            is_hidden=False,
+            component="/system/withdraw-config",
+            keepalive=False,
+        ),
+        Menu(
+            menu_type=MenuType.MENU,
+            name="初始资料管理",
+            path="initial-profile",
+            order=3,
+            parent_id=parent_id,
+            icon="material-symbols:badge-outline-rounded",
+            is_hidden=False,
+            component="/system/initial-profile",
             keepalive=False,
         ),
     ]
@@ -220,7 +279,30 @@ async def _ensure_menu_exists(
     is_hidden: bool = False,
 ) -> Menu:
     existing = await Menu.filter(path=path, parent_id=parent_id).first()
+    if not existing and component != "Layout":
+        existing = await Menu.filter(path=path, component=component).first()
+    if not existing and parent_id == 0:
+        existing = await Menu.filter(path=path, parent_id=0).first()
     if existing:
+        update_fields = {
+            "menu_type": menu_type,
+            "name": name,
+            "path": path,
+            "order": order,
+            "parent_id": parent_id,
+            "icon": icon,
+            "is_hidden": is_hidden,
+            "component": component,
+            "keepalive": keepalive,
+            "redirect": redirect,
+        }
+        changed_fields = []
+        for field, value in update_fields.items():
+            if getattr(existing, field) != value:
+                setattr(existing, field, value)
+                changed_fields.append(field)
+        if changed_fields:
+            await existing.save(update_fields=changed_fields)
         return existing
     return await Menu.create(
         menu_type=menu_type,
@@ -234,6 +316,23 @@ async def _ensure_menu_exists(
         keepalive=keepalive,
         redirect=redirect,
     )
+
+
+async def hide_legacy_top_menu() -> None:
+    legacy_menus = await Menu.filter(path="/top-menu").all()
+    for legacy_menu in legacy_menus:
+        changed_fields = []
+        for field, value in {
+            "name": "一级菜单",
+            "is_hidden": True,
+            "order": 99,
+            "keepalive": False,
+        }.items():
+            if getattr(legacy_menu, field) != value:
+                setattr(legacy_menu, field, value)
+                changed_fields.append(field)
+        if changed_fields:
+            await legacy_menu.save(update_fields=changed_fields)
 
 
 async def _repair_legacy_certification_menu(parent_id: int) -> None:
@@ -330,12 +429,12 @@ async def init_superuser():
 
 
 async def init_menus():
-    parent_menu = await _ensure_menu_exists(
+    system_parent = await _ensure_menu_exists(
         name="系统管理",
         parent_id=0,
         menu_type=MenuType.CATALOG,
         path="/system",
-        order=1,
+        order=5,
         icon="carbon:gui-management",
         is_hidden=False,
         component="Layout",
@@ -383,18 +482,11 @@ async def init_menus():
             "icon": "material-symbols:settings-outline-rounded",
             "component": "/system/config",
         },
-        {
-            "name": "提现配置",
-            "path": "withdraw-config",
-            "order": 8,
-            "icon": "material-symbols:payments-outline-rounded",
-            "component": "/system/withdraw-config",
-        },
     ]
     for child in system_children:
         await _ensure_menu_exists(
             name=child["name"],
-            parent_id=parent_menu.id,
+            parent_id=system_parent.id,
             menu_type=MenuType.MENU,
             path=child["path"],
             order=child["order"],
@@ -404,18 +496,54 @@ async def init_menus():
         )
 
     operation_parent = await _ensure_menu_exists(
-        name="运营中心",
+        name="运营",
         parent_id=0,
         menu_type=MenuType.CATALOG,
         path="/operation",
-        order=2,
+        order=1,
         icon="material-symbols:monitoring-outline-rounded",
         is_hidden=False,
         component="Layout",
         keepalive=False,
         redirect="/operation/app-user",
     )
-    await _repair_legacy_certification_menu(parent_id=operation_parent.id)
+    review_parent = await _ensure_menu_exists(
+        name="审核",
+        parent_id=0,
+        menu_type=MenuType.CATALOG,
+        path="/review",
+        order=2,
+        icon="material-symbols:fact-check-outline-rounded",
+        is_hidden=False,
+        component="Layout",
+        keepalive=False,
+        redirect="/review/certification-review",
+    )
+    finance_parent = await _ensure_menu_exists(
+        name="财务",
+        parent_id=0,
+        menu_type=MenuType.CATALOG,
+        path="/finance",
+        order=3,
+        icon="material-symbols:account-balance-wallet-outline-rounded",
+        is_hidden=False,
+        component="Layout",
+        keepalive=False,
+        redirect="/finance/recharge",
+    )
+    settings_parent = await _ensure_menu_exists(
+        name="设置",
+        parent_id=0,
+        menu_type=MenuType.CATALOG,
+        path="/settings",
+        order=4,
+        icon="material-symbols:settings-outline-rounded",
+        is_hidden=False,
+        component="Layout",
+        keepalive=False,
+        redirect="/settings/recharge-config",
+    )
+    await _repair_legacy_certification_menu(parent_id=review_parent.id)
     for child in build_operation_children(parent_id=operation_parent.id):
         await _ensure_menu_exists(
             name=child.name,
@@ -428,19 +556,25 @@ async def init_menus():
             keepalive=child.keepalive,
             is_hidden=child.is_hidden,
         )
+    for parent, children in [
+        (review_parent, build_review_children(parent_id=review_parent.id)),
+        (finance_parent, build_finance_children(parent_id=finance_parent.id)),
+        (settings_parent, build_settings_children(parent_id=settings_parent.id)),
+    ]:
+        for child in children:
+            await _ensure_menu_exists(
+                name=child.name,
+                parent_id=parent.id,
+                menu_type=child.menu_type,
+                path=child.path,
+                order=child.order,
+                icon=child.icon,
+                component=child.component,
+                keepalive=child.keepalive,
+                is_hidden=child.is_hidden,
+            )
 
-    await _ensure_menu_exists(
-        name="一级菜单",
-        parent_id=0,
-        menu_type=MenuType.MENU,
-        path="/top-menu",
-        order=99,
-        icon="material-symbols:featured-play-list-outline",
-        is_hidden=False,
-        component="/top-menu",
-        keepalive=False,
-        redirect="",
-    )
+    await hide_legacy_top_menu()
 
 
 async def init_apis():
@@ -449,24 +583,24 @@ async def init_apis():
 
 async def sync_business_ledger_admin_entries() -> None:
     """Ensure the business ledger menu/API exists even when full startup seed is disabled."""
-    operation_parent = await _ensure_menu_exists(
-        name="运营中心",
+    finance_parent = await _ensure_menu_exists(
+        name="财务",
         parent_id=0,
         menu_type=MenuType.CATALOG,
-        path="/operation",
-        order=2,
-        icon="material-symbols:monitoring-outline-rounded",
+        path="/finance",
+        order=3,
+        icon="material-symbols:account-balance-wallet-outline-rounded",
         is_hidden=False,
         component="Layout",
         keepalive=False,
-        redirect="/operation/app-user",
+        redirect="/finance/recharge",
     )
     business_ledger_menu = await _ensure_menu_exists(
         name="全量业务流水",
-        parent_id=operation_parent.id,
+        parent_id=finance_parent.id,
         menu_type=MenuType.MENU,
         path="business-ledger",
-        order=15,
+        order=4,
         icon="material-symbols:receipt-long-outline-rounded",
         is_hidden=False,
         component="/operation/business-ledger",
@@ -474,10 +608,10 @@ async def sync_business_ledger_admin_entries() -> None:
     )
     update_fields = {
         "name": "全量业务流水",
-        "parent_id": operation_parent.id,
+        "parent_id": finance_parent.id,
         "menu_type": MenuType.MENU,
         "path": "business-ledger",
-        "order": 15,
+        "order": 4,
         "icon": "material-symbols:receipt-long-outline-rounded",
         "is_hidden": False,
         "component": "/operation/business-ledger",
@@ -506,8 +640,30 @@ async def sync_business_ledger_admin_entries() -> None:
 
     all_roles = await Role.all()
     for role in all_roles:
-        await role.menus.add(operation_parent, business_ledger_menu)
+        await role.menus.add(finance_parent, business_ledger_menu)
         await role.apis.add(business_ledger_api)
+
+
+async def sync_role_parent_menu_permissions() -> None:
+    parent_menus = await Menu.filter(path__in=["/operation", "/review", "/finance", "/settings", "/system"]).all()
+    if not parent_menus:
+        return
+
+    children_by_parent_id: dict[int, list[Menu]] = {}
+    for parent_menu in parent_menus:
+        children_by_parent_id[parent_menu.id] = await Menu.filter(parent_id=parent_menu.id).all()
+
+    for role in await Role.all():
+        role_menus = await role.menus.all()
+        role_menu_ids = {menu.id for menu in role_menus}
+        for parent_menu in parent_menus:
+            child_ids = {menu.id for menu in children_by_parent_id.get(parent_menu.id, [])}
+            has_parent = parent_menu.id in role_menu_ids
+            has_child = bool(role_menu_ids & child_ids)
+            if has_child and not has_parent:
+                await role.menus.add(parent_menu)
+            elif has_parent and not has_child:
+                await role.menus.remove(parent_menu)
 
 
 async def init_db(*, run_migrations: bool = False):
@@ -570,30 +726,9 @@ async def init_roles():
         await user_role.apis.add(*basic_apis)
         return
 
-    # 兼容存量环境：为所有历史角色补齐运营中心菜单与运营查询权限（幂等）
+    # 兼容存量环境：为已有子菜单权限补齐迁移后的父级菜单（幂等）
     all_roles = await Role.all()
-    operation_menus = await Menu.filter(
-        path__in=[
-            "/operation",
-            "app-user",
-            "call-record",
-            "fee-bill",
-            "gift",
-            "moment",
-            "recharge",
-            "withdraw",
-            "withdraw-account",
-            "certification-review",
-            "profile-review",
-            "ranking",
-            "system-notification",
-            "token-adjust-record",
-            "business-ledger",
-        ]
-    ).all()
-    if all_roles and operation_menus:
-        for role in all_roles:
-            await role.menus.add(*operation_menus)
+    await sync_role_parent_menu_permissions()
 
     call_record_api = await Api.filter(method="GET", path="/api/v1/call_record/list").first()
     if call_record_api and all_roles:

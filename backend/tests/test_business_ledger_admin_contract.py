@@ -22,8 +22,8 @@ def test_business_ledger_admin_route_registered() -> None:
     assert "/business_ledger/list" in paths
 
 
-def test_business_ledger_operation_menu_and_permission_seed_exist() -> None:
-    children = init_app.build_operation_children(parent_id=100)
+def test_business_ledger_finance_menu_and_permission_seed_exist() -> None:
+    children = init_app.build_finance_children(parent_id=100)
     init_app_src = _read_backend_file("app/core/init_app.py")
 
     assert any(
