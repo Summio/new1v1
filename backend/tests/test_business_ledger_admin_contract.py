@@ -1,5 +1,6 @@
-from pathlib import Path
 import json
+from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -33,6 +34,7 @@ def test_business_ledger_operation_menu_and_permission_seed_exist() -> None:
     )
     assert '"business-ledger"' in init_app_src
     assert '"/api/v1/business_ledger/list"' in init_app_src
+    assert "sync_business_ledger_admin_entries" in init_app_src
 
 
 def test_business_ledger_web_api_and_page_exist() -> None:
@@ -105,3 +107,35 @@ async def test_business_ledger_rejects_invalid_filters_before_database_access() 
     assert (await _response_json(invalid_direction))["msg"] == "direction 仅支持 all/income/expense"
     assert invalid_biz_type.status_code == 400
     assert invalid_time.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_business_ledger_admin_entries_sync_even_when_startup_seed_disabled(monkeypatch) -> None:
+    init_db = AsyncMock()
+    init_superuser = AsyncMock()
+    init_menus = AsyncMock()
+    init_apis = AsyncMock()
+    init_roles = AsyncMock()
+    sync_business_ledger_admin_entries = AsyncMock()
+    monkeypatch.setattr(init_app.settings, "AUTO_MIGRATE_ON_STARTUP", False, raising=False)
+    monkeypatch.setattr(init_app.settings, "AUTO_SEED_ON_STARTUP", False, raising=False)
+    monkeypatch.setattr(init_app, "init_db", init_db)
+    monkeypatch.setattr(init_app, "init_superuser", init_superuser)
+    monkeypatch.setattr(init_app, "init_menus", init_menus)
+    monkeypatch.setattr(init_app, "init_apis", init_apis)
+    monkeypatch.setattr(init_app, "init_roles", init_roles)
+    monkeypatch.setattr(
+        init_app,
+        "sync_business_ledger_admin_entries",
+        sync_business_ledger_admin_entries,
+        raising=False,
+    )
+
+    await init_app.init_data()
+
+    init_db.assert_awaited_once_with(run_migrations=False)
+    sync_business_ledger_admin_entries.assert_awaited_once()
+    init_superuser.assert_not_awaited()
+    init_menus.assert_not_awaited()
+    init_apis.assert_not_awaited()
+    init_roles.assert_not_awaited()

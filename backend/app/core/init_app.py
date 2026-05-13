@@ -447,6 +447,69 @@ async def init_apis():
     await api_controller.refresh_api()
 
 
+async def sync_business_ledger_admin_entries() -> None:
+    """Ensure the business ledger menu/API exists even when full startup seed is disabled."""
+    operation_parent = await _ensure_menu_exists(
+        name="运营中心",
+        parent_id=0,
+        menu_type=MenuType.CATALOG,
+        path="/operation",
+        order=2,
+        icon="material-symbols:monitoring-outline-rounded",
+        is_hidden=False,
+        component="Layout",
+        keepalive=False,
+        redirect="/operation/app-user",
+    )
+    business_ledger_menu = await _ensure_menu_exists(
+        name="全量业务流水",
+        parent_id=operation_parent.id,
+        menu_type=MenuType.MENU,
+        path="business-ledger",
+        order=15,
+        icon="material-symbols:receipt-long-outline-rounded",
+        is_hidden=False,
+        component="/operation/business-ledger",
+        keepalive=False,
+    )
+    update_fields = {
+        "name": "全量业务流水",
+        "parent_id": operation_parent.id,
+        "menu_type": MenuType.MENU,
+        "path": "business-ledger",
+        "order": 15,
+        "icon": "material-symbols:receipt-long-outline-rounded",
+        "is_hidden": False,
+        "component": "/operation/business-ledger",
+        "keepalive": False,
+    }
+    changed = False
+    for field, value in update_fields.items():
+        if getattr(business_ledger_menu, field) != value:
+            setattr(business_ledger_menu, field, value)
+            changed = True
+    if changed:
+        await business_ledger_menu.save()
+
+    business_ledger_api = await Api.filter(method="GET", path="/api/v1/business_ledger/list").first()
+    if business_ledger_api:
+        business_ledger_api.summary = "全量业务流水列表"
+        business_ledger_api.tags = "全量业务流水"
+        await business_ledger_api.save(update_fields=["summary", "tags"])
+    else:
+        business_ledger_api = await Api.create(
+            method="GET",
+            path="/api/v1/business_ledger/list",
+            summary="全量业务流水列表",
+            tags="全量业务流水",
+        )
+
+    all_roles = await Role.all()
+    for role in all_roles:
+        await role.menus.add(operation_parent, business_ledger_menu)
+        await role.apis.add(business_ledger_api)
+
+
 async def init_db(*, run_migrations: bool = False):
     if not run_migrations:
         await Tortoise.init(config=settings.TORTOISE_ORM)
@@ -651,6 +714,7 @@ async def init_roles():
 
 async def init_data():
     await init_db(run_migrations=settings.AUTO_MIGRATE_ON_STARTUP)
+    await sync_business_ledger_admin_entries()
     if not settings.AUTO_SEED_ON_STARTUP:
         logger.info("startup seed data disabled")
         return

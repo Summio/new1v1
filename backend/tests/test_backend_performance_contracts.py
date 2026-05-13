@@ -22,7 +22,6 @@ MIGRATIONS_DIR = BACKEND_ROOT / "migrations/models"
 
 
 def test_certified_user_list_uses_bounded_online_page_helpers() -> None:
-    certified_user_text = CERTIFIED_USER_API.read_text(encoding="utf-8")
     presence_text = PRESENCE.read_text(encoding="utf-8")
     source = inspect.getsource(certified_user.certified_user_list)
     fetch_source = inspect.getsource(certified_user._fetch_sorted_certified_user_page)
@@ -82,6 +81,7 @@ async def test_startup_init_data_does_not_run_migrations_or_seed_data_by_default
     init_menus = AsyncMock()
     init_apis = AsyncMock()
     init_roles = AsyncMock()
+    sync_business_ledger_admin_entries = AsyncMock()
     monkeypatch.setattr(init_app.settings, "AUTO_MIGRATE_ON_STARTUP", False, raising=False)
     monkeypatch.setattr(init_app.settings, "AUTO_SEED_ON_STARTUP", False, raising=False)
     monkeypatch.setattr(init_app, "init_db", init_db)
@@ -89,10 +89,12 @@ async def test_startup_init_data_does_not_run_migrations_or_seed_data_by_default
     monkeypatch.setattr(init_app, "init_menus", init_menus)
     monkeypatch.setattr(init_app, "init_apis", init_apis)
     monkeypatch.setattr(init_app, "init_roles", init_roles)
+    monkeypatch.setattr(init_app, "sync_business_ledger_admin_entries", sync_business_ledger_admin_entries)
 
     await init_app.init_data()
 
     init_db.assert_awaited_once_with(run_migrations=False)
+    sync_business_ledger_admin_entries.assert_awaited_once()
     init_superuser.assert_not_awaited()
     init_menus.assert_not_awaited()
     init_apis.assert_not_awaited()
