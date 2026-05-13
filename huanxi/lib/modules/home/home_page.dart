@@ -9,6 +9,7 @@ import '../../app/providers/auth_provider.dart';
 import '../../app/providers/certified_user_provider.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/widgets/status_view.dart';
+import '../../core/utils/app_toast.dart';
 import 'main_shell.dart';
 
 Color availabilityColor(String status) {
@@ -220,6 +221,7 @@ class _CertifiedUserListPageState
 
   late ScrollController _scrollController;
   StreamSubscription<PresenceEvent>? _presenceSubscription;
+  bool _isPinning = false;
 
   @override
   void initState() {
@@ -260,12 +262,44 @@ class _CertifiedUserListPageState
     }
   }
 
+  Future<void> _pinActiveCertifiedUser() async {
+    if (_isPinning) return;
+    setState(() => _isPinning = true);
+    try {
+      final message = await ref
+          .read(certifiedUserListProvider.notifier)
+          .pinActiveCertifiedUser();
+      if (!mounted) return;
+      if (message == null) {
+        AppToast.show(context, '已置顶', backgroundColor: AppTheme.onlineGreen);
+        if (_scrollController.hasClients) {
+          await _scrollController.animateTo(
+            0,
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOut,
+          );
+        }
+      } else {
+        AppToast.show(context, message);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isPinning = false);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final certifiedUserState = ref.watch(certifiedUserListProvider);
     final coinName = ref.watch(tokenNamesProvider).coinName;
+    final authState = ref.watch(authProvider);
     final expectedSection = _sectionForIndex(widget.pageIndex);
     final isCurrentSection = certifiedUserState.section == expectedSection;
+    final showActivePin =
+        expectedSection == 'active' &&
+        isCurrentSection &&
+        authState.isCertifiedUser;
 
     Widget content;
     if (!isCurrentSection) {
@@ -281,31 +315,74 @@ class _CertifiedUserListPageState
       );
     } else {
       // RefreshIndicator 包裹 GridView，每个 PageView 页面独立支持下拉刷新
-      content = RefreshIndicator(
-        onRefresh: () => ref.read(certifiedUserListProvider.notifier).refresh(),
-        child: GridView.builder(
-          controller: _scrollController,
-          physics:
-              const AlwaysScrollableScrollPhysics(), // 确保可以 overscroll 触发下拉刷新
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            childAspectRatio: 0.75,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-          ),
-          itemCount: certifiedUserState.certifiedUsers.length,
-          itemBuilder: (context, idx) {
-            final certifiedUser = certifiedUserState.certifiedUsers[idx];
-            return _CertifiedUserCard(
-              key: ValueKey(
-                'certified_user_card_${certifiedUser.userId}_${certifiedUser.coverUrl ?? ''}',
+      content = Column(
+        children: [
+          if (showActivePin)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+              child: SizedBox(
+                width: double.infinity,
+                height: 40,
+                child: FilledButton.icon(
+                  onPressed: _isPinning ? null : _pinActiveCertifiedUser,
+                  icon: _isPinning
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Icon(Icons.vertical_align_top_rounded, size: 18),
+                  label: const Text('置顶'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    foregroundColor: Colors.white,
+                    textStyle: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
               ),
-              certifiedUser: certifiedUser,
-              coinName: coinName,
-            );
-          },
-        ),
+            ),
+          Expanded(
+            child: RefreshIndicator(
+              onRefresh: () =>
+                  ref.read(certifiedUserListProvider.notifier).refresh(),
+              child: GridView.builder(
+                controller: _scrollController,
+                physics:
+                    const AlwaysScrollableScrollPhysics(), // 确保可以 overscroll 触发下拉刷新
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  childAspectRatio: 0.75,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                ),
+                itemCount: certifiedUserState.certifiedUsers.length,
+                itemBuilder: (context, idx) {
+                  final certifiedUser = certifiedUserState.certifiedUsers[idx];
+                  return _CertifiedUserCard(
+                    key: ValueKey(
+                      'certified_user_card_${certifiedUser.userId}_${certifiedUser.coverUrl ?? ''}',
+                    ),
+                    certifiedUser: certifiedUser,
+                    coinName: coinName,
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
       );
     }
 

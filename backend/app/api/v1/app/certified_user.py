@@ -3,9 +3,14 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Query
 from tortoise.expressions import Q
 
-from app.core.ctx import CTX_APP_USER_ID
+from app.core.ctx import CTX_APP_USER_ID, CTX_APP_USER_OBJ
 from app.models import AppUser
-from app.schemas.base import SuccessExtra
+from app.schemas.base import Fail, Success, SuccessExtra
+from app.services.active_pin_service import (
+    clear_active_pin_cooldown,
+    load_active_pin_cooldown_minutes,
+    try_consume_active_pin_cooldown,
+)
 from app.services.user_availability_service import (
     build_availability_payload_map,
     resolve_availability_payload,
@@ -14,6 +19,56 @@ from app.services.user_block_service import exclude_blocked_user_ids
 from app.utils.media_url import normalize_media_list, to_relative_media_url
 
 router = APIRouter()
+
+
+@router.post("/certified-user/active-pin", summary="活跃页置顶")
+async def active_pin_certified_user():
+    app_user = CTX_APP_USER_OBJ.get()
+    if not app_user:
+        return Fail(code=401, msg="用户不存在")
+
+    if app_user.status == "banned":
+        return Fail(code=403, msg=f"账号已被封禁，原因：{app_user.ban_reason or '未知'}")
+    if (app_user.status or "normal") != "normal":
+        return Fail(code=403, msg="账号状态异常")
+    if not bool(app_user.is_certified_user):
+        return Fail(code=403, msg="仅真人认证用户可使用置顶")
+    if bool(getattr(app_user, "video_dnd_enabled", False)):
+        return Fail(code=400, msg="当前为勿扰状态，请关闭勿扰后再置顶")
+
+    from app.websocket.presence import is_online, mark_online_since
+
+    user_id = int(app_user.id)
+    if not await is_online(user_id):
+        return Fail(code=400, msg="请先保持在线后再置顶")
+
+    cooldown_minutes = await load_active_pin_cooldown_minutes()
+    cooldown_result = await try_consume_active_pin_cooldown(
+        user_id=user_id,
+        cooldown_minutes=cooldown_minutes,
+    )
+    if not cooldown_result.allowed:
+        return Fail(
+            code=429,
+            msg="置顶太频繁，请稍后再试",
+            data={"remaining_seconds": cooldown_result.remaining_seconds},
+        )
+
+    try:
+        await mark_online_since(user_id, is_certified_user=True)
+    except Exception:
+        if cooldown_minutes > 0:
+            await clear_active_pin_cooldown(user_id)
+        return Fail(code=500, msg="置顶失败，请稍后重试")
+
+    return Success(
+        msg="已置顶",
+        data={
+            "cooldown_minutes": cooldown_minutes,
+            "remaining_seconds": 0,
+            "pinned_at_ms": cooldown_result.pinned_at_ms,
+        },
+    )
 
 
 def _normalize_certified_tags(raw_value) -> list[str]:

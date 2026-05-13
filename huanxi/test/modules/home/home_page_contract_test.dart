@@ -28,12 +28,18 @@ void main() {
     expect(text, contains('_selectCategory(index, animatePage: true)'));
   });
 
-  test('home aligns provider section before initial certified user refresh', () {
-    final text = File('lib/modules/home/home_page.dart').readAsStringSync();
+  test(
+    'home aligns provider section before initial certified user refresh',
+    () {
+      final text = File('lib/modules/home/home_page.dart').readAsStringSync();
 
-    expect(text, contains('notifier.setSection(_sectionForIndex(_currentIndex));'));
-    expect(text, contains('notifier.fetchCertifiedUsers(refresh: true);'));
-  });
+      expect(
+        text,
+        contains('notifier.setSection(_sectionForIndex(_currentIndex));'),
+      );
+      expect(text, contains('notifier.fetchCertifiedUsers(refresh: true);'));
+    },
+  );
 
   test(
     'home uses lightweight fade transitions for category and cover loading',
@@ -50,43 +56,94 @@ void main() {
     },
   );
 
-  test('home does not render stale certified users on inactive category pages', () {
-    final text = File('lib/modules/home/home_page.dart').readAsStringSync();
+  test(
+    'home does not render stale certified users on inactive category pages',
+    () {
+      final text = File('lib/modules/home/home_page.dart').readAsStringSync();
 
-    expect(text, contains('final expectedSection = _sectionForIndex(widget.pageIndex);'));
-    expect(
-      text,
-      contains(
-        'final isCurrentSection = certifiedUserState.section == expectedSection;',
-      ),
-    );
-    expect(text, contains('if (!isCurrentSection)'));
-  });
+      expect(
+        text,
+        contains('final expectedSection = _sectionForIndex(widget.pageIndex);'),
+      );
+      expect(
+        text,
+        contains(
+          'final isCurrentSection = certifiedUserState.section == expectedSection;',
+        ),
+      );
+      expect(text, contains('if (!isCurrentSection)'));
+    },
+  );
 
   test('home gives certified user cards and cover images stable identity', () {
     final text = File('lib/modules/home/home_page.dart').readAsStringSync();
 
     expect(text, contains('certified_user_card_\${certifiedUser.userId}_'));
-    expect(text, contains('certified_user_cover_\${certifiedUser.userId}_\$coverUrl'));
-  });
-
-  test('certified user refresh clears stale entries before loading new section data', () {
-    final text = File('lib/app/providers/certified_user_provider.dart').readAsStringSync();
-
-    expect(text, contains('if (state.isLoading && !refresh) return;'));
     expect(
       text,
-      contains('certifiedUsers: refresh ? const [] : state.certifiedUsers'),
+      contains('certified_user_cover_\${certifiedUser.userId}_\$coverUrl'),
     );
   });
 
+  test(
+    'certified user refresh clears stale entries before loading new section data',
+    () {
+      final text = File(
+        'lib/app/providers/certified_user_provider.dart',
+      ).readAsStringSync();
+
+      expect(text, contains('if (state.isLoading && !refresh) return;'));
+      expect(
+        text,
+        contains('certifiedUsers: refresh ? const [] : state.certifiedUsers'),
+      );
+    },
+  );
+
   test('certified user provider ignores stale in-flight responses', () {
-    final text = File('lib/app/providers/certified_user_provider.dart').readAsStringSync();
+    final text = File(
+      'lib/app/providers/certified_user_provider.dart',
+    ).readAsStringSync();
 
     expect(text, contains('int _requestSerial = 0;'));
     expect(text, contains('final requestId = ++_requestSerial;'));
     expect(text, contains('final requestSection = state.section;'));
-    expect(text, contains('if (requestId != _requestSerial || state.section != requestSection)'));
+    expect(
+      text,
+      contains(
+        'if (requestId != _requestSerial || state.section != requestSection)',
+      ),
+    );
     expect(text, contains("'section': requestSection"));
   });
+
+  test('home active tab exposes certified user pin action', () {
+    final text = File('lib/modules/home/home_page.dart').readAsStringSync();
+
+    expect(text, contains('置顶'));
+    expect(text, contains('authProvider'));
+    expect(text, contains('isCertifiedUser'));
+    expect(text, contains("expectedSection == 'active'"));
+    expect(text, contains('pinActiveCertifiedUser'));
+    expect(text, contains('animateTo('));
+  });
+
+  test(
+    'certified user provider supports active pin endpoint and cooldown message',
+    () {
+      final endpointText = File(
+        'lib/core/constants/api_endpoints.dart',
+      ).readAsStringSync();
+      final providerText = File(
+        'lib/app/providers/certified_user_provider.dart',
+      ).readAsStringSync();
+
+      expect(endpointText, contains('certifiedUserActivePin'));
+      expect(endpointText, contains('app/certified-user/active-pin'));
+      expect(providerText, contains('pinActiveCertifiedUser'));
+      expect(providerText, contains('formatActivePinCooldownMessage'));
+      expect(providerText, contains('remaining_seconds'));
+      expect(providerText, contains('当前为勿扰状态，请关闭勿扰后再置顶'));
+    },
+  );
 }
