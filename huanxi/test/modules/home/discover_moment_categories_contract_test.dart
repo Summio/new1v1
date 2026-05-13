@@ -19,6 +19,18 @@ void main() {
     expect(discoverText, contains('momentFeedProvider('));
   });
 
+  test('discover restores and writes remembered tab selections', () {
+    final discoverText = File(
+      'lib/modules/home/discover_page.dart',
+    ).readAsStringSync();
+
+    expect(discoverText, contains('mainTabMemoryProvider'));
+    expect(discoverText, contains('discoverTabIndex'));
+    expect(discoverText, contains('setDiscoverTabIndex'));
+    expect(discoverText, contains('discoverMomentCategory'));
+    expect(discoverText, contains('setDiscoverMomentCategory'));
+  });
+
   test('moment list view supports category-specific empty text', () {
     final text = File(
       'lib/modules/home/moment_list_view.dart',

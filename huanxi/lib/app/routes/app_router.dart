@@ -157,12 +157,16 @@ final appRouter = GoRouter(
           path: AppRoutes.messages,
           pageBuilder: (context, state) => NoTransitionPage(
             child: ChatPage(
-              initialTabIndex: ChatPage.tabIndexFromQuery(
-                state.uri.queryParameters['tab'],
-              ),
-              initialRelationTabIndex: ChatPage.relationTabIndexFromQuery(
-                state.uri.queryParameters['relation'],
-              ),
+              initialTabIndexOverride:
+                  state.uri.queryParameters.containsKey('tab')
+                  ? ChatPage.tabIndexFromQuery(state.uri.queryParameters['tab'])
+                  : null,
+              initialRelationTabIndexOverride:
+                  state.uri.queryParameters.containsKey('relation')
+                  ? ChatPage.relationTabIndexFromQuery(
+                      state.uri.queryParameters['relation'],
+                    )
+                  : null,
             ),
           ),
         ),

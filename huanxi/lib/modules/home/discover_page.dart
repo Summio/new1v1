@@ -2,31 +2,45 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../app/theme/app_theme.dart';
+import '../../app/providers/main_tab_memory_provider.dart';
 import '../../app/providers/moment_provider.dart';
 import '../../app/providers/ranking_provider.dart';
 import '../../app/routes/app_router.dart';
 import 'moment_list_view.dart';
 
 /// 发现页 - 动态 / 排行榜
-class DiscoverPage extends StatefulWidget {
+class DiscoverPage extends ConsumerStatefulWidget {
   const DiscoverPage({super.key});
 
   @override
-  State<DiscoverPage> createState() => _DiscoverPageState();
+  ConsumerState<DiscoverPage> createState() => _DiscoverPageState();
 }
 
-class _DiscoverPageState extends State<DiscoverPage>
+class _DiscoverPageState extends ConsumerState<DiscoverPage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    final initialIndex = ref.read(mainTabMemoryProvider).discoverTabIndex;
+    _tabController = TabController(
+      length: 2,
+      initialIndex: initialIndex,
+      vsync: this,
+    );
+    _tabController.addListener(_onTabChanged);
+  }
+
+  void _onTabChanged() {
+    ref
+        .read(mainTabMemoryProvider.notifier)
+        .setDiscoverTabIndex(_tabController.index);
   }
 
   @override
   void dispose() {
+    _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     super.dispose();
   }
@@ -111,6 +125,7 @@ class _FeedTabState extends ConsumerState<_FeedTab> {
   @override
   void initState() {
     super.initState();
+    _category = ref.read(mainTabMemoryProvider).discoverMomentCategory;
     // 首次加载
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _ensureLoaded(_category);
@@ -129,6 +144,9 @@ class _FeedTabState extends ConsumerState<_FeedTab> {
     setState(() {
       _category = category;
     });
+    ref
+        .read(mainTabMemoryProvider.notifier)
+        .setDiscoverMomentCategory(category);
     _ensureLoaded(category);
   }
 

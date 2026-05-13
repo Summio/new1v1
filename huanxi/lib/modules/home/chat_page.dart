@@ -1,18 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../app/providers/main_tab_memory_provider.dart';
 import '../../app/theme/app_theme.dart';
 import 'call_page.dart';
 import 'messages_page.dart';
 import 'my_following_page.dart';
 
-class ChatPage extends StatefulWidget {
-  final int initialTabIndex;
-  final int initialRelationTabIndex;
+class ChatPage extends ConsumerStatefulWidget {
+  final int? initialTabIndexOverride;
+  final int? initialRelationTabIndexOverride;
 
   const ChatPage({
     super.key,
-    this.initialTabIndex = 0,
-    this.initialRelationTabIndex = 0,
+    this.initialTabIndexOverride,
+    this.initialRelationTabIndexOverride,
   });
 
   static int tabIndexFromQuery(String? value) {
@@ -40,24 +42,38 @@ class ChatPage extends StatefulWidget {
   }
 
   @override
-  State<ChatPage> createState() => _ChatPageState();
+  ConsumerState<ChatPage> createState() => _ChatPageState();
 }
 
-class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
+class _ChatPageState extends ConsumerState<ChatPage>
+    with TickerProviderStateMixin {
   late final TabController _tabController;
 
   @override
   void initState() {
     super.initState();
+    final rememberedIndex = ref.read(mainTabMemoryProvider).chatTabIndex;
+    final initialIndex = widget.initialTabIndexOverride ?? rememberedIndex;
     _tabController = TabController(
       length: 3,
-      initialIndex: widget.initialTabIndex.clamp(0, 2),
+      initialIndex: initialIndex.clamp(0, 2),
       vsync: this,
     );
+    _tabController.addListener(_onTabChanged);
+    ref
+        .read(mainTabMemoryProvider.notifier)
+        .setChatTabIndex(_tabController.index);
+  }
+
+  void _onTabChanged() {
+    ref
+        .read(mainTabMemoryProvider.notifier)
+        .setChatTabIndex(_tabController.index);
   }
 
   @override
   void dispose() {
+    _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     super.dispose();
   }
@@ -93,7 +109,9 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
               children: [
                 const MessagesPage.embedded(),
                 const CallPage.embedded(),
-                _RelationTabs(initialIndex: widget.initialRelationTabIndex),
+                _RelationTabs(
+                  initialIndexOverride: widget.initialRelationTabIndexOverride,
+                ),
               ],
             ),
           ),
@@ -103,31 +121,44 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
   }
 }
 
-class _RelationTabs extends StatefulWidget {
-  final int initialIndex;
+class _RelationTabs extends ConsumerStatefulWidget {
+  final int? initialIndexOverride;
 
-  const _RelationTabs({required this.initialIndex});
+  const _RelationTabs({required this.initialIndexOverride});
 
   @override
-  State<_RelationTabs> createState() => _RelationTabsState();
+  ConsumerState<_RelationTabs> createState() => _RelationTabsState();
 }
 
-class _RelationTabsState extends State<_RelationTabs>
+class _RelationTabsState extends ConsumerState<_RelationTabs>
     with SingleTickerProviderStateMixin {
   late final TabController _relationTabController;
 
   @override
   void initState() {
     super.initState();
+    final rememberedIndex = ref.read(mainTabMemoryProvider).relationTabIndex;
+    final initialIndex = widget.initialIndexOverride ?? rememberedIndex;
     _relationTabController = TabController(
       length: 3,
-      initialIndex: widget.initialIndex.clamp(0, 2),
+      initialIndex: initialIndex.clamp(0, 2),
       vsync: this,
     );
+    _relationTabController.addListener(_onRelationTabChanged);
+    ref
+        .read(mainTabMemoryProvider.notifier)
+        .setRelationTabIndex(_relationTabController.index);
+  }
+
+  void _onRelationTabChanged() {
+    ref
+        .read(mainTabMemoryProvider.notifier)
+        .setRelationTabIndex(_relationTabController.index);
   }
 
   @override
   void dispose() {
+    _relationTabController.removeListener(_onRelationTabChanged);
     _relationTabController.dispose();
     super.dispose();
   }

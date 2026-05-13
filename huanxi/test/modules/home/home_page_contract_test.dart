@@ -41,6 +41,16 @@ void main() {
     },
   );
 
+  test('home restores and writes remembered category selection', () {
+    final text = File('lib/modules/home/home_page.dart').readAsStringSync();
+
+    expect(text, contains('mainTabMemoryProvider'));
+    expect(text, contains('homeCategoryIndex'));
+    expect(text, contains('initialIndex: _currentIndex'));
+    expect(text, contains('initialPage: _currentIndex'));
+    expect(text, contains('setHomeCategoryIndex(index)'));
+  });
+
   test(
     'home uses lightweight fade transitions for category and cover loading',
     () {

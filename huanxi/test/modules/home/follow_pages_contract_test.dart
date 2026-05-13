@@ -21,6 +21,18 @@ void main() {
     expect(chatPage, contains('TabBarView'));
   });
 
+  test('chat page restores and writes remembered tab selections', () {
+    final chatPage = File('lib/modules/home/chat_page.dart').readAsStringSync();
+
+    expect(chatPage, contains('mainTabMemoryProvider'));
+    expect(chatPage, contains('chatTabIndex'));
+    expect(chatPage, contains('relationTabIndex'));
+    expect(chatPage, contains('setChatTabIndex'));
+    expect(chatPage, contains('setRelationTabIndex'));
+    expect(chatPage, contains('initialTabIndexOverride'));
+    expect(chatPage, contains('initialRelationTabIndexOverride'));
+  });
+
   test('profile moves call and relation entries into chat page', () {
     final profilePage = File(
       'lib/modules/home/profile_page.dart',

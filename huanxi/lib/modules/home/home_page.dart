@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../app/providers/certified_user_provider.dart';
+import '../../app/providers/main_tab_memory_provider.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/widgets/status_view.dart';
 import '../../core/utils/app_toast.dart';
@@ -51,7 +52,7 @@ class HomePage extends ConsumerStatefulWidget {
 class _HomePageState extends ConsumerState<HomePage>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  final PageController _pageController = PageController();
+  late final PageController _pageController;
 
   final List<String> _categories = ['推荐', '活跃', '新人'];
   int _currentIndex = 0;
@@ -59,7 +60,13 @@ class _HomePageState extends ConsumerState<HomePage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: _categories.length, vsync: this);
+    _currentIndex = ref.read(mainTabMemoryProvider).homeCategoryIndex;
+    _tabController = TabController(
+      length: _categories.length,
+      initialIndex: _currentIndex,
+      vsync: this,
+    );
+    _pageController = PageController(initialPage: _currentIndex);
     _tabController.addListener(_onTabChanged);
     Future.microtask(() {
       final notifier = ref.read(certifiedUserListProvider.notifier);
@@ -84,6 +91,7 @@ class _HomePageState extends ConsumerState<HomePage>
   void _selectCategory(int index, {required bool animatePage}) {
     if (_currentIndex != index) {
       setState(() => _currentIndex = index);
+      ref.read(mainTabMemoryProvider.notifier).setHomeCategoryIndex(index);
       ref
           .read(certifiedUserListProvider.notifier)
           .setSection(_sectionForIndex(index));
