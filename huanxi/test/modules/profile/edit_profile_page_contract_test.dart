@@ -60,13 +60,13 @@ void main() {
       'lib/modules/profile/edit_profile_page.dart',
     ).readAsStringSync();
 
-    expect(page, contains('DateTime(1975, 1, 1)'));
-    expect(page, contains('出生日期不能早于1975-01-01'));
+    expect(page, contains('DateTime(1960, 1, 1)'));
+    expect(page, contains('出生日期不能早于1960-01-01'));
     expect(page, contains('出生日期不能晚于今天'));
-    expect(page, contains('heightCm < 130 || heightCm > 230'));
-    expect(page, contains('身高请输入130-230之间的数字'));
-    expect(page, contains('weightKg < 30 || weightKg > 130'));
-    expect(page, contains('体重请输入30-130之间的数字'));
+    expect(page, contains('heightCm < 130 || heightCm > 200'));
+    expect(page, contains('身高请输入130-200之间的数字'));
+    expect(page, contains('weightKg < 30 || weightKg > 100'));
+    expect(page, contains('体重请输入30-100之间的数字'));
   });
 
   test('profile cache does not restore unvalidated basic fields', () {
