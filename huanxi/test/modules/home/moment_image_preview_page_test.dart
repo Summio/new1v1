@@ -1,30 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:huanxi/modules/home/moment_image_preview_page.dart';
+import 'package:photo_view/photo_view.dart';
 import 'dart:io';
 
 void main() {
-  TransformationController previewTransformationController(
-    WidgetTester tester,
-  ) {
-    final viewer = tester.widget<InteractiveViewer>(
-      find.byType(InteractiveViewer),
-    );
-    return viewer.transformationController!;
+  PhotoViewController previewController(WidgetTester tester) {
+    final viewer = tester.widget<PhotoView>(find.byType(PhotoView));
+    return viewer.controller! as PhotoViewController;
   }
 
-  Future<void> doubleTapAt(WidgetTester tester, Offset position) async {
-    final first = await tester.createGesture();
-    await first.down(position);
-    await tester.pump(const Duration(milliseconds: 20));
-    await first.up();
-    await tester.pump(const Duration(milliseconds: 60));
-
-    final second = await tester.createGesture();
-    await second.down(position);
-    await tester.pump(const Duration(milliseconds: 20));
-    await second.up();
-    await tester.pumpAndSettle();
+  ScaleStateCycle previewScaleStateCycle(WidgetTester tester) {
+    final viewer = tester.widget<PhotoView>(find.byType(PhotoView));
+    return viewer.scaleStateCycle!;
   }
 
   testWidgets('image preview opens at initial index and swipes within group', (
@@ -55,13 +43,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    final thirdImage = tester.widget<Image>(
-      find.byKey(const ValueKey('moment_image_preview_image_2')),
-    );
-    expect((thirdImage.image as NetworkImage).url, 'https://example.com/3.jpg');
+    expect(pageView.controller?.page, moreOrLessEquals(2));
   });
 
-  testWidgets('image preview double tap reaches 2.5x then 4x then resets', (
+  testWidgets('image preview double tap cycle toggles zoom and reset', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -70,41 +55,57 @@ void main() {
       ),
     );
 
-    final controller = previewTransformationController(tester);
-    const position = Offset(400, 300);
+    final controller = previewController(tester);
+    final scaleStateCycle = previewScaleStateCycle(tester);
 
-    await doubleTapAt(tester, position);
-    expect(controller.value.getMaxScaleOnAxis(), moreOrLessEquals(2.5));
+    expect(
+      scaleStateCycle(PhotoViewScaleState.initial),
+      PhotoViewScaleState.zoomedIn,
+    );
+    expect(controller.scale, moreOrLessEquals(2.5));
 
-    await doubleTapAt(tester, position);
-    expect(controller.value.getMaxScaleOnAxis(), moreOrLessEquals(4.0));
-
-    await doubleTapAt(tester, position);
-    expect(controller.value.getMaxScaleOnAxis(), moreOrLessEquals(1.0));
+    expect(
+      scaleStateCycle(PhotoViewScaleState.zoomedIn),
+      PhotoViewScaleState.initial,
+    );
+    expect(controller.scale, moreOrLessEquals(1.0));
   });
 
-  testWidgets('image preview still supports manual pinch zoom', (tester) async {
+  testWidgets('image preview double tap resets any enlarged real scale', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: MomentImagePreviewPage(imageUrl: 'https://example.com/1.jpg'),
       ),
     );
 
-    final controller = previewTransformationController(tester);
-    final first = await tester.createGesture(pointer: 1);
-    final second = await tester.createGesture(pointer: 2);
+    final controller = previewController(tester);
+    final scaleStateCycle = previewScaleStateCycle(tester);
 
-    await first.down(const Offset(350, 300));
-    await second.down(const Offset(450, 300));
-    await tester.pump();
-    await first.moveTo(const Offset(250, 300));
-    await second.moveTo(const Offset(550, 300));
-    await tester.pump();
-    await first.up();
-    await second.up();
-    await tester.pumpAndSettle();
+    controller.scale = 1.1;
 
-    expect(controller.value.getMaxScaleOnAxis(), greaterThan(1.0));
+    expect(
+      scaleStateCycle(PhotoViewScaleState.zoomedIn),
+      PhotoViewScaleState.initial,
+    );
+    expect(controller.scale, moreOrLessEquals(1.0));
+  });
+
+  testWidgets('image preview keeps PhotoView pinch gestures enabled', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: MomentImagePreviewPage(imageUrl: 'https://example.com/1.jpg'),
+      ),
+    );
+
+    final viewer = tester.widget<PhotoView>(find.byType(PhotoView));
+    expect(viewer.disableGestures, isNot(true));
+    expect(viewer.minScale, PhotoViewComputedScale.contained);
+    expect(viewer.initialScale, PhotoViewComputedScale.contained);
+    expect(viewer.maxScale, PhotoViewComputedScale.contained * 4.0);
   });
 
   test('image preview keeps zoom controllers scoped per page', () {
@@ -121,25 +122,26 @@ void main() {
   });
 
   test(
-    'image preview double tap cycles through two zoom levels before reset',
+    'image preview uses PhotoView for pinch zoom and two-state double tap',
     () {
       final source = File(
         'lib/modules/home/moment_image_preview_page.dart',
       ).readAsStringSync();
 
       expect(source, contains('static const double _doubleTapScale = 2.5;'));
-      expect(source, contains('static const double _maxScale = 4.0;'));
-      expect(
-        source,
-        contains('double _nextDoubleTapScale(double currentScale)'),
-      );
-      expect(
-        source,
-        contains('final targetScale = _nextDoubleTapScale(currentScale);'),
-      );
-      expect(source, contains('scale: targetScale'));
-      expect(source, contains('_clampMatrix(target, viewport)'));
-      expect(source, isNot(contains('if (currentScale > 1.05)')));
+      expect(source, contains('PhotoView('));
+      expect(source, contains('PhotoViewController'));
+      expect(source, contains('PhotoViewScaleStateController'));
+      expect(source, contains('scaleStateCycle: _scaleStateCycle'));
+      expect(source, contains('currentScale > _minScale + _scaleTolerance'));
+      expect(source, contains('PhotoViewScaleState.initial'));
+      expect(source, contains('PhotoViewScaleState.zoomedIn'));
+      expect(source, contains('PhotoViewComputedScale.contained * 4.0'));
+      expect(source, contains('_resolvedInitialScale() * _doubleTapScale'));
+      expect(source, isNot(contains('_nextDoubleTapScale')));
+      expect(source, isNot(contains('TransformationController')));
+      expect(source, isNot(contains('_clampMatrix')));
+      expect(source, isNot(contains('static const double _maxScale = 4.0;')));
     },
   );
 }

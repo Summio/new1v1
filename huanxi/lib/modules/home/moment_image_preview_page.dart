@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:photo_view/photo_view.dart';
 
 /// 动态图片全屏预览页
 /// 支持捏合缩放，点击任意位置关闭
@@ -20,8 +22,7 @@ class MomentImagePreviewPage extends StatefulWidget {
   State<MomentImagePreviewPage> createState() => _MomentImagePreviewPageState();
 }
 
-class _MomentImagePreviewPageState extends State<MomentImagePreviewPage>
-    with TickerProviderStateMixin {
+class _MomentImagePreviewPageState extends State<MomentImagePreviewPage> {
   late final PageController _pageController;
   late final List<String> _images;
   late final int _initialPage;
@@ -48,67 +49,60 @@ class _MomentImagePreviewPageState extends State<MomentImagePreviewPage>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => Navigator.of(context).pop(),
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            PageView.builder(
-              key: const ValueKey('moment_image_preview_page_view'),
-              controller: _pageController,
-              itemCount: _images.length,
-              itemBuilder: (context, index) {
-                return _ZoomableImagePage(
-                  imageUrl: _images[index],
-                  index: index,
-                );
-              },
-            ),
-            if (_images.length > 1)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: MediaQuery.of(context).padding.bottom + 28,
-                child: IgnorePointer(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(_images.length, (index) {
-                      return AnimatedBuilder(
-                        animation: _pageController,
-                        builder: (context, child) {
-                          final page = _pageController.hasClients
-                              ? (_pageController.page ?? _initialPage)
-                              : _initialPage.toDouble();
-                          final active = (page - index).abs() < 0.5;
-                          return Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 3),
-                            width: active ? 7 : 6,
-                            height: active ? 7 : 6,
-                            decoration: BoxDecoration(
-                              color: active
-                                  ? Colors.white
-                                  : Colors.white.withValues(alpha: 0.45),
-                              shape: BoxShape.circle,
-                            ),
-                          );
-                        },
-                      );
-                    }),
-                  ),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          PageView.builder(
+            key: const ValueKey('moment_image_preview_page_view'),
+            controller: _pageController,
+            itemCount: _images.length,
+            itemBuilder: (context, index) {
+              return _ZoomableImagePage(imageUrl: _images[index], index: index);
+            },
+          ),
+          if (_images.length > 1)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: MediaQuery.of(context).padding.bottom + 28,
+              child: IgnorePointer(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(_images.length, (index) {
+                    return AnimatedBuilder(
+                      animation: _pageController,
+                      builder: (context, child) {
+                        final page = _pageController.hasClients
+                            ? (_pageController.page ?? _initialPage)
+                            : _initialPage.toDouble();
+                        final active = (page - index).abs() < 0.5;
+                        return Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
+                          width: active ? 7 : 6,
+                          height: active ? 7 : 6,
+                          decoration: BoxDecoration(
+                            color: active
+                                ? Colors.white
+                                : Colors.white.withValues(alpha: 0.45),
+                            shape: BoxShape.circle,
+                          ),
+                        );
+                      },
+                    );
+                  }),
                 ),
               ),
-            // 左上角关闭按钮（可选，备用关闭方式）
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 8,
-              right: 8,
-              child: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white, size: 28),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
             ),
-          ],
-        ),
+          // 左上角关闭按钮（可选，备用关闭方式）
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 8,
+            right: 8,
+            child: IconButton(
+              icon: const Icon(Icons.close, color: Colors.white, size: 28),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -139,203 +133,124 @@ class _ZoomableImagePage extends StatefulWidget {
   State<_ZoomableImagePage> createState() => _ZoomableImagePageState();
 }
 
-class _ZoomableImagePageState extends State<_ZoomableImagePage>
-    with SingleTickerProviderStateMixin {
+class _ZoomableImagePageState extends State<_ZoomableImagePage> {
   static const double _minScale = 1.0;
-  static const double _maxScale = 4.0;
   static const double _doubleTapScale = 2.5;
+  static const double _scaleTolerance = 0.05;
 
-  late final TransformationController _transformationController;
-  late final AnimationController _animationController;
-  Animation<Matrix4>? _matrixAnimation;
-  TapDownDetails? _doubleTapDetails;
+  late final PhotoViewController _controller;
+  late final PhotoViewScaleStateController _scaleStateController;
+  late final StreamSubscription<PhotoViewControllerValue> _controllerStateSub;
+  double? _initialResolvedScale;
 
   @override
   void initState() {
     super.initState();
-    _transformationController = TransformationController();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 180),
+    _controller = PhotoViewController();
+    _scaleStateController = PhotoViewScaleStateController();
+    _controllerStateSub = _controller.outputStateStream.listen(
+      _captureInitialScale,
     );
   }
 
   @override
   void dispose() {
-    _matrixAnimation?.removeListener(_handleMatrixAnimation);
-    _animationController.dispose();
-    _transformationController.dispose();
+    _controllerStateSub.cancel();
+    _scaleStateController.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.sizeOf(context);
-    return GestureDetector(
-      behavior: HitTestBehavior.translucent,
-      onDoubleTapDown: (details) => _doubleTapDetails = details,
-      onDoubleTap: () => _handleDoubleTap(screenSize),
-      child: InteractiveViewer(
-        minScale: _minScale,
-        maxScale: _maxScale,
-        boundaryMargin: EdgeInsets.zero,
-        transformationController: _transformationController,
-        onInteractionEnd: (_) => _snapToBounds(screenSize),
-        child: SizedBox(
-          width: screenSize.width,
-          height: screenSize.height,
-          child: _buildImage(
-            width: screenSize.width,
-            height: screenSize.height,
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _handleDoubleTap(Size viewport) {
-    final currentScale = _transformationController.value.getMaxScaleOnAxis();
-    final targetScale = _nextDoubleTapScale(currentScale);
-    if (targetScale <= _minScale) {
-      _animateTo(Matrix4.identity());
-      return;
-    }
-
-    final position =
-        _doubleTapDetails?.localPosition ??
-        Offset(viewport.width / 2, viewport.height / 2);
-    final target = _buildMatrix(
-      scale: targetScale,
-      tx: -position.dx * (targetScale - 1),
-      ty: -position.dy * (targetScale - 1),
-    );
-
-    _animateTo(_clampMatrix(target, viewport));
-  }
-
-  double _nextDoubleTapScale(double currentScale) {
-    if (currentScale >= _maxScale - 0.05) {
-      return _minScale;
-    }
-    if (currentScale >= _doubleTapScale - 0.05) {
-      return _maxScale;
-    }
-    return _doubleTapScale;
-  }
-
-  void _snapToBounds(Size viewport) {
-    final clamped = _clampMatrix(_transformationController.value, viewport);
-    if (!_isSameMatrix(_transformationController.value, clamped)) {
-      _animateTo(clamped);
-    }
-  }
-
-  void _animateTo(Matrix4 target) {
-    _animationController.stop();
-    _matrixAnimation?.removeListener(_handleMatrixAnimation);
-    _matrixAnimation =
-        Matrix4Tween(
-            begin: _transformationController.value,
-            end: target,
-          ).animate(
-            CurvedAnimation(
-              parent: _animationController,
-              curve: Curves.easeOutCubic,
-            ),
-          )
-          ..addListener(_handleMatrixAnimation);
-    _animationController.forward(from: 0);
-  }
-
-  void _handleMatrixAnimation() {
-    final animation = _matrixAnimation;
-    if (animation == null) return;
-    _transformationController.value = animation.value;
-  }
-
-  Matrix4 _clampMatrix(Matrix4 matrix, Size viewport) {
-    var scale = matrix.getMaxScaleOnAxis();
-    scale = scale.clamp(_minScale, _maxScale);
-
-    if (scale <= _minScale) {
-      return Matrix4.identity();
-    }
-
-    final tx = matrix.storage[12];
-    final ty = matrix.storage[13];
-
-    final minTx = viewport.width - viewport.width * scale;
-    final minTy = viewport.height - viewport.height * scale;
-
-    final clampedTx = tx.clamp(minTx, 0.0);
-    final clampedTy = ty.clamp(minTy, 0.0);
-
-    return _buildMatrix(
-      scale: scale,
-      tx: clampedTx.toDouble(),
-      ty: clampedTy.toDouble(),
-    );
-  }
-
-  Matrix4 _buildMatrix({
-    required double scale,
-    required double tx,
-    required double ty,
-  }) {
-    return Matrix4.diagonal3Values(scale, scale, 1)
-      ..setTranslationRaw(tx, ty, 0);
-  }
-
-  bool _isSameMatrix(Matrix4 a, Matrix4 b) {
-    for (var i = 0; i < 16; i++) {
-      if ((a.storage[i] - b.storage[i]).abs() > 0.001) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  Widget _buildImage({required double width, required double height}) {
-    if (widget.imageUrl.startsWith('/uploads/')) {
-      return Image.file(
-        File(widget.imageUrl),
-        key: ValueKey('moment_image_preview_image_${widget.index}'),
-        width: width,
-        height: height,
-        fit: BoxFit.contain,
-        errorBuilder: (context, error, stackTrace) => _errorPlaceholder(),
-      );
-    }
-    return Image.network(
-      widget.imageUrl,
-      key: ValueKey('moment_image_preview_image_${widget.index}'),
-      width: width,
-      height: height,
-      fit: BoxFit.contain,
-      loadingBuilder: (_, child, loadingProgress) {
-        if (loadingProgress == null) return child;
+    return PhotoView(
+      key: ValueKey('moment_image_preview_photo_${widget.index}'),
+      imageProvider: _buildImageProvider(),
+      backgroundDecoration: const BoxDecoration(color: Colors.black),
+      controller: _controller,
+      scaleStateController: _scaleStateController,
+      minScale: PhotoViewComputedScale.contained,
+      initialScale: PhotoViewComputedScale.contained,
+      maxScale: PhotoViewComputedScale.contained * 4.0,
+      scaleStateCycle: _scaleStateCycle,
+      onTapUp: (context, details, value) => Navigator.of(context).pop(),
+      loadingBuilder: (_, event) {
         return Center(
           child: CircularProgressIndicator(
-            value: loadingProgress.expectedTotalBytes != null
-                ? loadingProgress.cumulativeBytesLoaded /
-                      loadingProgress.expectedTotalBytes!
+            value: event?.expectedTotalBytes != null
+                ? event!.cumulativeBytesLoaded / event.expectedTotalBytes!
                 : null,
             color: Colors.white,
           ),
         );
       },
       errorBuilder: (context, error, stackTrace) => _errorPlaceholder(),
+      gestureDetectorBehavior: HitTestBehavior.opaque,
     );
   }
 
+  PhotoViewScaleState _scaleStateCycle(PhotoViewScaleState actual) {
+    final isZoomedInState =
+        actual == PhotoViewScaleState.zoomedIn ||
+        _scaleStateController.scaleState == PhotoViewScaleState.zoomedIn;
+    final currentScale = isZoomedInState ? _minScale : _currentRelativeScale();
+    if (isZoomedInState || currentScale > _minScale + _scaleTolerance) {
+      _controller.updateMultiple(
+        position: Offset.zero,
+        scale: _initialResolvedScale ?? _minScale,
+      );
+      return PhotoViewScaleState.initial;
+    }
+
+    _controller.updateMultiple(
+      position: Offset.zero,
+      scale: _resolvedInitialScale() * _doubleTapScale,
+    );
+    return PhotoViewScaleState.zoomedIn;
+  }
+
+  void _captureInitialScale(PhotoViewControllerValue value) {
+    _initialResolvedScale ??= value.scale;
+  }
+
+  double _currentRelativeScale() {
+    final baseScale = _resolvedInitialScale();
+    final actualScale = _controller.scale ?? baseScale;
+    return actualScale / baseScale;
+  }
+
+  double _resolvedInitialScale() {
+    final initialScale = _initialResolvedScale;
+    if (initialScale != null) return initialScale;
+
+    final controllerScale = _controller.scale;
+    if (controllerScale != null) {
+      _initialResolvedScale = controllerScale;
+      return controllerScale;
+    }
+
+    _initialResolvedScale = _minScale;
+    return _minScale;
+  }
+
+  ImageProvider _buildImageProvider() {
+    final localFile = File(widget.imageUrl);
+    if (widget.imageUrl.startsWith('/uploads/') || localFile.existsSync()) {
+      return FileImage(localFile);
+    }
+    return NetworkImage(widget.imageUrl);
+  }
+
   Widget _errorPlaceholder() {
-    return const Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(Icons.broken_image_outlined, color: Colors.white54, size: 64),
-        SizedBox(height: 8),
-        Text('图片加载失败', style: TextStyle(color: Colors.white54)),
-      ],
+    return const Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.broken_image_outlined, color: Colors.white54, size: 64),
+          SizedBox(height: 8),
+          Text('图片加载失败', style: TextStyle(color: Colors.white54)),
+        ],
+      ),
     );
   }
 }
