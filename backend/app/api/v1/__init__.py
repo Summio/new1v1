@@ -9,6 +9,7 @@ from .app import app_router
 from .app_users import app_users_router
 from .auditlog import auditlog_router
 from .base import base_router
+from .business_ledger import business_ledger_router
 from .call_records import call_records_router
 from .complaint import complaint_router
 from .depts import depts_router
@@ -40,6 +41,7 @@ v1_router.include_router(auditlog_router, prefix="/auditlog", dependencies=[Depe
 v1_router.include_router(system_config_router, prefix="/system_config", dependencies=[DependPermission])
 v1_router.include_router(system_config_spec_router, prefix="/apis", dependencies=[DependPermission])
 v1_router.include_router(token_adjust_record_router, prefix="/token_adjust_record", dependencies=[DependPermission])
+v1_router.include_router(business_ledger_router, prefix="/business_ledger", dependencies=[DependPermission])
 v1_router.include_router(withdraw_router, prefix="/withdraw", dependencies=[DependPermission])
 v1_router.include_router(app_users_router, prefix="/app_user", dependencies=[DependPermission])
 v1_router.include_router(feedback_router, prefix="/feedback", dependencies=[DependPermission])

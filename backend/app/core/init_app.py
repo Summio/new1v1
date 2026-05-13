@@ -192,6 +192,17 @@ def build_operation_children(parent_id: int) -> list[Menu]:
             component="/operation/token-adjust-record",
             keepalive=False,
         ),
+        Menu(
+            menu_type=MenuType.MENU,
+            name="全量业务流水",
+            path="business-ledger",
+            order=15,
+            parent_id=parent_id,
+            icon="material-symbols:receipt-long-outline-rounded",
+            is_hidden=False,
+            component="/operation/business-ledger",
+            keepalive=False,
+        ),
     ]
 
 
@@ -514,6 +525,7 @@ async def init_roles():
             "ranking",
             "system-notification",
             "token-adjust-record",
+            "business-ledger",
         ]
     ).all()
     if all_roles and operation_menus:
@@ -610,6 +622,10 @@ async def init_roles():
     if token_adjust_record_api and all_roles:
         for role in all_roles:
             await role.apis.add(token_adjust_record_api)
+    business_ledger_api = await Api.filter(method="GET", path="/api/v1/business_ledger/list").first()
+    if business_ledger_api and all_roles:
+        for role in all_roles:
+            await role.apis.add(business_ledger_api)
     withdraw_config_menu = await Menu.filter(path="withdraw-config").first()
     withdraw_config_apis = await Api.filter(
         path__in=[
