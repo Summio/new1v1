@@ -10,6 +10,10 @@ def _menu_summary(menus):
     return {(menu.name, menu.path, menu.component) for menu in menus}
 
 
+def _menu_icons(menus):
+    return {menu.name: menu.icon for menu in menus}
+
+
 def test_operation_menu_keeps_only_daily_operation_children() -> None:
     children = init_app.build_operation_children(parent_id=100)
 
@@ -68,3 +72,53 @@ def test_startup_menu_seed_uses_accepted_top_level_categories() -> None:
     assert 'await _ensure_menu_exists(\n        name="一级菜单"' not in init_app_src
     assert "hide_legacy_top_menu" in init_app_src
     assert "sync_role_parent_menu_permissions" in init_app_src
+
+
+def test_admin_menu_icons_match_menu_purpose() -> None:
+    assert _menu_icons(init_app.build_operation_children(parent_id=100)) == {
+        "用户管理": "material-symbols:group-outline-rounded",
+        "通话记录": "material-symbols:call-log-outline-rounded",
+        "礼物管理": "material-symbols:featured-seasonal-and-gifts-rounded",
+        "动态管理": "material-symbols:dynamic-feed-rounded",
+        "排行榜": "material-symbols:leaderboard-outline-rounded",
+        "系统通知": "material-symbols:notifications-outline-rounded",
+        "投诉管理": "material-symbols:report-outline-rounded",
+        "意见反馈": "material-symbols:feedback-outline-rounded",
+    }
+    assert _menu_icons(init_app.build_review_children(parent_id=200)) == {
+        "真人认证审核": "material-symbols:verified-user-outline-rounded",
+        "资料编辑审核": "material-symbols:manage-accounts-outline-rounded",
+        "提现账户审核": "material-symbols:account-balance-outline-rounded",
+    }
+    assert _menu_icons(init_app.build_finance_children(parent_id=300)) == {
+        "充值管理": "material-symbols:add-card-outline-rounded",
+        "提现管理": "material-symbols:payments-outline-rounded",
+        "手续费账单": "material-symbols:receipt-long-outline-rounded",
+        "全量业务流水": "material-symbols:data-table-outline-rounded",
+        "代币修改记录": "material-symbols:currency-exchange-rounded",
+    }
+    assert _menu_icons(init_app.build_settings_children(parent_id=400)) == {
+        "充值配置": "material-symbols:price-change-outline-rounded",
+        "提现配置": "material-symbols:request-quote-outline-rounded",
+        "初始资料管理": "material-symbols:badge-outline-rounded",
+    }
+
+
+def test_top_level_and_system_menu_icons_match_menu_purpose() -> None:
+    init_app_src = (BACKEND_ROOT / "app/core/init_app.py").read_text(encoding="utf-8")
+
+    for expected in [
+        'name="运营",\n        parent_id=0,\n        menu_type=MenuType.CATALOG,\n        path="/operation",\n        order=1,\n        icon="material-symbols:monitoring-rounded"',
+        'name="审核",\n        parent_id=0,\n        menu_type=MenuType.CATALOG,\n        path="/review",\n        order=2,\n        icon="material-symbols:fact-check-outline-rounded"',
+        'name="财务",\n        parent_id=0,\n        menu_type=MenuType.CATALOG,\n        path="/finance",\n        order=3,\n        icon="material-symbols:account-balance-wallet-outline-rounded"',
+        'name="设置",\n        parent_id=0,\n        menu_type=MenuType.CATALOG,\n        path="/settings",\n        order=4,\n        icon="material-symbols:tune-rounded"',
+        'name="系统管理",\n        parent_id=0,\n        menu_type=MenuType.CATALOG,\n        path="/system",\n        order=5,\n        icon="material-symbols:admin-panel-settings-outline-rounded"',
+        '"name": "用户管理",\n            "path": "user",\n            "order": 1,\n            "icon": "material-symbols:person-outline-rounded"',
+        '"name": "角色管理",\n            "path": "role",\n            "order": 2,\n            "icon": "material-symbols:assignment-ind-outline"',
+        '"name": "菜单管理",\n            "path": "menu",\n            "order": 3,\n            "icon": "material-symbols:lists-rounded"',
+        '"name": "API管理",\n            "path": "api",\n            "order": 4,\n            "icon": "material-symbols:api-rounded"',
+        '"name": "部门管理",\n            "path": "dept",\n            "order": 5,\n            "icon": "material-symbols:account-tree-outline-rounded"',
+        '"name": "审计日志",\n            "path": "auditlog",\n            "order": 6,\n            "icon": "material-symbols:plagiarism-outline-rounded"',
+        '"name": "系统配置",\n            "path": "config",\n            "order": 7,\n            "icon": "material-symbols:settings-outline-rounded"',
+    ]:
+        assert expected in init_app_src

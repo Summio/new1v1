@@ -92,7 +92,9 @@ def test_app_displays_certified_user_call_price() -> None:
         encoding="utf-8"
     )
 
-    assert "certifiedUser.callPrice?.toStringAsFixed(0)" in content
+    assert "String _formatCallPrice(num? price, String coinName)" in content
+    assert "price?.toStringAsFixed(0)" in content
+    assert "certifiedUser.callPrice" in content
     assert "anchor.diamonds ?? 0" not in content
 
 
