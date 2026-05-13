@@ -12,6 +12,8 @@ import 'package:huanxi/core/utils/app_toast.dart';
 import '../../services/location_service.dart';
 import '../../services/review_entry_guard_service.dart';
 
+final DateTime _minBirthDate = DateTime(1975, 1, 1);
+
 class EditProfilePage extends ConsumerStatefulWidget {
   const EditProfilePage({super.key});
 
@@ -86,7 +88,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
     final picked = await showDatePicker(
       context: context,
       initialDate: _birthDate ?? DateTime(now.year - 20, now.month, now.day),
-      firstDate: DateTime(1950, 1, 1),
+      firstDate: _minBirthDate,
       lastDate: now,
       locale: const Locale('zh', 'CN'),
     );
@@ -217,6 +219,36 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
     }
     if (weightText.isNotEmpty && weightKg == null) {
       AppToast.showSnackBar(context, const SnackBar(content: Text('体重请输入数字')));
+      return;
+    }
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+    if (_birthDate != null && _birthDate!.isBefore(_minBirthDate)) {
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('出生日期不能早于1975-01-01')),
+      );
+      return;
+    }
+    if (_birthDate != null && _birthDate!.isAfter(todayDate)) {
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('出生日期不能晚于今天')),
+      );
+      return;
+    }
+    if (heightCm != null && (heightCm < 130 || heightCm > 230)) {
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('身高请输入130-230之间的数字')),
+      );
+      return;
+    }
+    if (weightKg != null && (weightKg < 30 || weightKg > 130)) {
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(content: Text('体重请输入30-130之间的数字')),
+      );
       return;
     }
 

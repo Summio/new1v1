@@ -55,6 +55,45 @@ void main() {
     );
   });
 
+  test('edit profile validates basic fields before submit', () {
+    final page = File(
+      'lib/modules/profile/edit_profile_page.dart',
+    ).readAsStringSync();
+
+    expect(page, contains('DateTime(1975, 1, 1)'));
+    expect(page, contains('出生日期不能早于1975-01-01'));
+    expect(page, contains('出生日期不能晚于今天'));
+    expect(page, contains('heightCm < 130 || heightCm > 230'));
+    expect(page, contains('身高请输入130-230之间的数字'));
+    expect(page, contains('weightKg < 30 || weightKg > 130'));
+    expect(page, contains('体重请输入30-130之间的数字'));
+  });
+
+  test('profile cache does not restore unvalidated basic fields', () {
+    final provider = File(
+      'lib/app/providers/auth_provider.dart',
+    ).readAsStringSync();
+
+    expect(provider, isNot(contains("birthDate: cachedInfo['birth_date']")));
+    expect(
+      provider,
+      isNot(contains("heightCm: _parseNullableInt(cachedInfo['height_cm'])")),
+    );
+    expect(
+      provider,
+      isNot(contains("weightKg: _parseNullableInt(cachedInfo['weight_kg'])")),
+    );
+    expect(provider, contains("birthDate: respData['birth_date'] as String?"));
+    expect(
+      provider,
+      contains("heightCm: _parseNullableInt(respData['height_cm'])"),
+    );
+    expect(
+      provider,
+      contains("weightKg: _parseNullableInt(respData['weight_kg'])"),
+    );
+  });
+
   test('edit profile album supports moving photos and mixed review prompt', () {
     final page = File(
       'lib/modules/profile/edit_profile_page.dart',

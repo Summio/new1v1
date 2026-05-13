@@ -9,6 +9,11 @@ from tortoise.transactions import in_transaction
 
 from app.core.china_locations import normalize_location_city
 from app.core.ctx import CTX_USER_ID
+from app.core.profile_basic_fields import (
+    normalize_birth_date,
+    normalize_height_cm,
+    normalize_weight_kg,
+)
 from app.models import (
     AppUser,
     AppUserProfileReviewApply,
@@ -234,13 +239,20 @@ async def update_app_user(req_in: AppUserAdminUpdateIn):
     if req_in.gender is not None:
         update_data["gender"] = str(req_in.gender.value)
     if req_in.birth_date is not None:
-        if req_in.birth_date > date.today():
-            return Fail(code=400, msg="出生日期不能晚于今天")
-        update_data["birth_date"] = req_in.birth_date
+        normalized_birth_date = normalize_birth_date(req_in.birth_date)
+        if isinstance(normalized_birth_date, str):
+            return Fail(code=400, msg=normalized_birth_date)
+        update_data["birth_date"] = normalized_birth_date
     if req_in.height_cm is not None:
-        update_data["height_cm"] = req_in.height_cm
+        normalized_height_cm = normalize_height_cm(req_in.height_cm)
+        if isinstance(normalized_height_cm, str):
+            return Fail(code=400, msg=normalized_height_cm)
+        update_data["height_cm"] = normalized_height_cm
     if req_in.weight_kg is not None:
-        update_data["weight_kg"] = req_in.weight_kg
+        normalized_weight_kg = normalize_weight_kg(req_in.weight_kg)
+        if isinstance(normalized_weight_kg, str):
+            return Fail(code=400, msg=normalized_weight_kg)
+        update_data["weight_kg"] = normalized_weight_kg
     if req_in.location_city is not None:
         v = req_in.location_city.strip()
         normalized_location_city = normalize_location_city(v)

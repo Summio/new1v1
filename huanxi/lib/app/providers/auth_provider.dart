@@ -428,9 +428,6 @@ class AuthNotifier extends StateNotifier<AuthState> {
               ?.trim(),
           signature: cachedInfo['signature'] as String?,
           gender: (cachedInfo['gender'] as String?) ?? 'male',
-          birthDate: cachedInfo['birth_date'] as String?,
-          heightCm: _parseNullableInt(cachedInfo['height_cm']),
-          weightKg: _parseNullableInt(cachedInfo['weight_kg']),
           locationCity: cachedInfo['location_city'] as String?,
           albumPhotos: _parseAlbum(cachedInfo['album_photos']),
           coverUrl: (normalizeMediaPayload(cachedInfo['cover_url']) as String?)
