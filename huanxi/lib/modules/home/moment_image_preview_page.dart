@@ -146,7 +146,7 @@ class _ZoomableImagePageState extends State<_ZoomableImagePage>
   static const double _doubleTapScale = 2.5;
 
   late final TransformationController _transformationController;
-  AnimationController? _animationController;
+  late final AnimationController _animationController;
   Animation<Matrix4>? _matrixAnimation;
   TapDownDetails? _doubleTapDetails;
 
@@ -154,11 +154,16 @@ class _ZoomableImagePageState extends State<_ZoomableImagePage>
   void initState() {
     super.initState();
     _transformationController = TransformationController();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 180),
+    );
   }
 
   @override
   void dispose() {
-    _animationController?.dispose();
+    _matrixAnimation?.removeListener(_handleMatrixAnimation);
+    _animationController.dispose();
     _transformationController.dispose();
     super.dispose();
   }
@@ -190,7 +195,8 @@ class _ZoomableImagePageState extends State<_ZoomableImagePage>
 
   void _handleDoubleTap(Size viewport) {
     final currentScale = _transformationController.value.getMaxScaleOnAxis();
-    if (currentScale > 1.05) {
+    final targetScale = _nextDoubleTapScale(currentScale);
+    if (targetScale <= _minScale) {
       _animateTo(Matrix4.identity());
       return;
     }
@@ -199,12 +205,22 @@ class _ZoomableImagePageState extends State<_ZoomableImagePage>
         _doubleTapDetails?.localPosition ??
         Offset(viewport.width / 2, viewport.height / 2);
     final target = _buildMatrix(
-      scale: _doubleTapScale,
-      tx: -position.dx * (_doubleTapScale - 1),
-      ty: -position.dy * (_doubleTapScale - 1),
+      scale: targetScale,
+      tx: -position.dx * (targetScale - 1),
+      ty: -position.dy * (targetScale - 1),
     );
 
     _animateTo(_clampMatrix(target, viewport));
+  }
+
+  double _nextDoubleTapScale(double currentScale) {
+    if (currentScale >= _maxScale - 0.05) {
+      return _minScale;
+    }
+    if (currentScale >= _doubleTapScale - 0.05) {
+      return _maxScale;
+    }
+    return _doubleTapScale;
   }
 
   void _snapToBounds(Size viewport) {
@@ -215,25 +231,26 @@ class _ZoomableImagePageState extends State<_ZoomableImagePage>
   }
 
   void _animateTo(Matrix4 target) {
-    _animationController?.dispose();
-    _animationController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 180),
-    );
+    _animationController.stop();
+    _matrixAnimation?.removeListener(_handleMatrixAnimation);
     _matrixAnimation =
         Matrix4Tween(
             begin: _transformationController.value,
             end: target,
           ).animate(
             CurvedAnimation(
-              parent: _animationController!,
+              parent: _animationController,
               curve: Curves.easeOutCubic,
             ),
           )
-          ..addListener(() {
-            _transformationController.value = _matrixAnimation!.value;
-          });
-    _animationController!.forward();
+          ..addListener(_handleMatrixAnimation);
+    _animationController.forward(from: 0);
+  }
+
+  void _handleMatrixAnimation() {
+    final animation = _matrixAnimation;
+    if (animation == null) return;
+    _transformationController.value = animation.value;
   }
 
   Matrix4 _clampMatrix(Matrix4 matrix, Size viewport) {
