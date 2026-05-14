@@ -252,64 +252,51 @@ class _GreetingBar extends StatelessWidget {
         !quota.enabled ||
         quota.remaining <= 0 ||
         quota.cooldownSeconds > 0;
-    final label = !quota.enabled
-        ? '已关闭'
+    final label = state.isSending
+        ? '发送中'
+        : !quota.enabled
+        ? '打招呼功能已关闭'
         : quota.cooldownSeconds > 0
-        ? '${quota.cooldownSeconds}s'
-        : '打招呼 ${quota.remaining}/${quota.dailyLimit}';
+        ? '打招呼.${quota.cooldownSeconds}s'
+        : '打招呼.今日剩余${quota.remaining}次';
 
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border.all(color: AppTheme.dividerColor),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              quota.enabled
-                  ? '今日剩余 ${quota.remaining} 次'
-                  : '打招呼功能已关闭',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: AppTheme.textPrimary,
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          SizedBox(
-            height: 36,
-            child: FilledButton.icon(
-              onPressed: disabled ? null : onPressed,
-              icon: state.isSending
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.chat_bubble_outline, size: 16),
-              label: Text(label),
-              style: FilledButton.styleFrom(
-                backgroundColor: Colors.black,
-                foregroundColor: Colors.white,
-                disabledBackgroundColor: AppTheme.cardBackground,
-                disabledForegroundColor: AppTheme.textSecondary,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+    return SizedBox(
+      width: double.infinity,
+      height: 40,
+      child: FilledButton.icon(
+        onPressed: disabled ? null : onPressed,
+        icon: state.isSending
+            ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
                 ),
-              ),
-            ),
+              )
+            : const Icon(Icons.chat_bubble_outline, size: 18),
+        label: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        style: FilledButton.styleFrom(
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: state.isSending
+              ? Colors.black
+              : AppTheme.cardBackground,
+          disabledForegroundColor: state.isSending
+              ? Colors.white
+              : AppTheme.textSecondary,
+          textStyle: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
           ),
-        ],
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
       ),
     );
   }

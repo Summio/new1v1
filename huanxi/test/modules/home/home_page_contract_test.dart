@@ -195,6 +195,21 @@ void main() {
     expect(text, contains('AppRoutes.im'));
   });
 
+  test('flirt greeting button shows remaining quota inside button', () {
+    final text = File(
+      'lib/modules/home/flirt_user_list_page.dart',
+    ).readAsStringSync();
+
+    expect(text, contains(r"'打招呼.今日剩余${quota.remaining}次'"));
+    expect(text, contains(r"'打招呼.${quota.cooldownSeconds}s'"));
+    expect(text, contains("'发送中'"));
+    expect(
+      text,
+      isNot(contains(r"'打招呼 ${quota.remaining}/${quota.dailyLimit}'")),
+    );
+    expect(text, isNot(contains(r"'今日剩余 ${quota.remaining} 次'")));
+  });
+
   test('flirt list avatar opens existing certified user detail route', () {
     final text = File(
       'lib/modules/home/flirt_user_list_page.dart',
