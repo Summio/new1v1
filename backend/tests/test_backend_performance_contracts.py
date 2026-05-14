@@ -74,6 +74,13 @@ def test_hot_path_composite_index_migration_exists() -> None:
     assert "idx_im_text_receiver_status_created" in migration_text
 
 
+def test_app_startup_initializes_db_connection_without_seed_data() -> None:
+    app_init_text = (BACKEND_ROOT / "app/__init__.py").read_text(encoding="utf-8")
+
+    assert "init_data" not in app_init_text
+    assert "init_db(run_migrations=False)" in app_init_text
+
+
 @pytest.mark.asyncio
 async def test_startup_init_data_does_not_run_migrations_or_seed_data_by_default(monkeypatch) -> None:
     init_db = AsyncMock()

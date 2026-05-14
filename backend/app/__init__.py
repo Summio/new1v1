@@ -10,7 +10,7 @@ from app.core.bgtask import run_auditlog_cleanup
 from app.core.call_watchdog import run_call_watchdog
 from app.core.exceptions import SettingNotFound
 from app.core.init_app import (
-    init_data,
+    init_db,
     make_middlewares,
     register_exceptions,
     register_routers,
@@ -29,8 +29,8 @@ except ImportError:
 async def lifespan(app: FastAPI):
     # 初始化 Redis
     await get_redis()
-    # 初始化数据库
-    await init_data()
+    # 仅初始化数据库连接；迁移与种子数据必须由显式任务执行，禁止随服务启动写库。
+    await init_db(run_migrations=False)
     stop_event = asyncio.Event()
     watchdog_task = asyncio.create_task(run_call_watchdog(stop_event))
     auditlog_task = asyncio.create_task(run_auditlog_cleanup(stop_event))
