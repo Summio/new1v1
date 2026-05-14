@@ -1,4 +1,4 @@
 
- ERROR  (node:11764) [DEP0060] DeprecationWarning: The util._extend API is deprecated. Please use Object.assign() instead.
+ ERROR  (node:15280) [DEP0060] DeprecationWarning: The util._extend API is deprecated. Please use Object.assign() instead.
 (Use `node --trace-deprecation ...` to show where the warning was created)
 
