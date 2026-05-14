@@ -15,16 +15,19 @@ router = APIRouter()
 FLIRT_FILTER_SAME_GENDER_KEY = "flirt_filter_same_gender_enabled"
 FLIRT_FILTER_CERTIFIED_USER_KEY = "flirt_filter_certified_user_enabled"
 FLIRT_GREET_DAILY_LIMIT_KEY = "flirt_greet_daily_limit"
+FLIRT_GREET_COOLDOWN_SECONDS_KEY = "flirt_greet_cooldown_seconds"
 
 
 async def _load_flirt_config() -> FlirtConfigIn:
     same_gender_raw = await SystemConfig.get_value(FLIRT_FILTER_SAME_GENDER_KEY, "true")
     certified_user_raw = await SystemConfig.get_value(FLIRT_FILTER_CERTIFIED_USER_KEY, "true")
     greet_daily_limit_raw = await SystemConfig.get_value(FLIRT_GREET_DAILY_LIMIT_KEY, "3")
+    greet_cooldown_seconds_raw = await SystemConfig.get_value(FLIRT_GREET_COOLDOWN_SECONDS_KEY, "10")
     return FlirtConfigIn(
         filter_same_gender_enabled=safe_parse_bool(same_gender_raw, True),
         filter_certified_user_enabled=safe_parse_bool(certified_user_raw, True),
         greet_daily_limit=max(0, min(20, safe_parse_int(greet_daily_limit_raw, 3))),
+        greet_cooldown_seconds=max(0, min(3600, safe_parse_int(greet_cooldown_seconds_raw, 10))),
     )
 
 
@@ -49,6 +52,10 @@ async def update_flirt_config(config_in: FlirtConfigIn):
             FLIRT_GREET_DAILY_LIMIT_KEY: (
                 str(int(config_in.greet_daily_limit)),
                 "搭讪配置-每日打招呼次数",
+            ),
+            FLIRT_GREET_COOLDOWN_SECONDS_KEY: (
+                str(int(config_in.greet_cooldown_seconds)),
+                "搭讪配置-打招呼冷却时间",
             ),
         }
         for cfg_key, (cfg_value, description) in values.items():

@@ -248,7 +248,11 @@ async def flirt_greet(req_in: FlirtGreetIn, background_tasks: BackgroundTasks):
         )
 
     try:
-        await set_greet_cooldown(redis, user_id=int(current_user.id))
+        await set_greet_cooldown(
+            redis,
+            user_id=int(current_user.id),
+            cooldown_seconds=int(config.greet_cooldown_seconds),
+        )
         quota = await get_greet_quota(redis, user_id=int(current_user.id), daily_limit=int(config.greet_daily_limit))
     except Exception:
         pass
@@ -256,16 +260,8 @@ async def flirt_greet(req_in: FlirtGreetIn, background_tasks: BackgroundTasks):
     background_tasks.add_task(
         _run_flirt_greet_send_task,
         sender_id=int(current_user.id),
-        target_user_ids=[
-            int(target_user.id)
-            for target_user in target_users
-            if not bool(target_user.text_dnd_enabled)
-        ],
-        text_dnd_user_ids=[
-            int(target_user.id)
-            for target_user in target_users
-            if bool(target_user.text_dnd_enabled)
-        ],
+        target_user_ids=[int(target_user.id) for target_user in target_users if not bool(target_user.text_dnd_enabled)],
+        text_dnd_user_ids=[int(target_user.id) for target_user in target_users if bool(target_user.text_dnd_enabled)],
         content=content,
     )
 

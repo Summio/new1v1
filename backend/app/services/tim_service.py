@@ -23,6 +23,7 @@ _USERSIG_EXPIRE_SECONDS = 600  # 腾讯 IM 默认最大有效期
 # ===== 重试参数 =====
 _MAX_RETRIES = 3
 _RETRY_BASE_DELAY = 1.0  # 秒
+_NON_RETRYABLE_TIM_ERROR_CODES = {20003}
 
 # ===== 共享 IM 配置缓存（供 TIMService 和 CallTraceService 共用，避免重复查询 DB）=====
 _IM_CONFIG_SHARED_TTL_SECONDS = 60
@@ -237,8 +238,11 @@ class TIMService:
                     continue
                 return False
 
-            if int(body.get("ErrorCode", -1)) != 0:
+            error_code = int(body.get("ErrorCode", -1))
+            if error_code != 0:
                 logger.warning("tim text send failed (attempt {}/{}): body={}", attempt + 1, _MAX_RETRIES, body)
+                if error_code in _NON_RETRYABLE_TIM_ERROR_CODES:
+                    return False
                 if attempt < _MAX_RETRIES - 1:
                     await asyncio.sleep(_RETRY_BASE_DELAY * (2**attempt))
                     continue

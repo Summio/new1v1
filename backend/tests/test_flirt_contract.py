@@ -23,6 +23,7 @@ def test_flirt_config_schema_defaults_enable_both_filters() -> None:
     assert config.filter_same_gender_enabled is True
     assert config.filter_certified_user_enabled is True
     assert config.greet_daily_limit == 3
+    assert config.greet_cooldown_seconds == 10
 
 
 def test_flirt_config_greet_daily_limit_range() -> None:
@@ -35,6 +36,16 @@ def test_flirt_config_greet_daily_limit_range() -> None:
         FlirtConfigIn(greet_daily_limit=21)
 
 
+def test_flirt_config_greet_cooldown_seconds_range() -> None:
+    assert FlirtConfigIn(greet_cooldown_seconds=0).greet_cooldown_seconds == 0
+    assert FlirtConfigIn(greet_cooldown_seconds=3600).greet_cooldown_seconds == 3600
+
+    with pytest.raises(ValidationError):
+        FlirtConfigIn(greet_cooldown_seconds=-1)
+    with pytest.raises(ValidationError):
+        FlirtConfigIn(greet_cooldown_seconds=3601)
+
+
 def test_flirt_config_admin_api_is_registered_and_clears_cache() -> None:
     assert FLIRT_CONFIG_API.exists()
     api_text = FLIRT_CONFIG_API.read_text(encoding="utf-8")
@@ -43,9 +54,11 @@ def test_flirt_config_admin_api_is_registered_and_clears_cache() -> None:
     assert "flirt_filter_same_gender_enabled" in api_text
     assert "flirt_filter_certified_user_enabled" in api_text
     assert "flirt_greet_daily_limit" in api_text
+    assert "flirt_greet_cooldown_seconds" in api_text
     assert "filter_same_gender_enabled" in api_text
     assert "filter_certified_user_enabled" in api_text
     assert "greet_daily_limit" in api_text
+    assert "greet_cooldown_seconds" in api_text
     assert "SYSTEM_CONFIG_CACHE_KEY" in api_text
     assert "get_redis" in api_text
     assert "flirt_config_router" in system_init
@@ -87,12 +100,24 @@ def test_app_flirt_greet_api_contract() -> None:
     assert '"started": True' in api_text
     assert "reserve_greet_quota" in api_text
     assert "set_greet_cooldown" in api_text
+    assert "cooldown_seconds=int(config.greet_cooldown_seconds)" in api_text
     assert "release_greet_quota" in api_text
     assert "get_online_user_ids" in api_text
     assert "Success(data=" in api_text
     route_body = api_text.split('@router.post("/flirt/greet"', 1)[1]
     route_body = route_body.split("async def _run_flirt_greet_send_task", 1)[0]
     assert "await send_text_message" not in route_body
+
+
+def test_flirt_greet_background_send_uses_serial_tim_sends() -> None:
+    api_text = FLIRT_API.read_text(encoding="utf-8")
+    task_body = api_text.split("async def _run_flirt_greet_send_task", 1)[1]
+
+    assert "for target_id in target_user_ids" in task_body
+    assert "await send_text_message(sender_id, target_id, content)" in task_body
+    assert "FLIRT_GREET_SEND_CONCURRENCY" not in api_text
+    assert "asyncio.Semaphore" not in task_body
+    assert "asyncio.gather" not in task_body
 
 
 def test_flirt_list_uses_bounded_candidate_scan_not_full_table_sort() -> None:
@@ -130,8 +155,11 @@ def test_admin_flirt_config_page_and_menu_exist() -> None:
     assert "过滤认证用户" in view_text
     assert "开启后隐藏真人认证用户，仅展示普通用户" in view_text
     assert "每日打招呼次数" in view_text
+    assert "打招呼冷却时间" in view_text
+    assert "两次打招呼之间的间隔秒数，0 表示不冷却，默认 10 秒" in view_text
     assert "NInputNumber" in view_text
     assert "greet_daily_limit" in view_text
+    assert "greet_cooldown_seconds" in view_text
     assert "getFlirtConfig" in web_api_text
     assert "updateFlirtConfig" in web_api_text
     assert "/apis/system/flirt-config" in web_api_text

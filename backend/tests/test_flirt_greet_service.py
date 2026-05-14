@@ -7,6 +7,7 @@ from app.services.flirt_greet_service import (
     build_greet_daily_key,
     build_greet_quota_payload,
     calculate_greet_daily_ttl,
+    set_greet_cooldown,
 )
 
 
@@ -44,3 +45,31 @@ def test_greet_quota_payload_disables_zero_limit() -> None:
         "enabled": False,
         "cooldown_seconds": 0,
     }
+
+
+class _FakeRedis:
+    def __init__(self) -> None:
+        self.calls = []
+
+    async def set(self, *args, **kwargs):
+        self.calls.append((args, kwargs))
+
+
+@pytest.mark.asyncio
+async def test_set_greet_cooldown_uses_configured_seconds() -> None:
+    redis = _FakeRedis()
+
+    await set_greet_cooldown(redis, user_id=100019, cooldown_seconds=30)
+
+    assert redis.calls == [
+        (("flirt:greet:cooldown:100019", "1"), {"ex": 30}),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_set_greet_cooldown_skips_zero_seconds() -> None:
+    redis = _FakeRedis()
+
+    await set_greet_cooldown(redis, user_id=100019, cooldown_seconds=0)
+
+    assert redis.calls == []

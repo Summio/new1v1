@@ -13,6 +13,7 @@ const form = ref({
   filter_same_gender_enabled: true,
   filter_certified_user_enabled: true,
   greet_daily_limit: 3,
+  greet_cooldown_seconds: 10,
 })
 
 onMounted(async () => {
@@ -29,6 +30,9 @@ async function loadConfig() {
       greet_daily_limit: Number.isInteger(res.data?.greet_daily_limit)
         ? res.data.greet_daily_limit
         : 3,
+      greet_cooldown_seconds: Number.isInteger(res.data?.greet_cooldown_seconds)
+        ? res.data.greet_cooldown_seconds
+        : 10,
     }
   } catch (error) {
     message.error('加载搭讪配置失败')
@@ -87,6 +91,21 @@ async function saveConfig() {
             :disabled="loading"
             :min="0"
             :max="20"
+            :step="1"
+            style="width: 160px"
+          />
+        </div>
+
+        <div class="config-row">
+          <div>
+            <div class="config-title">打招呼冷却时间</div>
+            <div class="config-desc">两次打招呼之间的间隔秒数，0 表示不冷却，默认 10 秒</div>
+          </div>
+          <NInputNumber
+            v-model:value="form.greet_cooldown_seconds"
+            :disabled="loading"
+            :min="0"
+            :max="3600"
             :step="1"
             style="width: 160px"
           />

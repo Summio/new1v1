@@ -112,5 +112,8 @@ async def release_greet_quota(redis, *, user_id: int) -> None:
         await redis.decr(daily_key)
 
 
-async def set_greet_cooldown(redis, *, user_id: int) -> None:
-    await redis.set(build_greet_cooldown_key(user_id), "1", ex=FLIRT_GREET_COOLDOWN_SECONDS)
+async def set_greet_cooldown(redis, *, user_id: int, cooldown_seconds: int = FLIRT_GREET_COOLDOWN_SECONDS) -> None:
+    seconds = max(0, int(cooldown_seconds or 0))
+    if seconds <= 0:
+        return
+    await redis.set(build_greet_cooldown_key(user_id), "1", ex=seconds)

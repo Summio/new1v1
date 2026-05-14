@@ -59,6 +59,7 @@ class FlirtConfigIn(BaseModel):
         description="过滤认证用户：开启后隐藏真人认证用户，仅展示普通用户",
     )
     greet_daily_limit: int = Field(default=3, ge=0, le=20, description="每日打招呼次数，0 表示禁用")
+    greet_cooldown_seconds: int = Field(default=10, ge=0, le=3600, description="打招呼冷却时间秒数，0 表示不冷却")
 
 
 class FlirtConfigOut(FlirtConfigIn):
