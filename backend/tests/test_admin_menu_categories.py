@@ -51,6 +51,7 @@ def test_review_finance_and_settings_menu_blueprints_exist() -> None:
         ("充值配置", "recharge-config", "/system/recharge-config"),
         ("提现配置", "withdraw-config", "/system/withdraw-config"),
         ("初始资料管理", "initial-profile", "/system/initial-profile"),
+        ("搭讪配置", "flirt-config", "/system/flirt-config"),
     }
 
 
@@ -106,6 +107,7 @@ def test_admin_menu_icons_match_menu_purpose() -> None:
         "充值配置": "material-symbols:price-change-outline-rounded",
         "提现配置": "material-symbols:request-quote-outline-rounded",
         "初始资料管理": "material-symbols:badge-outline-rounded",
+        "搭讪配置": "material-symbols:forum-outline-rounded",
     }
 
 

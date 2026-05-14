@@ -262,6 +262,17 @@ def build_settings_children(parent_id: int) -> list[Menu]:
             component="/system/initial-profile",
             keepalive=False,
         ),
+        Menu(
+            menu_type=MenuType.MENU,
+            name="搭讪配置",
+            path="flirt-config",
+            order=4,
+            parent_id=parent_id,
+            icon="material-symbols:forum-outline-rounded",
+            is_hidden=False,
+            component="/system/flirt-config",
+            keepalive=False,
+        ),
     ]
 
 

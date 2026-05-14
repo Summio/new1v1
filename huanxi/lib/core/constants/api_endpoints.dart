@@ -72,6 +72,9 @@ class ApiEndpoints {
   /// 认证用户推荐列表（分页）
   static const String certifiedUserList = 'app/certified-user/list';
 
+  /// 搭讪用户列表（分页）
+  static const String flirtUserList = 'app/flirt/list';
+
   /// 活跃页置顶
   static const String certifiedUserActivePin = 'app/certified-user/active-pin';
 

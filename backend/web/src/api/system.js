@@ -24,4 +24,7 @@ export default {
   // 提现配置
   getWithdrawConfig: () => request.get('/apis/system/withdraw-config'),
   updateWithdrawConfig: (data = {}) => request.put('/apis/system/withdraw-config', data),
+  // 搭讪配置
+  getFlirtConfig: () => request.get('/apis/system/flirt-config'),
+  updateFlirtConfig: (data = {}) => request.put('/apis/system/flirt-config', data),
 }

@@ -138,6 +138,27 @@ void main() {
     expect(text, contains('animateTo('));
   });
 
+  test('home exposes flirt tab only for certified users', () {
+    final text = File('lib/modules/home/home_page.dart').readAsStringSync();
+
+    expect(text, contains('搭讪'));
+    expect(text, contains('_showFlirtTab'));
+    expect(text, contains('authState.isCertifiedUser'));
+    expect(text, contains('FlirtUserListPage'));
+  });
+
+  test('flirt list shows configured empty state and action buttons', () {
+    final text = File('lib/modules/home/flirt_user_list_page.dart').readAsStringSync();
+
+    expect(text, contains('暂无可搭讪用户，可联系运营调整搭讪配置'));
+    expect(text, contains('文字'));
+    expect(text, contains('视频'));
+    expect(text, contains('金币余额'));
+    expect(text, contains('MainShell.presenceStream'));
+    expect(text, contains('AppRoutes.callOutgoing'));
+    expect(text, contains('AppRoutes.im'));
+  });
+
   test(
     'certified user provider supports active pin endpoint and cooldown message',
     () {

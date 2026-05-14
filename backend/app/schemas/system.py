@@ -50,6 +50,20 @@ class WithdrawConfigOut(BaseModel):
     packages: List[WithdrawPackageItem]
 
 
+class FlirtConfigIn(BaseModel):
+    """搭讪配置输入"""
+
+    filter_same_gender_enabled: bool = Field(default=True, description="过滤同性别：开启后仅展示异性用户")
+    filter_certified_user_enabled: bool = Field(
+        default=True,
+        description="过滤认证用户：开启后隐藏真人认证用户，仅展示普通用户",
+    )
+
+
+class FlirtConfigOut(FlirtConfigIn):
+    """搭讪配置输出"""
+
+
 class IMTextBillingConfigIn(BaseModel):
     """IM 文字消息计费配置输入"""
 

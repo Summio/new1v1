@@ -11,6 +11,7 @@ import '../../app/providers/main_tab_memory_provider.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/widgets/status_view.dart';
 import '../../core/utils/app_toast.dart';
+import 'flirt_user_list_page.dart';
 import 'main_shell.dart';
 
 Color availabilityColor(String status) {
@@ -54,13 +55,20 @@ class _HomePageState extends ConsumerState<HomePage>
   late TabController _tabController;
   late final PageController _pageController;
 
-  final List<String> _categories = ['推荐', '活跃', '新人'];
   int _currentIndex = 0;
+  bool _showFlirtTab = false;
+
+  List<String> get _categories => ['推荐', '活跃', '新人', if (_showFlirtTab) '搭讪'];
 
   @override
   void initState() {
     super.initState();
-    _currentIndex = ref.read(mainTabMemoryProvider).homeCategoryIndex;
+    final authState = ref.read(authProvider);
+    _showFlirtTab = authState.isCertifiedUser;
+    _currentIndex = _normalizeCategoryIndex(
+      ref.read(mainTabMemoryProvider).homeCategoryIndex,
+      _categories.length,
+    );
     _tabController = TabController(
       length: _categories.length,
       initialIndex: _currentIndex,
@@ -70,8 +78,10 @@ class _HomePageState extends ConsumerState<HomePage>
     _tabController.addListener(_onTabChanged);
     Future.microtask(() {
       final notifier = ref.read(certifiedUserListProvider.notifier);
-      notifier.setSection(_sectionForIndex(_currentIndex));
-      notifier.fetchCertifiedUsers(refresh: true);
+      if (_currentIndex < 3) {
+        notifier.setSection(_sectionForIndex(_currentIndex));
+        notifier.fetchCertifiedUsers(refresh: true);
+      }
     });
   }
 
@@ -92,9 +102,11 @@ class _HomePageState extends ConsumerState<HomePage>
     if (_currentIndex != index) {
       setState(() => _currentIndex = index);
       ref.read(mainTabMemoryProvider.notifier).setHomeCategoryIndex(index);
-      ref
-          .read(certifiedUserListProvider.notifier)
-          .setSection(_sectionForIndex(index));
+      if (index < 3) {
+        ref
+            .read(certifiedUserListProvider.notifier)
+            .setSection(_sectionForIndex(index));
+      }
     }
 
     if (_tabController.index != index) {
@@ -119,8 +131,53 @@ class _HomePageState extends ConsumerState<HomePage>
     _selectCategory(index, animatePage: true);
   }
 
+  int _normalizeCategoryIndex(int index, int categoryCount) {
+    if (index < 0) return 0;
+    if (index >= categoryCount) return 0;
+    return index;
+  }
+
+  void _syncFlirtTabVisibility(bool nextShowFlirtTab) {
+    if (_showFlirtTab == nextShowFlirtTab) return;
+    final previousIndex = _currentIndex;
+    setState(() {
+      _showFlirtTab = nextShowFlirtTab;
+      _currentIndex = _normalizeCategoryIndex(
+        previousIndex,
+        _categories.length,
+      );
+      _tabController.removeListener(_onTabChanged);
+      _tabController.dispose();
+      _tabController = TabController(
+        length: _categories.length,
+        initialIndex: _currentIndex,
+        vsync: this,
+      );
+      _tabController.addListener(_onTabChanged);
+    });
+    if (_pageController.hasClients) {
+      _pageController.jumpToPage(_currentIndex);
+    }
+    ref
+        .read(mainTabMemoryProvider.notifier)
+        .setHomeCategoryIndex(_currentIndex);
+    if (_currentIndex < 3) {
+      ref
+          .read(certifiedUserListProvider.notifier)
+          .setSection(_sectionForIndex(_currentIndex));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authProvider);
+    if (_showFlirtTab != authState.isCertifiedUser) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _syncFlirtTabVisibility(authState.isCertifiedUser);
+      });
+    }
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -195,6 +252,9 @@ class _HomePageState extends ConsumerState<HomePage>
               onPageChanged: _onPageChanged,
               itemCount: _categories.length,
               itemBuilder: (context, index) {
+                if (_showFlirtTab && index == 3) {
+                  return const FlirtUserListPage();
+                }
                 return _CertifiedUserListPage(
                   pageIndex: index,
                   pageController: _pageController,
