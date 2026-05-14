@@ -102,11 +102,18 @@ def test_app_flirt_greet_api_contract() -> None:
     assert "set_greet_cooldown" in api_text
     assert "cooldown_seconds=int(config.greet_cooldown_seconds)" in api_text
     assert "release_greet_quota" in api_text
+    assert "ensure_interaction_allowed" in api_text
+    assert "InteractionRelationError" in api_text
+    assert 'action="im_text"' in api_text
     assert "get_online_user_ids" in api_text
     assert "Success(data=" in api_text
     route_body = api_text.split('@router.post("/flirt/greet"', 1)[1]
     route_body = route_body.split("async def _run_flirt_greet_send_task", 1)[0]
     assert "await send_text_message" not in route_body
+    assert "sendable_target_user_ids" in route_body
+    assert "interaction_limit_failed_count" in route_body
+    assert "if not sendable_target_user_ids" in route_body
+    assert "await release_greet_quota" in route_body
 
 
 def test_flirt_greet_background_send_uses_serial_tim_sends() -> None:
@@ -115,6 +122,7 @@ def test_flirt_greet_background_send_uses_serial_tim_sends() -> None:
 
     assert "for target_id in target_user_ids" in task_body
     assert "await send_text_message(sender_id, target_id, content)" in task_body
+    assert "interaction_limit_failed_count" in task_body
     assert "FLIRT_GREET_SEND_CONCURRENCY" not in api_text
     assert "asyncio.Semaphore" not in task_body
     assert "asyncio.gather" not in task_body

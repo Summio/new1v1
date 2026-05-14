@@ -14,6 +14,10 @@ from app.services.flirt_greet_service import (
     set_greet_cooldown,
 )
 from app.services.gift_income_service import decimal_to_float_2
+from app.services.interaction_relation_service import (
+    InteractionRelationError,
+    ensure_interaction_allowed,
+)
 from app.services.tim_service import send_text_message
 from app.services.user_availability_service import (
     build_availability_payload_map,
@@ -247,6 +251,45 @@ async def flirt_greet(req_in: FlirtGreetIn, background_tasks: BackgroundTasks):
             msg="暂无在线可打招呼用户",
         )
 
+    sendable_target_user_ids: list[int] = []
+    text_dnd_user_ids: list[int] = []
+    interaction_limit_failed_user_ids: list[int] = []
+    for target_user in target_users:
+        target_user_id = int(target_user.id)
+        if bool(target_user.text_dnd_enabled):
+            text_dnd_user_ids.append(target_user_id)
+            continue
+        try:
+            await ensure_interaction_allowed(action="im_text", actor=current_user, target=target_user)
+        except InteractionRelationError:
+            interaction_limit_failed_user_ids.append(target_user_id)
+            continue
+        sendable_target_user_ids.append(target_user_id)
+
+    if not sendable_target_user_ids:
+        try:
+            await release_greet_quota(redis, user_id=int(current_user.id))
+            quota = await get_greet_quota(
+                redis, user_id=int(current_user.id), daily_limit=int(config.greet_daily_limit)
+            )
+        except Exception:
+            pass
+        return Success(
+            data={
+                "slot_index": req_in.slot_index,
+                "content": content,
+                "target_count": len(target_users),
+                "sent_count": 0,
+                "failed_count": len(text_dnd_user_ids) + len(interaction_limit_failed_user_ids),
+                "text_dnd_failed_count": len(text_dnd_user_ids),
+                "interaction_limit_failed_count": len(interaction_limit_failed_user_ids),
+                "im_failed_count": 0,
+                "quota": quota,
+                "failure_samples": [],
+            },
+            msg="暂无可打招呼用户",
+        )
+
     try:
         await set_greet_cooldown(
             redis,
@@ -260,8 +303,9 @@ async def flirt_greet(req_in: FlirtGreetIn, background_tasks: BackgroundTasks):
     background_tasks.add_task(
         _run_flirt_greet_send_task,
         sender_id=int(current_user.id),
-        target_user_ids=[int(target_user.id) for target_user in target_users if not bool(target_user.text_dnd_enabled)],
-        text_dnd_user_ids=[int(target_user.id) for target_user in target_users if bool(target_user.text_dnd_enabled)],
+        target_user_ids=sendable_target_user_ids,
+        text_dnd_user_ids=text_dnd_user_ids,
+        interaction_limit_failed_user_ids=interaction_limit_failed_user_ids,
         content=content,
     )
 
@@ -272,8 +316,9 @@ async def flirt_greet(req_in: FlirtGreetIn, background_tasks: BackgroundTasks):
             "content": content,
             "target_count": len(target_users),
             "sent_count": 0,
-            "failed_count": 0,
-            "text_dnd_failed_count": 0,
+            "failed_count": len(text_dnd_user_ids) + len(interaction_limit_failed_user_ids),
+            "text_dnd_failed_count": len(text_dnd_user_ids),
+            "interaction_limit_failed_count": len(interaction_limit_failed_user_ids),
             "im_failed_count": 0,
             "quota": quota,
             "failure_samples": [],
@@ -286,6 +331,7 @@ async def _run_flirt_greet_send_task(
     sender_id: int,
     target_user_ids: list[int],
     text_dnd_user_ids: list[int],
+    interaction_limit_failed_user_ids: list[int],
     content: str,
 ) -> None:
     sent_count = 0
@@ -298,10 +344,11 @@ async def _run_flirt_greet_send_task(
             im_failed_count += 1
 
     logger.info(
-        "flirt greet background send finished: sender_id={}, target_count={}, sent_count={}, text_dnd_failed_count={}, im_failed_count={}",
+        "flirt greet background send finished: sender_id={}, target_count={}, sent_count={}, text_dnd_failed_count={}, interaction_limit_failed_count={}, im_failed_count={}",
         sender_id,
-        len(target_user_ids) + len(text_dnd_user_ids),
+        len(target_user_ids) + len(text_dnd_user_ids) + len(interaction_limit_failed_user_ids),
         sent_count,
         len(text_dnd_user_ids),
+        len(interaction_limit_failed_user_ids),
         im_failed_count,
     )
