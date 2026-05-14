@@ -56,6 +56,7 @@ class _HomePageState extends ConsumerState<HomePage>
   late final PageController _pageController;
 
   int _currentIndex = 0;
+  int? _programmaticPageTargetIndex;
   bool _showFlirtTab = false;
 
   List<String> get _categories => ['推荐', '活跃', '新人', if (_showFlirtTab) '搭讪'];
@@ -98,22 +99,27 @@ class _HomePageState extends ConsumerState<HomePage>
     _selectCategory(_tabController.index, animatePage: true);
   }
 
-  void _selectCategory(int index, {required bool animatePage}) {
+  void _commitCategoryIndex(int index) {
     if (_currentIndex != index) {
       setState(() => _currentIndex = index);
-      ref.read(mainTabMemoryProvider.notifier).setHomeCategoryIndex(index);
-      if (index < 3) {
-        ref
-            .read(certifiedUserListProvider.notifier)
-            .setSection(_sectionForIndex(index));
-      }
     }
+    ref.read(mainTabMemoryProvider.notifier).setHomeCategoryIndex(index);
+    if (index < 3) {
+      ref
+          .read(certifiedUserListProvider.notifier)
+          .setSection(_sectionForIndex(index));
+    }
+  }
+
+  void _selectCategory(int index, {required bool animatePage}) {
+    _commitCategoryIndex(index);
 
     if (_tabController.index != index) {
       _tabController.animateTo(index);
     }
 
     if (animatePage && _pageController.hasClients) {
+      _programmaticPageTargetIndex = index;
       _pageController.animateToPage(
         index,
         duration: const Duration(milliseconds: 300),
@@ -123,7 +129,14 @@ class _HomePageState extends ConsumerState<HomePage>
   }
 
   void _onPageChanged(int index) {
-    _selectCategory(index, animatePage: false);
+    final targetIndex = _programmaticPageTargetIndex;
+    if (targetIndex != null && index != targetIndex) {
+      return;
+    }
+    if (targetIndex == index) {
+      _programmaticPageTargetIndex = null;
+    }
+    _commitCategoryIndex(index);
   }
 
   void _onTabTap(int index) {
@@ -146,6 +159,7 @@ class _HomePageState extends ConsumerState<HomePage>
         previousIndex,
         _categories.length,
       );
+      _programmaticPageTargetIndex = null;
       _tabController.removeListener(_onTabChanged);
       _tabController.dispose();
       _tabController = TabController(

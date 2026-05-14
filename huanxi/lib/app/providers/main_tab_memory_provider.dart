@@ -39,7 +39,7 @@ class MainTabMemoryNotifier extends StateNotifier<MainTabMemoryState> {
   MainTabMemoryNotifier() : super(const MainTabMemoryState());
 
   void setHomeCategoryIndex(int index) {
-    if (index < 0 || index > 2 || state.homeCategoryIndex == index) return;
+    if (index < 0 || index > 3 || state.homeCategoryIndex == index) return;
     state = state.copyWith(homeCategoryIndex: index);
   }
 

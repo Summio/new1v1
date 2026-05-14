@@ -24,9 +24,29 @@ void main() {
     final text = File('lib/modules/home/home_page.dart').readAsStringSync();
 
     expect(text, contains('void _selectCategory('));
-    expect(text, contains('_selectCategory(index, animatePage: false)'));
     expect(text, contains('_selectCategory(index, animatePage: true)'));
+    expect(text, contains('void _commitCategoryIndex(int index)'));
+    expect(text, contains('_commitCategoryIndex(index)'));
   });
+
+  test(
+    'home ignores intermediate page changes during programmatic category jumps',
+    () {
+      final text = File('lib/modules/home/home_page.dart').readAsStringSync();
+
+      expect(text, contains('int? _programmaticPageTargetIndex'));
+      expect(text, contains('_programmaticPageTargetIndex = index'));
+      expect(
+        text,
+        contains('final targetIndex = _programmaticPageTargetIndex'),
+      );
+      expect(
+        text,
+        contains('if (targetIndex != null && index != targetIndex)'),
+      );
+      expect(text, contains('_programmaticPageTargetIndex = null'));
+    },
+  );
 
   test(
     'home aligns provider section before initial certified user refresh',
@@ -43,12 +63,26 @@ void main() {
 
   test('home restores and writes remembered category selection', () {
     final text = File('lib/modules/home/home_page.dart').readAsStringSync();
+    final memoryText = File(
+      'lib/app/providers/main_tab_memory_provider.dart',
+    ).readAsStringSync();
 
     expect(text, contains('mainTabMemoryProvider'));
     expect(text, contains('homeCategoryIndex'));
     expect(text, contains('initialIndex: _currentIndex'));
     expect(text, contains('initialPage: _currentIndex'));
     expect(text, contains('setHomeCategoryIndex(index)'));
+    expect(text, contains('setHomeCategoryIndex(_currentIndex)'));
+    expect(memoryText, contains('index > 3'));
+  });
+
+  test('home normalizes remembered flirt category for non-certified users', () {
+    final text = File('lib/modules/home/home_page.dart').readAsStringSync();
+
+    expect(text, contains('_normalizeCategoryIndex('));
+    expect(text, contains('if (index >= categoryCount) return 0;'));
+    expect(text, contains('_showFlirtTab = authState.isCertifiedUser'));
+    expect(text, contains('if (_showFlirtTab && index == 3)'));
   });
 
   test(
@@ -148,7 +182,9 @@ void main() {
   });
 
   test('flirt list shows configured empty state and action buttons', () {
-    final text = File('lib/modules/home/flirt_user_list_page.dart').readAsStringSync();
+    final text = File(
+      'lib/modules/home/flirt_user_list_page.dart',
+    ).readAsStringSync();
 
     expect(text, contains('暂无可搭讪用户，可联系运营调整搭讪配置'));
     expect(text, contains('文字'));
@@ -157,6 +193,31 @@ void main() {
     expect(text, contains('MainShell.presenceStream'));
     expect(text, contains('AppRoutes.callOutgoing'));
     expect(text, contains('AppRoutes.im'));
+  });
+
+  test('flirt list avatar opens existing certified user detail route', () {
+    final text = File(
+      'lib/modules/home/flirt_user_list_page.dart',
+    ).readAsStringSync();
+
+    expect(text, contains('void _openDetail('));
+    expect(text, contains('AppRoutes.certifiedUserDetail'));
+    expect(text, contains('queryParameters: {'));
+    expect(text, contains("'userId': user.userId.toString()"));
+    expect(text, contains('onTap: () => _openDetail(context, user)'));
+  });
+
+  test('flirt list hides gender and location summary', () {
+    final text = File(
+      'lib/modules/home/flirt_user_list_page.dart',
+    ).readAsStringSync();
+
+    expect(text, isNot(contains('_genderText(')));
+    expect(text, isNot(contains('_locationText(')));
+    expect(text, isNot(contains(" · ")));
+    expect(text, contains('金币余额'));
+    expect(text, contains('文字'));
+    expect(text, contains('视频'));
   });
 
   test(

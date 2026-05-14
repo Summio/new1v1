@@ -151,28 +151,34 @@ class _FlirtUserTile extends StatelessWidget {
       ),
       child: Row(
         children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: SizedBox(
-              width: 64,
-              height: 64,
-              child: avatar.isEmpty
-                  ? const ColoredBox(
-                      color: AppTheme.cardBackground,
-                      child: Icon(Icons.person, color: AppTheme.textSecondary),
-                    )
-                  : Image.network(
-                      avatar,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) =>
-                          const ColoredBox(
-                            color: AppTheme.cardBackground,
-                            child: Icon(
-                              Icons.person,
-                              color: AppTheme.textSecondary,
+          GestureDetector(
+            onTap: () => _openDetail(context, user),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: SizedBox(
+                width: 64,
+                height: 64,
+                child: avatar.isEmpty
+                    ? const ColoredBox(
+                        color: AppTheme.cardBackground,
+                        child: Icon(
+                          Icons.person,
+                          color: AppTheme.textSecondary,
+                        ),
+                      )
+                    : Image.network(
+                        avatar,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) =>
+                            const ColoredBox(
+                              color: AppTheme.cardBackground,
+                              child: Icon(
+                                Icons.person,
+                                color: AppTheme.textSecondary,
+                              ),
                             ),
-                          ),
-                    ),
+                      ),
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -215,17 +221,7 @@ class _FlirtUserTile extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  '${_genderText(user.gender)} · ${_locationText(user.locationCity)}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: AppTheme.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 10),
                 Text(
                   '金币余额 ${_formatCoins(user.coins)}',
                   style: const TextStyle(
@@ -280,6 +276,15 @@ class _FlirtUserTile extends StatelessWidget {
     );
   }
 
+  static void _openDetail(BuildContext context, FlirtUserInfo user) {
+    context.push(
+      Uri(
+        path: AppRoutes.certifiedUserDetail,
+        queryParameters: {'userId': user.userId.toString()},
+      ).toString(),
+    );
+  }
+
   static void _openIm(BuildContext context, FlirtUserInfo user) {
     context.push(
       '${AppRoutes.im}/${user.userId}',
@@ -300,17 +305,6 @@ class _FlirtUserTile extends StatelessWidget {
         },
       ).toString(),
     );
-  }
-
-  static String _genderText(String? gender) {
-    if (gender == 'female') return '女';
-    if (gender == 'male') return '男';
-    return '未知';
-  }
-
-  static String _locationText(String? locationCity) {
-    final value = locationCity?.trim() ?? '';
-    return value.isEmpty ? '所在地未填' : value;
   }
 
   static String _formatCoins(double coins) {
