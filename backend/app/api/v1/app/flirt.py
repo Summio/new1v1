@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, BackgroundTasks, Query
+from loguru import logger
 
 from app.api.v1.apis.system.flirt_config import _load_flirt_config
 from app.core.ctx import CTX_APP_USER_OBJ
@@ -192,7 +193,7 @@ async def flirt_greet_quota():
 
 
 @router.post("/flirt/greet", summary="搭讪页打招呼")
-async def flirt_greet(req_in: FlirtGreetIn):
+async def flirt_greet(req_in: FlirtGreetIn, background_tasks: BackgroundTasks):
     current_user = CTX_APP_USER_OBJ.get()
     if not current_user:
         return Fail(code=401, msg="用户不存在")
@@ -246,42 +247,65 @@ async def flirt_greet(req_in: FlirtGreetIn):
             msg="暂无在线可打招呼用户",
         )
 
-    sent_count = 0
-    text_dnd_failed_count = 0
-    im_failed_count = 0
-    failure_samples: list[dict] = []
-    for target_user in target_users:
-        target_id = int(target_user.id)
-        if bool(target_user.text_dnd_enabled):
-            text_dnd_failed_count += 1
-            if len(failure_samples) < 5:
-                failure_samples.append({"user_id": target_id, "reason": "对方已开启文字勿扰"})
-            continue
-        ok = await send_text_message(int(current_user.id), target_id, content)
-        if ok:
-            sent_count += 1
-        else:
-            im_failed_count += 1
-            if len(failure_samples) < 5:
-                failure_samples.append({"user_id": target_id, "reason": "IM发送失败"})
-
     try:
         await set_greet_cooldown(redis, user_id=int(current_user.id))
         quota = await get_greet_quota(redis, user_id=int(current_user.id), daily_limit=int(config.greet_daily_limit))
     except Exception:
         pass
 
-    failed_count = text_dnd_failed_count + im_failed_count
+    background_tasks.add_task(
+        _run_flirt_greet_send_task,
+        sender_id=int(current_user.id),
+        target_user_ids=[
+            int(target_user.id)
+            for target_user in target_users
+            if not bool(target_user.text_dnd_enabled)
+        ],
+        text_dnd_user_ids=[
+            int(target_user.id)
+            for target_user in target_users
+            if bool(target_user.text_dnd_enabled)
+        ],
+        content=content,
+    )
+
     return Success(
         data={
+            "started": True,
             "slot_index": req_in.slot_index,
             "content": content,
             "target_count": len(target_users),
-            "sent_count": sent_count,
-            "failed_count": failed_count,
-            "text_dnd_failed_count": text_dnd_failed_count,
-            "im_failed_count": im_failed_count,
+            "sent_count": 0,
+            "failed_count": 0,
+            "text_dnd_failed_count": 0,
+            "im_failed_count": 0,
             "quota": quota,
-            "failure_samples": failure_samples,
+            "failure_samples": [],
         }
+    )
+
+
+async def _run_flirt_greet_send_task(
+    *,
+    sender_id: int,
+    target_user_ids: list[int],
+    text_dnd_user_ids: list[int],
+    content: str,
+) -> None:
+    sent_count = 0
+    im_failed_count = 0
+    for target_id in target_user_ids:
+        ok = await send_text_message(sender_id, target_id, content)
+        if ok:
+            sent_count += 1
+        else:
+            im_failed_count += 1
+
+    logger.info(
+        "flirt greet background send finished: sender_id={}, target_count={}, sent_count={}, text_dnd_failed_count={}, im_failed_count={}",
+        sender_id,
+        len(target_user_ids) + len(text_dnd_user_ids),
+        sent_count,
+        len(text_dnd_user_ids),
+        im_failed_count,
     )

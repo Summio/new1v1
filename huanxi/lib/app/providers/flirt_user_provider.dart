@@ -235,6 +235,7 @@ class FlirtGreetQuota {
 }
 
 class FlirtGreetResult {
+  final bool started;
   final int targetCount;
   final int sentCount;
   final int failedCount;
@@ -243,6 +244,7 @@ class FlirtGreetResult {
   final FlirtGreetQuota quota;
 
   const FlirtGreetResult({
+    this.started = false,
     required this.targetCount,
     required this.sentCount,
     required this.failedCount,
@@ -254,6 +256,7 @@ class FlirtGreetResult {
   factory FlirtGreetResult.fromJson(Map<String, dynamic> json) {
     final quotaRaw = json['quota'];
     return FlirtGreetResult(
+      started: json['started'] == true,
       targetCount: (json['target_count'] as num?)?.toInt() ?? 0,
       sentCount: (json['sent_count'] as num?)?.toInt() ?? 0,
       failedCount: (json['failed_count'] as num?)?.toInt() ?? 0,

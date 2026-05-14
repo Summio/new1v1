@@ -195,6 +195,20 @@ void main() {
     expect(text, contains('AppRoutes.im'));
   });
 
+  test('flirt greeting success toast supports async started response', () {
+    final pageText = File(
+      'lib/modules/home/flirt_user_list_page.dart',
+    ).readAsStringSync();
+    final providerText = File(
+      'lib/app/providers/flirt_user_provider.dart',
+    ).readAsStringSync();
+
+    expect(providerText, contains('final bool started'));
+    expect(providerText, contains("started: json['started'] == true"));
+    expect(pageText, contains('result.started'));
+    expect(pageText, contains('已开始发送，今日剩余'));
+  });
+
   test('flirt greeting button shows remaining quota inside button', () {
     final text = File(
       'lib/modules/home/flirt_user_list_page.dart',

@@ -81,12 +81,18 @@ def test_app_flirt_greet_api_contract() -> None:
     assert "AppUserCommonPhrase" in api_text
     assert "approved_content" in api_text
     assert "text_dnd_enabled" in api_text
-    assert "send_text_message" in api_text
+    assert "BackgroundTasks" in api_text
+    assert "_run_flirt_greet_send_task" in api_text
+    assert "background_tasks.add_task" in api_text
+    assert '"started": True' in api_text
     assert "reserve_greet_quota" in api_text
     assert "set_greet_cooldown" in api_text
     assert "release_greet_quota" in api_text
     assert "get_online_user_ids" in api_text
     assert "Success(data=" in api_text
+    route_body = api_text.split('@router.post("/flirt/greet"', 1)[1]
+    route_body = route_body.split("async def _run_flirt_greet_send_task", 1)[0]
+    assert "await send_text_message" not in route_body
 
 
 def test_flirt_list_uses_bounded_candidate_scan_not_full_table_sort() -> None:

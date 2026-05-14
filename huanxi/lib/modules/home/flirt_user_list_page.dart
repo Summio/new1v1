@@ -153,13 +153,15 @@ class _FlirtUserListPageState extends ConsumerState<FlirtUserListPage> {
           .read(flirtGreetProvider.notifier)
           .send(slotIndex: selected.slotIndex);
       if (!mounted) return;
-      if (result.targetCount == 0) {
+      if (!result.started && result.targetCount == 0) {
         AppToast.show(context, '暂无在线可打招呼用户');
         return;
       }
       AppToast.show(
         context,
-        '已发送 ${result.sentCount} 人，失败 ${result.failedCount} 人，今日剩余 ${result.quota.remaining} 次',
+        result.started
+            ? '已开始发送，今日剩余 ${result.quota.remaining} 次'
+            : '已发送 ${result.sentCount} 人，失败 ${result.failedCount} 人，今日剩余 ${result.quota.remaining} 次',
         backgroundColor: AppTheme.onlineGreen,
       );
     } catch (e) {
