@@ -1,0 +1,111 @@
+<h2>首页“搭讪页”入口与列表形式</h2>
+<p class="subtitle">请看 3 个低保真方向。当前我推荐 A：放在首页顶部分类里，最符合“首页搭讪页”，改动也最小。</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="width:280px;margin:auto;background:#fff;border:1px solid #e5e7eb;border-radius:22px;overflow:hidden;font-family:Arial,'Microsoft YaHei',sans-serif">
+        <div style="padding:16px 16px 8px;display:flex;align-items:center;justify-content:space-between">
+          <div style="font-size:28px;font-weight:900;color:#111">欢喜</div>
+          <div style="font-size:20px">🔍</div>
+        </div>
+        <div style="padding:8px 12px 12px;display:flex;gap:8px;overflow:hidden">
+          <span style="padding:7px 14px;border-radius:16px;background:#f2f2f7;color:#8e8e93;font-size:12px;font-weight:700">推荐</span>
+          <span style="padding:7px 14px;border-radius:16px;background:#f2f2f7;color:#8e8e93;font-size:12px;font-weight:700">活跃</span>
+          <span style="padding:7px 14px;border-radius:16px;background:#f2f2f7;color:#8e8e93;font-size:12px;font-weight:700">新人</span>
+          <span style="padding:7px 14px;border-radius:16px;background:#111;color:#fff;font-size:12px;font-weight:800">搭讪</span>
+        </div>
+        <div style="padding:6px 12px 16px;background:#fafafa">
+          <div style="display:flex;gap:10px;padding:12px;background:#fff;border-bottom:1px solid #f1f1f1">
+            <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#f8c6d8,#8bd3dd)"></div>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;justify-content:space-between;gap:6px">
+                <b style="font-size:14px;color:#111">小鹿</b>
+                <span style="font-size:11px;color:#16a34a">在线</span>
+              </div>
+              <div style="font-size:12px;color:#666;margin-top:4px">金币余额 1,280</div>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <button style="border:1px solid #ddd;background:#fff;border-radius:14px;padding:5px 12px;font-size:12px">文字</button>
+                <button style="border:0;background:#111;color:#fff;border-radius:14px;padding:5px 12px;font-size:12px">视频</button>
+              </div>
+            </div>
+          </div>
+          <div style="display:flex;gap:10px;padding:12px;background:#fff">
+            <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#fcd34d,#fb7185)"></div>
+            <div style="flex:1">
+              <div style="display:flex;justify-content:space-between"><b style="font-size:14px">阿南</b><span style="font-size:11px;color:#999">离线</span></div>
+              <div style="font-size:12px;color:#666;margin-top:4px">金币余额 86</div>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <button style="border:1px solid #ddd;background:#fff;border-radius:14px;padding:5px 12px;font-size:12px">文字</button>
+                <button style="border:0;background:#111;color:#fff;border-radius:14px;padding:5px 12px;font-size:12px">视频</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A. 首页顶部新增“搭讪”分类</h3>
+      <p>沿用首页现有推荐/活跃/新人结构。仅真人认证用户看到这个 Tab；未认证用户首页不出现入口。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="width:280px;margin:auto;background:#fff;border:1px solid #e5e7eb;border-radius:22px;overflow:hidden;font-family:Arial,'Microsoft YaHei',sans-serif">
+        <div style="height:330px;padding:16px;background:#fafafa">
+          <div style="font-size:24px;font-weight:900;color:#111;margin-bottom:14px">搭讪</div>
+          <div style="display:flex;gap:10px;padding:12px;background:#fff;border-radius:12px;margin-bottom:10px">
+            <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#93c5fd,#f9a8d4)"></div>
+            <div style="flex:1">
+              <b style="font-size:14px">Mia</b>
+              <div style="font-size:12px;color:#666;margin-top:4px">在线 · 金币 3,200</div>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <button style="border:1px solid #ddd;background:#fff;border-radius:14px;padding:5px 12px;font-size:12px">文字</button>
+                <button style="border:0;background:#111;color:#fff;border-radius:14px;padding:5px 12px;font-size:12px">视频</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div style="height:60px;display:flex;align-items:center;justify-content:space-around;border-top:1px solid #eee;font-size:11px;color:#888">
+          <span>首页</span><span>发现</span><b style="color:#111">搭讪</b><span>聊天</span><span>我的</span>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B. 底部导航新增“搭讪”</h3>
+      <p>入口最强，但会把底部导航从 4 项改成 5 项，影响主导航结构和现有首页定位。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image">
+      <div style="width:280px;margin:auto;background:#fff;border:1px solid #e5e7eb;border-radius:22px;overflow:hidden;font-family:Arial,'Microsoft YaHei',sans-serif">
+        <div style="padding:16px">
+          <div style="font-size:28px;font-weight:900;color:#111">欢喜</div>
+          <div style="margin-top:14px;display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div style="background:#111;color:#fff;border-radius:14px;padding:12px;font-weight:800;text-align:center">认证推荐</div>
+            <div style="background:#f2f2f7;color:#111;border-radius:14px;padding:12px;font-weight:800;text-align:center">搭讪</div>
+          </div>
+        </div>
+        <div style="padding:8px 14px 18px;background:#fafafa">
+          <div style="display:flex;gap:10px;padding:12px;background:#fff;border-radius:12px">
+            <div style="width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#a7f3d0,#fda4af)"></div>
+            <div style="flex:1">
+              <b style="font-size:14px">晴晴</b>
+              <div style="font-size:12px;color:#666;margin-top:4px">忙碌 · 金币 560</div>
+              <div style="display:flex;gap:8px;margin-top:8px">
+                <button style="border:1px solid #ddd;background:#fff;border-radius:14px;padding:5px 12px;font-size:12px">文字</button>
+                <button style="border:0;background:#111;color:#fff;border-radius:14px;padding:5px 12px;font-size:12px">视频</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C. 首页内做二级入口</h3>
+      <p>把原首页重新分成“认证推荐/搭讪”等大块。可见度较高，但会重构首页层级。</p>
+    </div>
+  </div>
+</div>

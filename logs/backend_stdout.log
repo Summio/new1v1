@@ -1,0 +1,907 @@
+2026-05-14 11:19:37.678 | INFO     | app.core.init_app:init_data:888 - startup seed data disabled
+2026-05-14 11:19:37.680 | INFO     | app.core.call_watchdog:run_call_watchdog:936 - call watchdog started
+2026-05-14 11:19:37.692 | INFO     | app.core.bgtask:cleanup_old_audit_logs:23 - audit log cleanup: deleted 0 records older than 180 days
+2026-05-14 11:19:37.693 | INFO     | app.core.bgtask:run_auditlog_cleanup:38 - auditlog periodic cleanup completed, deleted=0
+2026-05-14 11:19:39.728 | INFO     | app.core.call_watchdog:run_call_watchdog:949 - call watchdog: follower mode (no leader)
+2026-05-14 11:20:20 - INFO - 127.0.0.1:64270 - "GET /api/v1/base/userinfo HTTP/1.1" 200 OK
+2026-05-14 11:20:20 - INFO - 127.0.0.1:64271 - "GET /api/v1/base/usermenu HTTP/1.1" 200 OK
+2026-05-14 11:20:20 - INFO - 127.0.0.1:64272 - "GET /api/v1/base/userapi HTTP/1.1" 200 OK
+2026-05-14 11:20:21 - INFO - 127.0.0.1:64282 - "GET /api/v1/apis/system/certified-call-price-config HTTP/1.1" 200 OK
+2026-05-14 11:20:21 - INFO - 127.0.0.1:64281 - "GET /api/v1/system_config/list?page=1&page_size=500 HTTP/1.1" 200 OK
+2026-05-14 11:20:25.029 | INFO     | app.core.call_watchdog:run_call_watchdog:987 - call watchdog: acquired leader
+2026-05-14 11:22:24 - INFO - 192.168.31.179:49416 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 11:22:24 - INFO - 192.168.31.179:49430 - "GET /api/v1/app/init/bootstrap HTTP/1.1" 200 OK
+2026-05-14 11:22:26.080 | INFO     | app.websocket.manager:start_pubsub:270 - [WS] starting pubsub listener on pid 18400
+2026-05-14 11:22:26.092 | INFO     | app.websocket.manager:_pubsub_loop:284 - [WS] pubsub subscribed to ws:broadcast
+2026-05-14 11:22:26 - INFO - 192.168.31.179:49436 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 11:22:26 - INFO - 192.168.31.179:49448 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 11:22:28 - INFO - 192.168.31.179:49430 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 11:22:28 - INFO - 192.168.31.179:49416 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 11:22:28.275 | INFO     | app.websocket.manager:connect:102 - [WS] user 100022 connected on pid 18400, total=1
+2026-05-14 11:22:28.276 | INFO     | app.websocket.router:ws_app:107 - [WS] user 100022 authenticated successfully
+2026-05-14 11:22:28 - INFO - 192.168.31.179:49464 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 11:22:28 - INFO - 192.168.31.179:49492 - "GET /uploads/generated/star_recreated/100015/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:22:28 - INFO - 192.168.31.179:49478 - "GET /uploads/generated/star_recreated/100021/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:22:28 - INFO - 192.168.31.179:49484 - "GET /uploads/generated/star_recreated/100014/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:22:28 - INFO - 192.168.31.179:49488 - "GET /uploads/generated/star_recreated/100018/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 11:22:28 - INFO - 192.168.31.179:49512 - "GET /uploads/generated/star_recreated/100016/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 11:22:28 - INFO - 192.168.31.179:49514 - "GET /uploads/generated/star_recreated/100020/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:22:28 - INFO - 192.168.31.179:49526 - "GET /uploads/generated/star_recreated/100019/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:22:28 - INFO - 192.168.31.179:49498 - "GET /uploads/generated/star_recreated/100017/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:22:37 - INFO - 192.168.31.179:39534 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:22:37 - INFO - 192.168.31.179:39540 - "GET /uploads/generated/star_recreated/100022/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 11:22:37 - INFO - 192.168.31.179:39542 - "GET /uploads/generated/star_recreated/100013/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 11:22:37 - INFO - 192.168.31.179:39556 - "GET /uploads/generated/star_recreated/100023/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:22:38 - INFO - 192.168.31.179:39534 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:22:39 - INFO - 192.168.31.62:33146 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 11:22:39 - INFO - 192.168.31.62:33148 - "GET /api/v1/app/init/bootstrap HTTP/1.1" 200 OK
+2026-05-14 11:22:39 - INFO - 192.168.31.179:39534 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 11:22:40 - INFO - 192.168.31.179:39540 - "GET /uploads/profile/admin/a861c74d01514c6e9e491011e30ee06f.jpg HTTP/1.1" 200 OK
+2026-05-14 11:22:41 - INFO - 192.168.31.62:33148 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 11:22:41 - INFO - 192.168.31.62:33146 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 11:22:41 - INFO - 192.168.31.62:33156 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 11:22:41 - INFO - 192.168.31.62:33158 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 11:22:41.702 | INFO     | app.websocket.manager:connect:102 - [WS] user 100019 connected on pid 18400, total=2
+2026-05-14 11:22:41.704 | INFO     | app.websocket.router:ws_app:107 - [WS] user 100019 authenticated successfully
+2026-05-14 11:22:41 - INFO - 192.168.31.62:33160 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 11:22:42 - INFO - 192.168.31.179:39534 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 11:22:42 - INFO - 192.168.31.62:33162 - "GET /uploads/generated/star_recreated/100021/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:22:42 - INFO - 192.168.31.62:33164 - "GET /uploads/generated/star_recreated/100014/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:22:42 - INFO - 192.168.31.62:33166 - "GET /uploads/generated/star_recreated/100018/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 11:22:42 - INFO - 192.168.31.62:33172 - "GET /uploads/generated/star_recreated/100017/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:22:42 - INFO - 192.168.31.62:33170 - "GET /uploads/generated/star_recreated/100015/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:22:42 - INFO - 192.168.31.62:33168 - "GET /uploads/generated/star_recreated/100019/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:22:42 - INFO - 192.168.31.62:33176 - "GET /uploads/generated/star_recreated/100020/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:22:42 - INFO - 192.168.31.62:33174 - "GET /uploads/generated/star_recreated/100016/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 11:22:46 - INFO - 192.168.31.179:37046 - "GET /uploads/initial-profile/avatar/male/432518604e39459691ca2a900b3da599.jpg HTTP/1.1" 200 OK
+2026-05-14 11:22:46 - INFO - 192.168.31.179:37046 - "GET /uploads/profile/100033/e4d02c691c85452da3bf4c20f217fda7.jpg HTTP/1.1" 200 OK
+2026-05-14 11:22:46 - INFO - 192.168.31.179:37052 - "GET /uploads/profile/100034/f0bf8381b2714458a8cb7bd0f2bb8e5e.jpg HTTP/1.1" 200 OK
+2026-05-14 11:22:54 - INFO - 192.168.31.179:33078 - "GET /api/v1/app/im/usersig?peer_user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 11:22:54 - INFO - 192.168.31.179:33078 - "GET /api/v1/app/user/public?user_id=100001&scene=chat HTTP/1.1" 200 OK
+2026-05-14 11:22:54 - INFO - 192.168.31.179:33078 - "GET /api/v1/app/user/block/status?user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 11:22:56 - INFO - 192.168.31.179:33078 - "POST /api/v1/app/dialing HTTP/1.1" 200 OK
+2026-05-14 11:22:56 - INFO - 192.168.31.179:33078 - "POST /api/v1/app/rtc/token HTTP/1.1" 200 OK
+2026-05-14 11:22:58 - INFO - 192.168.31.179:33078 - "POST /api/v1/app/rtc/token HTTP/1.1" 200 OK
+2026-05-14 11:23:00 - INFO - 192.168.31.179:33078 - "POST /api/v1/app/rtc/token HTTP/1.1" 200 OK
+2026-05-14 11:23:00 - INFO - 192.168.31.179:33078 - "POST /api/v1/app/call/cancel HTTP/1.1" 200 OK
+2026-05-14 11:23:28 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 11:23:31 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:23:32 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 11:23:33 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:23:34 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:23:35 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:23:36 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:23:37 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:23:37 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 11:23:39 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:23:39 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:23:40 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:23:40.580 | INFO     | app.websocket.router:ws_app:181 - [WS] user 100019 disconnected normally
+2026-05-14 11:23:40.581 | INFO     | app.websocket.manager:disconnect:124 - [WS] user 100019 disconnected from pid 18400, remaining=1
+2026-05-14 11:23:41 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 11:23:41 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:23:42 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:23:43 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:23:43 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 11:23:46 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 11:23:46 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:23:47 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:23:48 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 11:23:49 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:23:49 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:23:50 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:23:51 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:23:52 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:23:52 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 11:23:53 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:23:53 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:23:54 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:23:55 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 11:23:55 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:23:58 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 11:23:58 - INFO - 192.168.31.179:59392 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 11:23:58 - INFO - 192.168.31.179:59392 - "GET /api/v1/app/user/public?user_id=100036 HTTP/1.1" 200 OK
+2026-05-14 11:23:58 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/user/public?user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 11:23:58 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 11:24:00 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:24:01 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:24:01 - INFO - 192.168.31.179:40560 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 11:24:24 - INFO - 192.168.31.62:33214 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 11:24:24 - INFO - 192.168.31.62:33212 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 11:24:24 - INFO - 192.168.31.62:33218 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 11:24:24.923 | INFO     | app.websocket.manager:connect:102 - [WS] user 100019 connected on pid 18400, total=2
+2026-05-14 11:24:24.924 | INFO     | app.websocket.router:ws_app:107 - [WS] user 100019 authenticated successfully
+2026-05-14 11:24:26 - INFO - 192.168.31.62:33216 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 11:24:27 - INFO - 192.168.31.62:33220 - "GET /uploads/generated/star_recreated/100021/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:24:27 - INFO - 192.168.31.62:33224 - "GET /uploads/generated/star_recreated/100018/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 11:24:27 - INFO - 192.168.31.62:33222 - "GET /uploads/generated/star_recreated/100014/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:24:27 - INFO - 192.168.31.62:33226 - "GET /uploads/generated/star_recreated/100019/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:24:27 - INFO - 192.168.31.62:33228 - "GET /uploads/generated/star_recreated/100015/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:24:27 - INFO - 192.168.31.62:33232 - "GET /uploads/generated/star_recreated/100016/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 11:24:27 - INFO - 192.168.31.62:33230 - "GET /uploads/generated/star_recreated/100017/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:24:27 - INFO - 192.168.31.62:33234 - "GET /uploads/generated/star_recreated/100020/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:24:30 - INFO - 192.168.31.179:48368 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 11:24:32 - INFO - 192.168.31.62:33230 - "GET /uploads/generated/star_recreated/100019/avatar.jpg HTTP/1.1" 200 OK
+2026-05-14 11:24:32 - INFO - 192.168.31.62:33238 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 11:24:32 - INFO - 192.168.31.62:33240 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 11:24:32 - INFO - 192.168.31.62:33242 - "GET /uploads/generated/star_recreated/100019/avatar.jpg HTTP/1.1" 200 OK
+2026-05-14 11:24:35 - INFO - 192.168.31.62:33238 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 11:24:37 - INFO - 192.168.31.62:33238 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:24:37 - INFO - 192.168.31.62:33242 - "GET /uploads/generated/star_recreated/100022/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 11:24:37 - INFO - 192.168.31.62:33230 - "GET /uploads/generated/star_recreated/100013/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 11:24:37 - INFO - 192.168.31.62:33244 - "GET /uploads/generated/star_recreated/100023/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:24:41 - INFO - 192.168.31.62:33246 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 11:24:41 - INFO - 192.168.31.62:33248 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 11:24:41 - INFO - 192.168.31.62:33246 - "GET /api/v1/app/user/public?user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 11:24:41 - INFO - 192.168.31.62:33248 - "GET /api/v1/app/user/public?user_id=100032 HTTP/1.1" 200 OK
+2026-05-14 11:24:41 - INFO - 192.168.31.62:33246 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 11:24:42 - INFO - 192.168.31.62:33242 - "GET /uploads/profile/admin/a861c74d01514c6e9e491011e30ee06f.jpg HTTP/1.1" 200 OK
+2026-05-14 11:24:43 - INFO - 192.168.31.62:33246 - "GET /api/v1/app/moment/feed?page=1&page_size=20&category=latest HTTP/1.1" 200 OK
+2026-05-14 11:24:44 - INFO - 192.168.31.62:33246 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 11:24:44 - INFO - 192.168.31.62:33248 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 11:24:44 - INFO - 192.168.31.62:33242 - "GET /uploads/generated/star_recreated/100019/avatar.jpg HTTP/1.1" 200 OK
+2026-05-14 11:24:45 - INFO - 192.168.31.62:33246 - "GET /api/v1/app/user/dnd-settings HTTP/1.1" 200 OK
+2026-05-14 11:24:48 - INFO - 192.168.31.62:33246 - "GET /api/v1/app/certification/apply/status HTTP/1.1" 200 OK
+2026-05-14 11:24:53 - INFO - 192.168.31.62:33250 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:25:13 - INFO - 192.168.31.179:34674 - "GET /uploads/generated/star_recreated/100021/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 11:25:13 - INFO - 192.168.31.179:34676 - "GET /api/v1/app/user/public?user_id=100021 HTTP/1.1" 200 OK
+2026-05-14 11:25:13 - INFO - 192.168.31.179:34688 - "GET /api/v1/app/moment/user?user_id=100021&page=1&page_size=3 HTTP/1.1" 200 OK
+2026-05-14 11:25:19 - INFO - 192.168.31.179:34694 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 11:25:24.172 | INFO     | app.websocket.router:ws_app:181 - [WS] user 100019 disconnected normally
+2026-05-14 11:25:24.172 | INFO     | app.websocket.manager:disconnect:124 - [WS] user 100019 disconnected from pid 18400, remaining=1
+2026-05-14 11:26:05 - INFO - 192.168.31.179:59068 - "GET /api/v1/app/moment/feed?page=1&page_size=20&category=latest HTTP/1.1" 200 OK
+2026-05-14 11:26:06 - INFO - 192.168.31.179:59068 - "GET /api/v1/app/moment/feed?page=1&page_size=20&category=following HTTP/1.1" 200 OK
+2026-05-14 11:26:07 - INFO - 192.168.31.179:59068 - "GET /api/v1/app/ranking/list?board=charm&period=day HTTP/1.1" 200 OK
+2026-05-14 11:26:08 - INFO - 192.168.31.179:59068 - "GET /api/v1/app/ranking/list?board=invite&period=day HTTP/1.1" 200 OK
+2026-05-14 11:26:08 - INFO - 192.168.31.179:59068 - "GET /api/v1/app/ranking/list?board=invite&period=month HTTP/1.1" 200 OK
+2026-05-14 11:26:09 - INFO - 192.168.31.179:59068 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 11:26:09 - INFO - 192.168.31.179:59072 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 11:26:09 - INFO - 192.168.31.179:59068 - "GET /api/v1/app/user/public?user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 11:26:11 - INFO - 192.168.31.179:59068 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:26:11 - INFO - 192.168.31.179:59072 - "GET /api/v1/app/user/public?user_id=100036 HTTP/1.1" 200 OK
+2026-05-14 11:26:12 - INFO - 192.168.31.179:59068 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 11:26:13 - INFO - 192.168.31.179:59068 - "GET /api/v1/app/ranking/list?board=invite&period=month HTTP/1.1" 200 OK
+2026-05-14 11:26:14 - INFO - 192.168.31.179:59068 - "GET /api/v1/app/ranking/list?board=invite&period=week HTTP/1.1" 200 OK
+2026-05-14 11:26:14 - INFO - 192.168.31.179:59068 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 11:26:14 - INFO - 192.168.31.179:59068 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 11:26:14 - INFO - 192.168.31.179:59068 - "GET /api/v1/app/user/public?user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 11:26:14 - INFO - 192.168.31.179:59072 - "GET /api/v1/app/user/public?user_id=100036 HTTP/1.1" 200 OK
+2026-05-14 11:26:14 - INFO - 192.168.31.179:59068 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 11:26:15 - INFO - 192.168.31.179:59068 - "GET /api/v1/app/user/follow/list?page=1&page_size=20&keyword= HTTP/1.1" 200 OK
+2026-05-14 11:26:16 - INFO - 192.168.31.179:59068 - "GET /api/v1/app/user/fans/list?page=1&page_size=20&keyword= HTTP/1.1" 200 OK
+2026-05-14 11:26:17 - INFO - 192.168.31.179:59068 - "GET /api/v1/app/ranking/list?board=invite&period=week HTTP/1.1" 200 OK
+2026-05-14 11:26:18 - INFO - 192.168.31.179:59068 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:26:19 - INFO - 192.168.31.179:59068 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 11:26:21 - INFO - 192.168.31.179:59068 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 11:26:21 - INFO - 192.168.31.179:33272 - "GET /api/v1/app/user/fans/list?page=1&page_size=20&keyword= HTTP/1.1" 200 OK
+2026-05-14 11:26:21 - INFO - 192.168.31.179:33272 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 11:26:22 - INFO - 192.168.31.179:59068 - "GET /api/v1/app/user/public?user_id=100036 HTTP/1.1" 200 OK
+2026-05-14 11:26:22 - INFO - 192.168.31.179:33272 - "GET /api/v1/app/user/public?user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 11:26:22 - INFO - 192.168.31.179:33272 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 11:26:22 - INFO - 192.168.31.179:59068 - "GET /api/v1/app/user/public?user_id=100036 HTTP/1.1" 200 OK
+2026-05-14 11:26:22 - INFO - 192.168.31.179:33272 - "GET /api/v1/app/user/public?user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 11:26:22 - INFO - 192.168.31.179:33272 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 11:26:23 - INFO - 192.168.31.179:33272 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 11:26:23 - INFO - 192.168.31.179:33272 - "GET /api/v1/app/user/public?user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 11:26:23 - INFO - 192.168.31.179:59068 - "GET /api/v1/app/user/public?user_id=100036 HTTP/1.1" 200 OK
+2026-05-14 11:26:24 - INFO - 192.168.31.179:33272 - "GET /api/v1/app/ranking/list?board=invite&period=week HTTP/1.1" 200 OK
+2026-05-14 11:26:24 - INFO - 192.168.31.179:33272 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:26:28 - INFO - 192.168.31.179:39482 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 11:26:28 - INFO - 192.168.31.179:39482 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:26:44 - INFO - 192.168.31.62:33266 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 11:26:44 - INFO - 192.168.31.62:33268 - "GET /api/v1/app/init/bootstrap HTTP/1.1" 200 OK
+2026-05-14 11:26:46 - INFO - 192.168.31.62:33268 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 11:26:46 - INFO - 192.168.31.62:33266 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 11:26:46 - INFO - 192.168.31.62:33276 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 11:26:46 - INFO - 192.168.31.62:33278 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 11:26:46.359 | INFO     | app.websocket.manager:connect:102 - [WS] user 100019 connected on pid 18400, total=2
+2026-05-14 11:26:46.366 | INFO     | app.websocket.router:ws_app:107 - [WS] user 100019 authenticated successfully
+2026-05-14 11:26:48 - INFO - 192.168.31.62:33280 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 11:26:49 - INFO - 192.168.31.62:33282 - "GET /uploads/generated/star_recreated/100021/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:26:49 - INFO - 192.168.31.62:33284 - "GET /uploads/generated/star_recreated/100014/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:26:49 - INFO - 192.168.31.62:33286 - "GET /uploads/generated/star_recreated/100018/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 11:26:49 - INFO - 192.168.31.62:33288 - "GET /uploads/generated/star_recreated/100019/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:26:49 - INFO - 192.168.31.62:33290 - "GET /uploads/generated/star_recreated/100015/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:26:49 - INFO - 192.168.31.62:33294 - "GET /uploads/generated/star_recreated/100016/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 11:26:49 - INFO - 192.168.31.62:33292 - "GET /uploads/generated/star_recreated/100017/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:26:49 - INFO - 192.168.31.62:33296 - "GET /uploads/generated/star_recreated/100020/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:26:51 - INFO - 192.168.31.62:33280 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 11:26:51 - INFO - 192.168.31.62:33300 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 11:26:51 - INFO - 192.168.31.62:33304 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 11:26:51 - INFO - 192.168.31.62:33302 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 11:26:51.774 | INFO     | app.websocket.router:ws_app:181 - [WS] user 100019 disconnected normally
+2026-05-14 11:26:51.774 | INFO     | app.websocket.manager:disconnect:124 - [WS] user 100019 disconnected from pid 18400, remaining=1
+2026-05-14 11:27:07 - INFO - 192.168.31.62:33308 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 11:27:07 - INFO - 192.168.31.62:33310 - "GET /api/v1/app/init/bootstrap HTTP/1.1" 200 OK
+2026-05-14 11:27:09 - INFO - 192.168.31.62:33308 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 11:27:09 - INFO - 192.168.31.62:33310 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 11:27:09 - INFO - 192.168.31.62:33318 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 11:27:09.722 | INFO     | app.websocket.manager:connect:102 - [WS] user 100019 connected on pid 18400, total=2
+2026-05-14 11:27:09.722 | INFO     | app.websocket.router:ws_app:107 - [WS] user 100019 authenticated successfully
+2026-05-14 11:27:09 - INFO - 192.168.31.62:33320 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 11:27:09 - INFO - 192.168.31.62:33322 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 11:27:10 - INFO - 192.168.31.62:33324 - "GET /uploads/generated/star_recreated/100021/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:27:10 - INFO - 192.168.31.62:33326 - "GET /uploads/generated/star_recreated/100014/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:27:10 - INFO - 192.168.31.62:33328 - "GET /uploads/generated/star_recreated/100018/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 11:27:10 - INFO - 192.168.31.62:33330 - "GET /uploads/generated/star_recreated/100019/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:27:10 - INFO - 192.168.31.62:33334 - "GET /uploads/generated/star_recreated/100017/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:27:10 - INFO - 192.168.31.62:33336 - "GET /uploads/generated/star_recreated/100016/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 11:27:10 - INFO - 192.168.31.62:33332 - "GET /uploads/generated/star_recreated/100015/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:27:10 - INFO - 192.168.31.62:33338 - "GET /uploads/generated/star_recreated/100020/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:27:11 - INFO - 192.168.31.62:33318 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:27:11 - INFO - 192.168.31.62:33336 - "GET /uploads/generated/star_recreated/100023/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:27:11 - INFO - 192.168.31.62:33332 - "GET /uploads/generated/star_recreated/100022/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 11:27:11 - INFO - 192.168.31.62:33326 - "GET /uploads/generated/star_recreated/100013/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 11:27:12 - INFO - 192.168.31.62:33318 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:27:13 - INFO - 192.168.31.62:33318 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 11:27:13 - INFO - 192.168.31.62:33332 - "GET /uploads/profile/admin/a861c74d01514c6e9e491011e30ee06f.jpg HTTP/1.1" 200 OK
+2026-05-14 11:27:13 - INFO - 192.168.31.62:33326 - "GET /uploads/initial-profile/avatar/male/432518604e39459691ca2a900b3da599.jpg HTTP/1.1" 200 OK
+2026-05-14 11:27:19 - INFO - 192.168.31.62:33342 - "GET /uploads/generated/star_recreated/100019/avatar.jpg HTTP/1.1" 200 OK
+2026-05-14 11:27:19 - INFO - 192.168.31.62:33344 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 11:27:19 - INFO - 192.168.31.62:33346 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 11:27:19 - INFO - 192.168.31.62:33348 - "GET /uploads/generated/star_recreated/100019/avatar.jpg HTTP/1.1" 200 OK
+2026-05-14 11:27:22 - INFO - 192.168.31.62:33350 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:27:24 - INFO - 192.168.31.62:33350 - "GET /api/v1/app/moment/feed?page=1&page_size=20&category=latest HTTP/1.1" 200 OK
+2026-05-14 11:27:24 - INFO - 192.168.31.62:33350 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 11:27:24 - INFO - 192.168.31.62:33352 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 11:27:25 - INFO - 192.168.31.62:33352 - "GET /api/v1/app/user/public?user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 11:27:25 - INFO - 192.168.31.62:33350 - "GET /api/v1/app/user/public?user_id=100032 HTTP/1.1" 200 OK
+2026-05-14 11:27:25 - INFO - 192.168.31.62:33350 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 11:27:26 - INFO - 192.168.31.62:33350 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:27:27 - INFO - 192.168.31.62:33350 - "GET /api/v1/app/user/public?user_id=100015 HTTP/1.1" 200 OK
+2026-05-14 11:27:27 - INFO - 192.168.31.62:33352 - "GET /api/v1/app/moment/user?user_id=100015&page=1&page_size=3 HTTP/1.1" 200 OK
+2026-05-14 11:27:27 - INFO - 192.168.31.62:33354 - "GET /uploads/generated/star_recreated/100015/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 11:27:44 - INFO - 192.168.31.62:33356 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 11:28:05 - INFO - 127.0.0.1:65213 - "GET /api/v1/base/userinfo HTTP/1.1" 200 OK
+2026-05-14 11:28:05 - INFO - 127.0.0.1:65214 - "GET /api/v1/base/usermenu HTTP/1.1" 200 OK
+2026-05-14 11:28:05 - INFO - 127.0.0.1:65215 - "GET /api/v1/base/userapi HTTP/1.1" 200 OK
+2026-05-14 11:28:06 - INFO - 127.0.0.1:65223 - "GET /api/v1/apis/system/certified-call-price-config HTTP/1.1" 200 OK
+2026-05-14 11:28:06 - INFO - 127.0.0.1:65222 - "GET /api/v1/system_config/list?page=1&page_size=500 HTTP/1.1" 200 OK
+2026-05-14 11:28:08 - INFO - 127.0.0.1:65226 - "GET /api/v1/apis/system/flirt-config HTTP/1.1" 200 OK
+2026-05-14 11:28:43.329 | DEBUG    | app.websocket.router:ws_app:118 - [WS] user 100022 heartbeat timeout
+2026-05-14 11:28:43.330 | INFO     | app.websocket.manager:disconnect:124 - [WS] user 100022 disconnected from pid 18400, remaining=1
+2026-05-14 11:29:11 - INFO - 192.168.31.62:33360 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 11:30:14 - INFO - 192.168.31.179:47378 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 11:30:14 - INFO - 192.168.31.179:47418 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 11:30:14.643 | INFO     | app.websocket.manager:connect:102 - [WS] user 100022 connected on pid 18400, total=2
+2026-05-14 11:30:14.643 | INFO     | app.websocket.router:ws_app:107 - [WS] user 100022 authenticated successfully
+2026-05-14 11:30:16 - INFO - 192.168.31.179:47390 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 11:30:16 - INFO - 192.168.31.179:47402 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:30:17 - INFO - 192.168.31.179:47426 - "GET /uploads/generated/star_recreated/100022/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 11:30:17 - INFO - 192.168.31.179:47434 - "GET /uploads/generated/star_recreated/100019/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:30:17 - INFO - 192.168.31.179:47450 - "GET /uploads/generated/star_recreated/100021/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:30:17 - INFO - 192.168.31.179:47462 - "GET /uploads/generated/star_recreated/100018/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 11:30:17 - INFO - 192.168.31.179:47468 - "GET /uploads/generated/star_recreated/100015/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:30:17 - INFO - 192.168.31.179:47494 - "GET /uploads/generated/star_recreated/100013/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 11:30:17 - INFO - 192.168.31.179:47508 - "GET /uploads/generated/star_recreated/100023/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:30:17 - INFO - 192.168.31.179:47478 - "GET /uploads/generated/star_recreated/100014/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:30:20.926 | INFO     | app.websocket.router:ws_app:181 - [WS] user 100022 disconnected normally
+2026-05-14 11:30:20.927 | INFO     | app.websocket.manager:disconnect:124 - [WS] user 100022 disconnected from pid 18400, remaining=1
+2026-05-14 11:30:30 - INFO - 192.168.31.62:33364 - "GET /uploads/profile/100033/e4d02c691c85452da3bf4c20f217fda7.jpg HTTP/1.1" 200 OK
+2026-05-14 11:30:30 - INFO - 192.168.31.62:33366 - "GET /uploads/profile/100034/f0bf8381b2714458a8cb7bd0f2bb8e5e.jpg HTTP/1.1" 200 OK
+2026-05-14 11:33:10.239 | INFO     | app.websocket.router:ws_app:181 - [WS] user 100019 disconnected normally
+2026-05-14 11:33:10.239 | INFO     | app.websocket.manager:disconnect:124 - [WS] user 100019 disconnected from pid 18400, remaining=0
+2026-05-14 11:34:24 - INFO - 192.168.31.62:33372 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 11:34:25 - INFO - 192.168.31.62:33372 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 11:34:26 - INFO - 192.168.31.62:33380 - "GET /uploads/profile/admin/a861c74d01514c6e9e491011e30ee06f.jpg HTTP/1.1" 200 OK
+2026-05-14 11:34:26 - INFO - 192.168.31.62:33382 - "GET /uploads/initial-profile/avatar/male/432518604e39459691ca2a900b3da599.jpg HTTP/1.1" 200 OK
+2026-05-14 11:34:26 - INFO - 192.168.31.62:33374 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 11:34:26 - INFO - 192.168.31.62:33378 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 11:34:26.817 | INFO     | app.websocket.manager:connect:102 - [WS] user 100019 connected on pid 18400, total=1
+2026-05-14 11:34:26.818 | INFO     | app.websocket.router:ws_app:107 - [WS] user 100019 authenticated successfully
+2026-05-14 11:34:26 - INFO - 192.168.31.62:33376 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:34:27 - INFO - 192.168.31.62:33382 - "GET /uploads/generated/star_recreated/100019/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:34:27 - INFO - 192.168.31.62:33380 - "GET /uploads/generated/star_recreated/100013/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 11:34:27 - INFO - 192.168.31.62:33384 - "GET /uploads/generated/star_recreated/100021/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:34:27 - INFO - 192.168.31.62:33386 - "GET /uploads/generated/star_recreated/100014/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:34:27 - INFO - 192.168.31.62:33388 - "GET /uploads/generated/star_recreated/100015/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:34:27 - INFO - 192.168.31.62:33392 - "GET /uploads/generated/star_recreated/100016/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 11:34:27 - INFO - 192.168.31.62:33390 - "GET /uploads/generated/star_recreated/100018/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 11:34:27 - INFO - 192.168.31.62:33394 - "GET /uploads/generated/star_recreated/100023/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:34:27 - INFO - 192.168.31.62:33372 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:34:28 - INFO - 192.168.31.62:33382 - "GET /uploads/generated/star_recreated/100020/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:34:30 - INFO - 192.168.31.62:33372 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:34:31 - INFO - 192.168.31.62:33372 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:34:32 - INFO - 192.168.31.62:33372 - "POST /api/v1/app/certified-user/active-pin HTTP/1.1" 200 OK
+2026-05-14 11:34:32 - INFO - 192.168.31.62:33372 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:34:49 - INFO - 192.168.31.62:33398 - "GET /uploads/generated/star_recreated/100017/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:34:50 - INFO - 192.168.31.62:33398 - "GET /uploads/generated/star_recreated/100022/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 11:34:52 - INFO - 192.168.31.62:33400 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 11:34:53 - INFO - 192.168.31.62:33400 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:34:53 - INFO - 192.168.31.62:33400 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:34:54 - INFO - 192.168.31.62:33400 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 11:35:52 - INFO - 192.168.31.62:33406 - "GET /uploads/profile/100034/f0bf8381b2714458a8cb7bd0f2bb8e5e.jpg HTTP/1.1" 200 OK
+2026-05-14 11:35:52 - INFO - 192.168.31.62:33404 - "GET /uploads/profile/100033/e4d02c691c85452da3bf4c20f217fda7.jpg HTTP/1.1" 200 OK
+2026-05-14 11:35:53 - INFO - 192.168.31.62:33404 - "GET /uploads/generated/star_recreated/100019/avatar.jpg HTTP/1.1" 200 OK
+2026-05-14 11:35:53 - INFO - 192.168.31.62:33408 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 11:35:53 - INFO - 192.168.31.62:33410 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 11:35:54 - INFO - 192.168.31.62:33406 - "GET /uploads/generated/star_recreated/100019/avatar.jpg HTTP/1.1" 200 OK
+2026-05-14 11:35:55 - INFO - 192.168.31.62:33408 - "GET /api/v1/app/certification/apply/status HTTP/1.1" 200 OK
+2026-05-14 11:36:06 - INFO - 192.168.31.62:33412 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:36:08 - INFO - 192.168.31.62:33412 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 11:36:45.843 | INFO     | app.websocket.router:ws_app:181 - [WS] user 100019 disconnected normally
+2026-05-14 11:36:45.845 | INFO     | app.websocket.manager:disconnect:124 - [WS] user 100019 disconnected from pid 18400, remaining=0
+2026-05-14 11:54:22.109 | INFO     | app.websocket.manager:connect:102 - [WS] user 100022 connected on pid 18400, total=1
+2026-05-14 11:54:22.111 | INFO     | app.websocket.router:ws_app:107 - [WS] user 100022 authenticated successfully
+2026-05-14 11:54:22 - INFO - 192.168.31.179:54530 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 11:54:22 - INFO - 192.168.31.179:54520 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 11:54:22 - INFO - 192.168.31.179:54546 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 11:54:23.165 | INFO     | app.websocket.router:ws_app:181 - [WS] user 100022 disconnected normally
+2026-05-14 11:54:23.165 | INFO     | app.websocket.manager:disconnect:124 - [WS] user 100022 disconnected from pid 18400, remaining=0
+2026-05-14 11:54:24.167 | DEBUG    | app.websocket.manager:push_to_user:228 - [WS] push skipped: user 100022 not online
+2026-05-14 11:55:28 - INFO - 192.168.31.179:46670 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 11:55:28 - INFO - 192.168.31.179:46680 - "GET /api/v1/app/init/bootstrap HTTP/1.1" 200 OK
+2026-05-14 11:55:29 - INFO - 192.168.31.179:46680 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 11:55:29 - INFO - 192.168.31.179:46670 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 11:55:29 - INFO - 192.168.31.179:46692 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 11:55:29 - INFO - 192.168.31.179:46704 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 11:55:29 - INFO - 192.168.31.179:46718 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 11:55:29.603 | INFO     | app.websocket.manager:connect:102 - [WS] user 100022 connected on pid 18400, total=1
+2026-05-14 11:55:29.605 | INFO     | app.websocket.router:ws_app:107 - [WS] user 100022 authenticated successfully
+2026-05-14 11:55:30 - INFO - 192.168.31.179:45966 - "GET /uploads/generated/star_recreated/100014/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:55:30 - INFO - 192.168.31.179:45962 - "GET /uploads/generated/star_recreated/100021/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:55:30 - INFO - 192.168.31.179:45982 - "GET /uploads/generated/star_recreated/100018/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 11:55:30 - INFO - 192.168.31.179:45994 - "GET /uploads/generated/star_recreated/100017/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:55:30 - INFO - 192.168.31.179:45986 - "GET /uploads/generated/star_recreated/100015/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:55:30 - INFO - 192.168.31.179:46010 - "GET /uploads/generated/star_recreated/100016/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 11:55:30 - INFO - 192.168.31.179:46016 - "GET /uploads/generated/star_recreated/100020/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:55:30 - INFO - 192.168.31.179:46020 - "GET /uploads/generated/star_recreated/100019/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:55:31 - INFO - 192.168.31.179:46680 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:55:31 - INFO - 192.168.31.179:46020 - "GET /uploads/generated/star_recreated/100022/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 11:55:31 - INFO - 192.168.31.179:46016 - "GET /uploads/generated/star_recreated/100013/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 11:55:31 - INFO - 192.168.31.179:45962 - "GET /uploads/generated/star_recreated/100023/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:55:32 - INFO - 192.168.31.179:46680 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:55:33.744 | INFO     | app.websocket.router:ws_app:181 - [WS] user 100022 disconnected normally
+2026-05-14 11:55:33.744 | INFO     | app.websocket.manager:disconnect:124 - [WS] user 100022 disconnected from pid 18400, remaining=0
+2026-05-14 11:56:16 - INFO - 192.168.31.62:33428 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 11:56:16 - INFO - 192.168.31.62:33426 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 11:56:16 - INFO - 192.168.31.62:33432 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 11:56:16.041 | INFO     | app.websocket.manager:connect:102 - [WS] user 100019 connected on pid 18400, total=1
+2026-05-14 11:56:16.042 | INFO     | app.websocket.router:ws_app:107 - [WS] user 100019 authenticated successfully
+2026-05-14 11:56:16 - INFO - 192.168.31.62:33430 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:56:55.374 | INFO     | app.websocket.router:ws_app:181 - [WS] user 100019 disconnected normally
+2026-05-14 11:56:55.374 | INFO     | app.websocket.manager:disconnect:124 - [WS] user 100019 disconnected from pid 18400, remaining=0
+2026-05-14 11:58:16 - INFO - 192.168.31.62:33446 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 11:58:16 - INFO - 192.168.31.62:33448 - "GET /api/v1/app/init/bootstrap HTTP/1.1" 200 OK
+2026-05-14 11:58:59.783 | INFO     | app.websocket.manager:connect:102 - [WS] user 100019 connected on pid 18400, total=1
+2026-05-14 11:58:59.838 | INFO     | app.websocket.router:ws_app:107 - [WS] user 100019 authenticated successfully
+2026-05-14 11:58:59 - INFO - 192.168.31.62:33462 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 11:58:59 - INFO - 192.168.31.62:33464 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 11:59:01 - INFO - 192.168.31.62:33458 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 11:59:01 - INFO - 192.168.31.62:33460 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 11:59:02 - INFO - 192.168.31.62:33466 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 11:59:02 - INFO - 192.168.31.62:33468 - "GET /uploads/generated/star_recreated/100021/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:59:02 - INFO - 192.168.31.62:33470 - "GET /uploads/generated/star_recreated/100014/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:59:02 - INFO - 192.168.31.62:33472 - "GET /uploads/generated/star_recreated/100018/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 11:59:02 - INFO - 192.168.31.62:33474 - "GET /uploads/generated/star_recreated/100019/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:59:02 - INFO - 192.168.31.62:33476 - "GET /uploads/generated/star_recreated/100015/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:59:02 - INFO - 192.168.31.62:33478 - "GET /uploads/generated/star_recreated/100017/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:59:02 - INFO - 192.168.31.62:33480 - "GET /uploads/generated/star_recreated/100016/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 11:59:02 - INFO - 192.168.31.62:33482 - "GET /uploads/generated/star_recreated/100020/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 11:59:06 - INFO - 192.168.31.62:33484 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:59:06 - INFO - 192.168.31.62:33470 - "GET /uploads/generated/star_recreated/100023/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 11:59:06 - INFO - 192.168.31.62:33480 - "GET /uploads/generated/star_recreated/100013/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 11:59:07 - INFO - 192.168.31.62:33484 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 11:59:07 - INFO - 192.168.31.62:33480 - "GET /uploads/profile/admin/a861c74d01514c6e9e491011e30ee06f.jpg HTTP/1.1" 200 OK
+2026-05-14 11:59:07 - INFO - 192.168.31.62:33470 - "GET /uploads/initial-profile/avatar/male/432518604e39459691ca2a900b3da599.jpg HTTP/1.1" 200 OK
+2026-05-14 11:59:12 - INFO - 192.168.31.62:33488 - "GET /api/v1/app/user/public?user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 11:59:13 - INFO - 192.168.31.62:33490 - "GET /uploads/profile/100001/3580bf97b94445a882a95efb99874733.jpg HTTP/1.1" 200 OK
+2026-05-14 11:59:13 - INFO - 192.168.31.62:33488 - "GET /api/v1/app/moment/user?user_id=100001&page=1&page_size=3 HTTP/1.1" 200 OK
+2026-05-14 11:59:16 - INFO - 192.168.31.62:33488 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 11:59:41 - INFO - 192.168.31.62:33492 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 11:59:54 - INFO - 192.168.31.62:33494 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 11:59:55 - INFO - 192.168.31.62:33494 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:00:00 - INFO - 192.168.31.62:33496 - "GET /api/v1/app/im/usersig?peer_user_id=100029 HTTP/1.1" 200 OK
+2026-05-14 12:00:00 - INFO - 192.168.31.62:33496 - "GET /api/v1/app/user/public?user_id=100029&scene=chat HTTP/1.1" 200 OK
+2026-05-14 12:00:00 - INFO - 192.168.31.62:33496 - "GET /api/v1/app/user/block/status?user_id=100029 HTTP/1.1" 200 OK
+2026-05-14 12:00:06 - INFO - 192.168.31.62:33498 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 12:00:09 - INFO - 192.168.31.62:33498 - "POST /api/v1/app/certified-user/active-pin HTTP/1.1" 200 OK
+2026-05-14 12:00:09 - INFO - 192.168.31.62:33498 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 12:00:10 - INFO - 192.168.31.62:33498 - "POST /api/v1/app/certified-user/active-pin HTTP/1.1" 200 OK
+2026-05-14 12:00:12 - INFO - 192.168.31.62:33498 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 12:00:14.129 | INFO     | app.websocket.router:ws_app:181 - [WS] user 100019 disconnected normally
+2026-05-14 12:00:14.129 | INFO     | app.websocket.manager:disconnect:124 - [WS] user 100019 disconnected from pid 18400, remaining=0
+2026-05-14 12:02:27 - INFO - 192.168.31.179:56958 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 12:02:27 - INFO - 192.168.31.179:56960 - "GET /api/v1/app/init/bootstrap HTTP/1.1" 200 OK
+2026-05-14 12:02:29 - INFO - 192.168.31.179:56960 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 12:02:29 - INFO - 192.168.31.179:56972 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 12:02:29 - INFO - 192.168.31.179:56984 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:02:29 - INFO - 192.168.31.179:56998 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 12:02:29.276 | INFO     | app.websocket.manager:connect:102 - [WS] user 100022 connected on pid 18400, total=1
+2026-05-14 12:02:29.277 | INFO     | app.websocket.router:ws_app:107 - [WS] user 100022 authenticated successfully
+2026-05-14 12:02:29 - INFO - 192.168.31.179:45544 - "GET /uploads/generated/star_recreated/100014/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 12:02:29 - INFO - 192.168.31.179:45550 - "GET /uploads/generated/star_recreated/100018/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 12:02:29 - INFO - 192.168.31.179:45540 - "GET /uploads/generated/star_recreated/100021/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 12:02:29 - INFO - 192.168.31.179:45586 - "GET /uploads/generated/star_recreated/100020/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 12:02:29 - INFO - 192.168.31.179:45570 - "GET /uploads/generated/star_recreated/100016/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 12:02:29 - INFO - 192.168.31.179:45556 - "GET /uploads/generated/star_recreated/100015/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 12:02:29 - INFO - 192.168.31.179:45564 - "GET /uploads/generated/star_recreated/100017/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 12:02:29 - INFO - 192.168.31.179:45602 - "GET /uploads/generated/star_recreated/100019/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 12:02:31 - INFO - 192.168.31.179:56958 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 12:02:31.752 | INFO     | app.websocket.router:ws_app:181 - [WS] user 100022 disconnected normally
+2026-05-14 12:02:31.752 | INFO     | app.websocket.manager:disconnect:124 - [WS] user 100022 disconnected from pid 18400, remaining=0
+2026-05-14 12:08:49 - INFO - 192.168.31.179:60446 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 12:08:49 - INFO - 192.168.31.179:60452 - "GET /api/v1/app/init/bootstrap HTTP/1.1" 200 OK
+2026-05-14 12:08:50 - INFO - 192.168.31.179:60452 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 12:08:50 - INFO - 192.168.31.179:60476 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 12:08:50 - INFO - 192.168.31.179:60490 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:08:50.543 | INFO     | app.websocket.manager:connect:102 - [WS] user 100022 connected on pid 18400, total=1
+2026-05-14 12:08:50.544 | INFO     | app.websocket.router:ws_app:107 - [WS] user 100022 authenticated successfully
+2026-05-14 12:08:52 - INFO - 192.168.31.179:60446 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 12:08:52 - INFO - 192.168.31.179:60506 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 12:08:52 - INFO - 192.168.31.179:44718 - "GET /uploads/generated/star_recreated/100021/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 12:08:52 - INFO - 192.168.31.179:44734 - "GET /uploads/generated/star_recreated/100014/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 12:08:52 - INFO - 192.168.31.179:44756 - "GET /uploads/generated/star_recreated/100015/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 12:08:52 - INFO - 192.168.31.179:44766 - "GET /uploads/generated/star_recreated/100017/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 12:08:52 - INFO - 192.168.31.179:44782 - "GET /uploads/generated/star_recreated/100016/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 12:08:52 - INFO - 192.168.31.179:44790 - "GET /uploads/generated/star_recreated/100020/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 12:08:52 - INFO - 192.168.31.179:44742 - "GET /uploads/generated/star_recreated/100018/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 12:08:52 - INFO - 192.168.31.179:44806 - "GET /uploads/generated/star_recreated/100019/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 12:08:53 - INFO - 192.168.31.179:60506 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 12:08:54 - INFO - 192.168.31.179:44718 - "GET /uploads/generated/star_recreated/100013/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 12:08:54 - INFO - 192.168.31.179:44734 - "GET /uploads/generated/star_recreated/100022/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 12:08:54 - INFO - 192.168.31.179:44790 - "GET /uploads/generated/star_recreated/100023/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 12:08:54 - INFO - 192.168.31.179:60506 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 12:08:55 - INFO - 192.168.31.179:60506 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:08:55 - INFO - 192.168.31.179:44718 - "GET /uploads/initial-profile/avatar/male/432518604e39459691ca2a900b3da599.jpg HTTP/1.1" 200 OK
+2026-05-14 12:08:55 - INFO - 192.168.31.179:44734 - "GET /uploads/profile/admin/a861c74d01514c6e9e491011e30ee06f.jpg HTTP/1.1" 200 OK
+2026-05-14 12:08:58 - INFO - 192.168.31.179:60506 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 12:09:05.170 | INFO     | app.websocket.router:ws_app:181 - [WS] user 100022 disconnected normally
+2026-05-14 12:09:05.170 | INFO     | app.websocket.manager:disconnect:124 - [WS] user 100022 disconnected from pid 18400, remaining=0
+2026-05-14 12:09:38.979 | INFO     | app.websocket.manager:connect:102 - [WS] user 100022 connected on pid 18400, total=1
+2026-05-14 12:09:38.984 | INFO     | app.websocket.router:ws_app:107 - [WS] user 100022 authenticated successfully
+2026-05-14 12:09:39.070 | INFO     | app.websocket.router:ws_app:181 - [WS] user 100022 disconnected normally
+2026-05-14 12:09:39.070 | INFO     | app.websocket.manager:disconnect:124 - [WS] user 100022 disconnected from pid 18400, remaining=0
+2026-05-14 12:09:44 - INFO - 192.168.31.179:45480 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 12:09:44 - INFO - 192.168.31.179:45484 - "GET /api/v1/app/init/bootstrap HTTP/1.1" 200 OK
+2026-05-14 12:09:45 - INFO - 192.168.31.179:45484 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 12:09:45 - INFO - 192.168.31.179:45480 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 12:09:45 - INFO - 192.168.31.179:45504 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 12:09:45 - INFO - 192.168.31.179:45514 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:09:46 - INFO - 192.168.31.179:45520 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 12:09:46.044 | INFO     | app.websocket.manager:connect:102 - [WS] user 100022 connected on pid 18400, total=1
+2026-05-14 12:09:46.045 | INFO     | app.websocket.router:ws_app:107 - [WS] user 100022 authenticated successfully
+2026-05-14 12:09:46 - INFO - 192.168.31.179:45522 - "GET /uploads/generated/star_recreated/100021/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 12:09:46 - INFO - 192.168.31.179:45528 - "GET /uploads/generated/star_recreated/100014/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 12:09:46 - INFO - 192.168.31.179:45552 - "GET /uploads/generated/star_recreated/100015/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 12:09:46 - INFO - 192.168.31.179:45560 - "GET /uploads/generated/star_recreated/100017/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 12:09:46 - INFO - 192.168.31.179:45542 - "GET /uploads/generated/star_recreated/100018/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 12:09:46 - INFO - 192.168.31.179:45570 - "GET /uploads/generated/star_recreated/100016/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 12:09:46 - INFO - 192.168.31.179:45582 - "GET /uploads/generated/star_recreated/100020/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 12:09:46 - INFO - 192.168.31.179:45588 - "GET /uploads/generated/star_recreated/100019/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 12:09:49 - INFO - 192.168.31.179:45596 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:09:49 - INFO - 192.168.31.179:45582 - "GET /uploads/initial-profile/avatar/male/432518604e39459691ca2a900b3da599.jpg HTTP/1.1" 200 OK
+2026-05-14 12:09:49 - INFO - 192.168.31.179:45528 - "GET /uploads/profile/admin/a861c74d01514c6e9e491011e30ee06f.jpg HTTP/1.1" 200 OK
+2026-05-14 12:09:50 - INFO - 192.168.31.179:45582 - "GET /uploads/profile/100034/f0bf8381b2714458a8cb7bd0f2bb8e5e.jpg HTTP/1.1" 200 OK
+2026-05-14 12:09:50 - INFO - 192.168.31.179:45528 - "GET /uploads/profile/100033/e4d02c691c85452da3bf4c20f217fda7.jpg HTTP/1.1" 200 OK
+2026-05-14 12:09:52 - INFO - 192.168.31.179:45596 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 12:09:52 - INFO - 192.168.31.179:45528 - "GET /uploads/generated/star_recreated/100013/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 12:09:52 - INFO - 192.168.31.179:45582 - "GET /uploads/generated/star_recreated/100022/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 12:09:52 - INFO - 192.168.31.179:39634 - "GET /uploads/generated/star_recreated/100023/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 12:09:53 - INFO - 192.168.31.179:45596 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 12:09:55 - INFO - 192.168.31.179:45596 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:09:58 - INFO - 192.168.31.179:39638 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:10:01 - INFO - 192.168.31.179:39638 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 12:10:03 - INFO - 192.168.31.179:39638 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:10:04 - INFO - 192.168.31.179:39638 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 12:10:05 - INFO - 192.168.31.179:39638 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 12:10:06 - INFO - 192.168.31.179:39638 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:10:07 - INFO - 192.168.31.179:39638 - "GET /api/v1/app/moment/feed?page=1&page_size=20&category=latest HTTP/1.1" 200 OK
+2026-05-14 12:10:08 - INFO - 192.168.31.179:39638 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:10:08 - INFO - 192.168.31.179:51388 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 12:10:08 - INFO - 192.168.31.179:51388 - "GET /api/v1/app/user/public?user_id=100036 HTTP/1.1" 200 OK
+2026-05-14 12:10:08 - INFO - 192.168.31.179:39638 - "GET /api/v1/app/user/public?user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 12:10:08 - INFO - 192.168.31.179:39638 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:10:10 - INFO - 192.168.31.179:51388 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 12:10:10 - INFO - 192.168.31.179:39638 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 12:10:10 - INFO - 192.168.31.179:51398 - "GET /uploads/generated/star_recreated/100022/avatar.jpg HTTP/1.1" 200 OK
+2026-05-14 12:10:10 - INFO - 192.168.31.179:51408 - "GET /uploads/generated/star_recreated/100022/avatar.jpg HTTP/1.1" 200 OK
+2026-05-14 12:10:10 - INFO - 192.168.31.179:39638 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:10:11 - INFO - 192.168.31.179:39638 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 12:10:11 - INFO - 192.168.31.179:51388 - "GET /api/v1/app/user/public?user_id=100036 HTTP/1.1" 200 OK
+2026-05-14 12:10:11 - INFO - 192.168.31.179:39638 - "GET /api/v1/app/user/public?user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 12:10:11 - INFO - 192.168.31.179:39638 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:10:13 - INFO - 192.168.31.179:51388 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 12:10:13 - INFO - 192.168.31.179:39638 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 12:10:13 - INFO - 192.168.31.179:51408 - "GET /uploads/generated/star_recreated/100022/avatar.jpg HTTP/1.1" 200 OK
+2026-05-14 12:10:14 - INFO - 192.168.31.179:51388 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 12:10:14 - INFO - 192.168.31.179:39638 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:10:14 - INFO - 192.168.31.179:51388 - "GET /api/v1/app/user/public?user_id=100036 HTTP/1.1" 200 OK
+2026-05-14 12:10:14 - INFO - 192.168.31.179:39638 - "GET /api/v1/app/user/public?user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 12:10:14 - INFO - 192.168.31.179:39638 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:10:16 - INFO - 192.168.31.179:39638 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:10:18 - INFO - 192.168.31.179:39638 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:12:21.190 | DEBUG    | app.websocket.router:ws_app:118 - [WS] user 100022 heartbeat timeout
+2026-05-14 12:12:21.190 | INFO     | app.websocket.manager:disconnect:124 - [WS] user 100022 disconnected from pid 18400, remaining=0
+2026-05-14 12:18:10 - INFO - 192.168.31.179:38030 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 12:18:11.025 | INFO     | app.websocket.manager:connect:102 - [WS] user 100022 connected on pid 18400, total=1
+2026-05-14 12:18:11.026 | INFO     | app.websocket.router:ws_app:107 - [WS] user 100022 authenticated successfully
+2026-05-14 12:18:11 - INFO - 192.168.31.179:38030 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 12:18:11 - INFO - 192.168.31.179:38030 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 12:18:11 - INFO - 192.168.31.179:38060 - "GET /uploads/generated/star_recreated/100022/avatar.jpg HTTP/1.1" 200 OK
+2026-05-14 12:18:11 - INFO - 192.168.31.179:38060 - "GET /uploads/generated/star_recreated/100022/avatar.jpg HTTP/1.1" 200 OK
+2026-05-14 12:18:12 - INFO - 192.168.31.179:38028 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 12:18:12 - INFO - 192.168.31.179:38014 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 12:18:12 - INFO - 192.168.31.179:38044 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:18:13 - INFO - 192.168.31.179:38028 - "GET /api/v1/app/certification/apply/status HTTP/1.1" 200 OK
+2026-05-14 12:18:13 - INFO - 192.168.31.179:38060 - "GET /uploads/generated/star_recreated/100022/avatar.jpg HTTP/1.1" 200 OK
+2026-05-14 12:18:43 - INFO - 192.168.31.179:57070 - "GET /api/v1/app/certification/apply/status HTTP/1.1" 200 OK
+2026-05-14 12:23:26.017 | DEBUG    | app.websocket.router:ws_app:118 - [WS] user 100022 heartbeat timeout
+2026-05-14 12:23:26.019 | INFO     | app.websocket.manager:disconnect:124 - [WS] user 100022 disconnected from pid 18400, remaining=0
+2026-05-14 12:36:11 - INFO - 192.168.31.179:54824 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 12:36:11 - INFO - 192.168.31.179:54814 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 12:36:11 - INFO - 192.168.31.179:54840 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:36:12.281 | INFO     | app.websocket.manager:connect:102 - [WS] user 100022 connected on pid 18400, total=1
+2026-05-14 12:36:12.282 | INFO     | app.websocket.router:ws_app:107 - [WS] user 100022 authenticated successfully
+2026-05-14 12:36:13 - INFO - 192.168.31.179:57406 - "GET /uploads/generated/star_recreated/100022/avatar.jpg HTTP/1.1" 200 OK
+2026-05-14 12:36:13 - INFO - 192.168.31.179:54828 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 12:36:14 - INFO - 192.168.31.179:54824 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:36:14 - INFO - 192.168.31.179:54824 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 12:36:14 - INFO - 192.168.31.179:54840 - "GET /api/v1/app/user/public?user_id=100036 HTTP/1.1" 200 OK
+2026-05-14 12:36:14 - INFO - 192.168.31.179:54824 - "GET /api/v1/app/user/public?user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 12:36:14 - INFO - 192.168.31.179:54824 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:36:15 - INFO - 192.168.31.179:57406 - "GET /uploads/profile/admin/a861c74d01514c6e9e491011e30ee06f.jpg HTTP/1.1" 200 OK
+2026-05-14 12:36:15 - INFO - 192.168.31.179:57418 - "GET /uploads/initial-profile/avatar/male/432518604e39459691ca2a900b3da599.jpg HTTP/1.1" 200 OK
+2026-05-14 12:36:15 - INFO - 192.168.31.179:54824 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 12:36:15 - INFO - 192.168.31.179:54840 - "GET /api/v1/app/user/public?user_id=100036 HTTP/1.1" 200 OK
+2026-05-14 12:36:15 - INFO - 192.168.31.179:54824 - "GET /api/v1/app/user/public?user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 12:36:17 - INFO - 192.168.31.179:54824 - "GET /api/v1/app/user/follow/list?page=1&page_size=20&keyword= HTTP/1.1" 200 OK
+2026-05-14 12:36:18 - INFO - 192.168.31.179:54824 - "GET /api/v1/app/user/fans/list?page=1&page_size=20&keyword= HTTP/1.1" 200 OK
+2026-05-14 12:36:19 - INFO - 192.168.31.179:54824 - "GET /api/v1/app/user/block/list?page=1&page_size=20&keyword= HTTP/1.1" 200 OK
+2026-05-14 12:36:20 - INFO - 192.168.31.179:54824 - "GET /api/v1/app/user/fans/list?page=1&page_size=20&keyword= HTTP/1.1" 200 OK
+2026-05-14 12:36:21 - INFO - 192.168.31.179:54824 - "GET /api/v1/app/user/follow/list?page=1&page_size=20&keyword= HTTP/1.1" 200 OK
+2026-05-14 12:36:23 - INFO - 192.168.31.179:54824 - "GET /api/v1/app/user/fans/list?page=1&page_size=20&keyword= HTTP/1.1" 200 OK
+2026-05-14 12:36:24 - INFO - 192.168.31.179:54824 - "GET /api/v1/app/user/block/list?page=1&page_size=20&keyword= HTTP/1.1" 200 OK
+2026-05-14 12:36:34 - INFO - 192.168.31.179:46400 - "GET /api/v1/app/user/fans/list?page=1&page_size=20&keyword= HTTP/1.1" 200 OK
+2026-05-14 12:36:37 - INFO - 192.168.31.179:46400 - "GET /api/v1/app/user/follow/list?page=1&page_size=20&keyword= HTTP/1.1" 200 OK
+2026-05-14 12:36:43 - INFO - 192.168.31.179:46406 - "GET /api/v1/app/user/fans/list?page=1&page_size=20&keyword= HTTP/1.1" 200 OK
+2026-05-14 12:36:44 - INFO - 192.168.31.179:46406 - "GET /api/v1/app/user/block/list?page=1&page_size=20&keyword= HTTP/1.1" 200 OK
+2026-05-14 12:36:47 - INFO - 192.168.31.179:46406 - "GET /api/v1/app/ranking/list?board=charm&period=day HTTP/1.1" 200 OK
+2026-05-14 12:36:49 - INFO - 192.168.31.179:46406 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:36:49 - INFO - 192.168.31.179:46406 - "GET /api/v1/app/user/block/list?page=1&page_size=20&keyword= HTTP/1.1" 200 OK
+2026-05-14 12:36:50 - INFO - 192.168.31.179:46406 - "GET /api/v1/app/user/fans/list?page=1&page_size=20&keyword= HTTP/1.1" 200 OK
+2026-05-14 12:36:51 - INFO - 192.168.31.179:46406 - "GET /api/v1/app/user/follow/list?page=1&page_size=20&keyword= HTTP/1.1" 200 OK
+2026-05-14 12:36:52 - INFO - 192.168.31.179:46406 - "GET /api/v1/app/user/fans/list?page=1&page_size=20&keyword= HTTP/1.1" 200 OK
+2026-05-14 12:36:53 - INFO - 192.168.31.179:46406 - "GET /api/v1/app/user/follow/list?page=1&page_size=20&keyword= HTTP/1.1" 200 OK
+2026-05-14 12:36:55 - INFO - 192.168.31.179:46406 - "GET /api/v1/app/user/fans/list?page=1&page_size=20&keyword= HTTP/1.1" 200 OK
+2026-05-14 12:36:56 - INFO - 192.168.31.179:46406 - "GET /api/v1/app/user/block/list?page=1&page_size=20&keyword= HTTP/1.1" 200 OK
+2026-05-14 12:36:58 - INFO - 192.168.31.179:46406 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 12:36:58 - INFO - 192.168.31.179:46406 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 12:36:58 - INFO - 192.168.31.179:54342 - "GET /uploads/generated/star_recreated/100022/avatar.jpg HTTP/1.1" 200 OK
+2026-05-14 12:37:00 - INFO - 192.168.31.179:46406 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:37:01 - INFO - 192.168.31.179:46406 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:37:02 - INFO - 192.168.31.179:46406 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 12:37:02 - INFO - 192.168.31.179:54342 - "GET /uploads/generated/star_recreated/100013/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 12:37:02 - INFO - 192.168.31.179:54356 - "GET /uploads/generated/star_recreated/100021/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 12:37:02 - INFO - 192.168.31.179:54370 - "GET /uploads/generated/star_recreated/100014/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 12:37:02 - INFO - 192.168.31.179:54372 - "GET /uploads/generated/star_recreated/100015/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 12:37:02 - INFO - 192.168.31.179:54392 - "GET /uploads/generated/star_recreated/100022/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 12:37:02 - INFO - 192.168.31.179:54380 - "GET /uploads/generated/star_recreated/100018/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 12:37:02 - INFO - 192.168.31.179:54406 - "GET /uploads/generated/star_recreated/100016/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 12:37:02 - INFO - 192.168.31.179:54416 - "GET /uploads/generated/star_recreated/100023/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 12:37:03 - INFO - 192.168.31.179:46406 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 12:37:03 - INFO - 192.168.31.179:54380 - "GET /uploads/generated/star_recreated/100020/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 12:37:04 - INFO - 192.168.31.179:46406 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 12:37:04 - INFO - 192.168.31.179:54380 - "GET /uploads/generated/star_recreated/100017/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 12:37:04 - INFO - 192.168.31.179:54392 - "GET /uploads/generated/star_recreated/100019/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 12:37:05 - INFO - 192.168.31.179:46406 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 12:37:06 - INFO - 192.168.31.179:46406 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 12:37:13 - INFO - 192.168.31.179:49866 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:37:16 - INFO - 192.168.31.179:49880 - "GET /uploads/profile/100033/e4d02c691c85452da3bf4c20f217fda7.jpg HTTP/1.1" 200 OK
+2026-05-14 12:37:16 - INFO - 192.168.31.179:49886 - "GET /uploads/profile/100034/f0bf8381b2714458a8cb7bd0f2bb8e5e.jpg HTTP/1.1" 200 OK
+2026-05-14 12:37:19 - INFO - 192.168.31.179:49902 - "GET /api/v1/app/user/public?user_id=100031 HTTP/1.1" 200 OK
+2026-05-14 12:37:19 - INFO - 192.168.31.179:49902 - "GET /api/v1/app/moment/user?user_id=100031&page=1&page_size=3 HTTP/1.1" 200 OK
+2026-05-14 12:37:35 - INFO - 192.168.31.179:52892 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 12:37:35 - INFO - 192.168.31.179:52896 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 12:37:35 - INFO - 192.168.31.179:52902 - "GET /uploads/generated/star_recreated/100022/avatar.jpg HTTP/1.1" 200 OK
+2026-05-14 12:37:37 - INFO - 192.168.31.179:52896 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:37:43 - INFO - 192.168.31.179:52914 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:37:43 - INFO - 192.168.31.179:52928 - "GET /api/v1/app/user/block/list?page=1&page_size=20&keyword= HTTP/1.1" 200 OK
+2026-05-14 12:37:47 - INFO - 192.168.31.179:59230 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:37:48 - INFO - 192.168.31.179:59230 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 12:37:48 - INFO - 192.168.31.179:59230 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 12:37:48 - INFO - 192.168.31.179:59236 - "GET /uploads/generated/star_recreated/100022/avatar.jpg HTTP/1.1" 200 OK
+2026-05-14 12:37:51 - INFO - 192.168.31.179:59238 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:37:54 - INFO - 192.168.31.179:59238 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 12:37:55 - INFO - 192.168.31.179:59238 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 12:37:56 - INFO - 192.168.31.179:59238 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 12:38:05 - INFO - 192.168.31.179:52850 - "POST /api/v1/app/certified-user/active-pin HTTP/1.1" 200 OK
+2026-05-14 12:38:05 - INFO - 192.168.31.179:52850 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 12:38:07.204 | INFO     | app.websocket.router:ws_app:181 - [WS] user 100022 disconnected normally
+2026-05-14 12:38:07.205 | INFO     | app.websocket.manager:disconnect:124 - [WS] user 100022 disconnected from pid 18400, remaining=0
+2026-05-14 12:38:12 - INFO - 192.168.31.179:52860 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 12:38:12 - INFO - 192.168.31.179:52862 - "GET /api/v1/app/init/bootstrap HTTP/1.1" 200 OK
+2026-05-14 12:38:14 - INFO - 192.168.31.179:52862 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 12:38:14 - INFO - 192.168.31.179:56600 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 12:38:14 - INFO - 192.168.31.179:56616 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:38:14 - INFO - 192.168.31.179:56630 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 12:38:14.134 | INFO     | app.websocket.manager:connect:102 - [WS] user 100022 connected on pid 18400, total=1
+2026-05-14 12:38:14.135 | INFO     | app.websocket.router:ws_app:107 - [WS] user 100022 authenticated successfully
+2026-05-14 12:38:14 - INFO - 192.168.31.179:56638 - "GET /uploads/generated/star_recreated/100014/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 12:38:14 - INFO - 192.168.31.179:56636 - "GET /uploads/generated/star_recreated/100021/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 12:38:14 - INFO - 192.168.31.179:56652 - "GET /uploads/generated/star_recreated/100015/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 12:38:14 - INFO - 192.168.31.179:56660 - "GET /uploads/generated/star_recreated/100017/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 12:38:14 - INFO - 192.168.31.179:56650 - "GET /uploads/generated/star_recreated/100018/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 12:38:14 - INFO - 192.168.31.179:56664 - "GET /uploads/generated/star_recreated/100016/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 12:38:14 - INFO - 192.168.31.179:56666 - "GET /uploads/generated/star_recreated/100020/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 12:38:14 - INFO - 192.168.31.179:56680 - "GET /uploads/generated/star_recreated/100019/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 12:38:15 - INFO - 192.168.31.179:56616 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 12:38:15 - INFO - 192.168.31.179:56652 - "GET /uploads/generated/star_recreated/100023/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 12:38:15 - INFO - 192.168.31.179:56636 - "GET /uploads/generated/star_recreated/100022/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 12:38:15 - INFO - 192.168.31.179:56638 - "GET /uploads/generated/star_recreated/100013/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 12:38:16 - INFO - 192.168.31.179:52860 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 12:38:16 - INFO - 192.168.31.179:56616 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 12:38:17 - INFO - 192.168.31.179:56616 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:38:18 - INFO - 192.168.31.179:56636 - "GET /uploads/profile/admin/a861c74d01514c6e9e491011e30ee06f.jpg HTTP/1.1" 200 OK
+2026-05-14 12:38:18 - INFO - 192.168.31.179:56638 - "GET /uploads/initial-profile/avatar/male/432518604e39459691ca2a900b3da599.jpg HTTP/1.1" 200 OK
+2026-05-14 12:38:20 - INFO - 192.168.31.179:56616 - "GET /api/v1/app/moment/feed?page=1&page_size=20&category=latest HTTP/1.1" 200 OK
+2026-05-14 12:38:20 - INFO - 192.168.31.179:56616 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:38:20 - INFO - 192.168.31.179:56694 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 12:38:21 - INFO - 192.168.31.179:56616 - "GET /api/v1/app/user/public?user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 12:38:21 - INFO - 192.168.31.179:56694 - "GET /api/v1/app/user/public?user_id=100036 HTTP/1.1" 200 OK
+2026-05-14 12:38:21 - INFO - 192.168.31.179:56616 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:38:22 - INFO - 192.168.31.179:56616 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 12:38:22 - INFO - 192.168.31.179:56694 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 12:38:22 - INFO - 192.168.31.179:56636 - "GET /uploads/generated/star_recreated/100022/avatar.jpg HTTP/1.1" 200 OK
+2026-05-14 12:38:23 - INFO - 192.168.31.179:56636 - "GET /uploads/generated/star_recreated/100022/avatar.jpg HTTP/1.1" 200 OK
+2026-05-14 12:38:26 - INFO - 192.168.31.179:35464 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:39:14.535 | INFO     | app.websocket.router:ws_app:181 - [WS] user 100022 disconnected normally
+2026-05-14 12:39:14.535 | INFO     | app.websocket.manager:disconnect:124 - [WS] user 100022 disconnected from pid 18400, remaining=0
+2026-05-14 12:45:45 - INFO - 192.168.31.179:39988 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 12:45:45 - INFO - 192.168.31.179:40008 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:45:45.948 | INFO     | app.websocket.manager:connect:102 - [WS] user 100022 connected on pid 18400, total=1
+2026-05-14 12:45:45.948 | INFO     | app.websocket.router:ws_app:107 - [WS] user 100022 authenticated successfully
+2026-05-14 12:45:47 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 12:45:47 - INFO - 192.168.31.179:40004 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 12:45:48 - INFO - 192.168.31.179:40024 - "GET /uploads/generated/star_recreated/100013/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 12:45:48 - INFO - 192.168.31.179:40036 - "GET /uploads/generated/star_recreated/100021/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 12:45:48 - INFO - 192.168.31.179:40044 - "GET /uploads/generated/star_recreated/100014/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 12:45:48 - INFO - 192.168.31.179:40048 - "GET /uploads/generated/star_recreated/100015/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 12:45:48 - INFO - 192.168.31.179:40050 - "GET /uploads/generated/star_recreated/100018/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 12:45:48 - INFO - 192.168.31.179:40052 - "GET /uploads/generated/star_recreated/100022/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 12:45:48 - INFO - 192.168.31.179:40074 - "GET /uploads/generated/star_recreated/100023/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 12:45:48 - INFO - 192.168.31.179:40058 - "GET /uploads/generated/star_recreated/100016/album_01.webp HTTP/1.1" 200 OK
+2026-05-14 12:45:48 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 12:45:49 - INFO - 192.168.31.179:40074 - "GET /uploads/generated/star_recreated/100020/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 12:45:50 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 12:45:50 - INFO - 192.168.31.179:40074 - "GET /uploads/generated/star_recreated/100017/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 12:45:50 - INFO - 192.168.31.179:40036 - "GET /uploads/generated/star_recreated/100019/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 12:45:51 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 12:45:51 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 12:45:52 - INFO - 192.168.31.179:40036 - "GET /uploads/initial-profile/avatar/male/432518604e39459691ca2a900b3da599.jpg HTTP/1.1" 200 OK
+2026-05-14 12:45:52 - INFO - 192.168.31.179:40074 - "GET /uploads/profile/admin/a861c74d01514c6e9e491011e30ee06f.jpg HTTP/1.1" 200 OK
+2026-05-14 12:45:52 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:45:55 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:45:55 - INFO - 192.168.31.179:35124 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 12:45:55 - INFO - 192.168.31.179:35124 - "GET /api/v1/app/user/public?user_id=100036 HTTP/1.1" 200 OK
+2026-05-14 12:45:55 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/user/public?user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 12:45:55 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:45:56 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 12:45:56 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 12:45:56 - INFO - 192.168.31.179:40074 - "GET /uploads/generated/star_recreated/100022/avatar.jpg HTTP/1.1" 200 OK
+2026-05-14 12:45:56 - INFO - 192.168.31.179:40074 - "GET /uploads/generated/star_recreated/100022/avatar.jpg HTTP/1.1" 200 OK
+2026-05-14 12:45:57 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:45:57 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 12:45:57 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/user/public?user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 12:45:57 - INFO - 192.168.31.179:35124 - "GET /api/v1/app/user/public?user_id=100036 HTTP/1.1" 200 OK
+2026-05-14 12:45:57 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:45:58 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:45:59 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:45:59 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 12:45:59 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/user/public?user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 12:45:59 - INFO - 192.168.31.179:35124 - "GET /api/v1/app/user/public?user_id=100036 HTTP/1.1" 200 OK
+2026-05-14 12:45:59 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:45:59 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/wallet/balance HTTP/1.1" 200 OK
+2026-05-14 12:45:59 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/user/info HTTP/1.1" 200 OK
+2026-05-14 12:45:59 - INFO - 192.168.31.179:40074 - "GET /uploads/generated/star_recreated/100022/avatar.jpg HTTP/1.1" 200 OK
+2026-05-14 12:46:00 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/init/bootstrap HTTP/1.1" 200 OK
+2026-05-14 12:46:00 - INFO - 192.168.31.179:35124 - "GET /api/v1/app/withdraw/account HTTP/1.1" 200 OK
+2026-05-14 12:46:02 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/init/bootstrap HTTP/1.1" 200 OK
+2026-05-14 12:46:02 - INFO - 192.168.31.179:35124 - "GET /api/v1/app/withdraw/account HTTP/1.1" 200 OK
+2026-05-14 12:46:05 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/init/bootstrap HTTP/1.1" 200 OK
+2026-05-14 12:46:07 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/init/bootstrap HTTP/1.1" 200 OK
+2026-05-14 12:46:07 - INFO - 192.168.31.179:55474 - "GET /api/v1/app/withdraw/account HTTP/1.1" 200 OK
+2026-05-14 12:46:08 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/wallet/transactions?type=diamonds&page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:46:11 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/wallet/transactions?type=diamonds&page=2&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:46:13 - INFO - 192.168.31.179:39998 - "GET /api/v1/app/wallet/transactions?type=diamonds&page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:46:17 - INFO - 192.168.31.179:38370 - "GET /api/v1/app/init/bootstrap HTTP/1.1" 200 OK
+2026-05-14 12:46:21 - INFO - 192.168.31.179:38380 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:46:21 - INFO - 192.168.31.179:38382 - "GET /api/v1/app/im/usersig HTTP/1.1" 200 OK
+2026-05-14 12:46:21 - INFO - 192.168.31.179:38380 - "GET /api/v1/app/user/public?user_id=100036 HTTP/1.1" 200 OK
+2026-05-14 12:46:21 - INFO - 192.168.31.179:38382 - "GET /api/v1/app/user/public?user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 12:46:21 - INFO - 192.168.31.179:38382 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:46:22 - INFO - 192.168.31.179:38382 - "GET /api/v1/app/im/usersig?peer_user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 12:46:22 - INFO - 192.168.31.179:38382 - "GET /api/v1/app/user/public?user_id=100001&scene=chat HTTP/1.1" 200 OK
+2026-05-14 12:46:22 - INFO - 192.168.31.179:38382 - "GET /api/v1/app/user/block/status?user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 12:46:24 - INFO - 192.168.31.179:38382 - "GET /api/v1/app/im/usersig?peer_user_id=100036 HTTP/1.1" 200 OK
+2026-05-14 12:46:24 - INFO - 192.168.31.179:38382 - "GET /api/v1/app/user/public?user_id=100036&scene=chat HTTP/1.1" 200 OK
+2026-05-14 12:46:24 - INFO - 192.168.31.179:38382 - "GET /api/v1/app/user/block/status?user_id=100036 HTTP/1.1" 200 OK
+2026-05-14 12:46:25 - INFO - 192.168.31.179:40568 - "GET /uploads/gift/icon/1d42e0a7fa8e4101afe398dedf8467c0.png HTTP/1.1" 200 OK
+2026-05-14 12:46:26 - INFO - 192.168.31.179:38382 - "GET /api/v1/app/im/usersig?peer_user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 12:46:26 - INFO - 192.168.31.179:38382 - "GET /api/v1/app/user/public?user_id=100001&scene=chat HTTP/1.1" 200 OK
+2026-05-14 12:46:26 - INFO - 192.168.31.179:38382 - "GET /api/v1/app/user/block/status?user_id=100001 HTTP/1.1" 200 OK
+2026-05-14 12:46:30 - INFO - 192.168.31.179:40570 - "GET /api/v1/app/notifications?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:46:30 - INFO - 192.168.31.179:40570 - "GET /api/v1/app/notifications/unread-count HTTP/1.1" 200 OK
+2026-05-14 12:46:32 - INFO - 192.168.31.179:40570 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:46:35 - INFO - 192.168.31.179:40570 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 12:46:35 - INFO - 192.168.31.179:40570 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=recommend HTTP/1.1" 200 OK
+2026-05-14 12:46:36 - INFO - 192.168.31.179:40570 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=active HTTP/1.1" 200 OK
+2026-05-14 12:46:37 - INFO - 192.168.31.179:40570 - "GET /api/v1/app/certified-user/list?page=1&page_size=20&section=new HTTP/1.1" 200 OK
+2026-05-14 12:46:37 - INFO - 192.168.31.179:40570 - "GET /api/v1/app/flirt/list?page=1&page_size=20 HTTP/1.1" 200 OK
+2026-05-14 12:47:21.597 | INFO     | app.websocket.router:ws_app:181 - [WS] user 100022 disconnected normally
+2026-05-14 12:47:21.597 | INFO     | app.websocket.manager:disconnect:124 - [WS] user 100022 disconnected from pid 18400, remaining=0
+2026-05-14 13:07:14 - INFO - 127.0.0.1:57361 - "GET /api/v1/base/userinfo HTTP/1.1" 200 OK
+2026-05-14 13:07:14 - INFO - 127.0.0.1:57362 - "GET /api/v1/base/usermenu HTTP/1.1" 200 OK
+2026-05-14 13:07:14 - INFO - 127.0.0.1:57363 - "GET /api/v1/base/userapi HTTP/1.1" 200 OK
+2026-05-14 13:07:17 - INFO - 127.0.0.1:57372 - "GET /api/v1/apis/system/flirt-config HTTP/1.1" 200 OK
+2026-05-14 13:10:35 - INFO - 127.0.0.1:57565 - "GET /api/v1/apis/system/initial-profile HTTP/1.1" 200 OK
+2026-05-14 13:10:36 - INFO - 127.0.0.1:57664 - "GET /api/v1/apis/system/flirt-config HTTP/1.1" 200 OK
+2026-05-14 13:11:07 - INFO - 127.0.0.1:57699 - "GET /api/v1/ranking/config HTTP/1.1" 200 OK
+2026-05-14 13:11:07 - INFO - 127.0.0.1:57704 - "GET /api/v1/ranking/list?page=1&page_size=10&board=charm&period=day HTTP/1.1" 200 OK
+2026-05-14 13:11:14 - INFO - 127.0.0.1:57713 - "GET /api/v1/feedback/list?page=1&page_size=10&keyword= HTTP/1.1" 200 OK
+2026-05-14 13:11:15 - INFO - 127.0.0.1:57715 - "GET /api/v1/complaint/list?page=1&page_size=10&status=&keyword= HTTP/1.1" 200 OK
+2026-05-14 13:11:17 - INFO - 127.0.0.1:57718 - "GET /api/v1/notification/list?page=1&page_size=10&keyword=&type=&status=&send_mode= HTTP/1.1" 200 OK
+2026-05-14 13:11:28 - INFO - 127.0.0.1:57731 - "GET /api/v1/notification/get?id=8 HTTP/1.1" 200 OK
+2026-05-14 13:11:43 - INFO - 127.0.0.1:57806 - "DELETE /api/v1/notification/delete?id=8 HTTP/1.1" 200 OK
+2026-05-14 13:11:43 - INFO - 127.0.0.1:57810 - "GET /api/v1/notification/list?page=1&page_size=10&keyword=&type=&status=&send_mode= HTTP/1.1" 200 OK
+2026-05-14 13:11:45 - INFO - 127.0.0.1:57816 - "GET /api/v1/notification/get?id=1 HTTP/1.1" 200 OK
+2026-05-14 13:11:51 - INFO - 127.0.0.1:57828 - "GET /api/v1/call_record/list?page=1&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:12:19 - INFO - 127.0.0.1:57859 - "GET /api/v1/notification/list?page=1&page_size=10&keyword=&type=&status=&send_mode= HTTP/1.1" 200 OK
+2026-05-14 13:12:22 - INFO - 127.0.0.1:57864 - "GET /api/v1/feedback/list?page=1&page_size=10&keyword= HTTP/1.1" 200 OK
+2026-05-14 13:12:23 - INFO - 127.0.0.1:57867 - "GET /api/v1/complaint/list?page=1&page_size=10&status=&keyword= HTTP/1.1" 200 OK
+2026-05-14 13:12:25 - INFO - 127.0.0.1:57872 - "GET /api/v1/ranking/config HTTP/1.1" 200 OK
+2026-05-14 13:12:25 - INFO - 127.0.0.1:57875 - "GET /api/v1/ranking/list?page=1&page_size=10&board=charm&period=day HTTP/1.1" 200 OK
+2026-05-14 13:12:26 - INFO - 127.0.0.1:57877 - "GET /api/v1/feedback/list?page=1&page_size=10&keyword= HTTP/1.1" 200 OK
+2026-05-14 13:12:29 - INFO - 127.0.0.1:57887 - "GET /api/v1/moment/list?user_id=&review_status=all&page=1&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:12:30 - INFO - 127.0.0.1:57890 - "GET /uploads/moments/100032/9b0113a370e34bfc895b8a0cfdd997a3.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:30 - INFO - 127.0.0.1:57895 - "GET /uploads/generated/star_recreated/100016/album_03.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:30 - INFO - 127.0.0.1:57896 - "GET /uploads/generated/star_recreated/100016/avatar.webp HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:30 - INFO - 127.0.0.1:57903 - "GET /uploads/generated/star_recreated/100016/album_02.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:30 - INFO - 127.0.0.1:57904 - "GET /uploads/generated/star_recreated/100016/album_01.webp HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:30 - INFO - 127.0.0.1:57905 - "GET /uploads/moments/100001/a78a2a5976a44a13a2747fa984a9d4ca.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:30 - INFO - 127.0.0.1:57906 - "GET /uploads/profile/admin/a861c74d01514c6e9e491011e30ee06f.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:30 - INFO - 127.0.0.1:57910 - "GET /uploads/moments/100001/d72cf4c8c17e4a228cbf9ab39d8efb62.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:30 - INFO - 127.0.0.1:57909 - "GET /uploads/moments/100001/5fad88d6ceae4b369b7f2c9ffffe06e5.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:30 - INFO - 127.0.0.1:57920 - "GET /uploads/moments/100001/4ecc37010767403a8928ddf436b9cdb3.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:30 - INFO - 127.0.0.1:57922 - "GET /uploads/moments/100001/a7dbe7d6759644f3a8665b634ed81a6d.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:30 - INFO - 127.0.0.1:57921 - "GET /uploads/moments/100001/603fdd9ec7d3467e9d5a9bddcb3366a3.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:30 - INFO - 127.0.0.1:57924 - "GET /uploads/generated/star_recreated/100022/avatar.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:30 - INFO - 127.0.0.1:57927 - "GET /uploads/generated/star_recreated/100022/album_01.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:30 - INFO - 127.0.0.1:57929 - "GET /uploads/generated/star_recreated/100022/album_02.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:31 - INFO - 127.0.0.1:57941 - "GET /uploads/moments/100001/0da5d61129f346a1892daa1830bcb00a.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:31 - INFO - 127.0.0.1:57942 - "GET /uploads/moments/100001/54a4822057fb4a81a88358b057abc8fd.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:31 - INFO - 127.0.0.1:57940 - "GET /uploads/moments/100001/93e3b5f9e5264b6a9ec830f7fa9fd36d.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:31 - INFO - 127.0.0.1:57939 - "GET /uploads/generated/star_recreated/100022/album_03.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:31 - INFO - 127.0.0.1:57945 - "GET /uploads/moments/100001/a349f67bb5784cfea388f7bee9d35736.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:31 - INFO - 127.0.0.1:57946 - "GET /uploads/moments/100001/1aed395222194f5f8bae93060b36ecb7.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:31 - INFO - 127.0.0.1:57957 - "GET /uploads/moments/100001/739be9f380454093a2ea322a35649ddb.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:31 - INFO - 127.0.0.1:57958 - "GET /uploads/generated/star_recreated/100015/avatar.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:31 - INFO - 127.0.0.1:57963 - "GET /uploads/generated/star_recreated/100015/album_02.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:31 - INFO - 127.0.0.1:57964 - "GET /uploads/generated/star_recreated/100015/album_03.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:31 - INFO - 127.0.0.1:57962 - "GET /uploads/generated/star_recreated/100015/album_01.webp HTTP/1.1" 304 Not Modified
+2026-05-14 13:12:41 - INFO - 127.0.0.1:57974 - "POST /api/v1/moment/unpin?id=15 HTTP/1.1" 200 OK
+2026-05-14 13:12:42 - INFO - 127.0.0.1:57977 - "GET /api/v1/moment/list?user_id=&review_status=all&page=1&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:12:46 - INFO - 127.0.0.1:57984 - "POST /api/v1/moment/unrecommend?id=15 HTTP/1.1" 200 OK
+2026-05-14 13:12:46 - INFO - 127.0.0.1:57989 - "GET /api/v1/moment/list?user_id=&review_status=all&page=1&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:12:48 - INFO - 127.0.0.1:57994 - "POST /api/v1/moment/unrecommend?id=4 HTTP/1.1" 200 OK
+2026-05-14 13:12:48 - INFO - 127.0.0.1:57998 - "GET /api/v1/moment/list?user_id=&review_status=all&page=1&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:12:51 - INFO - 127.0.0.1:58001 - "POST /api/v1/moment/clear-recommend-override?id=4 HTTP/1.1" 200 OK
+2026-05-14 13:12:52 - INFO - 127.0.0.1:58007 - "GET /api/v1/moment/list?user_id=&review_status=all&page=1&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:12:53 - INFO - 127.0.0.1:58009 - "POST /api/v1/moment/clear-recommend-override?id=15 HTTP/1.1" 200 OK
+2026-05-14 13:12:54 - INFO - 127.0.0.1:58013 - "GET /api/v1/moment/list?user_id=&review_status=all&page=1&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:13:16 - INFO - 127.0.0.1:58038 - "GET /api/v1/moment/list?user_id=&review_status=all&page=2&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:13:17 - INFO - 127.0.0.1:58053 - "GET /uploads/generated/star_recreated/100017/album_01.png HTTP/1.1" 200 OK
+2026-05-14 13:13:17 - INFO - 127.0.0.1:58054 - "GET /uploads/generated/star_recreated/100017/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 13:13:17 - INFO - 127.0.0.1:58055 - "GET /uploads/generated/star_recreated/100017/album_02.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:13:17 - INFO - 127.0.0.1:58057 - "GET /uploads/generated/star_recreated/100013/album_01.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:13:17 - INFO - 127.0.0.1:58056 - "GET /uploads/generated/star_recreated/100013/avatar.webp HTTP/1.1" 304 Not Modified
+2026-05-14 13:13:17 - INFO - 127.0.0.1:58058 - "GET /uploads/generated/star_recreated/100014/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 13:13:17 - INFO - 127.0.0.1:58070 - "GET /uploads/generated/star_recreated/100013/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 13:13:17 - INFO - 127.0.0.1:58069 - "GET /uploads/moments/100001/a04abe6f525144c5a012eb03491f5815.jpg HTTP/1.1" 200 OK
+2026-05-14 13:13:17 - INFO - 127.0.0.1:58071 - "GET /uploads/generated/star_recreated/100021/album_02.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:13:17 - INFO - 127.0.0.1:58073 - "GET /uploads/generated/star_recreated/100014/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 13:13:17 - INFO - 127.0.0.1:58075 - "GET /uploads/moments/100001/a5e069a7b5d8441184c8997ec520f51f.jpg HTTP/1.1" 200 OK
+2026-05-14 13:13:17 - INFO - 127.0.0.1:58077 - "GET /uploads/generated/star_recreated/100020/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 13:13:17 - INFO - 127.0.0.1:58085 - "GET /uploads/generated/star_recreated/100013/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 13:13:18 - INFO - 127.0.0.1:58087 - "GET /uploads/generated/star_recreated/100021/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 13:13:18 - INFO - 127.0.0.1:58089 - "GET /uploads/generated/star_recreated/100019/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 13:13:18 - INFO - 127.0.0.1:58092 - "GET /uploads/generated/star_recreated/100020/album_01.jpg HTTP/1.1" 200 OK
+2026-05-14 13:13:18 - INFO - 127.0.0.1:58096 - "GET /uploads/generated/star_recreated/100019/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 13:13:18 - INFO - 127.0.0.1:58097 - "GET /uploads/generated/star_recreated/100021/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 13:13:18 - INFO - 127.0.0.1:58103 - "GET /uploads/generated/star_recreated/100014/avatar.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:13:18 - INFO - 127.0.0.1:58105 - "GET /uploads/generated/star_recreated/100019/avatar.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:13:18 - INFO - 127.0.0.1:58107 - "GET /uploads/generated/star_recreated/100020/album_03.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:13:18 - INFO - 127.0.0.1:58112 - "GET /uploads/generated/star_recreated/100021/avatar.webp HTTP/1.1" 304 Not Modified
+2026-05-14 13:13:18 - INFO - 127.0.0.1:58116 - "GET /uploads/generated/star_recreated/100014/album_03.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:13:18 - INFO - 127.0.0.1:58115 - "GET /uploads/generated/star_recreated/100019/album_01.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:13:18 - INFO - 127.0.0.1:58122 - "GET /uploads/generated/star_recreated/100020/avatar.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:13:18 - INFO - 127.0.0.1:58123 - "GET /uploads/generated/star_recreated/100018/album_03.jpg HTTP/1.1" 200 OK
+2026-05-14 13:13:18 - INFO - 127.0.0.1:58125 - "GET /uploads/generated/star_recreated/100018/album_02.jpg HTTP/1.1" 200 OK
+2026-05-14 13:13:18 - INFO - 127.0.0.1:58132 - "GET /uploads/generated/star_recreated/100018/album_01.webp HTTP/1.1" 304 Not Modified
+2026-05-14 13:13:18 - INFO - 127.0.0.1:58131 - "GET /uploads/generated/star_recreated/100023/avatar.webp HTTP/1.1" 304 Not Modified
+2026-05-14 13:13:18 - INFO - 127.0.0.1:58134 - "GET /uploads/generated/star_recreated/100018/avatar.webp HTTP/1.1" 304 Not Modified
+2026-05-14 13:13:18 - INFO - 127.0.0.1:58137 - "GET /uploads/generated/star_recreated/100023/album_02.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:13:18 - INFO - 127.0.0.1:58139 - "GET /uploads/generated/star_recreated/100023/album_01.webp HTTP/1.1" 304 Not Modified
+2026-05-14 13:13:18 - INFO - 127.0.0.1:58141 - "GET /uploads/generated/star_recreated/100023/album_03.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:13:19 - INFO - 127.0.0.1:58143 - "GET /uploads/generated/star_recreated/100017/avatar.webp HTTP/1.1" 304 Not Modified
+2026-05-14 13:13:22 - INFO - 127.0.0.1:58151 - "GET /api/v1/withdraw/account/list?page=1&page_size=10&status=pending&real_name=&account_no= HTTP/1.1" 200 OK
+2026-05-14 13:13:23 - INFO - 127.0.0.1:58154 - "GET /uploads/withdraw_qr/100038/3ce59cc65a1043faaab0bc63c3d2f039.jpg HTTP/1.1" 304 Not Modified
+2026-05-14 13:15:53 - INFO - 127.0.0.1:58303 - "GET /api/v1/notification/list?page=1&page_size=10&keyword=&type=&status=&send_mode= HTTP/1.1" 200 OK
+2026-05-14 13:21:25 - INFO - 127.0.0.1:58738 - "GET /api/v1/base/userinfo HTTP/1.1" 200 OK
+2026-05-14 13:21:25 - INFO - 127.0.0.1:58739 - "GET /api/v1/base/usermenu HTTP/1.1" 200 OK
+2026-05-14 13:21:25 - INFO - 127.0.0.1:58740 - "GET /api/v1/base/userapi HTTP/1.1" 200 OK
+2026-05-14 13:21:26 - INFO - 127.0.0.1:58747 - "GET /api/v1/notification/list?page=1&page_size=10&keyword=&type=&status=&send_mode= HTTP/1.1" 200 OK
+2026-05-14 13:21:29 - INFO - 127.0.0.1:58755 - "GET /api/v1/base/userinfo HTTP/1.1" 200 OK
+2026-05-14 13:21:29 - INFO - 127.0.0.1:58756 - "GET /api/v1/base/usermenu HTTP/1.1" 200 OK
+2026-05-14 13:21:29 - INFO - 127.0.0.1:58757 - "GET /api/v1/base/userapi HTTP/1.1" 200 OK
+2026-05-14 13:21:30 - INFO - 127.0.0.1:58764 - "GET /api/v1/notification/list?page=1&page_size=10&keyword=&type=&status=&send_mode= HTTP/1.1" 200 OK
+2026-05-14 13:23:01 - INFO - 127.0.0.1:58940 - "GET /api/v1/base/userinfo HTTP/1.1" 200 OK
+2026-05-14 13:23:01 - INFO - 127.0.0.1:58942 - "GET /api/v1/base/usermenu HTTP/1.1" 200 OK
+2026-05-14 13:23:02 - INFO - 127.0.0.1:58943 - "GET /api/v1/base/userapi HTTP/1.1" 200 OK
+2026-05-14 13:23:03 - INFO - 127.0.0.1:58956 - "GET /api/v1/notification/list?page=1&page_size=10&keyword=&type=&status=&send_mode= HTTP/1.1" 200 OK
+2026-05-14 13:24:51 - INFO - 127.0.0.1:59071 - "GET /api/v1/base/userinfo HTTP/1.1" 200 OK
+2026-05-14 13:24:51 - INFO - 127.0.0.1:59072 - "GET /api/v1/base/usermenu HTTP/1.1" 200 OK
+2026-05-14 13:24:51 - INFO - 127.0.0.1:59073 - "GET /api/v1/base/userapi HTTP/1.1" 200 OK
+2026-05-14 13:24:52 - INFO - 127.0.0.1:59080 - "GET /api/v1/notification/list?page=1&page_size=10&keyword=&type=&status=&send_mode= HTTP/1.1" 200 OK
+2026-05-14 13:24:54 - INFO - 127.0.0.1:59088 - "GET /api/v1/base/userinfo HTTP/1.1" 200 OK
+2026-05-14 13:24:54 - INFO - 127.0.0.1:59089 - "GET /api/v1/base/usermenu HTTP/1.1" 200 OK
+2026-05-14 13:24:54 - INFO - 127.0.0.1:59091 - "GET /api/v1/base/userapi HTTP/1.1" 200 OK
+2026-05-14 13:24:55 - INFO - 127.0.0.1:59098 - "GET /api/v1/notification/list?page=1&page_size=10&keyword=&type=&status=&send_mode= HTTP/1.1" 200 OK
+2026-05-14 13:25:10 - INFO - 127.0.0.1:59142 - "GET /api/v1/base/userinfo HTTP/1.1" 200 OK
+2026-05-14 13:25:10 - INFO - 127.0.0.1:59144 - "GET /api/v1/base/usermenu HTTP/1.1" 200 OK
+2026-05-14 13:25:11 - INFO - 127.0.0.1:59146 - "GET /api/v1/base/userapi HTTP/1.1" 200 OK
+2026-05-14 13:25:12 - INFO - 127.0.0.1:59154 - "GET /api/v1/notification/list?page=1&page_size=10&keyword=&type=&status=&send_mode= HTTP/1.1" 200 OK
+2026-05-14 13:25:14 - INFO - 127.0.0.1:59155 - "GET /api/v1/withdraw/account/list?page=1&page_size=10&status=pending&real_name=&account_no= HTTP/1.1" 200 OK
+2026-05-14 13:25:15 - INFO - 127.0.0.1:59158 - "GET /api/v1/moment/list?user_id=&review_status=all&page=1&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:25:19 - INFO - 127.0.0.1:59162 - "GET /api/v1/token_adjust_record/list?page=1&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:25:20 - INFO - 127.0.0.1:59164 - "GET /api/v1/fee_bill/list?page=1&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:25:21 - INFO - 127.0.0.1:59165 - "GET /api/v1/token_adjust_record/list?page=1&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:25:26 - INFO - 127.0.0.1:59177 - "GET /api/v1/menu/list HTTP/1.1" 200 OK
+2026-05-14 13:25:26 - INFO - 127.0.0.1:59178 - "GET /api/v1/menu/list HTTP/1.1" 200 OK
+2026-05-14 13:25:45 - INFO - 127.0.0.1:59202 - "GET /api/v1/role/list?page=1&page_size=9999 HTTP/1.1" 200 OK
+2026-05-14 13:25:45 - INFO - 127.0.0.1:59201 - "GET /api/v1/user/list?page=1&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:25:45 - INFO - 127.0.0.1:59203 - "GET /api/v1/dept/list HTTP/1.1" 200 OK
+2026-05-14 13:25:54 - INFO - 127.0.0.1:59210 - "GET /api/v1/menu/list HTTP/1.1" 200 OK
+2026-05-14 13:25:54 - INFO - 127.0.0.1:59214 - "GET /api/v1/menu/list HTTP/1.1" 200 OK
+2026-05-14 13:26:30 - INFO - 127.0.0.1:59254 - "POST /api/v1/menu/update HTTP/1.1" 200 OK
+2026-05-14 13:26:30 - INFO - 127.0.0.1:59257 - "GET /api/v1/menu/list HTTP/1.1" 200 OK
+2026-05-14 13:26:30 - INFO - 127.0.0.1:59260 - "GET /api/v1/menu/list HTTP/1.1" 200 OK
+2026-05-14 13:26:34 - INFO - 127.0.0.1:59278 - "GET /api/v1/base/userinfo HTTP/1.1" 200 OK
+2026-05-14 13:26:34 - INFO - 127.0.0.1:59279 - "GET /api/v1/base/usermenu HTTP/1.1" 200 OK
+2026-05-14 13:26:34 - INFO - 127.0.0.1:59280 - "GET /api/v1/base/userapi HTTP/1.1" 200 OK
+2026-05-14 13:26:35 - INFO - 127.0.0.1:59287 - "GET /api/v1/menu/list HTTP/1.1" 200 OK
+2026-05-14 13:26:35 - INFO - 127.0.0.1:59288 - "GET /api/v1/menu/list HTTP/1.1" 200 OK
+2026-05-14 13:27:29 - INFO - 127.0.0.1:59387 - "GET /api/v1/auditlog/list?start_time=2026-05-14+00:00:00&end_time=2026-05-14+23:59:59&page=1&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:27:41 - INFO - 127.0.0.1:59402 - "GET /api/v1/dept/list?page=1&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:27:41 - INFO - 127.0.0.1:59404 - "GET /api/v1/dept/list HTTP/1.1" 200 OK
+2026-05-14 13:27:42 - INFO - 127.0.0.1:59407 - "GET /api/v1/api/list?page=1&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:28:01 - INFO - 127.0.0.1:59426 - "GET /api/v1/api/list?page=7&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:28:04 - INFO - 127.0.0.1:59433 - "GET /api/v1/api/list?page=9&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:28:05 - INFO - 127.0.0.1:59435 - "GET /api/v1/api/list?page=11&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:28:17 - INFO - 127.0.0.1:59461 - "GET /api/v1/api/list?page=19&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:28:22 - INFO - 127.0.0.1:59466 - "GET /api/v1/api/list?page=14&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:28:25 - INFO - 127.0.0.1:59473 - "GET /api/v1/api/list?page=1&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:28:29 - INFO - 127.0.0.1:59478 - "GET /api/v1/menu/list HTTP/1.1" 200 OK
+2026-05-14 13:28:29 - INFO - 127.0.0.1:59481 - "GET /api/v1/menu/list HTTP/1.1" 200 OK
+2026-05-14 13:28:30 - INFO - 127.0.0.1:59486 - "GET /api/v1/role/list?page=1&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:28:31 - INFO - 127.0.0.1:59490 - "GET /api/v1/user/list?page=1&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:28:31 - INFO - 127.0.0.1:59493 - "GET /api/v1/role/list?page=1&page_size=9999 HTTP/1.1" 200 OK
+2026-05-14 13:28:31 - INFO - 127.0.0.1:59494 - "GET /api/v1/dept/list HTTP/1.1" 200 OK
+2026-05-14 13:28:48 - INFO - 127.0.0.1:59531 - "GET /api/v1/base/userinfo HTTP/1.1" 200 OK
+2026-05-14 13:28:48 - INFO - 127.0.0.1:59534 - "GET /api/v1/base/usermenu HTTP/1.1" 200 OK
+2026-05-14 13:28:48 - INFO - 127.0.0.1:59535 - "GET /api/v1/base/userapi HTTP/1.1" 200 OK
+2026-05-14 13:28:49 - INFO - 127.0.0.1:59544 - "GET /api/v1/dept/list HTTP/1.1" 200 OK
+2026-05-14 13:28:49 - INFO - 127.0.0.1:59543 - "GET /api/v1/role/list?page=1&page_size=9999 HTTP/1.1" 200 OK
+2026-05-14 13:28:49 - INFO - 127.0.0.1:59542 - "GET /api/v1/user/list?page=1&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:28:56 - INFO - 127.0.0.1:59554 - "GET /api/v1/base/userinfo HTTP/1.1" 200 OK
+2026-05-14 13:28:56 - INFO - 127.0.0.1:59558 - "GET /api/v1/base/usermenu HTTP/1.1" 200 OK
+2026-05-14 13:28:56 - INFO - 127.0.0.1:59559 - "GET /api/v1/base/userapi HTTP/1.1" 200 OK
+2026-05-14 13:28:57 - INFO - 127.0.0.1:59570 - "GET /api/v1/dept/list HTTP/1.1" 200 OK
+2026-05-14 13:28:57 - INFO - 127.0.0.1:59568 - "GET /api/v1/user/list?page=1&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:28:57 - INFO - 127.0.0.1:59569 - "GET /api/v1/role/list?page=1&page_size=9999 HTTP/1.1" 200 OK
+2026-05-14 13:31:12 - INFO - 127.0.0.1:59729 - "GET /api/v1/base/userinfo HTTP/1.1" 200 OK
+2026-05-14 13:31:12 - INFO - 127.0.0.1:59732 - "GET /api/v1/base/usermenu HTTP/1.1" 200 OK
+2026-05-14 13:31:12 - INFO - 127.0.0.1:59733 - "GET /api/v1/base/userapi HTTP/1.1" 200 OK
+2026-05-14 13:31:13 - INFO - 127.0.0.1:59742 - "GET /api/v1/dept/list HTTP/1.1" 200 OK
+2026-05-14 13:31:13 - INFO - 127.0.0.1:59740 - "GET /api/v1/user/list?page=1&page_size=10 HTTP/1.1" 200 OK
+2026-05-14 13:31:13 - INFO - 127.0.0.1:59741 - "GET /api/v1/role/list?page=1&page_size=9999 HTTP/1.1" 200 OK

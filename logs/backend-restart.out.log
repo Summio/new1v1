@@ -1,0 +1,9 @@
+2026-05-14 13:34:06.550 | INFO     | app.core.init_app:init_data:899 - startup seed data disabled
+2026-05-14 13:34:06.552 | INFO     | app.core.call_watchdog:run_call_watchdog:936 - call watchdog started
+2026-05-14 13:34:06.562 | INFO     | app.core.bgtask:cleanup_old_audit_logs:23 - audit log cleanup: deleted 0 records older than 180 days
+2026-05-14 13:34:06.564 | INFO     | app.core.bgtask:run_auditlog_cleanup:38 - auditlog periodic cleanup completed, deleted=0
+2026-05-14 13:34:08.815 | INFO     | app.core.call_watchdog:run_call_watchdog:947 - call watchdog: acquired leader
+2026-05-14 13:34:11 - INFO - 127.0.0.1:60029 - "GET /api/v1/base/userinfo HTTP/1.1" 200 OK
+2026-05-14 13:34:11 - INFO - 127.0.0.1:60030 - "GET /api/v1/base/usermenu HTTP/1.1" 200 OK
+2026-05-14 13:34:11 - INFO - 127.0.0.1:60031 - "GET /api/v1/base/userapi HTTP/1.1" 200 OK
+2026-05-14 13:34:21 - INFO - 127.0.0.1:60060 - "GET /api/v1/app_user/common-phrase-review/list?status=pending&page=1&page_size=10 HTTP/1.1" 200 OK

@@ -1,0 +1,99 @@
+D:\1v1\new1v1\backend\app\settings\config.py:13: UserWarning: 使用了开发用 SECRET_KEY，生产环境请通过环境变量 SECRET_KEY 配置
+  class Settings(BaseSettings):
+D:\1v1\new1v1\backend\app\settings\config.py:13: UserWarning: 使用了默认数据库密码 123456，生产环境请通过环境变量 DB_PASSWORD 配置
+  class Settings(BaseSettings):
+2026-05-14 11:19:31 - INFO - Started server process [18400]
+2026-05-14 11:19:31 - INFO - Waiting for application startup.
+2026-05-14 11:19:37 - INFO - Application startup complete.
+2026-05-14 11:19:37 - INFO - Uvicorn running on http://0.0.0.0:9999 (Press CTRL+C to quit)
+2026-05-14 11:22:26 - INFO - ('192.168.31.179', 49434) - "WebSocket /api/v1/ws/app" [accepted]
+2026-05-14 11:22:26 - INFO - connection open
+2026-05-14 11:22:41 - INFO - ('192.168.31.62', 33154) - "WebSocket /api/v1/ws/app" [accepted]
+2026-05-14 11:22:41 - INFO - connection open
+2026-05-14 11:23:40 - INFO - connection closed
+D:\1v1\new1v1\backend\app\websocket\manager.py:170: RuntimeWarning: coroutine 'broadcast_presence' was never awaited
+  broadcast_presence(manager=self, user_id=user_id, online=False)
+RuntimeWarning: Enable tracemalloc to get the object allocation traceback
+2026-05-14 11:24:24 - INFO - ('192.168.31.62', 33210) - "WebSocket /api/v1/ws/app" [accepted]
+2026-05-14 11:24:24 - INFO - connection open
+2026-05-14 11:25:24 - INFO - connection closed
+2026-05-14 11:26:46 - INFO - ('192.168.31.62', 33274) - "WebSocket /api/v1/ws/app" [accepted]
+2026-05-14 11:26:46 - INFO - connection open
+2026-05-14 11:26:51 - INFO - connection closed
+2026-05-14 11:27:09 - INFO - ('192.168.31.62', 33316) - "WebSocket /api/v1/ws/app" [accepted]
+2026-05-14 11:27:09 - INFO - connection open
+2026-05-14 11:28:43 - INFO - connection closed
+2026-05-14 11:30:14 - INFO - ('192.168.31.179', 47366) - "WebSocket /api/v1/ws/app" [accepted]
+2026-05-14 11:30:14 - INFO - connection open
+2026-05-14 11:30:20 - INFO - connection closed
+2026-05-14 11:33:10 - INFO - connection closed
+2026-05-14 11:34:24 - INFO - ('192.168.31.62', 33370) - "WebSocket /api/v1/ws/app" [accepted]
+2026-05-14 11:34:24 - INFO - connection open
+2026-05-14 11:36:45 - INFO - connection closed
+2026-05-14 11:54:22 - INFO - ('192.168.31.179', 54512) - "WebSocket /api/v1/ws/app" [accepted]
+2026-05-14 11:54:22 - INFO - connection open
+2026-05-14 11:54:23 - INFO - connection closed
+2026-05-14 11:55:29 - INFO - ('192.168.31.179', 46684) - "WebSocket /api/v1/ws/app" [accepted]
+2026-05-14 11:55:29 - INFO - connection open
+2026-05-14 11:55:33 - INFO - connection closed
+2026-05-14 11:56:15 - INFO - ('192.168.31.62', 33424) - "WebSocket /api/v1/ws/app" [accepted]
+2026-05-14 11:56:15 - INFO - connection open
+2026-05-14 11:56:55 - ERROR - data transfer failed
+Traceback (most recent call last):
+  File "C:\Users\iamti\AppData\Local\Programs\Python\Python311\Lib\site-packages\websockets\legacy\protocol.py", line 945, in transfer_data
+    message = await self.read_message()
+              ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\iamti\AppData\Local\Programs\Python\Python311\Lib\site-packages\websockets\legacy\protocol.py", line 1015, in read_message
+    frame = await self.read_data_frame(max_size=self.max_size)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\iamti\AppData\Local\Programs\Python\Python311\Lib\site-packages\websockets\legacy\protocol.py", line 1090, in read_data_frame
+    frame = await self.read_frame(max_size)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\iamti\AppData\Local\Programs\Python\Python311\Lib\site-packages\websockets\legacy\protocol.py", line 1147, in read_frame
+    frame = await Frame.read(
+            ^^^^^^^^^^^^^^^^^
+  File "C:\Users\iamti\AppData\Local\Programs\Python\Python311\Lib\site-packages\websockets\legacy\framing.py", line 71, in read
+    data = await reader(2)
+           ^^^^^^^^^^^^^^^
+  File "C:\Users\iamti\AppData\Local\Programs\Python\Python311\Lib\asyncio\streams.py", line 750, in readexactly
+    await self._wait_for_data('readexactly')
+  File "C:\Users\iamti\AppData\Local\Programs\Python\Python311\Lib\asyncio\streams.py", line 543, in _wait_for_data
+    await self._waiter
+  File "C:\Users\iamti\AppData\Local\Programs\Python\Python311\Lib\asyncio\proactor_events.py", line 286, in _loop_reading
+    length = fut.result()
+             ^^^^^^^^^^^^
+  File "C:\Users\iamti\AppData\Local\Programs\Python\Python311\Lib\asyncio\windows_events.py", line 854, in _poll
+    value = callback(transferred, key, ov)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\iamti\AppData\Local\Programs\Python\Python311\Lib\asyncio\windows_events.py", line 494, in finish_recv
+    return ov.getresult()
+           ^^^^^^^^^^^^^^
+OSError: [WinError 121] 信号灯超时时间已到
+2026-05-14 11:56:55 - INFO - connection closed
+2026-05-14 11:58:59 - INFO - ('192.168.31.62', 33456) - "WebSocket /api/v1/ws/app" [accepted]
+2026-05-14 11:58:59 - INFO - connection open
+2026-05-14 12:00:14 - INFO - connection closed
+2026-05-14 12:02:29 - INFO - ('192.168.31.179', 56970) - "WebSocket /api/v1/ws/app" [accepted]
+2026-05-14 12:02:29 - INFO - connection open
+2026-05-14 12:02:31 - INFO - connection closed
+2026-05-14 12:08:50 - INFO - ('192.168.31.179', 60468) - "WebSocket /api/v1/ws/app" [accepted]
+2026-05-14 12:08:50 - INFO - connection open
+2026-05-14 12:09:05 - INFO - connection closed
+2026-05-14 12:09:38 - INFO - ('192.168.31.179', 35330) - "WebSocket /api/v1/ws/app" [accepted]
+2026-05-14 12:09:38 - INFO - connection open
+2026-05-14 12:09:39 - INFO - connection closed
+2026-05-14 12:09:45 - INFO - ('192.168.31.179', 45488) - "WebSocket /api/v1/ws/app" [accepted]
+2026-05-14 12:09:45 - INFO - connection open
+2026-05-14 12:12:21 - INFO - connection closed
+2026-05-14 12:18:11 - INFO - ('192.168.31.179', 38006) - "WebSocket /api/v1/ws/app" [accepted]
+2026-05-14 12:18:11 - INFO - connection open
+2026-05-14 12:23:26 - INFO - connection closed
+2026-05-14 12:36:12 - INFO - ('192.168.31.179', 54804) - "WebSocket /api/v1/ws/app" [accepted]
+2026-05-14 12:36:12 - INFO - connection open
+2026-05-14 12:38:07 - INFO - connection closed
+2026-05-14 12:38:14 - INFO - ('192.168.31.179', 56584) - "WebSocket /api/v1/ws/app" [accepted]
+2026-05-14 12:38:14 - INFO - connection open
+2026-05-14 12:39:14 - INFO - connection closed
+2026-05-14 12:45:45 - INFO - ('192.168.31.179', 39980) - "WebSocket /api/v1/ws/app" [accepted]
+2026-05-14 12:45:45 - INFO - connection open
+2026-05-14 12:47:21 - INFO - connection closed

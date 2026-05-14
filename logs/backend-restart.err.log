@@ -1,0 +1,8 @@
+D:\1v1\new1v1\backend\app\settings\config.py:13: UserWarning: 使用了开发用 SECRET_KEY，生产环境请通过环境变量 SECRET_KEY 配置
+  class Settings(BaseSettings):
+D:\1v1\new1v1\backend\app\settings\config.py:13: UserWarning: 使用了默认数据库密码 123456，生产环境请通过环境变量 DB_PASSWORD 配置
+  class Settings(BaseSettings):
+2026-05-14 13:34:06 - INFO - Started server process [15080]
+2026-05-14 13:34:06 - INFO - Waiting for application startup.
+2026-05-14 13:34:06 - INFO - Application startup complete.
+2026-05-14 13:34:06 - INFO - Uvicorn running on http://0.0.0.0:9999 (Press CTRL+C to quit)
