@@ -233,6 +233,37 @@ class TestPubsubLoopRouting:
             assert 100 in online_members
             assert fake_redis._strings.get(self_pid_key) == str(manager_b._pid)
 
+    @pytest.mark.asyncio
+    async def test_disconnect_awaits_offline_presence_broadcast(self):
+        """当前 worker 清理全局在线状态时，应 await 下线广播。"""
+        from app.websocket.manager import ConnectionManager
+
+        class _FakeRedis:
+            async def get(self, _key: str):
+                return "101"
+
+            async def srem(self, *_args):
+                return 1
+
+            async def delete(self, *_args):
+                return 1
+
+            async def zrem(self, *_args):
+                return 1
+
+        manager = ConnectionManager()
+        manager._pid = 101
+        ws = AsyncMock()
+        async with manager._lock:
+            manager._ws_conns[100] = ws
+
+        with patch("app.websocket.manager.get_redis", return_value=_FakeRedis()):
+            with patch("app.websocket.presence.get_redis", return_value=_FakeRedis()):
+                with patch("app.websocket.presence.broadcast_presence", new_callable=AsyncMock) as mock_broadcast:
+                    await manager.disconnect(100, websocket=ws)
+
+        mock_broadcast.assert_awaited_once_with(manager=manager, user_id=100, online=False)
+
 
 class TestCriticalEventMarkers:
     """测试关键事件集合标记"""

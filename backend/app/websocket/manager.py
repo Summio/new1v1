@@ -167,7 +167,7 @@ class ConnectionManager:
             try:
                 from app.websocket.presence import broadcast_presence
 
-                broadcast_presence(manager=self, user_id=user_id, online=False)
+                await broadcast_presence(manager=self, user_id=user_id, online=False)
             except Exception as e:
                 logger.warning(f"[WS] presence broadcast on disconnect failed: {e}")
 
