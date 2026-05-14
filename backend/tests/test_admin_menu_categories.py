@@ -2,7 +2,6 @@ from pathlib import Path
 
 from app.core import init_app
 
-
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -28,6 +27,7 @@ def test_operation_menu_keeps_only_daily_operation_children() -> None:
         ("动态管理", "moment", "/operation/moment"),
         ("排行榜", "ranking", "/operation/ranking"),
         ("系统通知", "system-notification", "/operation/system-notification"),
+        ("弹窗提示", "popup", "/operation/popup"),
         ("投诉管理", "complaint", "/operation/complaint"),
         ("意见反馈", "feedback", "/operation/feedback"),
     }
@@ -89,6 +89,7 @@ def test_admin_menu_icons_match_menu_purpose() -> None:
         "动态管理": "material-symbols:dynamic-feed-rounded",
         "排行榜": "material-symbols:leaderboard-outline-rounded",
         "系统通知": "material-symbols:notifications-outline-rounded",
+        "弹窗提示": "material-symbols:dialogs-outline-rounded",
         "投诉管理": "material-symbols:report-outline-rounded",
         "意见反馈": "material-symbols:feedback-outline-rounded",
     }

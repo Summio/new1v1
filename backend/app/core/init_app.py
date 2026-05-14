@@ -106,9 +106,20 @@ def build_operation_children(parent_id: int) -> list[Menu]:
         ),
         Menu(
             menu_type=MenuType.MENU,
+            name="弹窗提示",
+            path="popup",
+            order=7,
+            parent_id=parent_id,
+            icon="material-symbols:dialogs-outline-rounded",
+            is_hidden=False,
+            component="/operation/popup",
+            keepalive=False,
+        ),
+        Menu(
+            menu_type=MenuType.MENU,
             name="投诉管理",
             path="complaint",
-            order=7,
+            order=8,
             parent_id=parent_id,
             icon="material-symbols:report-outline-rounded",
             is_hidden=False,
@@ -119,7 +130,7 @@ def build_operation_children(parent_id: int) -> list[Menu]:
             menu_type=MenuType.MENU,
             name="意见反馈",
             path="feedback",
-            order=8,
+            order=9,
             parent_id=parent_id,
             icon="material-symbols:feedback-outline-rounded",
             is_hidden=False,
@@ -861,6 +872,24 @@ async def init_roles():
     if system_notification_apis and all_roles:
         for role in all_roles:
             await role.apis.add(*system_notification_apis)
+    system_popup_apis = await Api.filter(
+        path__in=[
+            "/api/v1/popup/list",
+            "/api/v1/popup/get",
+            "/api/v1/popup/estimate-target-count",
+            "/api/v1/popup/create",
+            "/api/v1/popup/update",
+            "/api/v1/popup/publish",
+            "/api/v1/popup/pause",
+            "/api/v1/popup/resume",
+            "/api/v1/popup/cancel",
+            "/api/v1/popup/delete",
+            "/api/v1/app/popups/{popup_id}/ack",
+        ],
+    ).all()
+    if system_popup_apis and all_roles:
+        for role in all_roles:
+            await role.apis.add(*system_popup_apis)
     token_adjust_record_api = await Api.filter(method="GET", path="/api/v1/token_adjust_record/list").first()
     if token_adjust_record_api and all_roles:
         for role in all_roles:

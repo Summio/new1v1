@@ -288,3 +288,25 @@ async def push_system_notification_unread_changed(
         "system_notification_unread_changed",
         data,
     )
+
+
+async def push_system_popup_pending(
+    user_id: int,
+    popup: dict,
+) -> PushResult:
+    """推送在线弹窗给当前在线用户。"""
+    data = {
+        "id": int(popup.get("id") or 0),
+        "title": str(popup.get("title") or ""),
+        "content": str(popup.get("content") or ""),
+        "type": str(popup.get("type") or ""),
+        "publish_at": popup.get("publish_at"),
+    }
+    return await get_manager().push_to_user(
+        int(user_id),
+        "system_popup_pending",
+        data,
+    )
+
+
+push_system_popup = push_system_popup_pending

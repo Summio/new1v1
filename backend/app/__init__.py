@@ -17,6 +17,7 @@ from app.core.init_app import (
 )
 from app.core.redis import close_redis, get_redis
 from app.core.system_notification_scheduler import run_system_notification_scheduler
+from app.core.system_popup_scheduler import run_system_popup_scheduler
 from app.websocket.manager import get_manager
 
 try:
@@ -35,6 +36,7 @@ async def lifespan(app: FastAPI):
     watchdog_task = asyncio.create_task(run_call_watchdog(stop_event))
     auditlog_task = asyncio.create_task(run_auditlog_cleanup(stop_event))
     notification_task = asyncio.create_task(run_system_notification_scheduler(stop_event))
+    popup_task = asyncio.create_task(run_system_popup_scheduler(stop_event))
     try:
         yield
     finally:
@@ -42,6 +44,7 @@ async def lifespan(app: FastAPI):
         await watchdog_task
         await auditlog_task
         await notification_task
+        await popup_task
         # 关闭 WebSocket Pub/Sub 监听
         try:
             await get_manager().stop_pubsub()

@@ -19,6 +19,7 @@ from .gift import gift_router
 from .menus import menus_router
 from .moments import moments_router
 from .notification import notification_router
+from .popup import popup_router
 from .ranking import router as ranking_router
 from .recharge import router as recharge_router
 from .roles import roles_router
@@ -53,4 +54,5 @@ v1_router.include_router(recharge_router, prefix="/recharge", dependencies=[Depe
 v1_router.include_router(ranking_router, prefix="/ranking", dependencies=[DependPermission])
 v1_router.include_router(moments_router, prefix="/moment", dependencies=[DependPermission])
 v1_router.include_router(notification_router, prefix="/notification", dependencies=[DependPermission])
+v1_router.include_router(popup_router, prefix="/popup", dependencies=[DependPermission])
 v1_router.include_router(system_router, prefix="/apis/system", dependencies=[DependPermission])

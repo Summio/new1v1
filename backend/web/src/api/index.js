@@ -125,6 +125,17 @@ export default {
   resumeSystemNotification: (data = {}) => request.post('/notification/resume', data),
   cancelSystemNotification: (data = {}) => request.post('/notification/cancel', data),
   deleteSystemNotification: (params = {}) => request.delete('/notification/delete', { params }),
+  // system popup manage
+  getSystemPopupList: (params = {}) => request.get('/popup/list', { params }),
+  getSystemPopupDetail: (params = {}) => request.get('/popup/get', { params }),
+  estimateSystemPopupTargetCount: (data = {}) => request.post('/popup/estimate-target-count', data),
+  createSystemPopup: (data = {}) => request.post('/popup/create', data),
+  updateSystemPopup: (data = {}) => request.post('/popup/update', data),
+  publishSystemPopup: (data = {}) => request.post('/popup/publish', data),
+  pauseSystemPopup: (data = {}) => request.post('/popup/pause', data),
+  resumeSystemPopup: (data = {}) => request.post('/popup/resume', data),
+  cancelSystemPopup: (data = {}) => request.post('/popup/cancel', data),
+  deleteSystemPopup: (params = {}) => request.delete('/popup/delete', { params }),
   // complaint manage
   getComplaintList: (params = {}) => request.get('/complaint/list', { params }),
   getComplaintDetail: (params = {}) => request.get('/complaint/detail', { params }),

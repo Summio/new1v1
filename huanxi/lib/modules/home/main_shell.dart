@@ -14,6 +14,7 @@ import '../../core/network/dio_client.dart';
 import '../../core/network/response_parsers.dart';
 import '../../core/storage/storage.dart';
 import '../../services/im_service.dart';
+import '../../services/system_popup_service.dart';
 import '../../services/websocket_service.dart';
 import '../call/call_session_payload.dart';
 
@@ -69,6 +70,9 @@ class _MainShellState extends ConsumerState<MainShell>
   CallSessionPayload? _pendingIncomingWhenBackground;
   String? _lastMatchedLocation;
   StreamSubscription<WsEvent>? _wsSubscription;
+  final SystemPopupService _systemPopupService = SystemPopupService.instance;
+  bool _systemPopupShowing = false;
+  final Set<int> _handledSystemPopupIds = <int>{};
 
   bool _shouldGuardIncomingRouteByRole() {
     // 与认证用户策略保持一致：不按角色做来电路由互斥拦截。
@@ -298,6 +302,9 @@ class _MainShellState extends ConsumerState<MainShell>
       case 'system_notification_unread_changed':
         _handleSystemNotificationUnreadChanged(event.data);
         break;
+      case 'system_popup_pending':
+        unawaited(_handleSystemPopupPending(event.data));
+        break;
     }
   }
 
@@ -412,6 +419,70 @@ class _MainShellState extends ConsumerState<MainShell>
     setState(() {
       _systemNotificationUnreadCount = count < 0 ? 0 : count;
     });
+  }
+
+  bool _isCallRoute(String? location) {
+    if (location == null || location.isEmpty) {
+      return false;
+    }
+    return location.startsWith(AppRoutes.callRoom) ||
+        location.startsWith(AppRoutes.callIncoming) ||
+        location.startsWith(AppRoutes.callOutgoing);
+  }
+
+  Future<void> _handleSystemPopupPending(Map<String, dynamic> data) async {
+    final popup = SystemPopupItem.fromJson(data);
+    if (popup.id <= 0) {
+      return;
+    }
+    if (_handledSystemPopupIds.contains(popup.id)) {
+      return;
+    }
+    _handledSystemPopupIds.add(popup.id);
+
+    if (!mounted) {
+      return;
+    }
+    final auth = ref.read(authProvider);
+    if (!auth.isLoggedIn ||
+        _lifecycleState != AppLifecycleState.resumed ||
+        _systemPopupShowing ||
+        _isCallRoute(_currentMatchedLocation(context))) {
+      return;
+    }
+
+    _systemPopupShowing = true;
+    try {
+      final acknowledged = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return AlertDialog(
+            title: Text(popup.title),
+            content: SingleChildScrollView(
+              child: Text(popup.content),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(true),
+                child: const Text('我知道了'),
+              ),
+            ],
+          );
+        },
+      );
+      if (acknowledged == true) {
+        try {
+          await _systemPopupService.ackPopup(popup.id);
+        } catch (e) {
+          debugPrint('mainShell.ackSystemPopup error: $e');
+        }
+      }
+    } catch (e) {
+      debugPrint('mainShell.showSystemPopup error: $e');
+    } finally {
+      _systemPopupShowing = false;
+    }
   }
 
   int _getCurrentIndex(BuildContext context) {

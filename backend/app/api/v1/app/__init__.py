@@ -17,6 +17,7 @@ from .location import router as location_router
 from .moment import router as moment_router
 from .notification import router as notification_router
 from .password import router as password_router
+from .popup import router as popup_router
 from .privacy import router as privacy_router
 from .ranking import router as ranking_router
 from .register import router as register_router
@@ -49,6 +50,7 @@ app_router.include_router(privacy_router, prefix="", dependencies=[Depends(Depen
 app_router.include_router(password_router, prefix="", dependencies=[Depends(DependAppAuth)])
 app_router.include_router(moment_router, prefix="", dependencies=[Depends(DependAppAuth)])
 app_router.include_router(notification_router, prefix="", dependencies=[Depends(DependAppAuth)])
+app_router.include_router(popup_router, prefix="", dependencies=[Depends(DependAppAuth)])
 app_router.include_router(ranking_router, prefix="", dependencies=[Depends(DependAppAuth)])
 app_router.include_router(review_entry_router, prefix="", dependencies=[Depends(DependAppAuth)])
 app_router.include_router(feedback_router, prefix="", dependencies=[Depends(DependAppAuth)])
