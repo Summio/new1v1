@@ -5,10 +5,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../app/providers/auth_provider.dart';
+import '../../app/providers/certified_common_phrase_provider.dart';
 import '../../app/providers/flirt_user_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/widgets/status_view.dart';
+import '../../core/utils/app_toast.dart';
 import 'home_page.dart';
 import 'main_shell.dart';
 
@@ -33,6 +35,7 @@ class _FlirtUserListPageState extends ConsumerState<FlirtUserListPage> {
     Future.microtask(() {
       if (!mounted) return;
       ref.read(flirtUserListProvider.notifier).fetchFlirtUsers(refresh: true);
+      ref.read(flirtGreetProvider.notifier).fetchQuota();
     });
   }
 
@@ -65,9 +68,111 @@ class _FlirtUserListPageState extends ConsumerState<FlirtUserListPage> {
     }
   }
 
+  Future<void> _refreshAll() async {
+    await Future.wait([
+      ref.read(flirtUserListProvider.notifier).refresh(),
+      ref.read(flirtGreetProvider.notifier).fetchQuota(),
+    ]);
+  }
+
+  Future<void> _sendGreeting() async {
+    final greetState = ref.read(flirtGreetProvider);
+    final quota = greetState.quota;
+    if (!quota.enabled) {
+      AppToast.show(context, '打招呼功能已关闭');
+      return;
+    }
+    if (quota.cooldownSeconds > 0) {
+      AppToast.show(context, '操作太频繁，请稍后再试');
+      return;
+    }
+    if (quota.remaining <= 0) {
+      AppToast.show(context, '今日打招呼次数已用完');
+      return;
+    }
+
+    await ref.read(certifiedCommonPhrasesProvider.notifier).fetch();
+    if (!mounted) return;
+    final phrases = ref
+        .read(certifiedCommonPhrasesProvider)
+        .phrases
+        .where((item) => item.approvedContent.trim().isNotEmpty)
+        .toList(growable: false);
+    if (phrases.isEmpty) {
+      AppToast.show(context, '请先设置并通过审核常用语');
+      return;
+    }
+
+    final selected = await showModalBottomSheet<CertifiedCommonPhraseInfo>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '选择打招呼常用语',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ...phrases.map(
+                  (phrase) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: ListTile(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        side: const BorderSide(color: AppTheme.dividerColor),
+                      ),
+                      title: Text(
+                        phrase.approvedContent,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      onTap: () => Navigator.of(context).pop(phrase),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+    if (selected == null || !mounted) return;
+
+    try {
+      final result = await ref
+          .read(flirtGreetProvider.notifier)
+          .send(slotIndex: selected.slotIndex);
+      if (!mounted) return;
+      if (result.targetCount == 0) {
+        AppToast.show(context, '暂无在线可打招呼用户');
+        return;
+      }
+      AppToast.show(
+        context,
+        '已发送 ${result.sentCount} 人，失败 ${result.failedCount} 人，今日剩余 ${result.quota.remaining} 次',
+        backgroundColor: AppTheme.onlineGreen,
+      );
+    } catch (e) {
+      if (!mounted) return;
+      AppToast.error(context, e);
+      await ref.read(flirtGreetProvider.notifier).fetchQuota();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(flirtUserListProvider);
+    final greetState = ref.watch(flirtGreetProvider);
     final coinName = ref.watch(tokenNamesProvider).coinName;
 
     if (state.isLoading && state.users.isEmpty) {
@@ -81,18 +186,25 @@ class _FlirtUserListPageState extends ConsumerState<FlirtUserListPage> {
     }
 
     return RefreshIndicator(
-      onRefresh: () => ref.read(flirtUserListProvider.notifier).refresh(),
+      onRefresh: _refreshAll,
       child: ListView.separated(
         controller: _scrollController,
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
         itemCount: state.users.isEmpty
-            ? 1
-            : state.users.length + (state.isLoading ? 1 : 0),
-        separatorBuilder: (_, index) => state.users.isEmpty
+            ? 2
+            : state.users.length + 1 + (state.isLoading ? 1 : 0),
+        separatorBuilder: (_, index) => state.users.isEmpty && index > 0
             ? const SizedBox.shrink()
             : const SizedBox(height: 10),
         itemBuilder: (context, index) {
+          if (index == 0) {
+            return _GreetingBar(
+              state: greetState,
+              onPressed: _sendGreeting,
+            );
+          }
+          final userIndex = index - 1;
           if (state.users.isEmpty) {
             return const SizedBox(
               height: 280,
@@ -109,14 +221,95 @@ class _FlirtUserListPageState extends ConsumerState<FlirtUserListPage> {
               ),
             );
           }
-          if (index >= state.users.length) {
+          if (userIndex >= state.users.length) {
             return const Padding(
               padding: EdgeInsets.symmetric(vertical: 16),
               child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
             );
           }
-          return _FlirtUserTile(user: state.users[index], coinName: coinName);
+          return _FlirtUserTile(
+            user: state.users[userIndex],
+            coinName: coinName,
+          );
         },
+      ),
+    );
+  }
+}
+
+class _GreetingBar extends StatelessWidget {
+  final FlirtGreetState state;
+  final VoidCallback onPressed;
+
+  const _GreetingBar({required this.state, required this.onPressed});
+
+  @override
+  Widget build(BuildContext context) {
+    final quota = state.quota;
+    final disabled =
+        state.isLoadingQuota ||
+        state.isSending ||
+        !quota.enabled ||
+        quota.remaining <= 0 ||
+        quota.cooldownSeconds > 0;
+    final label = !quota.enabled
+        ? '已关闭'
+        : quota.cooldownSeconds > 0
+        ? '${quota.cooldownSeconds}s'
+        : '打招呼 ${quota.remaining}/${quota.dailyLimit}';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border.all(color: AppTheme.dividerColor),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              quota.enabled
+                  ? '今日剩余 ${quota.remaining} 次'
+                  : '打招呼功能已关闭',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          SizedBox(
+            height: 36,
+            child: FilledButton.icon(
+              onPressed: disabled ? null : onPressed,
+              icon: state.isSending
+                  ? const SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.chat_bubble_outline, size: 16),
+              label: Text(label),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.black,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: AppTheme.cardBackground,
+                disabledForegroundColor: AppTheme.textSecondary,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

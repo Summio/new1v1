@@ -303,6 +303,18 @@ class IMTextChargeOut(BaseModel):
     request_id: str
 
 
+class FlirtGreetIn(BaseModel):
+    slot_index: int = Field(..., ge=1, le=3, description="常用语槽位")
+
+
+class FlirtGreetQuotaOut(BaseModel):
+    daily_limit: int = 3
+    used: int = 0
+    remaining: int = 0
+    enabled: bool = True
+    cooldown_seconds: int = 0
+
+
 # ===== 勿扰设置 =====
 
 

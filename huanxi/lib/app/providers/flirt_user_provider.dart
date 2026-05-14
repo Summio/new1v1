@@ -206,6 +206,142 @@ class FlirtUserListState {
   }
 }
 
+class FlirtGreetQuota {
+  final int dailyLimit;
+  final int used;
+  final int remaining;
+  final bool enabled;
+  final int cooldownSeconds;
+
+  const FlirtGreetQuota({
+    this.dailyLimit = 3,
+    this.used = 0,
+    this.remaining = 0,
+    this.enabled = true,
+    this.cooldownSeconds = 0,
+  });
+
+  factory FlirtGreetQuota.fromJson(Map<String, dynamic> json) {
+    return FlirtGreetQuota(
+      dailyLimit: (json['daily_limit'] as num?)?.toInt() ?? 3,
+      used: (json['used'] as num?)?.toInt() ?? 0,
+      remaining: (json['remaining'] as num?)?.toInt() ?? 0,
+      enabled: json['enabled'] as bool? ?? true,
+      cooldownSeconds: (json['cooldown_seconds'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  bool get canSend => enabled && remaining > 0 && cooldownSeconds <= 0;
+}
+
+class FlirtGreetResult {
+  final int targetCount;
+  final int sentCount;
+  final int failedCount;
+  final int textDndFailedCount;
+  final int imFailedCount;
+  final FlirtGreetQuota quota;
+
+  const FlirtGreetResult({
+    required this.targetCount,
+    required this.sentCount,
+    required this.failedCount,
+    required this.textDndFailedCount,
+    required this.imFailedCount,
+    required this.quota,
+  });
+
+  factory FlirtGreetResult.fromJson(Map<String, dynamic> json) {
+    final quotaRaw = json['quota'];
+    return FlirtGreetResult(
+      targetCount: (json['target_count'] as num?)?.toInt() ?? 0,
+      sentCount: (json['sent_count'] as num?)?.toInt() ?? 0,
+      failedCount: (json['failed_count'] as num?)?.toInt() ?? 0,
+      textDndFailedCount:
+          (json['text_dnd_failed_count'] as num?)?.toInt() ?? 0,
+      imFailedCount: (json['im_failed_count'] as num?)?.toInt() ?? 0,
+      quota: quotaRaw is Map<String, dynamic>
+          ? FlirtGreetQuota.fromJson(quotaRaw)
+          : const FlirtGreetQuota(),
+    );
+  }
+}
+
+class FlirtGreetState {
+  final FlirtGreetQuota quota;
+  final bool isLoadingQuota;
+  final bool isSending;
+  final String? error;
+
+  const FlirtGreetState({
+    this.quota = const FlirtGreetQuota(),
+    this.isLoadingQuota = false,
+    this.isSending = false,
+    this.error,
+  });
+
+  FlirtGreetState copyWith({
+    FlirtGreetQuota? quota,
+    bool? isLoadingQuota,
+    bool? isSending,
+    String? error,
+  }) {
+    return FlirtGreetState(
+      quota: quota ?? this.quota,
+      isLoadingQuota: isLoadingQuota ?? this.isLoadingQuota,
+      isSending: isSending ?? this.isSending,
+      error: error,
+    );
+  }
+}
+
+class FlirtGreetNotifier extends StateNotifier<FlirtGreetState> {
+  final DioClient _dio;
+
+  FlirtGreetNotifier(this._dio) : super(const FlirtGreetState());
+
+  Future<void> fetchQuota() async {
+    state = state.copyWith(isLoadingQuota: true, error: null);
+    try {
+      final resp = await _dio.apiGet(ApiEndpoints.flirtGreetQuota);
+      final data = resp['data'] as Map<String, dynamic>? ?? {};
+      state = state.copyWith(
+        quota: FlirtGreetQuota.fromJson(data),
+        isLoadingQuota: false,
+        error: null,
+      );
+    } catch (e) {
+      AppLogger.debug('flirtGreet.fetchQuota error: $e');
+      state = state.copyWith(isLoadingQuota: false, error: '打招呼额度加载失败');
+    }
+  }
+
+  Future<FlirtGreetResult> send({required int slotIndex}) async {
+    if (state.isSending) {
+      throw Exception('正在发送，请稍候');
+    }
+    state = state.copyWith(isSending: true, error: null);
+    try {
+      final resp = await _dio.apiPost(
+        ApiEndpoints.flirtGreet,
+        data: {'slot_index': slotIndex},
+      );
+      final data = resp['data'] as Map<String, dynamic>? ?? {};
+      final result = FlirtGreetResult.fromJson(data);
+      state = state.copyWith(
+        quota: result.quota,
+        isSending: false,
+        error: null,
+      );
+      return result;
+    } catch (e) {
+      AppLogger.debug('flirtGreet.send error: $e');
+      state = state.copyWith(isSending: false, error: '打招呼发送失败');
+      rethrow;
+    }
+  }
+}
+
 class FlirtUserListNotifier extends StateNotifier<FlirtUserListState> {
   final DioClient _dio;
   int _requestSerial = 0;
@@ -287,4 +423,9 @@ class FlirtUserListNotifier extends StateNotifier<FlirtUserListState> {
 final flirtUserListProvider =
     StateNotifierProvider<FlirtUserListNotifier, FlirtUserListState>((ref) {
       return FlirtUserListNotifier(DioClient.instance);
+    });
+
+final flirtGreetProvider =
+    StateNotifierProvider<FlirtGreetNotifier, FlirtGreetState>((ref) {
+      return FlirtGreetNotifier(DioClient.instance);
     });

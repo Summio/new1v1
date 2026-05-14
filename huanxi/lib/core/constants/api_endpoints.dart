@@ -75,6 +75,12 @@ class ApiEndpoints {
   /// 搭讪用户列表（分页）
   static const String flirtUserList = 'app/flirt/list';
 
+  /// 搭讪打招呼额度
+  static const String flirtGreetQuota = 'app/flirt/greet/quota';
+
+  /// 搭讪打招呼
+  static const String flirtGreet = 'app/flirt/greet';
+
   /// 活跃页置顶
   static const String certifiedUserActivePin = 'app/certified-user/active-pin';
 

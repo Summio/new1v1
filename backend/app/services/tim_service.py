@@ -165,6 +165,127 @@ class TIMService:
 
         return False
 
+    async def _send_c2c_text_msg(
+        self,
+        *,
+        sdk_app_id: int,
+        identifier: str,
+        usersig: str,
+        from_account: str,
+        to_account: str,
+        text: str,
+    ) -> bool:
+        try:
+            import httpx
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("tim text send skipped: httpx unavailable, err={}", str(exc))
+            return False
+
+        query = urlencode(
+            {
+                "sdkappid": sdk_app_id,
+                "identifier": identifier,
+                "usersig": usersig,
+                "random": random.randint(100000, 999999),
+                "contenttype": "json",
+            }
+        )
+        url = f"https://console.tim.qq.com/v4/openim/sendmsg?{query}"
+        payload = {
+            "SyncOtherMachine": 1,
+            "From_Account": from_account,
+            "To_Account": to_account,
+            "MsgRandom": random.randint(100000, 999999),
+            "MsgBody": [
+                {
+                    "MsgType": "TIMTextElem",
+                    "MsgContent": {
+                        "Text": text,
+                    },
+                }
+            ],
+        }
+
+        for attempt in range(_MAX_RETRIES):
+            try:
+                async with httpx.AsyncClient(timeout=8.0) as client:
+                    resp = await client.post(url, json=payload)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("tim text send failed (attempt {}/{}): {}", attempt + 1, _MAX_RETRIES, str(exc))
+                if attempt < _MAX_RETRIES - 1:
+                    await asyncio.sleep(_RETRY_BASE_DELAY * (2**attempt))
+                    continue
+                return False
+
+            if resp.status_code != 200:
+                logger.warning(
+                    "tim text send failed (attempt {}/{}): http_status={}",
+                    attempt + 1,
+                    _MAX_RETRIES,
+                    resp.status_code,
+                )
+                if attempt < _MAX_RETRIES - 1:
+                    await asyncio.sleep(_RETRY_BASE_DELAY * (2**attempt))
+                    continue
+                return False
+
+            try:
+                body = resp.json()
+            except ValueError:
+                if attempt < _MAX_RETRIES - 1:
+                    await asyncio.sleep(_RETRY_BASE_DELAY * (2**attempt))
+                    continue
+                return False
+
+            if int(body.get("ErrorCode", -1)) != 0:
+                logger.warning("tim text send failed (attempt {}/{}): body={}", attempt + 1, _MAX_RETRIES, body)
+                if attempt < _MAX_RETRIES - 1:
+                    await asyncio.sleep(_RETRY_BASE_DELAY * (2**attempt))
+                    continue
+                return False
+
+            return True
+
+        return False
+
+    async def send_text_message(
+        self,
+        *,
+        sender_id: int,
+        receiver_id: int,
+        text: str,
+    ) -> bool:
+        content = (text or "").strip()
+        if not content:
+            return False
+        try:
+            config = await self._get_im_config()
+            sdk_app_id_raw = (config.get("im_sdk_app_id") or "").strip()
+            secret_key = (config.get("im_secret_key") or "").strip()
+            if not sdk_app_id_raw or not secret_key:
+                logger.warning("tim text send skipped: IM not configured")
+                return False
+            sdk_app_id = int(sdk_app_id_raw)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("tim text send skipped: config error, err={}", str(exc))
+            return False
+
+        admin_identifier = (config.get("im_admin_identifier") or "admin").strip()
+        try:
+            usersig = await self._get_admin_usersig(sdk_app_id, secret_key, admin_identifier)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("tim text send skipped: usersig error, err={}", str(exc))
+            return False
+
+        return await self._send_c2c_text_msg(
+            sdk_app_id=sdk_app_id,
+            identifier=admin_identifier,
+            usersig=usersig,
+            from_account=self._to_im_account(sender_id),
+            to_account=self._to_im_account(receiver_id),
+            text=content,
+        )
+
     async def send_gift_notification(
         self,
         *,
@@ -289,3 +410,11 @@ async def send_gift_notification(
         sender_nickname=sender_nickname,
     )
 
+
+async def send_text_message(sender_id: int, receiver_id: int, text: str) -> bool:
+    """发送普通 C2C 文本消息。"""
+    return await get_tim_service().send_text_message(
+        sender_id=sender_id,
+        receiver_id=receiver_id,
+        text=text,
+    )

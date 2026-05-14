@@ -6,7 +6,7 @@ from app.core.redis import get_redis
 from app.models.system_config import SYSTEM_CONFIG_CACHE_KEY, SystemConfig
 from app.schemas.base import Success
 from app.schemas.system import FlirtConfigIn
-from app.utils.parse import safe_parse_bool
+from app.utils.parse import safe_parse_bool, safe_parse_int
 
 logger = logging.getLogger(__name__)
 
@@ -14,14 +14,17 @@ router = APIRouter()
 
 FLIRT_FILTER_SAME_GENDER_KEY = "flirt_filter_same_gender_enabled"
 FLIRT_FILTER_CERTIFIED_USER_KEY = "flirt_filter_certified_user_enabled"
+FLIRT_GREET_DAILY_LIMIT_KEY = "flirt_greet_daily_limit"
 
 
 async def _load_flirt_config() -> FlirtConfigIn:
     same_gender_raw = await SystemConfig.get_value(FLIRT_FILTER_SAME_GENDER_KEY, "true")
     certified_user_raw = await SystemConfig.get_value(FLIRT_FILTER_CERTIFIED_USER_KEY, "true")
+    greet_daily_limit_raw = await SystemConfig.get_value(FLIRT_GREET_DAILY_LIMIT_KEY, "3")
     return FlirtConfigIn(
         filter_same_gender_enabled=safe_parse_bool(same_gender_raw, True),
         filter_certified_user_enabled=safe_parse_bool(certified_user_raw, True),
+        greet_daily_limit=max(0, min(20, safe_parse_int(greet_daily_limit_raw, 3))),
     )
 
 
@@ -42,6 +45,10 @@ async def update_flirt_config(config_in: FlirtConfigIn):
             FLIRT_FILTER_CERTIFIED_USER_KEY: (
                 str(bool(config_in.filter_certified_user_enabled)).lower(),
                 "搭讪配置-过滤真人认证用户",
+            ),
+            FLIRT_GREET_DAILY_LIMIT_KEY: (
+                str(int(config_in.greet_daily_limit)),
+                "搭讪配置-每日打招呼次数",
             ),
         }
         for cfg_key, (cfg_value, description) in values.items():

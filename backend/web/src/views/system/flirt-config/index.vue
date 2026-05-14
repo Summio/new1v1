@@ -1,6 +1,6 @@
 <script setup>
 import { onMounted, ref } from 'vue'
-import { NAlert, NButton, NCard, NSpace, NSwitch, useMessage } from 'naive-ui'
+import { NAlert, NButton, NCard, NInputNumber, NSpace, NSwitch, useMessage } from 'naive-ui'
 
 import api from '@/api'
 import CommonPage from '@/components/page/CommonPage.vue'
@@ -12,6 +12,7 @@ const loading = ref(false)
 const form = ref({
   filter_same_gender_enabled: true,
   filter_certified_user_enabled: true,
+  greet_daily_limit: 3,
 })
 
 onMounted(async () => {
@@ -25,6 +26,9 @@ async function loadConfig() {
     form.value = {
       filter_same_gender_enabled: res.data?.filter_same_gender_enabled !== false,
       filter_certified_user_enabled: res.data?.filter_certified_user_enabled !== false,
+      greet_daily_limit: Number.isInteger(res.data?.greet_daily_limit)
+        ? res.data.greet_daily_limit
+        : 3,
     }
   } catch (error) {
     message.error('加载搭讪配置失败')
@@ -62,10 +66,7 @@ async function saveConfig() {
             <div class="config-title">过滤同性别</div>
             <div class="config-desc">开启后仅展示异性用户</div>
           </div>
-          <NSwitch
-            v-model:value="form.filter_same_gender_enabled"
-            :loading="loading"
-          />
+          <NSwitch v-model:value="form.filter_same_gender_enabled" :loading="loading" />
         </div>
 
         <div class="config-row">
@@ -73,17 +74,27 @@ async function saveConfig() {
             <div class="config-title">过滤认证用户</div>
             <div class="config-desc">开启后隐藏真人认证用户，仅展示普通用户</div>
           </div>
-          <NSwitch
-            v-model:value="form.filter_certified_user_enabled"
-            :loading="loading"
+          <NSwitch v-model:value="form.filter_certified_user_enabled" :loading="loading" />
+        </div>
+
+        <div class="config-row">
+          <div>
+            <div class="config-title">每日打招呼次数</div>
+            <div class="config-desc">每个真人认证用户每天可使用次数，0 表示禁用，默认 3 次</div>
+          </div>
+          <NInputNumber
+            v-model:value="form.greet_daily_limit"
+            :disabled="loading"
+            :min="0"
+            :max="20"
+            :step="1"
+            style="width: 160px"
           />
         </div>
 
         <NSpace justify="end">
           <NButton :loading="loading" @click="loadConfig">重置</NButton>
-          <NButton type="primary" :loading="loading" @click="saveConfig">
-            保存配置
-          </NButton>
+          <NButton type="primary" :loading="loading" @click="saveConfig"> 保存配置 </NButton>
         </NSpace>
       </NSpace>
     </NCard>

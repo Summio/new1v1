@@ -58,6 +58,7 @@ class FlirtConfigIn(BaseModel):
         default=True,
         description="过滤认证用户：开启后隐藏真人认证用户，仅展示普通用户",
     )
+    greet_daily_limit: int = Field(default=3, ge=0, le=20, description="每日打招呼次数，0 表示禁用")
 
 
 class FlirtConfigOut(FlirtConfigIn):
@@ -105,4 +106,3 @@ class CertifiedCallPriceConfigIn(BaseModel):
             cleaned.insert(0, 0)
         self.tiers = sorted(cleaned)
         return self
-

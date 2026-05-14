@@ -2,9 +2,18 @@ from fastapi import APIRouter, Query
 
 from app.api.v1.apis.system.flirt_config import _load_flirt_config
 from app.core.ctx import CTX_APP_USER_OBJ
-from app.models import AppUser
-from app.schemas.base import Fail, SuccessExtra
+from app.core.redis import get_redis
+from app.models import AppUser, AppUserCommonPhrase
+from app.schemas.app_api import FlirtGreetIn
+from app.schemas.base import Fail, Success, SuccessExtra
+from app.services.flirt_greet_service import (
+    get_greet_quota,
+    release_greet_quota,
+    reserve_greet_quota,
+    set_greet_cooldown,
+)
 from app.services.gift_income_service import decimal_to_float_2
+from app.services.tim_service import send_text_message
 from app.services.user_availability_service import (
     build_availability_payload_map,
     resolve_availability_payload,
@@ -55,6 +64,19 @@ def _serialize_flirt_user(user: AppUser, availability_payload: dict) -> dict:
         "has_blocked_me": False,
         **availability_payload,
     }
+
+
+async def _build_flirt_user_query(current_user: AppUser, config):
+    q = AppUser.filter(status="normal").exclude(id=int(current_user.id))
+    if config.filter_same_gender_enabled and current_user.gender:
+        q = q.exclude(gender=current_user.gender)
+    if config.filter_certified_user_enabled:
+        q = q.filter(is_certified_user=False)
+
+    blocked_user_ids = await exclude_blocked_user_ids(int(current_user.id))
+    if blocked_user_ids:
+        q = q.exclude(id__in=blocked_user_ids)
+    return q
 
 
 async def _fetch_flirt_user_page(q, page: int, page_size: int) -> tuple[int, list[tuple[AppUser, dict]]]:
@@ -121,6 +143,17 @@ async def _fetch_flirt_user_page(q, page: int, page_size: int) -> tuple[int, lis
     return total, selected
 
 
+async def _fetch_online_flirt_users(current_user: AppUser, config) -> list[AppUser]:
+    from app.websocket.presence import get_online_user_ids
+
+    online_ids = await get_online_user_ids()
+    online_ids.discard(int(current_user.id))
+    if not online_ids:
+        return []
+    q = await _build_flirt_user_query(current_user, config)
+    return list(await q.filter(id__in=list(online_ids)).order_by("-coins", "-id"))
+
+
 @router.get("/flirt/list", summary="搭讪用户列表")
 async def flirt_user_list(
     page: int = Query(1, ge=1, description="页码"),
@@ -133,18 +166,122 @@ async def flirt_user_list(
         return Fail(code=403, msg="仅真人认证用户可查看搭讪列表")
 
     config = await _load_flirt_config()
-    q = AppUser.filter(status="normal").exclude(id=int(current_user.id))
-
-    if config.filter_same_gender_enabled and current_user.gender:
-        q = q.exclude(gender=current_user.gender)
-    if config.filter_certified_user_enabled:
-        q = q.filter(is_certified_user=False)
-
-    blocked_user_ids = await exclude_blocked_user_ids(int(current_user.id))
-    if blocked_user_ids:
-        q = q.exclude(id__in=blocked_user_ids)
+    q = await _build_flirt_user_query(current_user, config)
 
     total, users_with_availability = await _fetch_flirt_user_page(q=q, page=page, page_size=page_size)
     rows = [_serialize_flirt_user(user, availability_payload) for user, availability_payload in users_with_availability]
     has_more = total > page * page_size
     return SuccessExtra(rows=rows, current=page, total=total, has_more=has_more)
+
+
+@router.get("/flirt/greet/quota", summary="搭讪打招呼额度")
+async def flirt_greet_quota():
+    current_user = CTX_APP_USER_OBJ.get()
+    if not current_user:
+        return Fail(code=401, msg="用户不存在")
+    if not bool(current_user.is_certified_user):
+        return Fail(code=403, msg="仅真人认证用户可使用打招呼")
+
+    config = await _load_flirt_config()
+    try:
+        redis = await get_redis()
+        quota = await get_greet_quota(redis, user_id=int(current_user.id), daily_limit=int(config.greet_daily_limit))
+    except Exception:
+        return Fail(code=503, msg="打招呼次数检查失败，请稍后重试")
+    return Success(data=quota)
+
+
+@router.post("/flirt/greet", summary="搭讪页打招呼")
+async def flirt_greet(req_in: FlirtGreetIn):
+    current_user = CTX_APP_USER_OBJ.get()
+    if not current_user:
+        return Fail(code=401, msg="用户不存在")
+    if not bool(current_user.is_certified_user):
+        return Fail(code=403, msg="仅真人认证用户可使用打招呼")
+
+    phrase = await AppUserCommonPhrase.filter(user_id=int(current_user.id), slot_index=req_in.slot_index).first()
+    content = (phrase.approved_content if phrase else "").strip()
+    if not content:
+        return Fail(code=400, msg="该常用语还没有通过审核")
+
+    config = await _load_flirt_config()
+    try:
+        redis = await get_redis()
+        quota_status, quota = await reserve_greet_quota(
+            redis,
+            user_id=int(current_user.id),
+            daily_limit=int(config.greet_daily_limit),
+        )
+    except Exception:
+        return Fail(code=503, msg="打招呼次数检查失败，请稍后重试")
+
+    if quota_status == "disabled":
+        return Fail(code=403, msg="打招呼功能已关闭", data={"quota": quota})
+    if quota_status == "cooldown":
+        return Fail(code=429, msg="操作太频繁，请稍后再试", data={"quota": quota})
+    if quota_status == "exhausted":
+        return Fail(code=429, msg="今日打招呼次数已用完", data={"quota": quota})
+
+    target_users = await _fetch_online_flirt_users(current_user, config)
+    if not target_users:
+        try:
+            await release_greet_quota(redis, user_id=int(current_user.id))
+            quota = await get_greet_quota(
+                redis, user_id=int(current_user.id), daily_limit=int(config.greet_daily_limit)
+            )
+        except Exception:
+            pass
+        return Success(
+            data={
+                "slot_index": req_in.slot_index,
+                "content": content,
+                "target_count": 0,
+                "sent_count": 0,
+                "failed_count": 0,
+                "text_dnd_failed_count": 0,
+                "im_failed_count": 0,
+                "quota": quota,
+                "failure_samples": [],
+            },
+            msg="暂无在线可打招呼用户",
+        )
+
+    sent_count = 0
+    text_dnd_failed_count = 0
+    im_failed_count = 0
+    failure_samples: list[dict] = []
+    for target_user in target_users:
+        target_id = int(target_user.id)
+        if bool(target_user.text_dnd_enabled):
+            text_dnd_failed_count += 1
+            if len(failure_samples) < 5:
+                failure_samples.append({"user_id": target_id, "reason": "对方已开启文字勿扰"})
+            continue
+        ok = await send_text_message(int(current_user.id), target_id, content)
+        if ok:
+            sent_count += 1
+        else:
+            im_failed_count += 1
+            if len(failure_samples) < 5:
+                failure_samples.append({"user_id": target_id, "reason": "IM发送失败"})
+
+    try:
+        await set_greet_cooldown(redis, user_id=int(current_user.id))
+        quota = await get_greet_quota(redis, user_id=int(current_user.id), daily_limit=int(config.greet_daily_limit))
+    except Exception:
+        pass
+
+    failed_count = text_dnd_failed_count + im_failed_count
+    return Success(
+        data={
+            "slot_index": req_in.slot_index,
+            "content": content,
+            "target_count": len(target_users),
+            "sent_count": sent_count,
+            "failed_count": failed_count,
+            "text_dnd_failed_count": text_dnd_failed_count,
+            "im_failed_count": im_failed_count,
+            "quota": quota,
+            "failure_samples": failure_samples,
+        }
+    )
