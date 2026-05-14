@@ -12,6 +12,10 @@ from app.services.capability_limit_service import (
     load_capability_limit_config,
     moment_publish_denial_message,
 )
+from app.services.customer_service import (
+    get_customer_service_user_id,
+    is_customer_service_user_id,
+)
 from app.services.review_entry_guard_service import (
     MOMENT_REVIEW_PENDING_MESSAGE,
     has_pending_moment_review,
@@ -315,6 +319,9 @@ async def get_moment_feed(
     query = Moment.filter(q)
     if blocked_user_ids:
         query = query.exclude(user_id__in=blocked_user_ids)
+    customer_service_user_id = await get_customer_service_user_id()
+    if customer_service_user_id is not None:
+        query = query.exclude(user_id=customer_service_user_id)
 
     total = await query.count()
     moments = (
@@ -349,6 +356,8 @@ async def get_user_moments(
     user = await AppUser.filter(id=user_id).first()
     if not user:
         return Fail(code=404, msg="用户不存在")
+    if user_id != int(app_user.id) and await is_customer_service_user_id(user_id):
+        return SuccessExtra(rows=[], total=0, has_more=False)
 
     blocked_user_ids = await exclude_blocked_user_ids(int(app_user.id))
     if user_id != int(app_user.id) and user_id in blocked_user_ids:

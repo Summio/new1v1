@@ -30,6 +30,11 @@ from app.services.capability_limit_service import (
     load_capability_limit_config,
     profile_edit_denial_message,
 )
+from app.services.customer_service import (
+    CUSTOMER_SERVICE_INTERACTION_BLOCK_MESSAGE,
+    filter_customer_service_user_ids,
+    is_customer_service_user_id,
+)
 from app.services.gift_income_service import decimal_to_float_2
 from app.services.interaction_relation_service import (
     InteractionRelationError,
@@ -491,8 +496,11 @@ async def get_user_public_profile(
     scene: str = Query("", description="调用场景，可选 chat"),
 ):
     current_user_id = int(CTX_APP_USER_ID.get() or 0)
-    if scene.strip().lower() == "chat" and current_user_id == user_id:
+    scene_value = scene.strip().lower()
+    if scene_value == "chat" and current_user_id == user_id:
         return Fail(code=400, msg="不能和自己聊天")
+    if await is_customer_service_user_id(user_id) and scene_value != "chat":
+        return Fail(code=404, msg="用户不存在")
 
     app_user = await AppUser.filter(id=user_id).first()
     if not app_user:
@@ -528,6 +536,13 @@ async def get_user_follow_status(
     target_user = await AppUser.filter(id=user_id).first()
     if not target_user:
         return Fail(code=404, msg="用户不存在")
+    if await is_customer_service_user_id(user_id):
+        return Success(
+            data=UserFollowStatusOut(
+                target_user_id=target_user.id,
+                is_following=False,
+            ).model_dump()
+        )
 
     is_following = await _is_following(current_user_id, target_user.id)
     return Success(
@@ -549,6 +564,8 @@ async def follow_user(req_in: UserFollowIn):
     target_user = await AppUser.filter(id=req_in.target_user_id).first()
     if not target_user:
         return Fail(code=404, msg="用户不存在")
+    if await is_customer_service_user_id(target_user.id):
+        return Fail(code=403, msg=CUSTOMER_SERVICE_INTERACTION_BLOCK_MESSAGE)
 
     actor_user = CTX_APP_USER_OBJ.get()
     if not actor_user:
@@ -615,6 +632,8 @@ async def block_user(req_in: UserBlockIn):
     target_user = await AppUser.filter(id=req_in.target_user_id).first()
     if not target_user:
         return Fail(code=404, msg="用户不存在")
+    if await is_customer_service_user_id(target_user.id):
+        return Fail(code=403, msg=CUSTOMER_SERVICE_INTERACTION_BLOCK_MESSAGE)
 
     async with in_transaction() as conn:
         relation = (
@@ -768,6 +787,7 @@ async def list_user_following(
     total = await relation_q.count()
     relations = await relation_q.order_by("-created_at", "-id").offset((page - 1) * page_size).limit(page_size)
     following_ids = [relation.following_id for relation in relations]
+    following_ids = await filter_customer_service_user_ids(following_ids)
     if not following_ids:
         return SuccessExtra(
             data=None,
@@ -838,6 +858,7 @@ async def list_user_fans(
     total = await relation_q.count()
     relations = await relation_q.order_by("-created_at", "-id").offset((page - 1) * page_size).limit(page_size)
     fan_ids = [relation.follower_id for relation in relations]
+    fan_ids = await filter_customer_service_user_ids(fan_ids)
     if not fan_ids:
         return SuccessExtra(
             data=None,

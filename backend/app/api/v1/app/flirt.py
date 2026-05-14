@@ -7,6 +7,7 @@ from app.core.redis import get_redis
 from app.models import AppUser, AppUserCommonPhrase
 from app.schemas.app_api import FlirtGreetIn
 from app.schemas.base import Fail, Success, SuccessExtra
+from app.services.customer_service import exclude_customer_service_user
 from app.services.flirt_greet_service import (
     get_greet_quota,
     release_greet_quota,
@@ -73,6 +74,7 @@ def _serialize_flirt_user(user: AppUser, availability_payload: dict) -> dict:
 
 async def _build_flirt_user_query(current_user: AppUser, config):
     q = AppUser.filter(status="normal").exclude(id=int(current_user.id))
+    q = await exclude_customer_service_user(q)
     if config.filter_same_gender_enabled and current_user.gender:
         q = q.exclude(gender=current_user.gender)
     if config.filter_certified_user_enabled:

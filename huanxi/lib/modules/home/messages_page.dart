@@ -189,6 +189,9 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
   Future<void> _loadPeerAppProfiles(
     List<V2TimConversation> conversations,
   ) async {
+    final appInitState = ref.read(appInitProvider);
+    final customerServiceUserId =
+        appInitState.customerServiceUserId?.trim() ?? '';
     final targets = conversations
         .map((c) => c.userID?.trim() ?? '')
         .where((id) => id.isNotEmpty)
@@ -203,6 +206,21 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
 
     final results = await Future.wait(
       targets.map((target) async {
+        if (_matchesCustomerServiceConversation(
+          target.imUserId,
+          customerServiceUserId,
+        )) {
+          final avatarUrl = _imService.normalizeMediaUrl(
+            appInitState.customerServiceAvatar,
+          );
+          return MapEntry(
+            target.imUserId,
+            _PeerAppProfile(
+              nickname: appInitState.customerServiceNickname,
+              avatarUrl: avatarUrl.isNotEmpty ? avatarUrl : null,
+            ),
+          );
+        }
         try {
           final data = await DioClient.instance.apiGet(
             ApiEndpoints.userPublic,
@@ -260,6 +278,15 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
 
   String _displayName(V2TimConversation conv) {
     final userId = conv.userID?.trim() ?? '';
+    final appInitState = ref.read(appInitProvider);
+    if (_matchesCustomerServiceConversation(
+      userId,
+      appInitState.customerServiceUserId?.trim() ?? '',
+    )) {
+      final customerName = appInitState.customerServiceNickname.trim();
+      if (customerName.isNotEmpty) return customerName;
+    }
+
     final appNickname = _appProfileByUserId[userId]?.nickname?.trim() ?? '';
     if (appNickname.isNotEmpty) return appNickname;
 
@@ -285,8 +312,31 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
     return int.tryParse(imUserId);
   }
 
+  bool _matchesCustomerServiceConversation(
+    String imUserId,
+    String customerServiceUserId,
+  ) {
+    final customerId = int.tryParse(customerServiceUserId.trim());
+    final peerId = _extractAppUserId(imUserId);
+    return customerId != null &&
+        customerId > 0 &&
+        peerId != null &&
+        peerId == customerId;
+  }
+
   String? _avatarUrl(V2TimConversation conv) {
     final userId = conv.userID?.trim() ?? '';
+    final appInitState = ref.read(appInitProvider);
+    if (_matchesCustomerServiceConversation(
+      userId,
+      appInitState.customerServiceUserId?.trim() ?? '',
+    )) {
+      final customerAvatar = _imService.normalizeMediaUrl(
+        appInitState.customerServiceAvatar,
+      );
+      if (customerAvatar.isNotEmpty) return customerAvatar;
+    }
+
     final appAvatar = _appProfileByUserId[userId]?.avatarUrl?.trim() ?? '';
     if (appAvatar.isNotEmpty) return appAvatar;
 
@@ -470,6 +520,15 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
                         extra: {
                           'peerNickname': _displayName(conv),
                           'peerAvatarUrl': _avatarUrl(conv),
+                          'isCustomerService':
+                              _matchesCustomerServiceConversation(
+                            userId,
+                            ref
+                                    .read(appInitProvider)
+                                    .customerServiceUserId
+                                    ?.trim() ??
+                                '',
+                          ),
                         },
                       );
                       if (!context.mounted) return;

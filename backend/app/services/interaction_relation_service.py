@@ -2,7 +2,10 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.models import AppUser, SystemConfig
-from app.services.customer_service import load_customer_service_config
+from app.services.customer_service import (
+    CUSTOMER_SERVICE_INTERACTION_BLOCK_MESSAGE,
+    load_customer_service_config,
+)
 from app.utils.parse import safe_parse_bool
 
 InteractionAction = Literal["follow", "im_text", "call", "gift"]
@@ -154,7 +157,9 @@ async def ensure_interaction_allowed(
 
     runtime = await _load_interaction_relation_runtime()
     if _is_customer_service_participant(actor, target, runtime.customer_service_user_id):
-        return
+        if action == "im_text":
+            return
+        raise InteractionRelationError(403, CUSTOMER_SERVICE_INTERACTION_BLOCK_MESSAGE)
 
     opposite_gender_enabled, certified_mix_enabled = _rule_flags(runtime.config, action)
     action_label = _ACTION_LABELS[action]

@@ -11,6 +11,7 @@ from app.services.active_pin_service import (
     load_active_pin_cooldown_minutes,
     try_consume_active_pin_cooldown,
 )
+from app.services.customer_service import exclude_customer_service_user
 from app.services.user_availability_service import (
     build_availability_payload_map,
     resolve_availability_payload,
@@ -115,7 +116,11 @@ def _offline_review_sort_key(user):
 
 
 async def _fetch_sorted_certified_user_page(q, section: str, page: int, page_size: int):
-    from app.websocket.presence import count_online_user_ids, filter_online_user_ids, get_online_user_id_page
+    from app.websocket.presence import (
+        count_online_user_ids,
+        filter_online_user_ids,
+        get_online_user_id_page,
+    )
 
     total = await q.count()
     offset = (page - 1) * page_size
@@ -152,7 +157,9 @@ async def _fetch_sorted_certified_user_page(q, section: str, page: int, page_siz
                 break
         return seen, users
 
-    async def fetch_active_online_rank(rank: int, rank_offset: int, limit: int, online_total: int) -> tuple[int, list[AppUser]]:
+    async def fetch_active_online_rank(
+        rank: int, rank_offset: int, limit: int, online_total: int
+    ) -> tuple[int, list[AppUser]]:
         if limit <= 0:
             return 0, []
         batch_size = 200
@@ -233,6 +240,7 @@ async def certified_user_list(
             filters["is_recommended"] = True
 
     q = AppUser.filter(**filters)
+    q = await exclude_customer_service_user(q)
     if not search_keyword:
         q = q.exclude(cover_url="")
     if gender:

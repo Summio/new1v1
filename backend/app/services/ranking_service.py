@@ -11,6 +11,7 @@ from app.core.redis import get_redis
 from app.core.time_utils import now_local_naive, to_local_naive_for_db
 from app.models import AppUser, RankingSnapshot, SystemConfig
 from app.models.system_config import SYSTEM_CONFIG_CACHE_KEY
+from app.services.customer_service import get_customer_service_user_id
 from app.services.gift_income_service import decimal_to_float_2, quantize_decimal_2
 from app.utils.media_url import to_relative_media_url
 
@@ -437,6 +438,14 @@ def build_admin_ranking_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]
 async def list_app_ranking(board: str, period: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     limit = await get_app_display_limit()
     rows, _total, meta = await list_snapshot_rows(board, period, page=1, page_size=limit)
+    customer_service_user_id = await get_customer_service_user_id()
+    if customer_service_user_id:
+        visible_rows: list[dict[str, Any]] = []
+        for row in rows:
+            if customer_service_user_id and int(row.get("user_id") or 0) == customer_service_user_id:
+                continue
+            visible_rows.append(row)
+        rows = visible_rows
     app_rows = build_app_ranking_rows(rows, board=meta["board"])
     meta["app_display_limit"] = limit
     return app_rows, meta
@@ -468,4 +477,3 @@ async def ensure_default_config() -> None:
             cfg_value=str(DEFAULT_APP_DISPLAY_LIMIT),
             description="App排行榜展示数量",
         )
-

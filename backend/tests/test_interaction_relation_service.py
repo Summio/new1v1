@@ -95,21 +95,37 @@ async def test_interaction_rule_matrix(
 
 
 @pytest.mark.asyncio
-async def test_customer_service_participant_bypasses_limits(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_customer_service_participant_allows_text_chat_only(monkeypatch: pytest.MonkeyPatch) -> None:
     await _install_runtime(
         monkeypatch,
         InteractionRelationConfig(
+            follow_opposite_gender_enabled=True,
+            follow_certified_mix_enabled=True,
+            call_opposite_gender_enabled=True,
+            call_certified_mix_enabled=True,
             gift_opposite_gender_enabled=True,
             gift_certified_mix_enabled=True,
+            im_text_opposite_gender_enabled=False,
+            im_text_certified_mix_enabled=False,
         ),
         customer_service_user_id=2,
     )
 
     await ensure_interaction_allowed(
-        action="gift",
+        action="im_text",
         actor=_user(user_id=1, gender="male", is_certified_user=False),
         target=_user(user_id=2, gender="male", is_certified_user=False),
     )
+
+    for action in ("follow", "call", "gift"):
+        with pytest.raises(InteractionRelationError) as exc_info:
+            await ensure_interaction_allowed(
+                action=action,  # type: ignore[arg-type]
+                actor=_user(user_id=1, gender="male", is_certified_user=False),
+                target=_user(user_id=2, gender="male", is_certified_user=False),
+            )
+
+        assert exc_info.value.code == 403
 
 
 def test_parse_interaction_relation_config_defaults_to_disabled() -> None:
