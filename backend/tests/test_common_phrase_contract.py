@@ -168,6 +168,8 @@ def test_common_phrase_admin_frontend_contract() -> None:
     assert "/app_user/common-phrase-review/review" in api_text
 
     assert "常用语审核" in view_text
+    assert "res.rows || res.data || []" in view_text
+    assert "total: res.total || 0" in view_text
     assert "待审核" in view_text
     assert "已通过内容" in view_text
     assert "待审核内容" in view_text

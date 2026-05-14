@@ -34,7 +34,11 @@ onMounted(() => {
 })
 
 async function getCommonPhraseReviewList(params = {}) {
-  return api.getCommonPhraseReviewList(params)
+  const res = await api.getCommonPhraseReviewList(params)
+  return {
+    data: res.rows || res.data || [],
+    total: res.total || 0,
+  }
 }
 
 async function handleReview(row, status) {
