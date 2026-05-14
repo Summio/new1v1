@@ -1,3 +1,5 @@
+import json
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -83,6 +85,33 @@ def test_common_phrase_service_preserves_approved_content_until_review() -> None
     assert approved["pending_content"] == ""
     assert approved["review_status"] == "approved"
     assert approved["review_remark"] == ""
+
+
+def test_common_phrase_slots_are_json_serializable() -> None:
+    from app.services.common_phrase_service import build_common_phrase_slots
+
+    submitted_at = datetime(2026, 5, 14, 13, 40, 51)
+    reviewed_at = datetime(2026, 5, 14, 13, 41, 51)
+    slots = build_common_phrase_slots(
+        [
+            {
+                "id": 1,
+                "user_id": 100019,
+                "slot_index": 1,
+                "approved_content": "你好",
+                "pending_content": "很高兴认识你",
+                "review_status": "pending",
+                "review_remark": "",
+                "submitted_at": submitted_at,
+                "reviewed_at": reviewed_at,
+                "reviewed_by": 1,
+            }
+        ]
+    )
+
+    json.dumps({"phrases": slots}, ensure_ascii=False)
+    assert slots[0]["submitted_at"] == submitted_at.isoformat()
+    assert slots[0]["reviewed_at"] == reviewed_at.isoformat()
 
 
 def test_common_phrase_app_and_admin_api_contract() -> None:

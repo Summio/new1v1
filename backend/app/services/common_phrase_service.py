@@ -6,6 +6,14 @@ COMMON_PHRASE_MAX_LENGTH = 50
 COMMON_PHRASE_STATUSES = {"none", "pending", "approved", "rejected"}
 
 
+def _format_dt(value: Any) -> str | None:
+    if value is None:
+        return None
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
 def validate_common_phrase_content(value: str | None) -> str:
     content = (value or "").strip()
     if not content:
@@ -41,8 +49,8 @@ def _phrase_to_dict(row: Any) -> dict:
         "pending_content": getter("pending_content", "") or "",
         "review_status": status,
         "review_remark": getter("review_remark", "") or "",
-        "submitted_at": getter("submitted_at"),
-        "reviewed_at": getter("reviewed_at"),
+        "submitted_at": _format_dt(getter("submitted_at")),
+        "reviewed_at": _format_dt(getter("reviewed_at")),
         "reviewed_by": getter("reviewed_by"),
     }
 
