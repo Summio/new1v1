@@ -7,6 +7,8 @@ from app.services.system_popup_service import (
     PopupValidationError,
     ack_user_popup,
     build_popup_run_key,
+    build_startup_popup_run_key,
+    is_user_targeted_by_popup_task,
     normalize_user_ids,
     validate_popup_task_payload,
 )
@@ -60,6 +62,70 @@ def test_normalize_user_ids_and_run_key_are_stable() -> None:
     assert (
         build_popup_run_key(task_id=8, scheduled_run_at=datetime(2026, 5, 14, 10, 0))
         == "popup_task:8:2026-05-14T10:00:00"
+    )
+    assert (
+        build_startup_popup_run_key(task_id=8, user_id=34, launch_id="launch-1")
+        == "popup_start:8:34:launch-1"
+    )
+
+
+def test_validate_popup_payload_accepts_app_start_without_schedule() -> None:
+    payload = validate_popup_task_payload(
+        {
+            "title": "Notice",
+            "content": "Hello",
+            "type": "announcement",
+            "send_mode": "app_start",
+            "status": "scheduled",
+            "target_mode": "all",
+        }
+    )
+
+    assert payload["send_mode"] == "app_start"
+    assert payload["publish_at"] is None
+    assert payload["repeat_type"] is None
+
+
+@pytest.mark.asyncio
+async def test_is_user_targeted_by_popup_task_supports_all_user_ids_and_filters(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert await is_user_targeted_by_popup_task(
+        user_id=12,
+        target_mode="all",
+        target_user_ids=[],
+        target_filters=None,
+    )
+    assert await is_user_targeted_by_popup_task(
+        user_id=12,
+        target_mode="user_ids",
+        target_user_ids=[3, 12],
+        target_filters=None,
+    )
+    assert not await is_user_targeted_by_popup_task(
+        user_id=12,
+        target_mode="user_ids",
+        target_user_ids=[3, 4],
+        target_filters=None,
+    )
+
+    class FakeQuery:
+        async def exists(self):
+            return True
+
+    class FakeAppUser:
+        @classmethod
+        def filter(cls, *args, **kwargs):
+            assert kwargs == {"id": 12}
+            return FakeQuery()
+
+    monkeypatch.setattr("app.services.system_popup_service.AppUser", FakeAppUser)
+
+    assert await is_user_targeted_by_popup_task(
+        user_id=12,
+        target_mode="filter",
+        target_user_ids=[],
+        target_filters={"gender": "female"},
     )
 
 

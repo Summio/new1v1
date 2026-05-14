@@ -16,6 +16,7 @@ class PopupSendMode(str, Enum):
     IMMEDIATE = "immediate"
     ONCE = "once"
     REPEAT = "repeat"
+    APP_START = "app_start"
 
 
 class PopupTaskStatus(str, Enum):
@@ -86,3 +87,12 @@ class SystemPopupEstimateIn(SystemPopupTargetIn):
 
 class SystemPopupAckOut(BaseModel):
     ok: bool = True
+
+
+class SystemPopupStartupIn(BaseModel):
+    launch_id: str = Field(..., min_length=1, max_length=48)
+
+    @field_validator("launch_id")
+    @classmethod
+    def strip_launch_id(cls, value: str) -> str:
+        return value.strip()

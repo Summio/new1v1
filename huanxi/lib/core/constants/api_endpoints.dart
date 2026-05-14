@@ -214,6 +214,9 @@ class ApiEndpoints {
   static const String systemNotificationReadAll = 'app/notifications/read-all';
 
   // ========== 在线弹窗模块 ==========
+  /// App启动弹窗
+  static const String systemPopupStartup = 'app/popups/startup';
+
   /// 在线弹窗确认
   static const String systemPopupAckBase = 'app/popups';
 }

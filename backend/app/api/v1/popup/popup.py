@@ -39,6 +39,9 @@ async def _dump_task(task: SystemPopupTask) -> dict:
     except PopupValidationError:
         estimated_count = 0
     receipt_counts = await count_task_receipts(task_id=int(task.id))
+    run_count = int(task.run_count or 0)
+    if task.send_mode == "app_start":
+        run_count = await SystemPopup.filter(task_id=task.id).count()
     return {
         "id": int(task.id),
         "title": task.title,
@@ -57,7 +60,7 @@ async def _dump_task(task: SystemPopupTask) -> dict:
         "start_at": format_popup_datetime(task.start_at),
         "end_at": format_popup_datetime(task.end_at),
         "max_runs": task.max_runs,
-        "run_count": int(task.run_count or 0),
+        "run_count": run_count,
         "next_run_at": format_popup_datetime(task.next_run_at),
         "last_run_at": format_popup_datetime(task.last_run_at),
         "created_at": format_popup_datetime(task.created_at),
@@ -155,25 +158,25 @@ async def publish_popup(req_in: SystemPopupTaskActionIn):
     return Success(data=await _dump_task(task), msg="发布成功")
 
 
-@router.post("/pause", summary="暂停弹窗提示周期任务")
+@router.post("/pause", summary="暂停弹窗提示任务")
 async def pause_popup(req_in: SystemPopupTaskActionIn):
     task = await SystemPopupTask.filter(id=req_in.id).first()
     if not task:
         return Fail(code=404, msg="弹窗提示不存在")
-    if task.send_mode != "repeat" or task.status != "running":
-        return Fail(code=400, msg="仅运行中的周期任务可暂停")
+    if task.send_mode not in {"repeat", "app_start"} or task.status != "running":
+        return Fail(code=400, msg="仅运行中的周期或App启动任务可暂停")
     task.status = "paused"
     await task.save()
     return Success(msg="暂停成功")
 
 
-@router.post("/resume", summary="恢复弹窗提示周期任务")
+@router.post("/resume", summary="恢复弹窗提示任务")
 async def resume_popup(req_in: SystemPopupTaskActionIn):
     task = await SystemPopupTask.filter(id=req_in.id).first()
     if not task:
         return Fail(code=404, msg="弹窗提示不存在")
-    if task.send_mode != "repeat" or task.status != "paused":
-        return Fail(code=400, msg="仅暂停中的周期任务可恢复")
+    if task.send_mode not in {"repeat", "app_start"} or task.status != "paused":
+        return Fail(code=400, msg="仅暂停中的周期或App启动任务可恢复")
     task.status = "running"
     await recalculate_popup_task_next_run_at(task)
     return Success(data=await _dump_task(task), msg="恢复成功")

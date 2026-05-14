@@ -15,7 +15,12 @@ class SystemPopupTask(BaseModel, TimestampMixin):
         description="draft/scheduled/running/paused/completed/cancelled",
         db_index=True,
     )
-    send_mode = fields.CharField(max_length=20, default="immediate", description="immediate/once/repeat", db_index=True)
+    send_mode = fields.CharField(
+        max_length=20,
+        default="immediate",
+        description="immediate/once/repeat/app_start",
+        db_index=True,
+    )
     target_mode = fields.CharField(max_length=20, default="all", description="all/user_ids/filter", db_index=True)
     target_user_ids = fields.JSONField(null=True, description="指定用户ID列表")
     target_filters = fields.JSONField(null=True, description="筛选条件")

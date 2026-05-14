@@ -37,11 +37,15 @@ def test_system_popup_backend_contract_files_exist() -> None:
     schema_text = SCHEMA_FILE.read_text(encoding="utf-8")
     assert "SystemPopupTaskCreateIn" in schema_text
     assert "SystemPopupAckOut" in schema_text
+    assert "SystemPopupStartupIn" in schema_text
+    assert "APP_START" in schema_text
     assert "is_online" not in schema_text
 
     assert SERVICE_FILE.exists()
     service_text = SERVICE_FILE.read_text(encoding="utf-8")
     assert "publish_popup_task_once" in service_text
+    assert "fetch_startup_popups_for_user" in service_text
+    assert "build_startup_popup_run_key" in service_text
     assert "ack_user_popup" in service_text
     assert "estimate_online_target_count" in service_text
     assert "filter_online_user_ids" in service_text
@@ -73,6 +77,7 @@ def test_system_popup_routes_menu_websocket_and_no_pending_api() -> None:
 
     assert APP_API_FILE.exists()
     app_text = APP_API_FILE.read_text(encoding="utf-8")
+    assert '@router.post("/popups/startup"' in app_text
     assert '@router.post("/popups/{popup_id}/ack"' in app_text
     assert "pending" not in app_text.lower()
 
@@ -96,6 +101,7 @@ def test_system_popup_routes_menu_websocket_and_no_pending_api() -> None:
     assert "CREATE TABLE `system_popup`" in migration_text
     assert "CREATE TABLE `system_popup_receipt`" in migration_text
     assert "/api/v1/popup/list" in migration_text
+    assert "/api/v1/app/popups/startup" in migration_text
     assert "/api/v1/app/popups/{popup_id}/ack" in migration_text
     assert "/api/v1/app/popups/pending" not in migration_text
 
@@ -123,22 +129,26 @@ def test_system_popup_admin_and_flutter_contract() -> None:
     assert "当前在线可触达人数" in web_view_text
     assert "已推送人数" in web_view_text
     assert "已确认人数" in web_view_text
+    assert "App启动时" in web_view_text
     assert "form.target_filters.is_online" not in web_view_text
 
     assert FLUTTER_ENDPOINTS_FILE.exists()
     endpoints_text = FLUTTER_ENDPOINTS_FILE.read_text(encoding="utf-8")
+    assert "systemPopupStartup" in endpoints_text
     assert "systemPopupAckBase" in endpoints_text
     assert "systemPopupPending" not in endpoints_text
 
     assert FLUTTER_SERVICE_FILE.exists()
     service_text = FLUTTER_SERVICE_FILE.read_text(encoding="utf-8")
     assert "class SystemPopupItem" in service_text
+    assert "fetchStartupPopups" in service_text
     assert "ackPopup" in service_text
     assert "fetchPending" not in service_text
 
     main_shell_text = FLUTTER_MAIN_SHELL_FILE.read_text(encoding="utf-8")
     assert "system_popup_pending" in main_shell_text
     assert "_handleSystemPopupPending" in main_shell_text
+    assert "_fetchStartupSystemPopups" in main_shell_text
     assert "AppRoutes.callRoom" in main_shell_text
     assert "AppRoutes.callIncoming" in main_shell_text
     assert "AppRoutes.callOutgoing" in main_shell_text

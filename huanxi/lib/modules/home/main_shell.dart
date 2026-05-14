@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:uuid/uuid.dart';
 
 import '../../app/providers/auth_provider.dart';
 import '../../app/providers/certified_user_provider.dart';
@@ -57,6 +58,8 @@ class PresenceEvent {
 
 class _MainShellState extends ConsumerState<MainShell>
     with WidgetsBindingObserver {
+  static final String _startupLaunchId = const Uuid().v4();
+
   final IMService _imService = IMService();
   bool _incomingRouteOpening = false;
   String? _lastHandledIncomingKey;
@@ -72,6 +75,7 @@ class _MainShellState extends ConsumerState<MainShell>
   StreamSubscription<WsEvent>? _wsSubscription;
   final SystemPopupService _systemPopupService = SystemPopupService.instance;
   bool _systemPopupShowing = false;
+  bool _startupSystemPopupsRequested = false;
   final Set<int> _handledSystemPopupIds = <int>{};
 
   bool _shouldGuardIncomingRouteByRole() {
@@ -94,6 +98,7 @@ class _MainShellState extends ConsumerState<MainShell>
       ref.read(authProvider.notifier).refreshBalance();
       ref.read(authProvider.notifier).fetchUserInfo();
       _refreshSystemNotificationUnreadCount();
+      unawaited(_fetchStartupSystemPopups());
     });
   }
 
@@ -432,6 +437,46 @@ class _MainShellState extends ConsumerState<MainShell>
 
   Future<void> _handleSystemPopupPending(Map<String, dynamic> data) async {
     final popup = SystemPopupItem.fromJson(data);
+    await _showSystemPopupIfAllowed(popup);
+  }
+
+  Future<void> _fetchStartupSystemPopups() async {
+    if (_startupSystemPopupsRequested) {
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    final auth = ref.read(authProvider);
+    if (!auth.isLoggedIn) {
+      return;
+    }
+    _startupSystemPopupsRequested = true;
+    if (_lifecycleState != AppLifecycleState.resumed ||
+        _systemPopupShowing ||
+        _isCallRoute(_currentMatchedLocation(context))) {
+      return;
+    }
+
+    try {
+      final popups = await _systemPopupService.fetchStartupPopups(
+        _startupLaunchId,
+      );
+      for (final popup in popups) {
+        if (!mounted ||
+            _lifecycleState != AppLifecycleState.resumed ||
+            _systemPopupShowing ||
+            _isCallRoute(_currentMatchedLocation(context))) {
+          return;
+        }
+        await _showSystemPopupIfAllowed(popup);
+      }
+    } catch (e) {
+      debugPrint('mainShell.fetchStartupSystemPopups error: $e');
+    }
+  }
+
+  Future<void> _showSystemPopupIfAllowed(SystemPopupItem popup) async {
     if (popup.id <= 0) {
       return;
     }
@@ -543,6 +588,12 @@ class _MainShellState extends ConsumerState<MainShell>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         _initGlobalIMUnread();
+      });
+    }
+    if (auth.isLoggedIn && !_startupSystemPopupsRequested) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_fetchStartupSystemPopups());
       });
     }
 

@@ -32,6 +32,23 @@ class SystemPopupService {
 
   static final SystemPopupService instance = SystemPopupService._();
 
+  Future<List<SystemPopupItem>> fetchStartupPopups(String launchId) async {
+    final data = await DioClient.instance.apiPost(
+      ApiEndpoints.systemPopupStartup,
+      data: {'launch_id': launchId},
+    );
+    final payload = data['data'];
+    final rawItems = payload is Map<String, dynamic> ? payload['items'] : null;
+    if (rawItems is! List) {
+      return const <SystemPopupItem>[];
+    }
+    return rawItems
+        .whereType<Map>()
+        .map((item) => SystemPopupItem.fromJson(Map<String, dynamic>.from(item)))
+        .where((item) => item.id > 0)
+        .toList(growable: false);
+  }
+
   Future<void> ackPopup(int popupId) async {
     await DioClient.instance.apiPost(
       '${ApiEndpoints.systemPopupAckBase}/$popupId/ack',

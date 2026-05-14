@@ -884,6 +884,7 @@ async def init_roles():
             "/api/v1/popup/resume",
             "/api/v1/popup/cancel",
             "/api/v1/popup/delete",
+            "/api/v1/app/popups/startup",
             "/api/v1/app/popups/{popup_id}/ack",
         ],
     ).all()

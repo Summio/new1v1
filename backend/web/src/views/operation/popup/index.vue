@@ -52,6 +52,7 @@ const sendModeOptions = [
   { label: '立即发送', value: 'immediate' },
   { label: '一次性定时', value: 'once' },
   { label: '周期重复', value: 'repeat' },
+  { label: 'App启动时', value: 'app_start' },
 ]
 const repeatTypeOptions = [
   { label: '每日', value: 'daily' },
@@ -283,7 +284,7 @@ const columns = [
     title: '下次发送时间',
     key: 'next_run_at',
     width: 180,
-    render: (row) => renderDate(row.next_run_at),
+    render: (row) => (row.send_mode === 'app_start' ? '-' : renderDate(row.next_run_at)),
   },
   { title: '已发送次数', key: 'run_count', width: 110, align: 'center' },
   { title: '创建时间', key: 'created_at', width: 180, render: (row) => renderDate(row.created_at) },
@@ -435,7 +436,8 @@ const columns = [
 
     <NModal v-model:show="modalVisible" preset="card" :title="modalTitle" style="width: 840px">
       <NAlert type="info" :bordered="false" style="margin-bottom: 16px">
-        弹窗仅在线 WebSocket 推送，离线用户不会补发；当前在线可触达人数以计算当刻为准。
+        弹窗仅在线 WebSocket 推送，离线用户不会补发；App启动时弹窗会在用户冷启动 App
+        或登录后首次进入主界面时请求展示，后台切回前台不会重复触发。
       </NAlert>
       <NForm :model="form" label-placement="left" label-width="120">
         <NFormItem label="标题">
