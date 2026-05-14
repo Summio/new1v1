@@ -49,7 +49,7 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
       }
       final packageList = payload['withdraw_packages'];
       if (packageList is! List || packageList.isEmpty) {
-        throw Exception('暂无可用提现档位');
+        throw Exception('暂无可用提现套餐');
       }
       final parsed = <Map<String, dynamic>>[];
       for (final item in packageList) {
@@ -65,7 +65,7 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
         });
       }
       if (parsed.isEmpty) {
-        throw Exception('提现档位配置无效');
+        throw Exception('提现套餐配置无效');
       }
       if (!mounted) return;
       setState(() {
@@ -138,7 +138,7 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
     if (!_account.isComplete) {
       AppToast.showSnackBar(
         context,
-        const SnackBar(content: Text('请先填写提现账户资料')),
+        const SnackBar(content: Text('请先填写提现账户')),
       );
       await _editAccount();
       return;
@@ -205,7 +205,7 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  _loadError ?? '暂无可用提现档位',
+                  _loadError ?? '暂无可用提现套餐',
                   style: const TextStyle(
                     fontSize: 16,
                     color: AppTheme.textSecondary,
@@ -252,7 +252,7 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            '可提现 ${authState.diamonds.toStringAsFixed(2)}$diamondName，审核通过后到账支付宝',
+                            '$diamondName余额: ${authState.diamonds.toStringAsFixed(2)}',
                             style: TextStyle(
                               fontSize: 13,
                               color: AppTheme.secondaryDark,
@@ -264,7 +264,7 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
                   ),
                   const SizedBox(height: 24),
                   const Text(
-                    '选择提现档位',
+                    '选择提现套餐',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
@@ -292,7 +292,7 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
                     ),
                   const SizedBox(height: 24),
                   const Text(
-                    '提现资料',
+                    '提现账户',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),

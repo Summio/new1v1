@@ -21,7 +21,6 @@ class _RechargePageState extends ConsumerState<RechargePage> {
   int _selectedIndex = 0;
   bool _isLoadingPackages = true;
   bool _isSubmitting = false;
-  int _tokenRate = 10;
   String? _loadError;
 
   List<Map<String, dynamic>> _packages = [];
@@ -48,8 +47,6 @@ class _RechargePageState extends ConsumerState<RechargePage> {
         throw Exception('配置数据格式错误');
       }
 
-      final rateRaw = payload['token_rate'];
-      final tokenRate = rateRaw is num ? rateRaw.toInt() : _tokenRate;
       final packageList = payload['recharge_packages'];
 
       if (packageList is! List || packageList.isEmpty) {
@@ -76,7 +73,6 @@ class _RechargePageState extends ConsumerState<RechargePage> {
 
       if (!mounted) return;
       setState(() {
-        _tokenRate = tokenRate > 0 ? tokenRate : _tokenRate;
         _packages = parsed;
         if (_selectedIndex >= _packages.length) {
           _selectedIndex = 0;
@@ -141,6 +137,7 @@ class _RechargePageState extends ConsumerState<RechargePage> {
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authProvider);
     final tokenNames = ref.watch(tokenNamesProvider);
     final dynamicCoinName = tokenNames.coinName;
 
@@ -226,10 +223,10 @@ class _RechargePageState extends ConsumerState<RechargePage> {
                           color: AppTheme.secondaryDark,
                           size: 20,
                         ),
-                        SizedBox(width: 8),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            '1元 = $_tokenRate$dynamicCoinName，$dynamicCoinName用于拨打认证用户电话',
+                            '$dynamicCoinName余额: ${authState.coins.toStringAsFixed(2)}',
                             style: TextStyle(
                               fontSize: 13,
                               color: AppTheme.secondaryDark,
@@ -241,7 +238,7 @@ class _RechargePageState extends ConsumerState<RechargePage> {
                   ),
                   const SizedBox(height: 24),
                   const Text(
-                    '选择充值金额',
+                    '选择充值套餐',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
