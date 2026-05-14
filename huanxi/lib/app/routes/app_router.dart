@@ -71,6 +71,11 @@ class AppRoutes {
   static const String teenModeSetup = '/settings/teen-mode/setup';
   static const String teenModeVerify = '/teen-mode/verify';
   static const String certificationCenter = '/profile/certification';
+  static const String certificationApply = '/profile/certification/apply';
+  static const String certificationCallPrice =
+      '/profile/certification/call-price';
+  static const String certificationCommonPhrases =
+      '/profile/certification/common-phrases';
   static const String im = '/im';
   static const String giftPanel = '/gift';
   static const String myMoments = '/profile/moments';
@@ -353,7 +358,19 @@ final appRouter = GoRouter(
     ),
     GoRoute(
       path: AppRoutes.certificationCenter,
-      builder: (context, state) => const CertificationCenterPage(),
+      builder: (context, state) => const CertificationHomePage(),
+    ),
+    GoRoute(
+      path: AppRoutes.certificationApply,
+      builder: (context, state) => const CertificationApplyPage(),
+    ),
+    GoRoute(
+      path: AppRoutes.certificationCallPrice,
+      builder: (context, state) => const CertifiedCallPricePage(),
+    ),
+    GoRoute(
+      path: AppRoutes.certificationCommonPhrases,
+      builder: (context, state) => const CertifiedCommonPhrasesPage(),
     ),
     GoRoute(
       path: '${AppRoutes.im}/:userId',

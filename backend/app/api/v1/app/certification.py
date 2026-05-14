@@ -6,10 +6,12 @@ from fastapi import APIRouter, Depends, File, UploadFile
 from app.core.app_auth import DependAppAuth
 from app.core.ctx import CTX_APP_USER_OBJ
 from app.models import AppUser
+from app.models.app_user_common_phrase import AppUserCommonPhrase
 from app.schemas.app_user import (
     CertificationApplyIn,
     CertificationStatusOut,
     CertifiedCallPriceUpdateIn,
+    CommonPhraseUpdateIn,
 )
 from app.schemas.base import Fail, Success
 from app.services.capability_limit_service import (
@@ -19,6 +21,11 @@ from app.services.capability_limit_service import (
 from app.services.certification_price_service import (
     get_certified_call_price_tiers,
     normalize_certified_call_price,
+)
+from app.services.common_phrase_service import (
+    build_common_phrase_slots,
+    validate_common_phrase_content,
+    validate_common_phrase_slot,
 )
 from app.settings.config import settings
 from app.utils.media_url import to_relative_media_url
@@ -151,3 +158,64 @@ async def update_call_price(req_in: CertifiedCallPriceUpdateIn):
         return Fail(code=400, msg="请选择后台配置的通话价格档位")
     await AppUser.filter(id=app_user.id).update(certified_call_price=normalized)
     return Success(data={"price": normalized})
+
+
+@router.get("/certification/common-phrases", summary="获取认证用户常用语", dependencies=[Depends(DependAppAuth)])
+async def get_common_phrases():
+    app_user: AppUser = CTX_APP_USER_OBJ.get()
+    if not app_user:
+        return Fail(code=401, msg="用户不存在")
+    if not app_user.is_certified_user:
+        return Fail(code=403, msg="仅真人认证用户可设置常用语")
+
+    rows = await AppUserCommonPhrase.filter(user_id=app_user.id).order_by("slot_index").all()
+    return Success(data={"phrases": build_common_phrase_slots(rows)})
+
+
+@router.put(
+    "/certification/common-phrases/{slot_index}",
+    summary="提交认证用户常用语审核",
+    dependencies=[Depends(DependAppAuth)],
+)
+async def update_common_phrase(slot_index: int, req_in: CommonPhraseUpdateIn):
+    app_user: AppUser = CTX_APP_USER_OBJ.get()
+    if not app_user:
+        return Fail(code=401, msg="用户不存在")
+    if not app_user.is_certified_user:
+        return Fail(code=403, msg="仅真人认证用户可设置常用语")
+
+    try:
+        normalized_slot = validate_common_phrase_slot(slot_index)
+        content = validate_common_phrase_content(req_in.content)
+    except ValueError as exc:
+        return Fail(code=400, msg=str(exc))
+
+    row = await AppUserCommonPhrase.filter(user_id=app_user.id, slot_index=normalized_slot).first()
+    if row:
+        row.pending_content = content
+        row.review_status = "pending"
+        row.review_remark = ""
+        row.submitted_at = datetime.now()
+        row.reviewed_at = None
+        row.reviewed_by = None
+        await row.save(
+            update_fields=[
+                "pending_content",
+                "review_status",
+                "review_remark",
+                "submitted_at",
+                "reviewed_at",
+                "reviewed_by",
+                "updated_at",
+            ]
+        )
+    else:
+        row = await AppUserCommonPhrase.create(
+            user_id=app_user.id,
+            slot_index=normalized_slot,
+            pending_content=content,
+            review_status="pending",
+            review_remark="",
+            submitted_at=datetime.now(),
+        )
+    return Success(data={"phrase": build_common_phrase_slots([row])[normalized_slot - 1]}, msg="已提交审核")

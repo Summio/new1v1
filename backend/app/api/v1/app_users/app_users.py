@@ -16,6 +16,7 @@ from app.core.profile_basic_fields import (
 )
 from app.models import (
     AppUser,
+    AppUserCommonPhrase,
     AppUserProfileReviewApply,
     AppUserTokenAdjustRecord,
     CallRecord,
@@ -29,6 +30,7 @@ from app.schemas.app_user import (
     AppUserAdminUpdateIn,
     AppUserBalanceAdjustIn,
     CertificationReviewIn,
+    CommonPhraseReviewIn,
 )
 from app.schemas.app_user_profile_review import (
     ProfileReviewBulkIn,
@@ -37,6 +39,7 @@ from app.schemas.app_user_profile_review import (
 from app.schemas.base import Fail, Success, SuccessExtra
 from app.services.balance_event_service import publish_balance_changed
 from app.services.certification_price_service import normalize_certified_call_price
+from app.services.common_phrase_service import apply_common_phrase_review
 from app.services.gift_income_service import decimal_to_float_2
 from app.services.profile_review_service import (
     ProfileReviewValidationError,
@@ -105,6 +108,24 @@ def _format_profile_review_apply(apply: AppUserProfileReviewApply, user: AppUser
         "after_snapshot": after_snapshot,
         "review_items": review_items,
         "review_item_count": len(review_items),
+    }
+
+
+def _format_common_phrase_review(row: AppUserCommonPhrase, user: AppUser | None) -> dict:
+    return {
+        "id": row.id,
+        "user_id": int(row.user_id),
+        "phone": user.phone if user else "",
+        "nickname": (user.nickname or user.phone or f"用户{row.user_id}") if user else f"用户{row.user_id}",
+        "avatar": to_relative_media_url(user.avatar) if user else None,
+        "slot_index": int(row.slot_index or 0),
+        "approved_content": row.approved_content or "",
+        "pending_content": row.pending_content or "",
+        "review_status": row.review_status or "none",
+        "review_remark": row.review_remark or "",
+        "submitted_at": row.submitted_at.isoformat() if row.submitted_at else None,
+        "reviewed_at": row.reviewed_at.isoformat() if row.reviewed_at else None,
+        "reviewed_by": int(row.reviewed_by or 0) or None,
     }
 
 
@@ -579,13 +600,112 @@ async def complete_profile_review(req_in: ProfileReviewBulkIn):
     return Success(msg="审核完成")
 
 
+@router.get("/common-phrase-review/list", summary="查看常用语审核列表")
+async def list_common_phrase_review(
+    page: int = Query(1, ge=1, description="页码"),
+    page_size: int = Query(10, ge=1, le=100, description="每页数量"),
+    status: str = Query("pending", description="审核状态 all/none/pending/approved/rejected"),
+    phone: str = Query("", description="手机号"),
+    nickname: str = Query("", description="昵称"),
+    user_id: int | None = Query(None, ge=1, description="用户ID"),
+):
+    q = Q()
+    normalized_status = (status or "pending").strip()
+    if normalized_status and normalized_status != "all":
+        q &= Q(review_status=normalized_status)
+    if user_id:
+        q &= Q(user_id=user_id)
+    if phone or nickname:
+        user_q = Q()
+        if phone:
+            user_q &= Q(phone__contains=phone)
+        if nickname:
+            user_q &= Q(nickname__contains=nickname)
+        matched_user_ids = await AppUser.filter(user_q).values_list("id", flat=True)
+        matched_user_ids = [int(item) for item in matched_user_ids]
+        if not matched_user_ids:
+            return SuccessExtra(data=None, rows=[], current=page, total=0, has_more=False)
+        q &= Q(user_id__in=matched_user_ids)
+
+    total = await AppUserCommonPhrase.filter(q).count()
+    rows = (
+        await AppUserCommonPhrase.filter(q)
+        .order_by("-submitted_at", "-id")
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    user_ids = [int(row.user_id) for row in rows]
+    users = await AppUser.filter(id__in=user_ids).all() if user_ids else []
+    user_map = {int(user.id): user for user in users}
+    return SuccessExtra(
+        data=None,
+        rows=[_format_common_phrase_review(row, user_map.get(int(row.user_id))) for row in rows],
+        current=page,
+        total=total,
+        has_more=page * page_size < total,
+    )
+
+
+@router.get("/common-phrase-review/get", summary="查看常用语审核详情")
+async def get_common_phrase_review(id: int = Query(..., ge=1, description="常用语记录ID")):
+    row = await AppUserCommonPhrase.filter(id=id).first()
+    if not row:
+        return Fail(code=404, msg="常用语不存在")
+    user = await AppUser.filter(id=row.user_id).first()
+    return Success(data=_format_common_phrase_review(row, user))
+
+
+@router.post("/common-phrase-review/review", summary="审核常用语")
+async def review_common_phrase(req_in: CommonPhraseReviewIn):
+    row = await AppUserCommonPhrase.filter(id=req_in.id).first()
+    if not row:
+        return Fail(code=404, msg="常用语不存在")
+    if (row.review_status or "none") != "pending":
+        return Fail(code=400, msg="当前常用语不是待审核状态")
+
+    try:
+        next_row = apply_common_phrase_review(
+            {
+                "approved_content": row.approved_content or "",
+                "pending_content": row.pending_content or "",
+                "review_status": row.review_status or "none",
+                "review_remark": row.review_remark or "",
+            },
+            status=req_in.status,
+            review_remark=req_in.review_remark,
+        )
+    except ValueError as exc:
+        return Fail(code=400, msg=str(exc))
+
+    row.approved_content = next_row["approved_content"]
+    row.pending_content = next_row["pending_content"]
+    row.review_status = next_row["review_status"]
+    row.review_remark = next_row["review_remark"]
+    row.reviewed_at = datetime.now()
+    row.reviewed_by = int(CTX_USER_ID.get() or 0) or None
+    await row.save(
+        update_fields=[
+            "approved_content",
+            "pending_content",
+            "review_status",
+            "review_remark",
+            "reviewed_at",
+            "reviewed_by",
+            "updated_at",
+        ]
+    )
+    return Success(msg="审核成功")
+
+
 @router.get("/bill/list", summary="查看App用户账单列表")
 async def list_app_user_bill(
     user_id: int = Query(..., ge=1, description="用户ID"),
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(10, ge=1, le=100, description="每页数量"),
     direction: str = Query("all", description="方向 all/income/expense"),
-    biz_type: str = Query("", description="业务类型 recharge/call/gift/withdraw/im_text/call_fee/gift_fee/token_adjust"),
+    biz_type: str = Query(
+        "", description="业务类型 recharge/call/gift/withdraw/im_text/call_fee/gift_fee/token_adjust"
+    ),
 ):
     user = await AppUser.filter(id=user_id).first()
     if not user:
@@ -998,7 +1118,9 @@ async def list_app_user_bill(
     if normalized_biz_type:
         allowed_types = {"recharge", "call", "gift", "withdraw", "im_text", "call_fee", "gift_fee", "token_adjust"}
         if normalized_biz_type not in allowed_types:
-            return Fail(code=400, msg="biz_type 仅支持 recharge/call/gift/withdraw/im_text/call_fee/gift_fee/token_adjust")
+            return Fail(
+                code=400, msg="biz_type 仅支持 recharge/call/gift/withdraw/im_text/call_fee/gift_fee/token_adjust"
+            )
 
     filtered = bills
     if normalized_direction == "income":

@@ -164,6 +164,17 @@ def build_review_children(parent_id: int) -> list[Menu]:
             component="/operation/withdraw-account",
             keepalive=False,
         ),
+        Menu(
+            menu_type=MenuType.MENU,
+            name="常用语审核",
+            path="common-phrase-review",
+            order=6,
+            parent_id=parent_id,
+            icon="material-symbols:chat-paste-go-outline-rounded",
+            is_hidden=False,
+            component="/operation/common-phrase-review",
+            keepalive=False,
+        ),
     ]
 
 

@@ -96,6 +96,10 @@ class ApiEndpoints {
   /// 更新认证用户通话价格
   static const String certifiedCallPriceUpdate = 'app/certification/call-price';
 
+  /// 认证用户常用语
+  static const String certifiedCommonPhrases =
+      'app/certification/common-phrases';
+
   // ========== 通话模块 ==========
   /// 发起呼叫（余额预检）
   static const String dialing = 'app/dialing';

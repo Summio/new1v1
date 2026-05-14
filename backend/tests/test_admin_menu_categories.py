@@ -38,6 +38,7 @@ def test_review_finance_and_settings_menu_blueprints_exist() -> None:
         ("真人认证审核", "certification-review", "/operation/certification-review"),
         ("资料编辑审核", "profile-review", "/operation/profile-review"),
         ("提现账户审核", "withdraw-account", "/operation/withdraw-account"),
+        ("常用语审核", "common-phrase-review", "/operation/common-phrase-review"),
     }
     assert _menu_summary(init_app.build_finance_children(parent_id=300)) == {
         ("充值管理", "recharge", "/operation/recharge"),
@@ -95,6 +96,7 @@ def test_admin_menu_icons_match_menu_purpose() -> None:
         "真人认证审核": "material-symbols:verified-user-outline-rounded",
         "资料编辑审核": "material-symbols:manage-accounts-outline-rounded",
         "提现账户审核": "material-symbols:account-balance-outline-rounded",
+        "常用语审核": "material-symbols:chat-paste-go-outline-rounded",
     }
     assert _menu_icons(init_app.build_finance_children(parent_id=300)) == {
         "充值管理": "material-symbols:add-card-outline-rounded",

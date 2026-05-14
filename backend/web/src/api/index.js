@@ -38,6 +38,11 @@ export default {
   rejectAllProfileReviewItems: (data = {}) =>
     request.post('/app_user/profile-review/reject-all', data),
   completeProfileReview: (data = {}) => request.post('/app_user/profile-review/complete', data),
+  getCommonPhraseReviewList: (params = {}) =>
+    request.get('/app_user/common-phrase-review/list', { params }),
+  getCommonPhraseReviewById: (params = {}) =>
+    request.get('/app_user/common-phrase-review/get', { params }),
+  reviewCommonPhrase: (data = {}) => request.post('/app_user/common-phrase-review/review', data),
   uploadAppUserImage: (data) =>
     request.post('/app_user/upload-image', data, {
       headers: { 'Content-Type': 'multipart/form-data' },

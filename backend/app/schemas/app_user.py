@@ -178,6 +178,16 @@ class CertifiedCallPriceUpdateIn(BaseModel):
     price: int = Field(..., ge=0, le=1000000, description="认证用户通话价格(金币/分钟)")
 
 
+class CommonPhraseUpdateIn(BaseModel):
+    content: str = Field(..., min_length=1, max_length=50, description="常用语内容")
+
+
+class CommonPhraseReviewIn(BaseModel):
+    id: int = Field(..., ge=1, description="常用语槽位记录ID")
+    status: Literal["approved", "rejected"] = Field(..., description="审核结果")
+    review_remark: Optional[str] = Field(default=None, max_length=500, description="审核备注/驳回原因")
+
+
 # ===== 关注 =====
 
 

@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../core/constants/api_endpoints.dart';
@@ -172,24 +173,284 @@ final certificationApplyProvider =
       return CertificationApplyNotifier(DioClient.instance);
     });
 
-/// 认证中心页
-class CertificationCenterPage extends ConsumerStatefulWidget {
-  const CertificationCenterPage({super.key});
+class CertifiedCommonPhraseInfo {
+  final int? id;
+  final int slotIndex;
+  final String approvedContent;
+  final String pendingContent;
+  final String reviewStatus;
+  final String reviewRemark;
 
-  @override
-  ConsumerState<CertificationCenterPage> createState() =>
-      _CertificationCenterPageState();
+  const CertifiedCommonPhraseInfo({
+    this.id,
+    required this.slotIndex,
+    this.approvedContent = '',
+    this.pendingContent = '',
+    this.reviewStatus = 'none',
+    this.reviewRemark = '',
+  });
+
+  factory CertifiedCommonPhraseInfo.empty(int slotIndex) {
+    return CertifiedCommonPhraseInfo(slotIndex: slotIndex);
+  }
+
+  factory CertifiedCommonPhraseInfo.fromJson(Map<String, dynamic> json) {
+    return CertifiedCommonPhraseInfo(
+      id: (json['id'] as num?)?.toInt(),
+      slotIndex: (json['slot_index'] as num?)?.toInt() ?? 0,
+      approvedContent: (json['approved_content'] as String?)?.trim() ?? '',
+      pendingContent: (json['pending_content'] as String?)?.trim() ?? '',
+      reviewStatus: (json['review_status'] as String?)?.trim() ?? 'none',
+      reviewRemark: (json['review_remark'] as String?)?.trim() ?? '',
+    );
+  }
 }
 
-class _CertificationCenterPageState
-    extends ConsumerState<CertificationCenterPage> {
+class CertifiedCommonPhrasesState {
+  final List<CertifiedCommonPhraseInfo> phrases;
+  final bool isLoading;
+  final String? error;
+
+  const CertifiedCommonPhrasesState({
+    this.phrases = const [],
+    this.isLoading = false,
+    this.error,
+  });
+
+  int get approvedCount =>
+      phrases.where((item) => item.approvedContent.isNotEmpty).length;
+
+  int get pendingCount =>
+      phrases.where((item) => item.reviewStatus == 'pending').length;
+
+  CertifiedCommonPhrasesState copyWith({
+    List<CertifiedCommonPhraseInfo>? phrases,
+    bool? isLoading,
+    String? error,
+  }) {
+    return CertifiedCommonPhrasesState(
+      phrases: phrases ?? this.phrases,
+      isLoading: isLoading ?? this.isLoading,
+      error: error,
+    );
+  }
+}
+
+class CertifiedCommonPhrasesNotifier
+    extends StateNotifier<CertifiedCommonPhrasesState> {
+  final DioClient _dio;
+
+  CertifiedCommonPhrasesNotifier(this._dio)
+    : super(const CertifiedCommonPhrasesState());
+
+  Future<void> fetch() async {
+    state = state.copyWith(isLoading: true, error: null);
+    try {
+      final resp = await _dio.apiGet(ApiEndpoints.certifiedCommonPhrases);
+      final data = resp['data'] as Map<String, dynamic>? ?? {};
+      final raw = data['phrases'] as List? ?? const [];
+      final parsed = raw
+          .whereType<Map<String, dynamic>>()
+          .map(CertifiedCommonPhraseInfo.fromJson)
+          .toList();
+      final bySlot = {for (final item in parsed) item.slotIndex: item};
+      state = CertifiedCommonPhrasesState(
+        phrases: List.generate(
+          3,
+          (index) =>
+              bySlot[index + 1] ?? CertifiedCommonPhraseInfo.empty(index + 1),
+        ),
+      );
+    } catch (e) {
+      state = state.copyWith(isLoading: false, error: '加载常用语失败');
+    }
+  }
+
+  Future<void> submit({required int slotIndex, required String content}) async {
+    await _dio.apiPut(
+      '${ApiEndpoints.certifiedCommonPhrases}/$slotIndex',
+      data: {'content': content},
+    );
+    await fetch();
+  }
+}
+
+final certifiedCommonPhrasesProvider =
+    StateNotifierProvider<
+      CertifiedCommonPhrasesNotifier,
+      CertifiedCommonPhrasesState
+    >((ref) {
+      return CertifiedCommonPhrasesNotifier(DioClient.instance);
+    });
+
+/// 认证中心入口页
+class CertificationHomePage extends ConsumerStatefulWidget {
+  const CertificationHomePage({super.key});
+
+  @override
+  ConsumerState<CertificationHomePage> createState() =>
+      _CertificationHomePageState();
+}
+
+class _CertificationHomePageState extends ConsumerState<CertificationHomePage> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await ref.read(appInitProvider.notifier).init();
+      await ref.read(certificationApplyProvider.notifier).fetchStatus();
+      final authState = ref.read(authProvider);
+      if (authState.isCertifiedUser) {
+        await ref.read(certifiedCommonPhrasesProvider.notifier).fetch();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final authState = ref.watch(authProvider);
+    final applyState = ref.watch(certificationApplyProvider);
+    final phraseState = ref.watch(certifiedCommonPhrasesProvider);
+    final coinName = ref.watch(tokenNamesProvider).coinName;
+
+    return Scaffold(
+      backgroundColor: AppTheme.backgroundColor,
+      appBar: AppBar(
+        title: const Text('认证中心'),
+        backgroundColor: Colors.white,
+        foregroundColor: AppTheme.textPrimary,
+        elevation: 0,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+        children: [
+          _CertificationEntryCard(
+            title: '真人认证',
+            subtitle: _certificationStatusText(applyState),
+            icon: Icons.verified_user_outlined,
+            onTap: () => context.push(AppRoutes.certificationApply),
+          ),
+          if (authState.isCertifiedUser) ...[
+            const SizedBox(height: 12),
+            _CertificationEntryCard(
+              title: '通话价格',
+              subtitle:
+                  '当前价格 ${_formatCallPrice(authState.certifiedCallPrice, coinName)}',
+              icon: Icons.price_change_outlined,
+              onTap: () => context.push(AppRoutes.certificationCallPrice),
+            ),
+            const SizedBox(height: 12),
+            _CertificationEntryCard(
+              title: '常用语',
+              subtitle:
+                  '已通过条数 ${phraseState.approvedCount} · 待审核条数 ${phraseState.pendingCount}',
+              icon: Icons.chat_bubble_outline_rounded,
+              onTap: () => context.push(AppRoutes.certificationCommonPhrases),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _certificationStatusText(CertificationApplyState state) {
+    switch (state.status) {
+      case CertificationApplyStatus.pending:
+        return '审核中';
+      case CertificationApplyStatus.approved:
+        return '已通过';
+      case CertificationApplyStatus.rejected:
+        return '已驳回';
+      case CertificationApplyStatus.none:
+        return '未认证';
+    }
+  }
+}
+
+class _CertificationEntryCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _CertificationEntryCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE7EBF2)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: AppTheme.primaryColor.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: AppTheme.primaryColor),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: AppTheme.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: AppTheme.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: AppTheme.textSecondary),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 真人认证页
+class CertificationApplyPage extends ConsumerStatefulWidget {
+  const CertificationApplyPage({super.key});
+
+  @override
+  ConsumerState<CertificationApplyPage> createState() =>
+      _CertificationApplyPageState();
+}
+
+class _CertificationApplyPageState
+    extends ConsumerState<CertificationApplyPage> {
   static const String _exampleImageAsset =
       'assets/images/certification_apply_example.jpg';
 
   String? _localFacePhotoUrl;
   bool _uploading = false;
-  int? _selectedPrice;
-  bool _savingPrice = false;
 
   @override
   void initState() {
@@ -218,7 +479,7 @@ class _CertificationCenterPageState
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
-        title: const Text('认证中心'),
+        title: const Text('真人认证'),
         backgroundColor: Colors.white,
         foregroundColor: AppTheme.textPrimary,
         elevation: 0,
@@ -233,10 +494,6 @@ class _CertificationCenterPageState
                   _buildSectionTitle('真人认证'),
                   const SizedBox(height: 10),
                   _buildPanel(child: _buildContent(applyState)),
-                  const SizedBox(height: 16),
-                  _buildSectionTitle('通话价格'),
-                  const SizedBox(height: 10),
-                  _buildPanel(child: _buildCallPriceContent()),
                 ],
               ),
             ),
@@ -443,120 +700,6 @@ class _CertificationCenterPageState
         ),
       ],
     );
-  }
-
-  Widget _buildCallPriceContent() {
-    final authState = ref.watch(authProvider);
-    final initState = ref.watch(appInitProvider);
-    final coinName = ref.watch(tokenNamesProvider).coinName;
-    final isCertified = authState.isCertifiedUser;
-    final configuredTiers = initState.certifiedCallPriceTiers;
-    final paidTiers = configuredTiers.where((tier) => tier > 0).toList();
-    final tiers = isCertified ? paidTiers : const [0];
-    final currentPrice = isCertified ? authState.certifiedCallPrice : 0;
-    final selected = tiers.isEmpty
-        ? 0
-        : tiers.contains(_selectedPrice)
-        ? _selectedPrice!
-        : (tiers.contains(currentPrice) ? currentPrice : tiers.first);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          isCertified ? '选择每分钟通话价格' : '未通过真人认证时只能设置免费通话',
-          style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
-        ),
-        const SizedBox(height: 12),
-        if (tiers.isEmpty)
-          const Text(
-            '暂无可用通话价格，请联系平台配置',
-            style: TextStyle(fontSize: 13, color: AppTheme.errorColor),
-          )
-        else
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: tiers.map((price) {
-              final active = selected == price;
-              return ChoiceChip(
-                label: Text(_formatCallPrice(price, coinName)),
-                selected: active,
-                onSelected: isCertified
-                    ? (_) {
-                        setState(() {
-                          _selectedPrice = price;
-                        });
-                      }
-                    : null,
-                selectedColor: AppTheme.primaryColor.withValues(alpha: 0.14),
-                labelStyle: TextStyle(
-                  color: active ? AppTheme.primaryColor : AppTheme.textPrimary,
-                  fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-                ),
-              );
-            }).toList(),
-          ),
-        const SizedBox(height: 14),
-        SizedBox(
-          width: double.infinity,
-          height: 44,
-          child: ElevatedButton(
-            onPressed: isCertified && tiers.isNotEmpty && !_savingPrice
-                ? () => _saveCallPrice(selected)
-                : null,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.primaryColor,
-              foregroundColor: Colors.white,
-              disabledBackgroundColor: const Color(0xFFD2D7DF),
-            ),
-            child: Text(_savingPrice ? '保存中...' : '保存通话价格'),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Future<void> _saveCallPrice(int price) async {
-    setState(() {
-      _savingPrice = true;
-    });
-    try {
-      final data = await DioClient.instance.apiPost(
-        ApiEndpoints.certifiedCallPriceUpdate,
-        data: {'price': price},
-      );
-      if ((data['code'] as int?) != 200) {
-        throw ApiException(
-          code: data['code'] as int? ?? -1,
-          message: data['msg'] as String? ?? '保存失败',
-        );
-      }
-      await ref.read(authProvider.notifier).fetchUserInfo();
-      if (!mounted) return;
-      AppToast.showSnackBar(
-        context,
-        const SnackBar(
-          content: Text('通话价格已保存'),
-          backgroundColor: Color(0xFF34C759),
-        ),
-      );
-    } on ApiException catch (e) {
-      if (mounted) AppToast.error(context, e.message);
-    } catch (_) {
-      if (mounted) AppToast.error(context, '保存失败，请重试');
-    } finally {
-      if (mounted) {
-        setState(() {
-          _savingPrice = false;
-        });
-      }
-    }
-  }
-
-  String _formatCallPrice(int price, String coinName) {
-    if (price <= 0) return '免费';
-    return '$price$coinName/分钟';
   }
 
   Widget _buildCompactPhotoSection({required String facePhotoUrl}) {
@@ -786,6 +929,429 @@ class _CertificationCenterPageState
       );
     }
   }
+}
+
+class CertifiedCallPricePage extends ConsumerStatefulWidget {
+  const CertifiedCallPricePage({super.key});
+
+  @override
+  ConsumerState<CertifiedCallPricePage> createState() =>
+      _CertifiedCallPricePageState();
+}
+
+class _CertifiedCallPricePageState
+    extends ConsumerState<CertifiedCallPricePage> {
+  int? _selectedPrice;
+  bool _savingPrice = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await ref.read(appInitProvider.notifier).init();
+      if (!ref.read(authProvider).isCertifiedUser && mounted) {
+        AppToast.error(context, '通过真人认证后才可以设置通话价格');
+        context.pop();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final authState = ref.watch(authProvider);
+    final initState = ref.watch(appInitProvider);
+    final coinName = ref.watch(tokenNamesProvider).coinName;
+    final configuredTiers = initState.certifiedCallPriceTiers;
+    final paidTiers = configuredTiers.where((tier) => tier > 0).toList();
+    final currentPrice = authState.certifiedCallPrice;
+    final selected = paidTiers.isEmpty
+        ? 0
+        : paidTiers.contains(_selectedPrice)
+        ? _selectedPrice!
+        : (paidTiers.contains(currentPrice) ? currentPrice : paidTiers.first);
+
+    return Scaffold(
+      backgroundColor: AppTheme.backgroundColor,
+      appBar: AppBar(
+        title: const Text('通话价格'),
+        backgroundColor: Colors.white,
+        foregroundColor: AppTheme.textPrimary,
+        elevation: 0,
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+        children: [
+          _Panel(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '选择每分钟通话价格',
+                  style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+                ),
+                const SizedBox(height: 12),
+                if (paidTiers.isEmpty)
+                  const Text(
+                    '暂无可用通话价格，请联系平台配置',
+                    style: TextStyle(fontSize: 13, color: AppTheme.errorColor),
+                  )
+                else
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: paidTiers.map((price) {
+                      final active = selected == price;
+                      return ChoiceChip(
+                        label: Text(_formatCallPrice(price, coinName)),
+                        selected: active,
+                        onSelected: (_) {
+                          setState(() {
+                            _selectedPrice = price;
+                          });
+                        },
+                        selectedColor: AppTheme.primaryColor.withValues(
+                          alpha: 0.14,
+                        ),
+                        labelStyle: TextStyle(
+                          color: active
+                              ? AppTheme.primaryColor
+                              : AppTheme.textPrimary,
+                          fontWeight: active
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  height: 44,
+                  child: ElevatedButton(
+                    onPressed:
+                        authState.isCertifiedUser &&
+                            paidTiers.isNotEmpty &&
+                            !_savingPrice
+                        ? () => _saveCallPrice(selected)
+                        : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.primaryColor,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: const Color(0xFFD2D7DF),
+                    ),
+                    child: Text(_savingPrice ? '保存中...' : '保存通话价格'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _saveCallPrice(int price) async {
+    setState(() {
+      _savingPrice = true;
+    });
+    try {
+      final data = await DioClient.instance.apiPost(
+        ApiEndpoints.certifiedCallPriceUpdate,
+        data: {'price': price},
+      );
+      if ((data['code'] as int?) != 200) {
+        throw ApiException(
+          code: data['code'] as int? ?? -1,
+          message: data['msg'] as String? ?? '保存失败',
+        );
+      }
+      await ref.read(authProvider.notifier).fetchUserInfo();
+      if (!mounted) return;
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(
+          content: Text('通话价格已保存'),
+          backgroundColor: Color(0xFF34C759),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (mounted) AppToast.error(context, e.message);
+    } catch (_) {
+      if (mounted) AppToast.error(context, '保存失败，请重试');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _savingPrice = false;
+        });
+      }
+    }
+  }
+}
+
+class CertifiedCommonPhrasesPage extends ConsumerStatefulWidget {
+  const CertifiedCommonPhrasesPage({super.key});
+
+  @override
+  ConsumerState<CertifiedCommonPhrasesPage> createState() =>
+      _CertifiedCommonPhrasesPageState();
+}
+
+class _CertifiedCommonPhrasesPageState
+    extends ConsumerState<CertifiedCommonPhrasesPage> {
+  final Map<int, TextEditingController> _controllers = {};
+  int? _submittingSlot;
+
+  @override
+  void initState() {
+    super.initState();
+    for (var index = 1; index <= 3; index++) {
+      _controllers[index] = TextEditingController();
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!ref.read(authProvider).isCertifiedUser && mounted) {
+        AppToast.error(context, '通过真人认证后才可以设置常用语');
+        context.pop();
+        return;
+      }
+      await ref.read(certifiedCommonPhrasesProvider.notifier).fetch();
+      _syncControllers();
+    });
+  }
+
+  @override
+  void dispose() {
+    for (final controller in _controllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  void _syncControllers() {
+    final phrases = ref.read(certifiedCommonPhrasesProvider).phrases;
+    for (final phrase in phrases) {
+      final controller = _controllers[phrase.slotIndex];
+      if (controller == null) continue;
+      final value = phrase.pendingContent.isNotEmpty
+          ? phrase.pendingContent
+          : phrase.approvedContent;
+      if (controller.text.isEmpty) {
+        controller.text = value;
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(certifiedCommonPhrasesProvider);
+    final phrases = state.phrases.isEmpty
+        ? List.generate(
+            3,
+            (index) => CertifiedCommonPhraseInfo.empty(index + 1),
+          )
+        : state.phrases;
+
+    return Scaffold(
+      backgroundColor: AppTheme.backgroundColor,
+      appBar: AppBar(
+        title: const Text('常用语'),
+        backgroundColor: Colors.white,
+        foregroundColor: AppTheme.textPrimary,
+        elevation: 0,
+      ),
+      body: state.isLoading && state.phrases.isEmpty
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: () =>
+                  ref.read(certifiedCommonPhrasesProvider.notifier).fetch(),
+              child: ListView.separated(
+                padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+                itemCount: phrases.length,
+                separatorBuilder: (context, index) =>
+                    const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final phrase = phrases[index];
+                  return _buildPhraseCard(phrase);
+                },
+              ),
+            ),
+    );
+  }
+
+  Widget _buildPhraseCard(CertifiedCommonPhraseInfo phrase) {
+    final slotIndex = phrase.slotIndex;
+    final controller = _controllers[slotIndex]!;
+    final isSubmitting = _submittingSlot == slotIndex;
+
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                _phraseTitle(slotIndex),
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: AppTheme.textPrimary,
+                ),
+              ),
+              const Spacer(),
+              _statusTag(phrase.reviewStatus),
+            ],
+          ),
+          const SizedBox(height: 10),
+          _contentLine('当前已通过内容', phrase.approvedContent),
+          if (phrase.reviewStatus == 'pending')
+            _contentLine('待审核内容', phrase.pendingContent),
+          if (phrase.reviewStatus == 'rejected') ...[
+            _contentLine('被驳回内容', phrase.pendingContent),
+            _contentLine('驳回原因', phrase.reviewRemark),
+          ],
+          const SizedBox(height: 10),
+          TextField(
+            controller: controller,
+            maxLength: 50,
+            minLines: 2,
+            maxLines: 3,
+            decoration: InputDecoration(
+              hintText: '输入常用语内容，最多50字',
+              filled: true,
+              fillColor: const Color(0xFFF7F8FA),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(8),
+                borderSide: BorderSide.none,
+              ),
+              counterText: '',
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            height: 42,
+            child: ElevatedButton(
+              onPressed: isSubmitting
+                  ? null
+                  : () => _submitPhrase(slotIndex, controller.text),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                foregroundColor: Colors.white,
+                disabledBackgroundColor: const Color(0xFFD2D7DF),
+              ),
+              child: Text(isSubmitting ? '提交中...' : '提交审核'),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _phraseTitle(int slotIndex) {
+    switch (slotIndex) {
+      case 1:
+        return '常用语1';
+      case 2:
+        return '常用语2';
+      case 3:
+        return '常用语3';
+      default:
+        return '常用语$slotIndex';
+    }
+  }
+
+  Widget _statusTag(String status) {
+    final label = switch (status) {
+      'pending' => '待审核',
+      'approved' => '已通过',
+      'rejected' => '已驳回',
+      _ => '未设置',
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppTheme.primaryColor.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(fontSize: 12, color: AppTheme.primaryColor),
+      ),
+    );
+  }
+
+  Widget _contentLine(String label, String content) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Text(
+        '$label：${content.trim().isEmpty ? '暂无' : content.trim()}',
+        style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+      ),
+    );
+  }
+
+  Future<void> _submitPhrase(int slotIndex, String rawContent) async {
+    final content = rawContent.trim();
+    if (content.isEmpty) {
+      AppToast.error(context, '请填写常用语内容');
+      return;
+    }
+    if (content.length > 50) {
+      AppToast.error(context, '常用语最多50字');
+      return;
+    }
+    setState(() {
+      _submittingSlot = slotIndex;
+    });
+    try {
+      await ref
+          .read(certifiedCommonPhrasesProvider.notifier)
+          .submit(slotIndex: slotIndex, content: content);
+      if (!mounted) return;
+      _controllers[slotIndex]?.text = content;
+      AppToast.showSnackBar(
+        context,
+        const SnackBar(
+          content: Text('常用语已提交审核'),
+          backgroundColor: Color(0xFF34C759),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (mounted) AppToast.error(context, e.message);
+    } catch (_) {
+      if (mounted) AppToast.error(context, '提交失败，请重试');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _submittingSlot = null;
+        });
+      }
+    }
+  }
+}
+
+class _Panel extends StatelessWidget {
+  final Widget child;
+
+  const _Panel({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE7EBF2)),
+      ),
+      child: child,
+    );
+  }
+}
+
+String _formatCallPrice(int price, String coinName) {
+  if (price <= 0) return '免费';
+  return '$price$coinName/分钟';
 }
 
 class _CapturedPhoto {
