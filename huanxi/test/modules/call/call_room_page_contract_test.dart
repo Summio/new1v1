@@ -93,4 +93,40 @@ void main() {
       );
     },
   );
+
+  test(
+    'call room recharge entry pushes recharge page and refreshes balance',
+    () {
+      final text = File(
+        'lib/modules/call/call_room_page.dart',
+      ).readAsStringSync().replaceAll('\r\n', '\n');
+
+      expect(text, contains('Future<void> _openRechargePage() async'));
+      expect(text, contains('await context.push(AppRoutes.recharge);'));
+      expect(text, isNot(contains('context.go(AppRoutes.recharge)')));
+      expect(
+        text,
+        contains('ref.read(authProvider.notifier).refreshBalance();'),
+      );
+      expect(text, contains("label: '充值'"));
+    },
+  );
+
+  test('call bottom controls are fixed grid without balance text', () {
+    final text = File(
+      'lib/modules/call/call_room_page.dart',
+    ).readAsStringSync().replaceAll('\r\n', '\n');
+
+    final controlsStart = text.indexOf('class _CallBottomControls');
+    final hangupStart = text.indexOf('class _CallHangupButton', controlsStart);
+    final controlsText = text.substring(controlsStart, hangupStart);
+
+    expect(controlsText, isNot(contains('SingleChildScrollView')));
+    expect(controlsText, isNot(contains('scrollDirection: Axis.horizontal')));
+    expect(controlsText, contains('Wrap('));
+    expect(controlsText, contains('Icons.account_balance_wallet_outlined'));
+    expect(controlsText, contains("label: '充值'"));
+    expect(controlsText, isNot(contains('余额')));
+    expect(controlsText, isNot(contains('coins')));
+  });
 }

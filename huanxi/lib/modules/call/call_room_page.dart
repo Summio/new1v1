@@ -701,6 +701,17 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
     _chatFocusNode.unfocus();
   }
 
+  Future<void> _openRechargePage() async {
+    if (_chatInputVisible.value) {
+      _closeChatInput();
+    }
+    await context.push(AppRoutes.recharge);
+    if (!mounted) {
+      return;
+    }
+    await ref.read(authProvider.notifier).refreshBalance();
+  }
+
   Future<void> _sendChatMessage() async {
     final peerChatUserId = _peerChatUserId;
     final myAppUserId = _myAppUserId;
@@ -953,6 +964,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
                 isImChatLoading: _isImChatLoading,
                 onToggleChat: _toggleChatInput,
                 onShowGift: () => _showGiftPanel(_findCertifiedUserForPeer()),
+                onRecharge: () => unawaited(_openRechargePage()),
               ),
               _CallHangupButton(
                 isChatInputVisible: _chatInputVisible,
@@ -1525,6 +1537,7 @@ class _CallBottomControls extends StatelessWidget {
   final bool isImChatLoading;
   final VoidCallback onToggleChat;
   final VoidCallback onShowGift;
+  final VoidCallback onRecharge;
 
   const _CallBottomControls({
     required this.rtcState,
@@ -1533,6 +1546,7 @@ class _CallBottomControls extends StatelessWidget {
     required this.isImChatLoading,
     required this.onToggleChat,
     required this.onShowGift,
+    required this.onRecharge,
   });
 
   @override
@@ -1563,57 +1577,79 @@ class _CallBottomControls extends StatelessWidget {
                     colors: [Colors.black54, Colors.transparent],
                   ),
                 ),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  physics: const BouncingScrollPhysics(),
-                  child: Row(
-                    children: [
-                      _ControlButton(
-                        icon: rtcState.isMicOn ? Icons.mic : Icons.mic_off,
-                        label: rtcState.isMicOn ? '麦克风' : '静音',
-                        isActive: !rtcState.isMicOn,
-                        onTap: () => unawaited(rtcController.toggleMic()),
+                child: LayoutBuilder(
+                  builder: (context, constraints) {
+                    final rawButtonWidth = (constraints.maxWidth - 36) / 4;
+                    final buttonWidth = rawButtonWidth < 50
+                        ? 50.0
+                        : rawButtonWidth > 76
+                        ? 76.0
+                        : rawButtonWidth;
+                    return Align(
+                      alignment: Alignment.center,
+                      child: Wrap(
+                        alignment: WrapAlignment.center,
+                        runAlignment: WrapAlignment.center,
+                        spacing: 12,
+                        runSpacing: 14,
+                        children: [
+                          _ControlButton(
+                            width: buttonWidth,
+                            icon: rtcState.isMicOn ? Icons.mic : Icons.mic_off,
+                            label: rtcState.isMicOn ? '麦克风' : '静音',
+                            isActive: !rtcState.isMicOn,
+                            onTap: () => unawaited(rtcController.toggleMic()),
+                          ),
+                          _ControlButton(
+                            width: buttonWidth,
+                            icon: rtcState.isSpeakerOn
+                                ? Icons.volume_up
+                                : Icons.volume_off,
+                            label: '扬声器',
+                            isActive: !rtcState.isSpeakerOn,
+                            onTap: () =>
+                                unawaited(rtcController.toggleSpeaker()),
+                          ),
+                          _ControlButton(
+                            width: buttonWidth,
+                            icon: rtcState.isCameraOn
+                                ? Icons.videocam
+                                : Icons.videocam_off,
+                            label: '摄像头',
+                            isActive: !rtcState.isCameraOn,
+                            onTap: () =>
+                                unawaited(rtcController.toggleCamera()),
+                          ),
+                          _ControlButton(
+                            width: buttonWidth,
+                            icon: Icons.flip_camera_ios,
+                            label: '翻转',
+                            isSpinning: rtcState.isFlipping,
+                            onTap: () => unawaited(rtcController.flipCamera()),
+                          ),
+                          _ControlButton(
+                            width: buttonWidth,
+                            icon: Icons.card_giftcard,
+                            label: '礼物',
+                            onTap: onShowGift,
+                          ),
+                          _ControlButton(
+                            width: buttonWidth,
+                            icon: Icons.chat_bubble_outline,
+                            label: isImChatLoading ? '聊天中' : '聊天',
+                            isActive: visible,
+                            onTap: onToggleChat,
+                          ),
+                          _ControlButton(
+                            width: buttonWidth,
+                            icon: Icons.account_balance_wallet_outlined,
+                            label: '充值',
+                            onTap: onRecharge,
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 10),
-                      _ControlButton(
-                        icon: rtcState.isSpeakerOn
-                            ? Icons.volume_up
-                            : Icons.volume_off,
-                        label: '扬声器',
-                        isActive: !rtcState.isSpeakerOn,
-                        onTap: () => unawaited(rtcController.toggleSpeaker()),
-                      ),
-                      const SizedBox(width: 10),
-                      _ControlButton(
-                        icon: rtcState.isCameraOn
-                            ? Icons.videocam
-                            : Icons.videocam_off,
-                        label: '摄像头',
-                        isActive: !rtcState.isCameraOn,
-                        onTap: () => unawaited(rtcController.toggleCamera()),
-                      ),
-                      const SizedBox(width: 10),
-                      _ControlButton(
-                        icon: Icons.card_giftcard,
-                        label: '礼物',
-                        onTap: onShowGift,
-                      ),
-                      const SizedBox(width: 10),
-                      _ControlButton(
-                        icon: Icons.chat_bubble_outline,
-                        label: isImChatLoading ? '聊天中' : '聊天',
-                        isActive: visible,
-                        onTap: onToggleChat,
-                      ),
-                      const SizedBox(width: 10),
-                      _ControlButton(
-                        icon: Icons.flip_camera_ios,
-                        label: '翻转',
-                        isSpinning: rtcState.isFlipping,
-                        onTap: () => unawaited(rtcController.flipCamera()),
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
               ),
             ),
@@ -1642,7 +1678,7 @@ class _CallHangupButton extends StatelessWidget {
         return Positioned(
           left: 0,
           right: 0,
-          bottom: safeBottom + 116,
+          bottom: safeBottom + 206,
           child: Opacity(
             opacity: visible ? 0 : 1,
             child: IgnorePointer(
@@ -1809,6 +1845,7 @@ class _CallDurationText extends ConsumerWidget {
 
 /// 控制按钮组件
 class _ControlButton extends StatelessWidget {
+  final double width;
   final IconData icon;
   final String label;
   final VoidCallback onTap;
@@ -1816,6 +1853,7 @@ class _ControlButton extends StatelessWidget {
   final bool isSpinning;
 
   const _ControlButton({
+    this.width = 64,
     required this.icon,
     required this.label,
     required this.onTap,
@@ -1827,34 +1865,39 @@ class _ControlButton extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              color: isActive
-                  ? AppTheme.primaryColor.withValues(alpha: 0.3)
-                  : Colors.white.withValues(alpha: 0.1),
-              shape: BoxShape.circle,
+      child: SizedBox(
+        width: width,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 50,
+              height: 50,
+              decoration: BoxDecoration(
+                color: isActive
+                    ? AppTheme.primaryColor.withValues(alpha: 0.3)
+                    : Colors.white.withValues(alpha: 0.1),
+                shape: BoxShape.circle,
+              ),
+              child: isSpinning
+                  ? const Padding(
+                      padding: EdgeInsets.all(12),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : Icon(icon, color: Colors.white, size: 24),
             ),
-            child: isSpinning
-                ? const Padding(
-                    padding: EdgeInsets.all(12),
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
-                : Icon(icon, color: Colors.white, size: 24),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            label,
-            style: const TextStyle(color: Colors.white70, fontSize: 11),
-          ),
-        ],
+            const SizedBox(height: 6),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white70, fontSize: 11),
+            ),
+          ],
+        ),
       ),
     );
   }
