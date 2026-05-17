@@ -11,6 +11,7 @@ from app.services.system_notification_service import (
     MAX_NOTIFICATION_TARGET_USERS,
     RECEIPT_BULK_CREATE_BATCH_SIZE,
     NotificationValidationError,
+    _notification_due_occurrences,
     _dump_user_notification,
     build_business_notification_key,
     build_run_key,
@@ -22,6 +23,59 @@ from app.services.system_notification_service import (
     publish_task_once,
     validate_task_payload,
 )
+
+
+class _AwaitableQuery:
+    def __init__(self, items=None, first_value=None, exists_value=None, count_value=None):
+        self.items = list(items or [])
+        self.first_value = first_value
+        self.exists_value = exists_value
+        self.count_value = count_value
+        self.offset_value = 0
+        self.limit_value = None
+
+    def order_by(self, *args):
+        return self
+
+    def offset(self, value):
+        self.offset_value = value
+        return self
+
+    def limit(self, value):
+        self.limit_value = value
+        return self
+
+    async def first(self):
+        if self.first_value is not None:
+            return self.first_value
+        return self.items[0] if self.items else None
+
+    async def exists(self):
+        return bool(self.exists_value)
+
+    async def count(self):
+        if self.count_value is not None:
+            return self.count_value
+        return len(self.items)
+
+    async def all(self):
+        end = None if self.limit_value is None else self.offset_value + self.limit_value
+        return self.items[self.offset_value:end]
+
+    def __await__(self):
+        async def _result():
+            end = None if self.limit_value is None else self.offset_value + self.limit_value
+            return self.items[self.offset_value:end]
+
+        return _result().__await__()
+
+
+class _FakeTransaction:
+    async def __aenter__(self):
+        return None
+
+    async def __aexit__(self, *_):
+        return None
 
 
 def test_repeat_notification_requires_end_at_or_max_runs() -> None:
@@ -272,6 +326,30 @@ async def test_admin_task_dump_normalizes_legacy_enum_text(monkeypatch: pytest.M
     assert data["target_mode"] == "all"
 
 
+def test_notification_due_occurrences_repeat_backfills_recent_30_runs() -> None:
+    task = SimpleNamespace(
+        id=8,
+        status="running",
+        send_mode="repeat",
+        created_at=datetime(2026, 5, 1, 8, 0),
+        publish_at=None,
+        repeat_type="daily",
+        repeat_time="09:00",
+        repeat_weekday=None,
+        repeat_month_day=None,
+        start_at=datetime(2026, 4, 1, 0, 0),
+        end_at=None,
+        max_runs=None,
+    )
+
+    occurrences = _notification_due_occurrences(task, now=datetime(2026, 5, 17, 10, 0))
+
+    assert len(occurrences) == 30
+    assert occurrences[0].scheduled_run_at == datetime(2026, 4, 18, 9, 0)
+    assert occurrences[-1].scheduled_run_at == datetime(2026, 5, 17, 9, 0)
+    assert len({item.run_key for item in occurrences}) == 30
+
+
 @pytest.mark.asyncio
 async def test_publish_task_once_rejects_target_count_over_limit(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeNotificationQuery:
@@ -378,6 +456,295 @@ async def test_publish_task_once_bulk_creates_receipts_without_websocket_push(mo
     assert batch_sizes == [RECEIPT_BULK_CREATE_BATCH_SIZE] * (
         MAX_NOTIFICATION_TARGET_USERS // RECEIPT_BULK_CREATE_BATCH_SIZE
     )
+
+
+@pytest.mark.asyncio
+async def test_list_user_notifications_materializes_immediate_task_for_target_user(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = datetime(2026, 5, 17, 10, 0)
+    task = SimpleNamespace(
+        id=8,
+        status="running",
+        send_mode="immediate",
+        created_at=datetime(2026, 5, 17, 9, 30),
+        publish_at=None,
+        repeat_type=None,
+        repeat_time=None,
+        repeat_weekday=None,
+        repeat_month_day=None,
+        start_at=None,
+        end_at=None,
+        max_runs=None,
+        target_mode="all",
+        target_user_ids=[],
+        target_filters=None,
+        content="维护通知",
+        type="announcement",
+    )
+    notifications = []
+    receipts = []
+    notification_id = {"next": 1}
+
+    class FakeTask:
+        @classmethod
+        def filter(cls, **kwargs):
+            assert kwargs == {"status": "running", "send_mode__in": ["immediate", "once", "repeat"]}
+            return _AwaitableQuery([task])
+
+    class FakeNotification:
+        @classmethod
+        def filter(cls, **kwargs):
+            if "run_key" in kwargs:
+                return _AwaitableQuery([item for item in notifications if item.run_key == kwargs["run_key"]])
+            if "id__in" in kwargs:
+                ids = {int(item) for item in kwargs["id__in"]}
+                return _AwaitableQuery([item for item in notifications if int(item.id) in ids])
+            return _AwaitableQuery()
+
+        @classmethod
+        async def create(cls, **kwargs):
+            item = SimpleNamespace(id=notification_id["next"], **kwargs)
+            notification_id["next"] += 1
+            notifications.append(item)
+            return item
+
+    class FakeReceipt:
+        def __init__(self, **kwargs):
+            self.id = len(receipts) + 1
+            self.notification_id = kwargs["notification_id"]
+            self.user_id = kwargs["user_id"]
+            self.read_at = kwargs.get("read_at")
+            self.created_at = now
+
+        @classmethod
+        def filter(cls, **kwargs):
+            rows = receipts
+            if "user_id" in kwargs:
+                rows = [item for item in rows if item.user_id == kwargs["user_id"]]
+            if "notification_id" in kwargs:
+                rows = [item for item in rows if item.notification_id == kwargs["notification_id"]]
+            return _AwaitableQuery(rows, count_value=len(rows))
+
+        @classmethod
+        async def get_or_create(cls, **kwargs):
+            for item in receipts:
+                if item.notification_id == kwargs["notification_id"] and item.user_id == kwargs["user_id"]:
+                    return item, False
+            item = cls(**kwargs)
+            receipts.append(item)
+            return item, True
+
+    monkeypatch.setattr(system_notification_service, "SystemNotificationTask", FakeTask)
+    monkeypatch.setattr(system_notification_service, "SystemNotification", FakeNotification)
+    monkeypatch.setattr(system_notification_service, "SystemNotificationReceipt", FakeReceipt)
+    monkeypatch.setattr(system_notification_service, "in_transaction", lambda: _FakeTransaction())
+    monkeypatch.setattr(system_notification_service, "now_local_naive", lambda: now)
+
+    rows, total = await system_notification_service.list_user_notifications(user_id=34, page=1, page_size=20)
+    rows_again, total_again = await system_notification_service.list_user_notifications(user_id=34, page=1, page_size=20)
+
+    assert total == 1
+    assert total_again == 1
+    assert [row["content"] for row in rows] == ["维护通知"]
+    assert [row["id"] for row in rows_again] == [1]
+    assert len(notifications) == 1
+    assert len(receipts) == 1
+
+
+@pytest.mark.asyncio
+async def test_list_user_notifications_hides_once_task_before_publish_at(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = datetime(2026, 5, 17, 10, 0)
+    task = SimpleNamespace(
+        id=8,
+        status="running",
+        send_mode="once",
+        created_at=datetime(2026, 5, 17, 9, 30),
+        publish_at=datetime(2026, 5, 17, 11, 0),
+        repeat_type=None,
+        repeat_time=None,
+        repeat_weekday=None,
+        repeat_month_day=None,
+        start_at=None,
+        end_at=None,
+        max_runs=None,
+        target_mode="all",
+        target_user_ids=[],
+        target_filters=None,
+        content="定时通知",
+        type="announcement",
+    )
+    created_notifications = []
+
+    class FakeTask:
+        @classmethod
+        def filter(cls, **kwargs):
+            return _AwaitableQuery([task])
+
+    class FakeNotification:
+        @classmethod
+        def filter(cls, **kwargs):
+            return _AwaitableQuery([])
+
+        @classmethod
+        async def create(cls, **kwargs):
+            created_notifications.append(kwargs)
+            return SimpleNamespace(id=1, **kwargs)
+
+    class FakeReceipt:
+        @classmethod
+        def filter(cls, **kwargs):
+            return _AwaitableQuery([], count_value=0)
+
+        @classmethod
+        async def get_or_create(cls, **kwargs):
+            raise AssertionError("未到发布时间不应创建 receipt")
+
+    monkeypatch.setattr(system_notification_service, "SystemNotificationTask", FakeTask)
+    monkeypatch.setattr(system_notification_service, "SystemNotification", FakeNotification)
+    monkeypatch.setattr(system_notification_service, "SystemNotificationReceipt", FakeReceipt)
+    monkeypatch.setattr(system_notification_service, "now_local_naive", lambda: now)
+
+    rows, total = await system_notification_service.list_user_notifications(user_id=34, page=1, page_size=20)
+
+    assert rows == []
+    assert total == 0
+    assert created_notifications == []
+
+
+@pytest.mark.asyncio
+async def test_list_user_notifications_materializes_once_task_after_publish_at(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = datetime(2026, 5, 17, 10, 0)
+    publish_at = datetime(2026, 5, 17, 9, 0)
+    task = SimpleNamespace(
+        id=8,
+        status="running",
+        send_mode="once",
+        created_at=datetime(2026, 5, 17, 8, 30),
+        publish_at=publish_at,
+        repeat_type=None,
+        repeat_time=None,
+        repeat_weekday=None,
+        repeat_month_day=None,
+        start_at=None,
+        end_at=None,
+        max_runs=None,
+        target_mode="all",
+        target_user_ids=[],
+        target_filters=None,
+        content="定时通知",
+        type="announcement",
+    )
+    notifications = []
+    receipts = []
+
+    class FakeTask:
+        @classmethod
+        def filter(cls, **kwargs):
+            return _AwaitableQuery([task])
+
+    class FakeNotification:
+        @classmethod
+        def filter(cls, **kwargs):
+            if "run_key" in kwargs:
+                return _AwaitableQuery([item for item in notifications if item.run_key == kwargs["run_key"]])
+            if "id__in" in kwargs:
+                return _AwaitableQuery(notifications)
+            return _AwaitableQuery()
+
+        @classmethod
+        async def create(cls, **kwargs):
+            item = SimpleNamespace(id=1, **kwargs)
+            notifications.append(item)
+            return item
+
+    class FakeReceipt:
+        def __init__(self, **kwargs):
+            self.notification_id = kwargs["notification_id"]
+            self.user_id = kwargs["user_id"]
+            self.read_at = None
+            self.created_at = now
+
+        @classmethod
+        def filter(cls, **kwargs):
+            rows = receipts
+            if "user_id" in kwargs:
+                rows = [item for item in rows if item.user_id == kwargs["user_id"]]
+            return _AwaitableQuery(rows, count_value=len(rows))
+
+        @classmethod
+        async def get_or_create(cls, **kwargs):
+            item = cls(**kwargs)
+            receipts.append(item)
+            return item, True
+
+    monkeypatch.setattr(system_notification_service, "SystemNotificationTask", FakeTask)
+    monkeypatch.setattr(system_notification_service, "SystemNotification", FakeNotification)
+    monkeypatch.setattr(system_notification_service, "SystemNotificationReceipt", FakeReceipt)
+    monkeypatch.setattr(system_notification_service, "in_transaction", lambda: _FakeTransaction())
+    monkeypatch.setattr(system_notification_service, "now_local_naive", lambda: now)
+
+    rows, total = await system_notification_service.list_user_notifications(user_id=34, page=1, page_size=20)
+
+    assert total == 1
+    assert rows[0]["content"] == "定时通知"
+    assert notifications[0].scheduled_run_at == publish_at
+    assert notifications[0].run_key == "task:8:2026-05-17T09:00:00"
+
+
+@pytest.mark.asyncio
+async def test_materialize_due_notifications_does_not_materialize_for_non_target_user(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    task = SimpleNamespace(
+        id=8,
+        status="running",
+        send_mode="immediate",
+        created_at=datetime(2026, 5, 17, 9, 30),
+        publish_at=None,
+        target_mode="user_ids",
+        target_user_ids=[99],
+        target_filters=None,
+        content="定向通知",
+        type="announcement",
+        repeat_type=None,
+        repeat_time=None,
+        repeat_weekday=None,
+        repeat_month_day=None,
+        start_at=None,
+        end_at=None,
+        max_runs=None,
+    )
+
+    class FakeTask:
+        @classmethod
+        def filter(cls, **kwargs):
+            return _AwaitableQuery([task])
+
+    class FakeNotification:
+        @classmethod
+        async def create(cls, **kwargs):
+            raise AssertionError("非目标用户不应创建通知")
+
+    class FakeReceipt:
+        @classmethod
+        async def get_or_create(cls, **kwargs):
+            raise AssertionError("非目标用户不应创建 receipt")
+
+    monkeypatch.setattr(system_notification_service, "SystemNotificationTask", FakeTask)
+    monkeypatch.setattr(system_notification_service, "SystemNotification", FakeNotification)
+    monkeypatch.setattr(system_notification_service, "SystemNotificationReceipt", FakeReceipt)
+
+    count = await system_notification_service.materialize_due_notifications_for_user(
+        user_id=34,
+        now=datetime(2026, 5, 17, 10, 0),
+    )
+
+    assert count == 0
 
 
 @pytest.mark.asyncio

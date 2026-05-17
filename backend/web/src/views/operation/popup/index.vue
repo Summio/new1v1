@@ -177,7 +177,7 @@ async function estimateTargetCount() {
     })
     estimatedCount.value = res.data?.count ?? 0
   } catch (error) {
-    window.$message?.error(error?.message || '当前在线可触达人数计算失败')
+    window.$message?.error(error?.message || '预计可拉取人数计算失败')
   }
 }
 
@@ -260,14 +260,14 @@ const columns = [
   },
   { title: '目标范围', key: 'target_mode', width: 110 },
   {
-    title: '当前在线可触达人数',
+    title: '预计可拉取人数',
     key: 'estimated_count',
     width: 160,
     align: 'center',
     render: (row) => row.estimated_count ?? '-',
   },
   {
-    title: '已推送人数',
+    title: '已拉取人数',
     key: 'pushed_count',
     width: 110,
     align: 'center',
@@ -281,12 +281,12 @@ const columns = [
     render: (row) => row.ack_count ?? 0,
   },
   {
-    title: '下次发送时间',
+    title: '下次可拉取时间',
     key: 'next_run_at',
     width: 180,
     render: (row) => (row.send_mode === 'app_start' ? '-' : renderDate(row.next_run_at)),
   },
-  { title: '已发送次数', key: 'run_count', width: 110, align: 'center' },
+  { title: '已生成期数', key: 'run_count', width: 110, align: 'center' },
   { title: '创建时间', key: 'created_at', width: 180, render: (row) => renderDate(row.created_at) },
   {
     title: '操作',
@@ -336,7 +336,7 @@ const columns = [
           )
         )
       }
-      if (['draft', 'scheduled'].includes(row.status)) {
+      if (['draft', 'scheduled', 'paused'].includes(row.status)) {
         actions.push(
           h(
             NButton,
@@ -436,8 +436,7 @@ const columns = [
 
     <NModal v-model:show="modalVisible" preset="card" :title="modalTitle" style="width: 840px">
       <NAlert type="info" :bordered="false" style="margin-bottom: 16px">
-        弹窗仅在线 WebSocket 推送，离线用户不会补发；App启动时弹窗会在用户冷启动 App
-        或登录后首次进入主界面时请求展示，后台切回前台不会重复触发。
+        发布后不会主动推送；弹窗由 App 启动或前台轮询接口拉取，ack 后不再重复展示同一期。
       </NAlert>
       <NForm :model="form" label-placement="left" label-width="120">
         <NFormItem label="标题">
@@ -486,7 +485,7 @@ const columns = [
             />
           </NFormItem>
         </template>
-        <NFormItem label="当前在线可触达人数">
+        <NFormItem label="预计可拉取人数">
           <NSpace align="center">
             <NButton secondary @click="estimateTargetCount">计算</NButton>
             <span>{{ estimatedCount === null ? '未计算' : `${estimatedCount} 人` }}</span>

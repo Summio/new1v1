@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import calendar
+from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from enum import Enum
 from typing import Any
@@ -29,6 +30,13 @@ RECEIPT_BULK_CREATE_BATCH_SIZE = 500
 
 class NotificationValidationError(ValueError):
     pass
+
+
+@dataclass(frozen=True)
+class NotificationOccurrence:
+    scheduled_run_at: datetime
+    run_key: str
+    published_at: datetime
 
 
 def format_notification_datetime(value: datetime | None) -> str | None:
@@ -346,11 +354,7 @@ async def create_notification_task(data: dict[str, Any], *, created_by: int | No
     payload["created_by"] = created_by
     payload["status"] = _initial_task_status(payload)
     payload["next_run_at"] = _initial_next_run_at(payload)
-    task = await SystemNotificationTask.create(**payload)
-    next_run_at = _normalize_schedule_datetime(task.next_run_at)
-    if next_run_at and next_run_at <= now_local_naive():
-        await publish_due_task(task)
-    return task
+    return await SystemNotificationTask.create(**payload)
 
 
 def _task_payload(task: SystemNotificationTask, *, status: str | None = None) -> dict[str, Any]:
@@ -375,12 +379,9 @@ def _task_payload(task: SystemNotificationTask, *, status: str | None = None) ->
 
 async def activate_notification_task(task: SystemNotificationTask) -> SystemNotificationTask:
     payload = validate_task_payload(_task_payload(task, status="scheduled"))
-    task.status = _initial_task_status(payload)
+    task.status = "running"
     task.next_run_at = _initial_next_run_at(payload)
     await task.save()
-    next_run_at = _normalize_schedule_datetime(task.next_run_at)
-    if next_run_at and next_run_at <= now_local_naive():
-        await publish_due_task(task)
     return task
 
 
@@ -506,6 +507,148 @@ async def publish_due_notifications(*, now: datetime | None = None, limit: int =
     return len(tasks)
 
 
+def _notification_due_occurrences(
+    task: SystemNotificationTask,
+    *,
+    now: datetime,
+    max_backfill: int = 30,
+) -> list[NotificationOccurrence]:
+    now = _normalize_schedule_datetime(now) or now_local_naive()
+    if getattr(task, "status", None) != "running":
+        return []
+
+    send_mode = getattr(task, "send_mode", None)
+    occurrences: list[datetime] = []
+    if send_mode == "immediate":
+        scheduled = _normalize_schedule_datetime(getattr(task, "created_at", None)) or now
+        if scheduled <= now:
+            occurrences.append(scheduled)
+    elif send_mode == "once":
+        scheduled = _normalize_schedule_datetime(getattr(task, "publish_at", None))
+        if scheduled is not None and scheduled <= now:
+            occurrences.append(scheduled)
+    elif send_mode == "repeat":
+        start = (
+            _normalize_schedule_datetime(getattr(task, "start_at", None))
+            or _normalize_schedule_datetime(getattr(task, "created_at", None))
+            or now
+        )
+        end_at = _normalize_schedule_datetime(getattr(task, "end_at", None))
+        if end_at is not None and start > end_at:
+            return []
+        max_runs = getattr(task, "max_runs", None)
+        after = start - timedelta(seconds=1)
+        generated = 0
+        while True:
+            if max_runs is not None and generated >= int(max_runs):
+                break
+            scheduled = calculate_next_run_at(
+                repeat_type=getattr(task, "repeat_type", None) or "",
+                after=after,
+                repeat_time=getattr(task, "repeat_time", None) or "",
+                repeat_weekday=getattr(task, "repeat_weekday", None),
+                repeat_month_day=getattr(task, "repeat_month_day", None),
+            )
+            if scheduled > now:
+                break
+            if end_at is not None and scheduled > end_at:
+                break
+            occurrences.append(scheduled)
+            if len(occurrences) > max_backfill:
+                occurrences = occurrences[-max_backfill:]
+            generated += 1
+            after = scheduled
+            if generated > 10000:
+                break
+    else:
+        return []
+
+    return [
+        NotificationOccurrence(
+            scheduled_run_at=scheduled,
+            run_key=build_run_key(task_id=int(task.id), scheduled_run_at=scheduled),
+            published_at=now,
+        )
+        for scheduled in occurrences[-max_backfill:]
+    ]
+
+
+async def is_user_targeted_by_notification_task(
+    *,
+    user_id: int,
+    target_mode: str,
+    target_user_ids: list[int] | None,
+    target_filters: dict[str, Any] | None,
+) -> bool:
+    if target_mode == "all":
+        return True
+    if target_mode == "user_ids":
+        return int(user_id) in {int(item) for item in target_user_ids or []}
+    if target_mode == "filter":
+        filters = _normalize_target_filters(target_mode, target_filters)
+        if not await AppUser.filter(_target_query("filter", None, filters), id=int(user_id)).exists():
+            return False
+        if filters and "is_online" in filters:
+            return bool(await _apply_online_filter([int(user_id)], filters))
+        return True
+    return False
+
+
+async def _get_or_create_notification_for_occurrence(
+    *,
+    task: SystemNotificationTask,
+    occurrence: NotificationOccurrence,
+) -> SystemNotification:
+    existing = await SystemNotification.filter(run_key=occurrence.run_key).first()
+    if existing:
+        return existing
+    async with in_transaction():
+        try:
+            return await SystemNotification.create(
+                task_id=task.id,
+                content=task.content,
+                type=task.type,
+                source="admin",
+                publish_at=occurrence.scheduled_run_at,
+                published_at=occurrence.published_at,
+                scheduled_run_at=occurrence.scheduled_run_at,
+                run_key=occurrence.run_key,
+            )
+        except IntegrityError:
+            existing = await SystemNotification.filter(run_key=occurrence.run_key).first()
+            if existing:
+                return existing
+            raise
+
+
+async def materialize_due_notifications_for_user(
+    *,
+    user_id: int,
+    now: datetime | None = None,
+    max_backfill: int = 30,
+) -> int:
+    now = _normalize_schedule_datetime(now) or now_local_naive()
+    tasks = await SystemNotificationTask.filter(status="running", send_mode__in=["immediate", "once", "repeat"])
+    created_receipts = 0
+    for task in tasks:
+        if not await is_user_targeted_by_notification_task(
+            user_id=user_id,
+            target_mode=task.target_mode,
+            target_user_ids=task.target_user_ids or [],
+            target_filters=task.target_filters or None,
+        ):
+            continue
+        for occurrence in _notification_due_occurrences(task, now=now, max_backfill=max_backfill):
+            notification = await _get_or_create_notification_for_occurrence(task=task, occurrence=occurrence)
+            _, created = await SystemNotificationReceipt.get_or_create(
+                notification_id=int(notification.id),
+                user_id=int(user_id),
+            )
+            if created:
+                created_receipts += 1
+    return created_receipts
+
+
 async def create_business_notification(
     *,
     user_id: int,
@@ -531,6 +674,7 @@ async def create_business_notification(
 
 
 async def list_user_notifications(*, user_id: int, page: int, page_size: int) -> tuple[list[dict[str, Any]], int]:
+    await materialize_due_notifications_for_user(user_id=user_id)
     total = await SystemNotificationReceipt.filter(user_id=user_id).count()
     receipts = (
         await SystemNotificationReceipt.filter(user_id=user_id)

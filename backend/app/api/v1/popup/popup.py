@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Query
+from tortoise.exceptions import ConfigurationError
 from tortoise.expressions import Q
 
 from app.models import SystemPopup, SystemPopupTask
@@ -39,9 +40,10 @@ async def _dump_task(task: SystemPopupTask) -> dict:
     except PopupValidationError:
         estimated_count = 0
     receipt_counts = await count_task_receipts(task_id=int(task.id))
-    run_count = int(task.run_count or 0)
-    if task.send_mode == "app_start":
+    try:
         run_count = await SystemPopup.filter(task_id=task.id).count()
+    except ConfigurationError:
+        run_count = int(task.run_count or 0)
     return {
         "id": int(task.id),
         "title": task.title,
@@ -149,13 +151,13 @@ async def publish_popup(req_in: SystemPopupTaskActionIn):
     task = await SystemPopupTask.filter(id=req_in.id).first()
     if not task:
         return Fail(code=404, msg="弹窗提示不存在")
-    if task.status not in {"draft", "scheduled"}:
+    if task.status not in {"draft", "scheduled", "paused"}:
         return Fail(code=400, msg="当前状态不可发布")
     try:
         await activate_popup_task(task)
     except PopupValidationError as exc:
         return Fail(code=400, msg=str(exc))
-    return Success(data=await _dump_task(task), msg="发布成功")
+    return Success(data=await _dump_task(task), msg="发布成功，App 下次拉取时可见")
 
 
 @router.post("/pause", summary="暂停弹窗提示任务")
@@ -163,8 +165,8 @@ async def pause_popup(req_in: SystemPopupTaskActionIn):
     task = await SystemPopupTask.filter(id=req_in.id).first()
     if not task:
         return Fail(code=404, msg="弹窗提示不存在")
-    if task.send_mode not in {"repeat", "app_start"} or task.status != "running":
-        return Fail(code=400, msg="仅运行中的周期或App启动任务可暂停")
+    if task.status != "running":
+        return Fail(code=400, msg="仅运行中的任务可暂停")
     task.status = "paused"
     await task.save()
     return Success(msg="暂停成功")
@@ -175,8 +177,8 @@ async def resume_popup(req_in: SystemPopupTaskActionIn):
     task = await SystemPopupTask.filter(id=req_in.id).first()
     if not task:
         return Fail(code=404, msg="弹窗提示不存在")
-    if task.send_mode not in {"repeat", "app_start"} or task.status != "paused":
-        return Fail(code=400, msg="仅暂停中的周期或App启动任务可恢复")
+    if task.status != "paused":
+        return Fail(code=400, msg="仅暂停中的任务可恢复")
     task.status = "running"
     await recalculate_popup_task_next_run_at(task)
     return Success(data=await _dump_task(task), msg="恢复成功")
@@ -202,6 +204,6 @@ async def delete_popup(id: int = Query(..., ge=1)):
         return Fail(code=404, msg="弹窗提示不存在")
     sent = await SystemPopup.filter(task_id=id).exists()
     if sent:
-        return Fail(code=400, msg="已发送过的弹窗任务不可删除")
+        return Fail(code=400, msg="已产生用户记录的弹窗任务不可删除，请使用取消")
     await task.delete()
     return Success(msg="删除成功")

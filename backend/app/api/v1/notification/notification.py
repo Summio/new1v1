@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Query
+from tortoise.exceptions import ConfigurationError
 from tortoise.expressions import Q
 
 from app.models import SystemNotification, SystemNotificationTask
@@ -37,6 +38,10 @@ async def _dump_task(task: SystemNotificationTask) -> dict:
         )
     except NotificationValidationError:
         estimated_count = 0
+    try:
+        run_count = await SystemNotification.filter(task_id=task.id).count()
+    except ConfigurationError:
+        run_count = int(task.run_count or 0)
     return {
         "id": int(task.id),
         "content": task.content,
@@ -54,7 +59,7 @@ async def _dump_task(task: SystemNotificationTask) -> dict:
         "start_at": format_notification_datetime(task.start_at),
         "end_at": format_notification_datetime(task.end_at),
         "max_runs": task.max_runs,
-        "run_count": int(task.run_count or 0),
+        "run_count": run_count,
         "next_run_at": format_notification_datetime(task.next_run_at),
         "last_run_at": format_notification_datetime(task.last_run_at),
         "created_at": format_notification_datetime(task.created_at),
@@ -144,36 +149,38 @@ async def publish_notification(req_in: SystemNotificationTaskActionIn):
     task = await SystemNotificationTask.filter(id=req_in.id).first()
     if not task:
         return Fail(code=404, msg="系统通知不存在")
-    if task.status not in {"draft", "scheduled"}:
+    if task.status not in {"draft", "scheduled", "paused"}:
         return Fail(code=400, msg="当前状态不可发布")
     try:
         await activate_notification_task(task)
     except NotificationValidationError as exc:
         return Fail(code=400, msg=str(exc))
-    return Success(data=await _dump_task(task), msg="发布成功")
+    return Success(data=await _dump_task(task), msg="发布成功，用户下次拉取时可见")
 
 
-@router.post("/pause", summary="暂停系统通知周期任务")
+@router.post("/pause", summary="暂停系统通知任务")
 async def pause_notification(req_in: SystemNotificationTaskActionIn):
     task = await SystemNotificationTask.filter(id=req_in.id).first()
     if not task:
         return Fail(code=404, msg="系统通知不存在")
-    if task.send_mode != "repeat" or task.status != "running":
-        return Fail(code=400, msg="仅运行中的周期任务可暂停")
+    if task.status != "running":
+        return Fail(code=400, msg="仅运行中的任务可暂停")
     task.status = "paused"
     await task.save()
     return Success(msg="暂停成功")
 
 
-@router.post("/resume", summary="恢复系统通知周期任务")
+@router.post("/resume", summary="恢复系统通知任务")
 async def resume_notification(req_in: SystemNotificationTaskActionIn):
     task = await SystemNotificationTask.filter(id=req_in.id).first()
     if not task:
         return Fail(code=404, msg="系统通知不存在")
-    if task.send_mode != "repeat" or task.status != "paused":
-        return Fail(code=400, msg="仅暂停中的周期任务可恢复")
-    task.status = "running"
-    await recalculate_task_next_run_at(task)
+    if task.status != "paused":
+        return Fail(code=400, msg="仅暂停中的任务可恢复")
+    try:
+        await activate_notification_task(task)
+    except NotificationValidationError as exc:
+        return Fail(code=400, msg=str(exc))
     return Success(data=await _dump_task(task), msg="恢复成功")
 
 
@@ -197,6 +204,6 @@ async def delete_notification(id: int = Query(..., ge=1)):
         return Fail(code=404, msg="系统通知不存在")
     sent = await SystemNotification.filter(task_id=id).exists()
     if sent:
-        return Fail(code=400, msg="已发送过的通知任务不可删除")
+        return Fail(code=400, msg="已产生用户记录的通知任务不可删除，请使用取消")
     await task.delete()
     return Success(msg="删除成功")

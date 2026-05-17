@@ -54,7 +54,9 @@ def test_system_popup_backend_contract_files_exist() -> None:
     assert "push_system_popup" not in service_text
 
     assert SCHEDULER_FILE.exists()
-    assert "publish_due_popups" in SCHEDULER_FILE.read_text(encoding="utf-8")
+    scheduler_text = SCHEDULER_FILE.read_text(encoding="utf-8")
+    assert "publish_due_popups" not in scheduler_text
+    assert "materialize on pull" in scheduler_text
 
     model_init_text = MODEL_INIT_FILE.read_text(encoding="utf-8")
     assert "from .system_popup import *" in model_init_text
@@ -127,9 +129,11 @@ def test_system_popup_admin_and_flutter_contract() -> None:
     assert WEB_VIEW_FILE.exists()
     web_view_text = WEB_VIEW_FILE.read_text(encoding="utf-8")
     assert "弹窗提示" in web_view_text
-    assert "当前在线可触达人数" in web_view_text
-    assert "已推送人数" in web_view_text
+    assert "预计可拉取人数" in web_view_text
+    assert "已拉取人数" in web_view_text
     assert "已确认人数" in web_view_text
+    assert "下次可拉取时间" in web_view_text
+    assert "已生成期数" in web_view_text
     assert "App启动时" in web_view_text
     assert "form.target_filters.is_online" not in web_view_text
 
@@ -159,3 +163,54 @@ def test_system_popup_scheduler_is_not_started_in_api_lifespan() -> None:
 
     assert "run_system_popup_scheduler" not in app_text
     assert "popup_task" not in app_text
+
+
+def test_popup_pull_materializes_due_tasks_without_push_or_scheduler() -> None:
+    service_text = SERVICE_FILE.read_text(encoding="utf-8")
+    ws_text = WS_EVENTS_FILE.read_text(encoding="utf-8")
+    app_text = APP_FILE.read_text(encoding="utf-8")
+
+    assert "materialize_due_popups_for_user" in service_text
+    assert "materialize_due_popups_for_user" in service_text.split("async def fetch_pending_popups_for_user", 1)[1]
+    assert "materialize_startup_popups_for_user" in service_text
+    assert "system_popup_pending" not in ws_text
+    assert "run_system_popup_scheduler" not in app_text
+
+
+def test_admin_popup_publish_activates_task_without_push_or_batch_send() -> None:
+    api_text = ADMIN_API_FILE.read_text(encoding="utf-8")
+    service_text = SERVICE_FILE.read_text(encoding="utf-8")
+
+    publish_section = api_text.split("async def publish_popup", 1)[1].split("async def pause_popup", 1)[0]
+    assert "activate_popup_task" in publish_section
+    assert "publish_popup_task_once" not in publish_section
+    assert "publish_due_popups" not in publish_section
+    assert "async def materialize_due_popups_for_user" in service_text
+
+
+def test_admin_popup_actions_remain_available_for_lazy_pull_mode() -> None:
+    api_text = ADMIN_API_FILE.read_text(encoding="utf-8")
+    web_text = WEB_VIEW_FILE.read_text(encoding="utf-8")
+
+    for fn in [
+        "async def list_popup_tasks",
+        "async def get_popup_task",
+        "async def estimate_popup_target_count",
+        "async def create_popup",
+        "async def update_popup",
+        "async def publish_popup",
+        "async def pause_popup",
+        "async def resume_popup",
+        "async def cancel_popup",
+        "async def delete_popup",
+    ]:
+        assert fn in api_text
+
+    assert "createSystemPopup" in web_text
+    assert "updateSystemPopup" in web_text
+    assert "publishSystemPopup" in web_text
+    assert "pauseSystemPopup" in web_text
+    assert "resumeSystemPopup" in web_text
+    assert "cancelSystemPopup" in web_text
+    assert "deleteSystemPopup" in web_text
+    assert "estimateSystemPopupTargetCount" in web_text

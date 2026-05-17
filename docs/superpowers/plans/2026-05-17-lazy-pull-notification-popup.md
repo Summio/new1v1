@@ -31,11 +31,14 @@
 
 - `backend/app/api/v1/notification/notification.py`
   - 后台“发布”动作只激活任务，不再要求立即批量发送。
-  - 删除、暂停、恢复语义按懒拉取模型调整。
+  - 列表、详情、创建、编辑、发布、暂停、恢复、取消、删除、估算人数都必须继续可用。
+  - 暂停/恢复/取消语义按懒拉取模型调整：暂停或取消后，后续 App 拉取不再懒物化新实例。
 
 - `backend/app/api/v1/popup/popup.py`
   - 后台“发布”动作只激活任务。
   - App 启动时弹窗继续作为 `send_mode = app_start` 保持兼容。
+  - 列表、详情、创建、编辑、发布、暂停、恢复、取消、删除、估算人数都必须继续可用。
+  - 暂停/恢复/取消语义按懒拉取模型调整：暂停或取消后，后续 App startup/pending 拉取不再懒物化新实例。
 
 - `backend/app/api/v1/app/notification.py`
   - 保持 App 通知接口路径不变。
@@ -59,19 +62,32 @@
 
 - `backend/web/src/views/operation/system-notification/index.vue`
   - 调整后台文案：发送表示“进入可拉取状态”，不是服务端主动推送。
+  - 保持运营可操作项：筛选、创建、编辑、保存草稿、发布、暂停、恢复、取消、删除、预估触达人数。
 
 - `backend/web/src/views/operation/popup/index.vue`
   - 调整后台文案：弹窗到点后由 App startup/pending 拉取。
+  - 保持运营可操作项：筛选、创建、编辑、保存草稿、发布、暂停、恢复、取消、删除、预估触达人数。
 
 - `huanxi/lib/modules/home/main_shell.dart`
   - 增加或确认弹窗 pending HTTP 轮询，App 前台时运行，后台停止。
   - 不处理通知/弹窗 WebSocket 事件。
 
+- `huanxi/lib/modules/home/system_notifications_page.dart`
+  - 保持进入页面自动刷新、下拉刷新、分页加载、单条已读/未读、全部已读。
+  - 不显示系统通知未读数/红点。
+
 - `huanxi/lib/services/system_popup_service.dart`
   - 保持 startup/pending/ack HTTP 方法。
 
+- `huanxi/lib/services/system_notification_service.dart`
+  - 保持通知列表、详情、单条已读/未读、全部已读 HTTP 方法。
+  - 不恢复未读数汇总接口。
+
 - `huanxi/test/modules/home/main_shell_contract_test.dart`
   - 增加弹窗轮询和不监听 WebSocket 的合同测试。
+
+- `huanxi/test/modules/home/system_notifications_contract_test.dart`
+  - 增加通知页面通过 HTTP 拉取同步后台发布结果的合同测试。
 
 ---
 
@@ -378,6 +394,48 @@ pytest -q tests/test_system_notification_contract.py tests/test_system_notificat
 
 预期通过。
 
+- [ ] **Step 5: 明确通知运营动作语义**
+
+在 `backend/app/api/v1/notification/notification.py` 中调整并通过合同测试锁定：
+
+- `list/get/create/update/estimate-target-count` 保持现有行为。
+- `publish`：`draft/scheduled/paused` 可以进入 `running`，不批量发送。
+- `pause`：所有 `running` 通知任务都可以暂停，不限 `repeat`；暂停后后续拉取不再懒物化新实例。
+- `resume`：所有 `paused` 通知任务都可以恢复为 `running`；恢复后继续按当前时间拉取时结算。
+- `cancel`：非 `completed/cancelled` 均可取消；取消后后续拉取不再懒物化新实例。
+- `delete`：没有物化过通知实例的任务可删除；已物化过的任务只能取消，避免破坏用户 receipt。
+
+建议合同测试：
+
+```python
+def test_admin_notification_actions_remain_available_for_lazy_pull_mode():
+    api_text = (BACKEND_ROOT / "app/api/v1/notification/notification.py").read_text(encoding="utf-8")
+    web_text = (REPO_ROOT / "backend/web/src/views/operation/system-notification/index.vue").read_text(encoding="utf-8")
+
+    for fn in [
+        "async def list_notification_tasks",
+        "async def get_notification_task",
+        "async def estimate_notification_target_count",
+        "async def create_notification",
+        "async def update_notification",
+        "async def publish_notification",
+        "async def pause_notification",
+        "async def resume_notification",
+        "async def cancel_notification",
+        "async def delete_notification",
+    ]:
+        assert fn in api_text
+
+    assert 'api.createSystemNotification' in web_text
+    assert 'api.updateSystemNotification' in web_text
+    assert 'publishSystemNotification' in web_text
+    assert 'pauseSystemNotification' in web_text
+    assert 'resumeSystemNotification' in web_text
+    assert 'cancelSystemNotification' in web_text
+    assert 'deleteSystemNotification' in web_text
+    assert 'estimateSystemNotificationTargetCount' in web_text
+```
+
 ### Task 4: 实现弹窗 occurrence 计算和懒物化
 
 **Files:**
@@ -615,7 +673,49 @@ pytest -q tests/test_system_popup_contract.py tests/test_system_popup_service.py
 
 预期通过。
 
-### Task 6: 管理后台文案和状态展示
+- [ ] **Step 5: 明确弹窗运营动作语义**
+
+在 `backend/app/api/v1/popup/popup.py` 中调整并通过合同测试锁定：
+
+- `list/get/create/update/estimate-target-count` 保持现有行为。
+- `publish`：`draft/scheduled/paused` 可以进入 `running`，不主动推送，不批量创建在线用户 receipt。
+- `pause`：所有 `running` 弹窗任务都可以暂停，不限 `repeat/app_start`；暂停后 startup/pending 拉取不再懒物化新实例。
+- `resume`：所有 `paused` 弹窗任务都可以恢复为 `running`；恢复后继续按当前时间拉取时结算。
+- `cancel`：非 `completed/cancelled` 均可取消；取消后后续拉取不再懒物化新实例。
+- `delete`：没有物化过弹窗实例的任务可删除；已物化过的任务只能取消，避免破坏 ack 记录。
+
+建议合同测试：
+
+```python
+def test_admin_popup_actions_remain_available_for_lazy_pull_mode():
+    api_text = (BACKEND_ROOT / "app/api/v1/popup/popup.py").read_text(encoding="utf-8")
+    web_text = (REPO_ROOT / "backend/web/src/views/operation/popup/index.vue").read_text(encoding="utf-8")
+
+    for fn in [
+        "async def list_popup_tasks",
+        "async def get_popup_task",
+        "async def estimate_popup_target_count",
+        "async def create_popup",
+        "async def update_popup",
+        "async def publish_popup",
+        "async def pause_popup",
+        "async def resume_popup",
+        "async def cancel_popup",
+        "async def delete_popup",
+    ]:
+        assert fn in api_text
+
+    assert 'api.createSystemPopup' in web_text
+    assert 'api.updateSystemPopup' in web_text
+    assert 'publishSystemPopup' in web_text
+    assert 'pauseSystemPopup' in web_text
+    assert 'resumeSystemPopup' in web_text
+    assert 'cancelSystemPopup' in web_text
+    assert 'deleteSystemPopup' in web_text
+    assert 'estimateSystemPopupTargetCount' in web_text
+```
+
+### Task 6: 管理后台运营功能和状态展示
 
 **Files:**
 - Modify: `backend/web/src/views/operation/system-notification/index.vue`
@@ -641,7 +741,49 @@ def test_admin_popup_page_explains_pull_visibility():
     assert "WebSocket" not in text
 ```
 
-- [ ] **Step 2: 修改通知后台文案**
+- [ ] **Step 2: 增加运营控件合同**
+
+在同一组合同测试中确认后台页面仍提供完整运营控件：
+
+```python
+def test_admin_notification_page_keeps_all_operation_controls():
+    text = (REPO_ROOT / "backend/web/src/views/operation/system-notification/index.vue").read_text(encoding="utf-8")
+
+    for value in ["immediate", "once", "repeat"]:
+        assert value in text
+    for action in [
+        "createSystemNotification",
+        "updateSystemNotification",
+        "publishSystemNotification",
+        "pauseSystemNotification",
+        "resumeSystemNotification",
+        "cancelSystemNotification",
+        "deleteSystemNotification",
+        "estimateSystemNotificationTargetCount",
+    ]:
+        assert action in text
+```
+
+```python
+def test_admin_popup_page_keeps_all_operation_controls():
+    text = (REPO_ROOT / "backend/web/src/views/operation/popup/index.vue").read_text(encoding="utf-8")
+
+    for value in ["immediate", "once", "repeat", "app_start"]:
+        assert value in text
+    for action in [
+        "createSystemPopup",
+        "updateSystemPopup",
+        "publishSystemPopup",
+        "pauseSystemPopup",
+        "resumeSystemPopup",
+        "cancelSystemPopup",
+        "deleteSystemPopup",
+        "estimateSystemPopupTargetCount",
+    ]:
+        assert action in text
+```
+
+- [ ] **Step 3: 修改通知后台文案**
 
 在 `backend/web/src/views/operation/system-notification/index.vue` 的发送方式附近增加简短提示：
 
@@ -649,7 +791,7 @@ def test_admin_popup_page_explains_pull_visibility():
 发布后不会主动推送；立即发送表示用户下次拉取通知列表时可见，定时/周期表示到点后可被拉取。
 ```
 
-- [ ] **Step 3: 修改弹窗后台文案**
+- [ ] **Step 4: 修改弹窗后台文案**
 
 在 `backend/web/src/views/operation/popup/index.vue` 的发送方式附近增加简短提示：
 
@@ -657,7 +799,17 @@ def test_admin_popup_page_explains_pull_visibility():
 发布后不会主动推送；弹窗由 App 启动或前台轮询接口拉取，ack 后不再重复展示同一期。
 ```
 
-- [ ] **Step 4: 运行合同测试**
+- [ ] **Step 5: 调整操作按钮可见性**
+
+在两个后台页面中确认操作按钮不会因懒拉取模式导致运营无法管理：
+
+- `draft/scheduled/paused` 允许发布。
+- `running` 允许暂停和取消。
+- `paused` 允许恢复、发布或取消；如果保留“发布”按钮，应与“恢复”语义一致。
+- `completed/cancelled` 不允许继续发布、暂停、恢复。
+- 已物化过实例的任务隐藏或禁用删除按钮，提示“已产生用户记录，请使用取消”。
+
+- [ ] **Step 6: 运行合同测试**
 
 ```bash
 cd D:/1v1/new1v1/backend
@@ -666,14 +818,55 @@ pytest -q tests/test_system_notification_contract.py tests/test_system_popup_con
 
 预期通过。
 
-### Task 7: Flutter 弹窗 HTTP 轮询
+### Task 7: Flutter 通知同步与弹窗 HTTP 轮询
 
 **Files:**
 - Modify: `huanxi/lib/modules/home/main_shell.dart`
+- Modify: `huanxi/lib/modules/home/system_notifications_page.dart`
+- Modify: `huanxi/lib/app/providers/system_notification_provider.dart`
+- Modify: `huanxi/lib/services/system_notification_service.dart`
 - Modify: `huanxi/lib/services/system_popup_service.dart`
 - Test: `huanxi/test/modules/home/main_shell_contract_test.dart`
+- Test: `huanxi/test/modules/home/system_notifications_contract_test.dart`
 
-- [ ] **Step 1: 增加 Flutter 轮询合同测试**
+- [ ] **Step 1: 增加 Flutter 通知同步合同测试**
+
+在 `huanxi/test/modules/home/system_notifications_contract_test.dart` 增加断言：
+
+```dart
+test('system notifications stay http pull based and refresh on page entry', () {
+  final page = File('lib/modules/home/system_notifications_page.dart').readAsStringSync();
+  final service = File('lib/services/system_notification_service.dart').readAsStringSync();
+  final provider = File('lib/app/providers/system_notification_provider.dart').readAsStringSync();
+
+  expect(service, contains('fetchNotifications'));
+  expect(service, contains('fetchDetail'));
+  expect(service, contains('markRead'));
+  expect(service, contains('markUnread'));
+  expect(service, contains('readAll'));
+  expect(service, isNot(contains('unread-count')));
+
+  expect(provider, contains('Future<void> refresh()'));
+  expect(provider, contains('fetchNotifications(page: 1)'));
+  expect(page, contains('systemNotificationListProvider.notifier).refresh()'));
+  expect(page, contains('RefreshIndicator'));
+  expect(page, contains('loadMore'));
+  expect(page, isNot(contains('system_notification_unread_changed')));
+});
+```
+
+- [ ] **Step 2: 确认通知页面同步策略**
+
+在 Flutter 端保持通知低频 HTTP 拉取，不引入通知轮询：
+
+- 进入 `SystemNotificationsPage` 后调用 `systemNotificationListProvider.notifier.refresh()`。
+- 下拉刷新调用 `refresh()`。
+- 滚动到底部调用 `loadMore()`。
+- 打开详情调用 `fetchDetail()`，并通过 `syncDetail()` 同步列表中的已读状态。
+- 单条已读/未读和全部已读继续调用 HTTP 接口。
+- 不恢复系统通知未读数、红点和 WebSocket 监听。
+
+- [ ] **Step 3: 增加 Flutter 弹窗轮询合同测试**
 
 在 `huanxi/test/modules/home/main_shell_contract_test.dart` 增加断言：
 
@@ -689,7 +882,7 @@ test('main shell starts and stops popup polling with lifecycle', () {
 });
 ```
 
-- [ ] **Step 2: 确认 popup service 暴露 pending 拉取**
+- [ ] **Step 4: 确认 popup service 暴露 pending 拉取**
 
 在 `huanxi/lib/services/system_popup_service.dart` 确认存在：
 
@@ -705,7 +898,7 @@ GET /api/v1/app/popups/pending
 
 并解析 `data.items`。
 
-- [ ] **Step 3: 在 MainShell 增加前台轮询**
+- [ ] **Step 5: 在 MainShell 增加前台轮询**
 
 在 `huanxi/lib/modules/home/main_shell.dart`：
 
@@ -723,7 +916,7 @@ static const Duration _systemPopupPollingInterval = Duration(seconds: 60);
 
 不要低于 15 秒。
 
-- [ ] **Step 4: 保持展示保护**
+- [ ] **Step 6: 保持展示保护**
 
 轮询回调复用现有弹窗展示保护：
 
@@ -733,11 +926,11 @@ static const Duration _systemPopupPollingInterval = Duration(seconds: 60);
 - 当前没有系统弹窗正在展示。
 - 同一 popup id 在本轮生命周期内不重复处理。
 
-- [ ] **Step 5: 运行 Flutter 合同测试**
+- [ ] **Step 7: 运行 Flutter 合同测试**
 
 ```bash
 cd D:/1v1/new1v1/huanxi
-flutter test test/modules/home/main_shell_contract_test.dart
+flutter test test/modules/home/system_notifications_contract_test.dart test/modules/home/main_shell_contract_test.dart
 ```
 
 预期通过。
@@ -818,11 +1011,15 @@ No issues found!
 - 通知立即发送：后台发布后任务进入 `running`，目标用户下次 `GET /api/v1/app/notifications` 可见。
 - 通知一次性定时：`publish_at` 到达前不可见，到达后目标用户拉取可见。
 - 通知周期重复：目标用户拉取时按周期生成最近有限数量的通知实例，每期有独立 `run_key` 和已读状态。
+- 通知后台运营：列表、详情、创建、编辑、发布、暂停、恢复、取消、删除、估算人数都可用；已物化实例的任务不可硬删除，只能取消。
+- Flutter 通知同步：进入系统通知页、下拉刷新、分页加载、打开详情、单条已读/未读、全部已读都通过 HTTP 工作；不恢复通知轮询、未读数、红点或 WebSocket 监听。
 - 弹窗立即发送：后台发布后目标用户下次 `GET /api/v1/app/popups/pending` 可见。
 - 弹窗一次性定时：`publish_at` 到达前不可见，到达后 pending 拉取可见。
 - 弹窗周期重复：pending 拉取时只展示当前最近一期，不补历史弹窗堆积。
 - 弹窗 App 启动时：`send_mode = app_start` 只通过 `POST /api/v1/app/popups/startup` 返回。
 - 弹窗 ack 后，同一 popup id 对该用户不再返回。
+- 弹窗后台运营：列表、详情、创建、编辑、发布、暂停、恢复、取消、删除、估算人数都可用；已物化实例的任务不可硬删除，只能取消。
+- Flutter 弹窗同步：App 启动调用 startup，回前台立即拉 pending，前台运行按 60 秒级 HTTP 轮询 pending，后台停止轮询，ack 后不重复展示。
 - 后端没有通知/弹窗 WebSocket 主动推送。
 - 后端没有通知/弹窗 FastAPI lifespan 长跑调度器。
 - 没有外部短任务、cron、worker 依赖。

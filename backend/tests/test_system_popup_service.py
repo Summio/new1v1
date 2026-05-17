@@ -88,6 +88,47 @@ def test_validate_popup_payload_accepts_app_start_without_schedule() -> None:
 
 
 @pytest.mark.asyncio
+async def test_activate_popup_task_sets_once_task_to_running(monkeypatch: pytest.MonkeyPatch) -> None:
+    saved = {"count": 0}
+
+    class FakeTask(SimpleNamespace):
+        async def save(self) -> None:
+            saved["count"] += 1
+
+    task = FakeTask(
+        id=8,
+        title="Notice",
+        content="Hello",
+        type="announcement",
+        send_mode="once",
+        status="scheduled",
+        target_mode="all",
+        target_user_ids=[],
+        target_filters=None,
+        publish_at=datetime(2026, 5, 14, 10, 0),
+        repeat_type=None,
+        repeat_time=None,
+        repeat_weekday=None,
+        repeat_month_day=None,
+        start_at=None,
+        end_at=None,
+        max_runs=None,
+        next_run_at=None,
+    )
+
+    monkeypatch.setattr(
+        "app.services.system_popup_service.now_local_naive",
+        lambda: datetime(2026, 5, 14, 9, 0),
+    )
+
+    await system_popup_service.activate_popup_task(task)
+
+    assert task.status == "running"
+    assert task.next_run_at == datetime(2026, 5, 14, 10, 0)
+    assert saved["count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_is_user_targeted_by_popup_task_supports_all_user_ids_and_filters(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -228,11 +269,25 @@ async def test_publish_popup_task_once_creates_popup_without_online_filter_recei
 
 
 @pytest.mark.asyncio
-async def test_fetch_pending_popups_returns_targeted_unacked_items_and_creates_receipts(
+async def test_fetch_pending_popups_returns_targeted_unacked_items(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    task_targeted = SimpleNamespace(id=8, target_mode="all", target_user_ids=[], target_filters=None)
-    task_not_targeted = SimpleNamespace(id=9, target_mode="user_ids", target_user_ids=[99], target_filters=None)
+    task_targeted = SimpleNamespace(
+        id=8,
+        status="running",
+        send_mode="immediate",
+        target_mode="all",
+        target_user_ids=[],
+        target_filters=None,
+    )
+    task_not_targeted = SimpleNamespace(
+        id=9,
+        status="running",
+        send_mode="immediate",
+        target_mode="user_ids",
+        target_user_ids=[99],
+        target_filters=None,
+    )
     popups = [
         SimpleNamespace(
             id=1,
@@ -262,54 +317,285 @@ async def test_fetch_pending_popups_returns_targeted_unacked_items_and_creates_r
             task=task_not_targeted,
         ),
     ]
-    created_receipts: list[tuple[int, int]] = []
 
     class FakePopupQuery:
-        def order_by(self, *args):
-            return self
+        def __init__(self, item=None):
+            self.item = item
 
-        def limit(self, value):
-            return self
+        async def first(self):
+            return self.item
 
-        def __await__(self):
-            async def _result():
-                return popups
-
-            return _result().__await__()
 
     class FakePopup:
         @classmethod
         def filter(cls, **kwargs):
-            assert kwargs == {"published_at__not_isnull": True}
-            return FakePopupQuery()
+            popup_id = kwargs["id"]
+            return FakePopupQuery(next((item for item in popups if item.id == popup_id), None))
 
     class FakeReceiptQuery:
-        def __init__(self, popup_id: int):
-            self.popup_id = popup_id
+        def order_by(self, *args):
+            return self
 
-        async def first(self):
-            if self.popup_id == 2:
-                return SimpleNamespace(ack_at=datetime(2026, 5, 14, 10, 5))
-            return None
+        def __await__(self):
+            async def _result():
+                return [
+                    SimpleNamespace(popup_id=1),
+                    SimpleNamespace(popup_id=3),
+                ]
+
+            return _result().__await__()
 
     class FakeReceipt:
         @classmethod
         def filter(cls, **kwargs):
-            assert kwargs["user_id"] == 34
-            return FakeReceiptQuery(kwargs["popup_id"])
-
-        @classmethod
-        async def get_or_create(cls, **kwargs):
-            created_receipts.append((kwargs["popup_id"], kwargs["user_id"]))
-            return SimpleNamespace(ack_at=None), True
+            assert kwargs == {"user_id": 34, "ack_at__isnull": True}
+            return FakeReceiptQuery()
 
     monkeypatch.setattr("app.services.system_popup_service.SystemPopup", FakePopup)
     monkeypatch.setattr("app.services.system_popup_service.SystemPopupReceipt", FakeReceipt)
+    async def fake_materialize_due_popups_for_user(**kwargs):
+        return 0
+
+    monkeypatch.setattr(
+        "app.services.system_popup_service.materialize_due_popups_for_user",
+        fake_materialize_due_popups_for_user,
+        raising=False,
+    )
 
     items = await system_popup_service.fetch_pending_popups_for_user(user_id=34)
 
     assert [item["id"] for item in items] == [1]
-    assert created_receipts == [(1, 34)]
+
+
+@pytest.mark.asyncio
+async def test_fetch_pending_popups_hides_unacked_popup_when_task_is_paused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    popup = SimpleNamespace(
+        id=88,
+        title="Notice",
+        content="Hello",
+        type="announcement",
+        publish_at=None,
+        published_at=datetime(2026, 5, 14, 10, 0),
+        task=SimpleNamespace(
+            id=8,
+            status="paused",
+            send_mode="immediate",
+            target_mode="all",
+            target_user_ids=[],
+            target_filters=None,
+        ),
+    )
+
+    async def fake_materialize_due_popups_for_user(**kwargs):
+        return 0
+
+    class FakePopupQuery:
+        async def first(self):
+            return popup
+
+    class FakePopup:
+        @classmethod
+        def filter(cls, **kwargs):
+            return FakePopupQuery()
+
+    class FakeReceiptQuery:
+        def order_by(self, *args):
+            return self
+
+        def __await__(self):
+            async def _result():
+                return [SimpleNamespace(popup_id=88)]
+
+            return _result().__await__()
+
+    class FakeReceipt:
+        @classmethod
+        def filter(cls, **kwargs):
+            return FakeReceiptQuery()
+
+    monkeypatch.setattr(
+        "app.services.system_popup_service.materialize_due_popups_for_user",
+        fake_materialize_due_popups_for_user,
+        raising=False,
+    )
+    monkeypatch.setattr("app.services.system_popup_service.SystemPopup", FakePopup)
+    monkeypatch.setattr("app.services.system_popup_service.SystemPopupReceipt", FakeReceipt)
+
+    assert await system_popup_service.fetch_pending_popups_for_user(user_id=34) == []
+
+
+def test_pending_popups_materializes_immediate_popup_for_target_user() -> None:
+    task = SimpleNamespace(
+        id=8,
+        status="running",
+        send_mode="immediate",
+        created_at=datetime(2026, 5, 14, 10, 0),
+        publish_at=None,
+        end_at=None,
+    )
+
+    occurrences = system_popup_service._popup_due_occurrences(
+        task,
+        now=datetime(2026, 5, 14, 10, 30),
+        mode="pending",
+    )
+
+    assert len(occurrences) == 1
+    assert occurrences[0].scheduled_run_at == datetime(2026, 5, 14, 10, 0)
+    assert occurrences[0].run_key == "popup_task:8:2026-05-14T10:00:00"
+
+
+def test_pending_popups_hides_once_popup_before_publish_at() -> None:
+    task = SimpleNamespace(
+        id=8,
+        status="running",
+        send_mode="once",
+        created_at=datetime(2026, 5, 14, 10, 0),
+        publish_at=datetime(2026, 5, 14, 11, 0),
+        end_at=None,
+    )
+
+    assert (
+        system_popup_service._popup_due_occurrences(
+            task,
+            now=datetime(2026, 5, 14, 10, 30),
+            mode="pending",
+        )
+        == []
+    )
+
+
+def test_pending_popups_materializes_once_popup_after_publish_at() -> None:
+    task = SimpleNamespace(
+        id=8,
+        status="running",
+        send_mode="once",
+        created_at=datetime(2026, 5, 14, 10, 0),
+        publish_at=datetime(2026, 5, 14, 10, 20),
+        end_at=None,
+    )
+
+    occurrences = system_popup_service._popup_due_occurrences(
+        task,
+        now=datetime(2026, 5, 14, 10, 30),
+        mode="pending",
+    )
+
+    assert len(occurrences) == 1
+    assert occurrences[0].scheduled_run_at == datetime(2026, 5, 14, 10, 20)
+
+
+def test_pending_popups_materializes_current_repeat_occurrence_only() -> None:
+    task = SimpleNamespace(
+        id=8,
+        status="running",
+        send_mode="repeat",
+        created_at=datetime(2026, 5, 10, 10, 0),
+        publish_at=None,
+        repeat_type="daily",
+        repeat_time="09:00",
+        repeat_weekday=None,
+        repeat_month_day=None,
+        start_at=datetime(2026, 5, 10, 0, 0),
+        end_at=datetime(2026, 5, 20, 0, 0),
+        max_runs=None,
+    )
+
+    occurrences = system_popup_service._popup_due_occurrences(
+        task,
+        now=datetime(2026, 5, 14, 10, 30),
+        mode="pending",
+    )
+
+    assert len(occurrences) == 1
+    assert occurrences[0].scheduled_run_at == datetime(2026, 5, 14, 9, 0)
+
+
+def test_startup_popups_materializes_app_start_task() -> None:
+    task = SimpleNamespace(
+        id=8,
+        status="running",
+        send_mode="app_start",
+        created_at=datetime(2026, 5, 14, 10, 0),
+        publish_at=None,
+        end_at=None,
+    )
+
+    occurrences = system_popup_service._popup_due_occurrences(
+        task,
+        now=datetime(2026, 5, 14, 10, 30),
+        mode="startup",
+    )
+
+    assert len(occurrences) == 1
+    assert occurrences[0].run_key == "popup_task:8:2026-05-14T10:00:00"
+
+
+@pytest.mark.asyncio
+async def test_popup_ack_hides_materialized_popup(monkeypatch: pytest.MonkeyPatch) -> None:
+    popup = SimpleNamespace(
+        id=88,
+        title="Notice",
+        content="Hello",
+        type="announcement",
+        publish_at=None,
+        published_at=datetime(2026, 5, 14, 10, 0),
+        task=SimpleNamespace(
+            id=8,
+            status="running",
+            send_mode="immediate",
+            target_mode="all",
+            target_user_ids=[],
+            target_filters=None,
+        ),
+    )
+    receipt = SimpleNamespace(ack_at=None)
+
+    async def fake_materialize_due_popups_for_user(**kwargs):
+        return 1
+
+    class FakePopupQuery:
+        async def first(self):
+            return popup
+
+
+    class FakePopup:
+        @classmethod
+        def filter(cls, **kwargs):
+            return FakePopupQuery()
+
+    class FakeReceiptQuery:
+        def order_by(self, *args):
+            return self
+
+        def __await__(self):
+            async def _result():
+                if receipt.ack_at is not None:
+                    return []
+                return [SimpleNamespace(popup_id=88)]
+
+            return _result().__await__()
+
+    class FakeReceipt:
+        @classmethod
+        def filter(cls, **kwargs):
+            return FakeReceiptQuery()
+
+    monkeypatch.setattr(
+        "app.services.system_popup_service.materialize_due_popups_for_user",
+        fake_materialize_due_popups_for_user,
+        raising=False,
+    )
+    monkeypatch.setattr("app.services.system_popup_service.SystemPopup", FakePopup)
+    monkeypatch.setattr("app.services.system_popup_service.SystemPopupReceipt", FakeReceipt)
+
+    assert [item["id"] for item in await system_popup_service.fetch_pending_popups_for_user(user_id=34)] == [88]
+
+    receipt.ack_at = datetime(2026, 5, 14, 10, 5)
+
+    assert await system_popup_service.fetch_pending_popups_for_user(user_id=34) == []
 
 
 @pytest.mark.asyncio
@@ -353,75 +639,64 @@ async def test_publish_due_popup_task_accepts_timezone_aware_schedule_fields(mon
 async def test_fetch_startup_popups_limits_running_tasks_and_returned_items(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    queried = {"limit": None}
-    tasks = [
+    popups = [
         SimpleNamespace(
             id=index,
             title=f"Notice {index}",
             content="Hello",
             type="announcement",
-            target_mode="all",
-            target_user_ids=[],
-            target_filters=None,
+            published_at=datetime(2026, 5, 14, 10, index),
+            publish_at=None,
+            task=SimpleNamespace(
+                status="running",
+                send_mode="app_start",
+                target_mode="all",
+                target_user_ids=[],
+                target_filters=None,
+            ),
         )
         for index in range(1, 8)
     ]
 
-    class FakeTaskQuery:
-        def __init__(self):
-            self.items = tasks
-
-        def order_by(self, *args):
-            return self
-
-        def limit(self, value):
-            queried["limit"] = value
-            self.items = tasks[:value]
-            return self
-
-        def __await__(self):
-            async def _result():
-                return self.items
-
-            return _result().__await__()
-
-    class FakeTask:
-        @classmethod
-        def filter(cls, **kwargs):
-            assert kwargs == {"send_mode": "app_start", "status": "running"}
-            return FakeTaskQuery()
+    async def fake_materialize_startup_popups_for_user(**kwargs):
+        return 3
 
     class FakePopupQuery:
-        def __init__(self, run_key):
-            self.run_key = run_key
+        def __init__(self, item):
+            self.item = item
 
         async def first(self):
-            task_id = int(self.run_key.split(":")[1])
-            return SimpleNamespace(
-                id=task_id,
-                title=f"Notice {task_id}",
-                content="Hello",
-                type="announcement",
-                published_at=datetime(2026, 5, 14, 10, task_id),
-                publish_at=None,
-            )
+            return self.item
 
     class FakePopup:
         @classmethod
         def filter(cls, **kwargs):
-            return FakePopupQuery(kwargs["run_key"])
+            popup_id = kwargs["id"]
+            return FakePopupQuery(next((item for item in popups if item.id == popup_id), None))
+
+    class FakeReceiptQuery:
+        def order_by(self, *args):
+            return self
+
+        def __await__(self):
+            async def _result():
+                return [SimpleNamespace(popup_id=item.id) for item in popups]
+
+            return _result().__await__()
 
     class FakeReceipt:
         @classmethod
-        async def get_or_create(cls, **kwargs):
-            return SimpleNamespace(), False
+        def filter(cls, **kwargs):
+            return FakeReceiptQuery()
 
-    monkeypatch.setattr("app.services.system_popup_service.SystemPopupTask", FakeTask)
+    monkeypatch.setattr(
+        "app.services.system_popup_service.materialize_startup_popups_for_user",
+        fake_materialize_startup_popups_for_user,
+    )
     monkeypatch.setattr("app.services.system_popup_service.SystemPopup", FakePopup)
     monkeypatch.setattr("app.services.system_popup_service.SystemPopupReceipt", FakeReceipt)
 
     items = await fetch_startup_popups_for_user(user_id=34, launch_id="launch-1")
 
-    assert queried["limit"] == 5
     assert len(items) == 3
-    assert [item["title"] for item in items] == ["Notice 1", "Notice 2", "Notice 3"]
+    assert [item["title"] for item in items] == ["Notice 7", "Notice 6", "Notice 5"]

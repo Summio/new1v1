@@ -93,4 +93,85 @@ void main() {
     expect(detailPage, contains('_formatNotificationTime'));
     expect(detailPage, contains('_formatNotificationTime(detail.publishAt)'));
   });
+
+  test('system notifications stay http pull based and refresh on page entry', () {
+    final page = File(
+      'lib/modules/home/system_notifications_page.dart',
+    ).readAsStringSync();
+    final detailPage = File(
+      'lib/modules/home/system_notification_detail_page.dart',
+    ).readAsStringSync();
+    final service = File(
+      'lib/services/system_notification_service.dart',
+    ).readAsStringSync();
+    final provider = File(
+      'lib/app/providers/system_notification_provider.dart',
+    ).readAsStringSync();
+
+    expect(service, contains('fetchNotifications'));
+    expect(service, contains('fetchDetail'));
+    expect(service, contains('markRead'));
+    expect(service, contains('markUnread'));
+    expect(service, contains('readAll'));
+    expect(service, isNot(contains('unread-count')));
+
+    expect(provider, contains('Future<void> refresh()'));
+    expect(provider, contains('fetchNotifications(page: 1)'));
+    expect(provider, contains('loadMore'));
+    expect(provider, contains('syncDetail'));
+    expect(page, contains('systemNotificationListProvider.notifier).refresh()'));
+    expect(page, contains('RefreshIndicator'));
+    expect(page, contains('loadMore'));
+    expect(detailPage, contains('fetchDetail'));
+    expect(detailPage, contains('syncDetail'));
+    expect(page, isNot(contains('system_notification_unread_changed')));
+  });
+
+  test('admin operation pages explain lazy pull delivery and keep controls', () {
+    final notificationPage = File(
+      '../backend/web/src/views/operation/system-notification/index.vue',
+    ).readAsStringSync();
+    final popupPage = File(
+      '../backend/web/src/views/operation/popup/index.vue',
+    ).readAsStringSync();
+
+    expect(notificationPage, contains('发布后不会主动推送'));
+    expect(notificationPage, contains('下次拉取通知列表'));
+    expect(notificationPage, isNot(contains('WebSocket')));
+    expect(popupPage, contains('发布后不会主动推送'));
+    expect(popupPage, contains('App 启动或前台轮询接口拉取'));
+    expect(popupPage, contains('ack 后不再重复展示同一期'));
+    expect(popupPage, isNot(contains('WebSocket')));
+
+    for (final value in ['immediate', 'once', 'repeat']) {
+      expect(notificationPage, contains(value));
+    }
+    for (final value in ['immediate', 'once', 'repeat', 'app_start']) {
+      expect(popupPage, contains(value));
+    }
+    for (final action in [
+      'createSystemNotification',
+      'updateSystemNotification',
+      'publishSystemNotification',
+      'pauseSystemNotification',
+      'resumeSystemNotification',
+      'cancelSystemNotification',
+      'deleteSystemNotification',
+      'estimateSystemNotificationTargetCount',
+    ]) {
+      expect(notificationPage, contains(action));
+    }
+    for (final action in [
+      'createSystemPopup',
+      'updateSystemPopup',
+      'publishSystemPopup',
+      'pauseSystemPopup',
+      'resumeSystemPopup',
+      'cancelSystemPopup',
+      'deleteSystemPopup',
+      'estimateSystemPopupTargetCount',
+    ]) {
+      expect(popupPage, contains(action));
+    }
+  });
 }

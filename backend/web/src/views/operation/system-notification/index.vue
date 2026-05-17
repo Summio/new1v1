@@ -1,6 +1,7 @@
 <script setup>
 import { computed, h, onMounted, ref } from 'vue'
 import {
+  NAlert,
   NButton,
   NDatePicker,
   NForm,
@@ -258,12 +259,12 @@ const columns = [
     render: (row) => row.estimated_count ?? '-',
   },
   {
-    title: '下次发送时间',
+    title: '下次可拉取时间',
     key: 'next_run_at',
     width: 180,
     render: (row) => renderDate(row.next_run_at),
   },
-  { title: '已发送次数', key: 'run_count', width: 110, align: 'center' },
+  { title: '已生成期数', key: 'run_count', width: 110, align: 'center' },
   { title: '创建时间', key: 'created_at', width: 180, render: (row) => renderDate(row.created_at) },
   {
     title: '操作',
@@ -313,7 +314,7 @@ const columns = [
           )
         )
       }
-      if (['draft', 'scheduled'].includes(row.status)) {
+      if (['draft', 'scheduled', 'paused'].includes(row.status)) {
         actions.push(
           h(
             NButton,
@@ -412,6 +413,9 @@ const columns = [
     </CrudTable>
 
     <NModal v-model:show="modalVisible" preset="card" :title="modalTitle" style="width: 820px">
+      <NAlert type="info" :bordered="false" style="margin-bottom: 16px">
+        发布后不会主动推送；通知用户下次拉取通知列表时可见，立即发送表示进入可拉取状态，定时/周期表示到点后可被拉取。
+      </NAlert>
       <NForm ref="formRef" :model="form" label-placement="left" label-width="110">
         <NFormItem label="正文"
           ><NInput v-model:value="form.content" type="textarea" :autosize="{ minRows: 5 }"

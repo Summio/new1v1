@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import calendar
+from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from enum import Enum
 from typing import Any
@@ -22,6 +23,13 @@ STARTUP_POPUP_TASK_SCAN_LIMIT = 5
 STARTUP_POPUP_RETURN_LIMIT = 3
 PENDING_POPUP_SCAN_LIMIT = 50
 PENDING_POPUP_RETURN_LIMIT = 10
+
+
+@dataclass(frozen=True)
+class PopupOccurrence:
+    scheduled_run_at: datetime
+    run_key: str
+    published_at: datetime
 
 
 class PopupValidationError(ValueError):
@@ -332,11 +340,7 @@ async def create_popup_task(data: dict[str, Any], *, created_by: int | None = No
     payload["created_by"] = created_by
     payload["status"] = _initial_task_status(payload)
     payload["next_run_at"] = _initial_next_run_at(payload)
-    task = await SystemPopupTask.create(**payload)
-    next_run_at = _normalize_schedule_datetime(task.next_run_at)
-    if next_run_at and next_run_at <= now_local_naive():
-        await publish_due_popup_task(task)
-    return task
+    return await SystemPopupTask.create(**payload)
 
 
 def _task_payload(task: SystemPopupTask, *, status: str | None = None) -> dict[str, Any]:
@@ -362,12 +366,9 @@ def _task_payload(task: SystemPopupTask, *, status: str | None = None) -> dict[s
 
 async def activate_popup_task(task: SystemPopupTask) -> SystemPopupTask:
     payload = validate_popup_task_payload(_task_payload(task, status="scheduled"))
-    task.status = _initial_task_status(payload)
+    task.status = "running"
     task.next_run_at = _initial_next_run_at(payload)
     await task.save()
-    next_run_at = _normalize_schedule_datetime(task.next_run_at)
-    if next_run_at and next_run_at <= now_local_naive():
-        await publish_due_popup_task(task)
     return task
 
 
@@ -376,7 +377,8 @@ async def recalculate_popup_task_next_run_at(task: SystemPopupTask) -> SystemPop
     if task.status == "draft":
         task.next_run_at = None
     elif task.status in {"scheduled", "running"}:
-        task.status = _initial_task_status({**payload, "status": "scheduled"})
+        if task.status == "scheduled":
+            task.status = _initial_task_status({**payload, "status": "scheduled"})
         task.next_run_at = _initial_next_run_at({**payload, "status": "scheduled"})
     elif task.status == "paused" and payload["send_mode"] == "app_start":
         task.next_run_at = None
@@ -430,21 +432,122 @@ async def is_user_targeted_by_popup_task(
     return False
 
 
-async def fetch_startup_popups_for_user(*, user_id: int, launch_id: str) -> list[dict[str, Any]]:
-    launch_id = str(launch_id or "").strip()
-    if not launch_id:
-        raise PopupValidationError("启动标识不能为空")
-
-    tasks = (
-        await SystemPopupTask.filter(send_mode="app_start", status="running")
-        .order_by("-created_at", "-id")
-        .limit(STARTUP_POPUP_TASK_SCAN_LIMIT)
+def _occurrence_from_task(task: SystemPopupTask, scheduled_run_at: datetime, now: datetime) -> PopupOccurrence:
+    scheduled = _normalize_schedule_datetime(scheduled_run_at) or now
+    return PopupOccurrence(
+        scheduled_run_at=scheduled,
+        run_key=build_popup_run_key(task_id=int(task.id), scheduled_run_at=scheduled),
+        published_at=now,
     )
-    popups: list[dict[str, Any]] = []
-    published_at = now_local_naive()
-    for task in tasks:
-        if len(popups) >= STARTUP_POPUP_RETURN_LIMIT:
+
+
+def _latest_repeat_run_at(task: SystemPopupTask, *, now: datetime) -> datetime | None:
+    start_at = _normalize_schedule_datetime(task.start_at) or _normalize_schedule_datetime(task.created_at) or now
+    if start_at > now:
+        return None
+    end_at = _normalize_schedule_datetime(task.end_at)
+    if end_at is not None and now > end_at:
+        return None
+
+    after = start_at - timedelta(seconds=1)
+    latest: datetime | None = None
+    max_runs = int(task.max_runs) if task.max_runs is not None else None
+    runs = 0
+    while max_runs is None or runs < max_runs:
+        candidate = calculate_next_run_at(
+            repeat_type=task.repeat_type or "",
+            after=after,
+            repeat_time=task.repeat_time or "",
+            repeat_weekday=task.repeat_weekday,
+            repeat_month_day=task.repeat_month_day,
+        )
+        if candidate > now:
             break
+        if end_at is not None and candidate > end_at:
+            break
+        latest = candidate
+        runs += 1
+        after = candidate
+    return latest
+
+
+def _popup_due_occurrences(
+    task: SystemPopupTask,
+    *,
+    now: datetime,
+    mode: str,
+) -> list[PopupOccurrence]:
+    now = _normalize_schedule_datetime(now) or now_local_naive()
+    if task.status != "running":
+        return []
+    if mode == "startup":
+        if task.send_mode != "app_start":
+            return []
+    elif mode == "pending":
+        if task.send_mode not in {"immediate", "once", "repeat"}:
+            return []
+    else:
+        raise PopupValidationError("弹窗拉取模式不正确")
+
+    if task.send_mode in {"immediate", "app_start"}:
+        scheduled = _normalize_schedule_datetime(task.created_at) or now
+        return [_occurrence_from_task(task, scheduled, now)]
+
+    if task.send_mode == "once":
+        scheduled = _normalize_schedule_datetime(task.publish_at)
+        if scheduled is None or scheduled > now:
+            return []
+        return [_occurrence_from_task(task, scheduled, now)]
+
+    if task.send_mode == "repeat":
+        scheduled = _latest_repeat_run_at(task, now=now)
+        if scheduled is None:
+            return []
+        return [_occurrence_from_task(task, scheduled, now)]
+
+    return []
+
+
+async def _get_or_create_popup_for_occurrence(
+    *,
+    task: SystemPopupTask,
+    occurrence: PopupOccurrence,
+) -> SystemPopup:
+    existing = await SystemPopup.filter(run_key=occurrence.run_key).first()
+    if existing is not None:
+        return existing
+    async with in_transaction():
+        try:
+            return await SystemPopup.create(
+                task_id=task.id,
+                title=task.title,
+                content=task.content,
+                type=task.type,
+                publish_at=occurrence.scheduled_run_at,
+                published_at=occurrence.published_at,
+                scheduled_run_at=occurrence.scheduled_run_at,
+                run_key=occurrence.run_key,
+            )
+        except IntegrityError:
+            existing = await SystemPopup.filter(run_key=occurrence.run_key).first()
+            if existing is None:
+                raise
+            return existing
+
+
+async def materialize_due_popups_for_user(
+    *,
+    user_id: int,
+    mode: str,
+    now: datetime | None = None,
+) -> int:
+    if mode not in {"startup", "pending"}:
+        raise PopupValidationError("弹窗拉取模式不正确")
+    now = _normalize_schedule_datetime(now) or now_local_naive()
+    send_modes = ["app_start"] if mode == "startup" else ["immediate", "once", "repeat"]
+    tasks = await SystemPopupTask.filter(status="running", send_mode__in=send_modes).order_by("-created_at", "-id")
+    visible_receipts = 0
+    for task in tasks:
         if not await is_user_targeted_by_popup_task(
             user_id=user_id,
             target_mode=task.target_mode,
@@ -452,40 +555,33 @@ async def fetch_startup_popups_for_user(*, user_id: int, launch_id: str) -> list
             target_filters=task.target_filters or None,
         ):
             continue
-
-        run_key = build_startup_popup_run_key(task_id=int(task.id), user_id=int(user_id), launch_id=launch_id)
-        popup = await SystemPopup.filter(run_key=run_key).first()
-        if popup is None:
-            async with in_transaction():
-                try:
-                    popup = await SystemPopup.create(
-                        task_id=task.id,
-                        title=task.title,
-                        content=task.content,
-                        type=task.type,
-                        publish_at=published_at,
-                        published_at=published_at,
-                        scheduled_run_at=None,
-                        run_key=run_key,
-                    )
-                    await SystemPopupReceipt.create(
-                        popup_id=popup.id,
-                        user_id=int(user_id),
-                        pushed_at=published_at,
-                    )
-                except IntegrityError:
-                    popup = await SystemPopup.filter(run_key=run_key).first()
-                    if popup is None:
-                        continue
-        else:
-            await SystemPopupReceipt.get_or_create(
-                popup_id=popup.id,
+        for occurrence in _popup_due_occurrences(task, now=now, mode=mode):
+            popup = await _get_or_create_popup_for_occurrence(task=task, occurrence=occurrence)
+            receipt, _ = await SystemPopupReceipt.get_or_create(
+                popup_id=int(popup.id),
                 user_id=int(user_id),
-                defaults={"pushed_at": popup.published_at or published_at},
+                defaults={"pushed_at": now},
             )
+            if receipt.ack_at is None:
+                visible_receipts += 1
+    return visible_receipts
 
-        popups.append(_dump_app_popup(popup))
-    return popups
+
+async def materialize_startup_popups_for_user(
+    *,
+    user_id: int,
+    now: datetime | None = None,
+) -> int:
+    return await materialize_due_popups_for_user(user_id=user_id, mode="startup", now=now)
+
+
+async def fetch_startup_popups_for_user(*, user_id: int, launch_id: str) -> list[dict[str, Any]]:
+    launch_id = str(launch_id or "").strip()
+    if not launch_id:
+        raise PopupValidationError("启动标识不能为空")
+    await materialize_startup_popups_for_user(user_id=user_id)
+    return await _fetch_user_unacked_popups(user_id=user_id, mode="startup", limit=STARTUP_POPUP_RETURN_LIMIT)
+
 
 
 async def _get_popup_task(popup: SystemPopup) -> SystemPopupTask | None:
@@ -498,22 +594,26 @@ async def _get_popup_task(popup: SystemPopup) -> SystemPopupTask | None:
     return await SystemPopupTask.filter(id=int(task_id)).first()
 
 
-async def fetch_pending_popups_for_user(
-    *,
-    user_id: int,
-    limit: int = PENDING_POPUP_RETURN_LIMIT,
-) -> list[dict[str, Any]]:
-    popups = (
-        await SystemPopup.filter(published_at__not_isnull=True)
-        .order_by("-published_at", "-id")
-        .limit(PENDING_POPUP_SCAN_LIMIT)
-    )
-    items: list[dict[str, Any]] = []
-    for popup in popups:
-        if len(items) >= limit:
-            break
+def _popup_matches_pull_mode(task: SystemPopupTask, mode: str) -> bool:
+    if getattr(task, "status", None) != "running":
+        return False
+    send_mode = getattr(task, "send_mode", None)
+    if mode == "startup":
+        return send_mode == "app_start"
+    if mode == "pending":
+        return send_mode in {"immediate", "once", "repeat"}
+    return False
+
+
+async def _fetch_user_unacked_popups(*, user_id: int, mode: str, limit: int) -> list[dict[str, Any]]:
+    receipts = await SystemPopupReceipt.filter(user_id=int(user_id), ack_at__isnull=True).order_by("-created_at", "-id")
+    candidates: list[SystemPopup] = []
+    for receipt in receipts:
+        popup = await SystemPopup.filter(id=int(receipt.popup_id), published_at__not_isnull=True).first()
+        if popup is None:
+            continue
         task = await _get_popup_task(popup)
-        if task is None or getattr(task, "send_mode", None) == "app_start":
+        if task is None or not _popup_matches_pull_mode(task, mode):
             continue
         if not await is_user_targeted_by_popup_task(
             user_id=user_id,
@@ -522,21 +622,25 @@ async def fetch_pending_popups_for_user(
             target_filters=task.target_filters or None,
         ):
             continue
+        candidates.append(popup)
 
-        receipt = await SystemPopupReceipt.filter(popup_id=int(popup.id), user_id=int(user_id)).first()
-        if receipt is not None and receipt.ack_at is not None:
-            continue
-        if receipt is None:
-            receipt, _ = await SystemPopupReceipt.get_or_create(
-                popup_id=int(popup.id),
-                user_id=int(user_id),
-                defaults={"pushed_at": popup.published_at or now_local_naive()},
-            )
-            if receipt.ack_at is not None:
-                continue
+    candidates.sort(
+        key=lambda item: (
+            _normalize_schedule_datetime(item.published_at) or _normalize_schedule_datetime(item.publish_at) or datetime.min,
+            int(item.id),
+        ),
+        reverse=True,
+    )
+    return [_dump_app_popup(popup) for popup in candidates[:limit]]
 
-        items.append(_dump_app_popup(popup))
-    return items
+
+async def fetch_pending_popups_for_user(
+    *,
+    user_id: int,
+    limit: int = PENDING_POPUP_RETURN_LIMIT,
+) -> list[dict[str, Any]]:
+    await materialize_due_popups_for_user(user_id=user_id, mode="pending")
+    return await _fetch_user_unacked_popups(user_id=user_id, mode="pending", limit=limit)
 
 
 def _should_complete_repeat(task: SystemPopupTask, now: datetime) -> bool:

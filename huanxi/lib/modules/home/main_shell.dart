@@ -60,6 +60,7 @@ class PresenceEvent {
 class _MainShellState extends ConsumerState<MainShell>
     with WidgetsBindingObserver {
   static final String _startupLaunchId = const Uuid().v4();
+  static const Duration _systemPopupPollingInterval = Duration(seconds: 60);
 
   final IMService _imService = IMService();
   bool _incomingRouteOpening = false;
@@ -77,6 +78,7 @@ class _MainShellState extends ConsumerState<MainShell>
   final SystemPopupService _systemPopupService = SystemPopupService.instance;
   bool _systemPopupShowing = false;
   bool _startupSystemPopupsRequested = false;
+  Timer? _systemPopupPollingTimer;
   final Set<int> _handledSystemPopupIds = <int>{};
 
   bool _shouldGuardIncomingRouteByRole() {
@@ -103,6 +105,7 @@ class _MainShellState extends ConsumerState<MainShell>
       ref.read(authProvider.notifier).fetchUserInfo();
       unawaited(_openLaunchIncomingCallIfNeeded());
       unawaited(_fetchStartupSystemPopups());
+      _startSystemPopupPolling();
     });
   }
 
@@ -123,6 +126,10 @@ class _MainShellState extends ConsumerState<MainShell>
         _initGlobalIMUnread();
       }
       unawaited(_fetchPendingSystemPopups());
+      _startSystemPopupPolling();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive) {
+      _stopSystemPopupPolling();
     }
   }
 
@@ -526,7 +533,6 @@ class _MainShellState extends ConsumerState<MainShell>
     if (!auth.isLoggedIn) {
       return;
     }
-    _startupSystemPopupsRequested = true;
     if (_lifecycleState != AppLifecycleState.resumed ||
         _systemPopupShowing ||
         _isCallRoute(_currentMatchedLocation(context))) {
@@ -539,6 +545,7 @@ class _MainShellState extends ConsumerState<MainShell>
       );
       final pendingPopups = await _systemPopupService.fetchPendingPopups();
       final popups = [...startupPopups, ...pendingPopups];
+      var allPopupsHandled = true;
       for (final popup in popups) {
         if (!mounted ||
             _lifecycleState != AppLifecycleState.resumed ||
@@ -546,7 +553,11 @@ class _MainShellState extends ConsumerState<MainShell>
             _isCallRoute(_currentMatchedLocation(context))) {
           return;
         }
-        await _showSystemPopupIfAllowed(popup);
+        final handled = await _showSystemPopupIfAllowed(popup);
+        allPopupsHandled = allPopupsHandled && handled;
+      }
+      if (allPopupsHandled) {
+        _startupSystemPopupsRequested = true;
       }
     } catch (e) {
       debugPrint('mainShell.fetchStartupSystemPopups error: $e');
@@ -581,24 +592,42 @@ class _MainShellState extends ConsumerState<MainShell>
     }
   }
 
-  Future<void> _showSystemPopupIfAllowed(SystemPopupItem popup) async {
-    if (popup.id <= 0) {
+  void _startSystemPopupPolling() {
+    if (!mounted || _systemPopupPollingTimer != null) {
       return;
+    }
+    final auth = ref.read(authProvider);
+    if (!auth.isLoggedIn || _lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+    _systemPopupPollingTimer = Timer.periodic(
+      _systemPopupPollingInterval,
+      (_) => unawaited(_fetchPendingSystemPopups()),
+    );
+  }
+
+  void _stopSystemPopupPolling() {
+    _systemPopupPollingTimer?.cancel();
+    _systemPopupPollingTimer = null;
+  }
+
+  Future<bool> _showSystemPopupIfAllowed(SystemPopupItem popup) async {
+    if (popup.id <= 0) {
+      return true;
     }
     if (_handledSystemPopupIds.contains(popup.id)) {
-      return;
+      return true;
     }
-    _handledSystemPopupIds.add(popup.id);
 
     if (!mounted) {
-      return;
+      return false;
     }
     final auth = ref.read(authProvider);
     if (!auth.isLoggedIn ||
         _lifecycleState != AppLifecycleState.resumed ||
         _systemPopupShowing ||
         _isCallRoute(_currentMatchedLocation(context))) {
-      return;
+      return false;
     }
 
     _systemPopupShowing = true;
@@ -622,15 +651,20 @@ class _MainShellState extends ConsumerState<MainShell>
       if (acknowledged == true) {
         try {
           await _systemPopupService.ackPopup(popup.id);
+          _handledSystemPopupIds.add(popup.id);
+          return true;
         } catch (e) {
           debugPrint('mainShell.ackSystemPopup error: $e');
+          return false;
         }
       }
     } catch (e) {
       debugPrint('mainShell.showSystemPopup error: $e');
+      return false;
     } finally {
       _systemPopupShowing = false;
     }
+    return false;
   }
 
   int _getCurrentIndex(BuildContext context) {
@@ -680,6 +714,7 @@ class _MainShellState extends ConsumerState<MainShell>
     if (_imMessageListener != null) {
       _imService.removeMessageListener(_imMessageListener!);
     }
+    _stopSystemPopupPolling();
     _wsSubscription?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -688,6 +723,9 @@ class _MainShellState extends ConsumerState<MainShell>
   @override
   Widget build(BuildContext context) {
     final auth = ref.watch(authProvider);
+    if (!auth.isLoggedIn) {
+      _stopSystemPopupPolling();
+    }
     final currentUserId = auth.userId ?? StorageService.getUserId();
     final shouldEnsureGlobalImReady =
         auth.isLoggedIn &&
@@ -703,6 +741,7 @@ class _MainShellState extends ConsumerState<MainShell>
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         unawaited(_fetchStartupSystemPopups());
+        _startSystemPopupPolling();
       });
     }
 

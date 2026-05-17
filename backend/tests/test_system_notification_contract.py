@@ -154,9 +154,68 @@ def test_system_notification_migration_and_admin_web_exist() -> None:
 
 def test_system_notification_scheduler_is_not_started_in_api_lifespan() -> None:
     app_text = APP_FILE.read_text(encoding="utf-8")
+    scheduler_text = (ROOT / "app/core/system_notification_scheduler.py").read_text(encoding="utf-8")
 
     assert "run_system_notification_scheduler" not in app_text
     assert "notification_task" not in app_text
+    assert "publish_due_notifications" not in scheduler_text
+    assert "materialize on pull" in scheduler_text
+
+
+def test_notification_pull_materializes_due_tasks_without_push_or_scheduler() -> None:
+    service_text = SERVICE_FILE.read_text(encoding="utf-8")
+    app_text = APP_API_FILE.read_text(encoding="utf-8")
+    events_text = WS_EVENTS_FILE.read_text(encoding="utf-8")
+    init_text = APP_FILE.read_text(encoding="utf-8")
+
+    assert "materialize_due_notifications_for_user" in service_text
+    assert "materialize_due_notifications_for_user" in service_text.split("async def list_user_notifications", 1)[1]
+    assert "run_system_notification_scheduler" not in init_text
+    assert "system_notification_unread_changed" not in events_text
+    assert "unread-count" not in app_text
+
+
+def test_admin_notification_publish_activates_task_without_batch_send() -> None:
+    api_text = ADMIN_API_FILE.read_text(encoding="utf-8")
+    service_text = SERVICE_FILE.read_text(encoding="utf-8")
+
+    publish_section = api_text.split("async def publish_notification", 1)[1].split("async def pause_notification", 1)[0]
+    assert "activate_notification_task" in publish_section
+    assert "publish_task_once" not in publish_section
+    assert "publish_due_notifications" not in publish_section
+    assert "async def materialize_due_notifications_for_user" in service_text
+
+
+def test_admin_notification_actions_remain_available_for_lazy_pull_mode() -> None:
+    api_text = ADMIN_API_FILE.read_text(encoding="utf-8")
+    web_text = WEB_VIEW_FILE.read_text(encoding="utf-8")
+
+    for fn in [
+        "async def list_notification_tasks",
+        "async def get_notification_task",
+        "async def estimate_notification_target_count",
+        "async def create_notification",
+        "async def update_notification",
+        "async def publish_notification",
+        "async def pause_notification",
+        "async def resume_notification",
+        "async def cancel_notification",
+        "async def delete_notification",
+    ]:
+        assert fn in api_text
+
+    assert "task.status not in {\"draft\", \"scheduled\", \"paused\"}" in api_text
+    assert "task.status != \"running\"" in api_text
+    assert "task.send_mode != \"repeat\"" not in api_text
+    assert "已产生用户记录" in api_text
+    assert "api.createSystemNotification" in web_text
+    assert "api.updateSystemNotification" in web_text
+    assert "publishSystemNotification" in web_text
+    assert "pauseSystemNotification" in web_text
+    assert "resumeSystemNotification" in web_text
+    assert "cancelSystemNotification" in web_text
+    assert "deleteSystemNotification" in web_text
+    assert "estimateSystemNotificationTargetCount" in web_text
 
 
 def test_admin_query_bar_item_applies_content_width() -> None:
