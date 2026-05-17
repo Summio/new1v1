@@ -2,56 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../services/system_notification_service.dart';
 
-class SystemNotificationUnreadState {
-  final int count;
-  final SystemNotificationItem? latest;
-  final bool isLoading;
-
-  const SystemNotificationUnreadState({
-    this.count = 0,
-    this.latest,
-    this.isLoading = false,
-  });
-
-  SystemNotificationUnreadState copyWith({
-    int? count,
-    SystemNotificationItem? latest,
-    bool? isLoading,
-  }) {
-    return SystemNotificationUnreadState(
-      count: count ?? this.count,
-      latest: latest ?? this.latest,
-      isLoading: isLoading ?? this.isLoading,
-    );
-  }
-}
-
-class SystemNotificationUnreadNotifier
-    extends StateNotifier<SystemNotificationUnreadState> {
-  SystemNotificationUnreadNotifier()
-      : super(const SystemNotificationUnreadState());
-
-  final SystemNotificationService _service =
-      SystemNotificationService.instance;
-
-  Future<void> refresh() async {
-    state = state.copyWith(isLoading: true);
-    try {
-      final summary = await _service.fetchUnreadSummary();
-      state = SystemNotificationUnreadState(
-        count: summary.count,
-        latest: summary.latest,
-      );
-    } catch (_) {
-      state = state.copyWith(isLoading: false);
-    }
-  }
-
-  void syncCount(int count) {
-    state = state.copyWith(count: count < 0 ? 0 : count);
-  }
-}
-
 class SystemNotificationListState {
   final List<SystemNotificationItem> items;
   final bool isLoading;
@@ -90,12 +40,9 @@ class SystemNotificationListState {
 
 class SystemNotificationListNotifier
     extends StateNotifier<SystemNotificationListState> {
-  SystemNotificationListNotifier(this._ref)
-      : super(const SystemNotificationListState());
+  SystemNotificationListNotifier() : super(const SystemNotificationListState());
 
-  final Ref _ref;
-  final SystemNotificationService _service =
-      SystemNotificationService.instance;
+  final SystemNotificationService _service = SystemNotificationService.instance;
 
   Future<void> refresh() async {
     state = state.copyWith(isLoading: true, error: null);
@@ -107,7 +54,6 @@ class SystemNotificationListNotifier
         hasMore: result.hasMore,
         page: 1,
       );
-      await _ref.read(systemNotificationUnreadProvider.notifier).refresh();
     } catch (e) {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
@@ -134,54 +80,63 @@ class SystemNotificationListNotifier
     await _service.markRead(notificationId);
     state = state.copyWith(
       items: state.items
-          .map((item) => item.id == notificationId
-              ? item.copyWith(isRead: true, readAt: DateTime.now().toString())
-              : item)
+          .map(
+            (item) => item.id == notificationId
+                ? item.copyWith(isRead: true, readAt: DateTime.now().toString())
+                : item,
+          )
           .toList(),
     );
-    await _ref.read(systemNotificationUnreadProvider.notifier).refresh();
   }
 
   Future<void> markUnread(int notificationId) async {
     await _service.markUnread(notificationId);
     state = state.copyWith(
       items: state.items
-          .map((item) => item.id == notificationId
-              ? SystemNotificationItem(
-                  id: item.id,
-                  content: item.content,
-                  type: item.type,
-                  publishAt: item.publishAt,
-                  isRead: false,
-                )
-              : item)
+          .map(
+            (item) => item.id == notificationId
+                ? SystemNotificationItem(
+                    id: item.id,
+                    content: item.content,
+                    type: item.type,
+                    publishAt: item.publishAt,
+                    isRead: false,
+                  )
+                : item,
+          )
           .toList(),
     );
-    await _ref.read(systemNotificationUnreadProvider.notifier).refresh();
   }
 
   Future<void> readAll() async {
     await _service.readAll();
     state = state.copyWith(
       items: state.items
-          .map((item) => item.copyWith(
-                isRead: true,
-                readAt: DateTime.now().toString(),
-              ))
+          .map(
+            (item) =>
+                item.copyWith(isRead: true, readAt: DateTime.now().toString()),
+          )
           .toList(),
     );
-    await _ref.read(systemNotificationUnreadProvider.notifier).refresh();
+  }
+
+  void syncDetail(SystemNotificationDetail detail) {
+    state = state.copyWith(
+      items: state.items
+          .map(
+            (item) => item.id == detail.id
+                ? item.copyWith(isRead: detail.isRead, readAt: detail.readAt)
+                : item,
+          )
+          .toList(),
+    );
   }
 }
 
-final systemNotificationUnreadProvider =
-    StateNotifierProvider<SystemNotificationUnreadNotifier,
-        SystemNotificationUnreadState>((ref) {
-  return SystemNotificationUnreadNotifier();
-});
-
 final systemNotificationListProvider =
-    StateNotifierProvider<SystemNotificationListNotifier,
-        SystemNotificationListState>((ref) {
-  return SystemNotificationListNotifier(ref);
-});
+    StateNotifierProvider<
+      SystemNotificationListNotifier,
+      SystemNotificationListState
+    >((ref) {
+      return SystemNotificationListNotifier();
+    });

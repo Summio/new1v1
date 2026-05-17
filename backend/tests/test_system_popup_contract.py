@@ -1,6 +1,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+APP_FILE = ROOT / "app/__init__.py"
 MODEL_FILE = ROOT / "app/models/system_popup.py"
 SCHEMA_FILE = ROOT / "app/schemas/system_popup.py"
 SERVICE_FILE = ROOT / "app/services/system_popup_service.py"
@@ -45,11 +46,12 @@ def test_system_popup_backend_contract_files_exist() -> None:
     service_text = SERVICE_FILE.read_text(encoding="utf-8")
     assert "publish_popup_task_once" in service_text
     assert "fetch_startup_popups_for_user" in service_text
+    assert "fetch_pending_popups_for_user" in service_text
     assert "build_startup_popup_run_key" in service_text
     assert "ack_user_popup" in service_text
-    assert "estimate_online_target_count" in service_text
-    assert "filter_online_user_ids" in service_text
-    assert "pending" not in service_text.lower()
+    assert "estimate_online_target_count" not in service_text
+    assert "filter_online_user_ids" not in service_text
+    assert "push_system_popup" not in service_text
 
     assert SCHEDULER_FILE.exists()
     assert "publish_due_popups" in SCHEDULER_FILE.read_text(encoding="utf-8")
@@ -78,8 +80,8 @@ def test_system_popup_routes_menu_websocket_and_no_pending_api() -> None:
     assert APP_API_FILE.exists()
     app_text = APP_API_FILE.read_text(encoding="utf-8")
     assert '@router.post("/popups/startup"' in app_text
+    assert '@router.get("/popups/pending"' in app_text
     assert '@router.post("/popups/{popup_id}/ack"' in app_text
-    assert "pending" not in app_text.lower()
 
     app_init_text = APP_INIT_FILE.read_text(encoding="utf-8")
     v1_init_text = V1_INIT_FILE.read_text(encoding="utf-8")
@@ -88,8 +90,8 @@ def test_system_popup_routes_menu_websocket_and_no_pending_api() -> None:
     assert 'prefix="/popup"' in v1_init_text
 
     ws_text = WS_EVENTS_FILE.read_text(encoding="utf-8")
-    assert "push_system_popup_pending" in ws_text
-    assert "system_popup_pending" in ws_text
+    assert "push_system_popup_pending" not in ws_text
+    assert "system_popup_pending" not in ws_text
 
     init_app_text = INIT_APP_FILE.read_text(encoding="utf-8")
     assert "弹窗提示" in init_app_text
@@ -103,7 +105,6 @@ def test_system_popup_routes_menu_websocket_and_no_pending_api() -> None:
     assert "/api/v1/popup/list" in migration_text
     assert "/api/v1/app/popups/startup" in migration_text
     assert "/api/v1/app/popups/{popup_id}/ack" in migration_text
-    assert "/api/v1/app/popups/pending" not in migration_text
 
 
 def test_system_popup_admin_and_flutter_contract() -> None:
@@ -135,20 +136,26 @@ def test_system_popup_admin_and_flutter_contract() -> None:
     assert FLUTTER_ENDPOINTS_FILE.exists()
     endpoints_text = FLUTTER_ENDPOINTS_FILE.read_text(encoding="utf-8")
     assert "systemPopupStartup" in endpoints_text
+    assert "systemPopupPending" in endpoints_text
     assert "systemPopupAckBase" in endpoints_text
-    assert "systemPopupPending" not in endpoints_text
 
     assert FLUTTER_SERVICE_FILE.exists()
     service_text = FLUTTER_SERVICE_FILE.read_text(encoding="utf-8")
     assert "class SystemPopupItem" in service_text
     assert "fetchStartupPopups" in service_text
+    assert "fetchPendingPopups" in service_text
     assert "ackPopup" in service_text
-    assert "fetchPending" not in service_text
 
     main_shell_text = FLUTTER_MAIN_SHELL_FILE.read_text(encoding="utf-8")
-    assert "system_popup_pending" in main_shell_text
-    assert "_handleSystemPopupPending" in main_shell_text
     assert "_fetchStartupSystemPopups" in main_shell_text
+    assert "_fetchPendingSystemPopups" in main_shell_text
     assert "AppRoutes.callRoom" in main_shell_text
     assert "AppRoutes.callIncoming" in main_shell_text
     assert "AppRoutes.callOutgoing" in main_shell_text
+
+
+def test_system_popup_scheduler_is_not_started_in_api_lifespan() -> None:
+    app_text = APP_FILE.read_text(encoding="utf-8")
+
+    assert "run_system_popup_scheduler" not in app_text
+    assert "popup_task" not in app_text

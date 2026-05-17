@@ -27,8 +27,8 @@ void main() {
 
     expect(endpoints, contains('systemNotifications'));
     expect(endpoints, contains('app/notifications'));
-    expect(endpoints, contains('systemNotificationUnreadCount'));
-    expect(endpoints, contains('app/notifications/unread-count'));
+    expect(endpoints, isNot(contains('systemNotificationUnreadCount')));
+    expect(endpoints, isNot(contains('app/notifications/unread-count')));
     expect(endpoints, contains('systemNotificationReadAll'));
 
     expect(router, contains('AppRoutes.systemNotifications'));
@@ -48,22 +48,31 @@ void main() {
     );
 
     expect(service, contains('SystemNotificationService'));
-    expect(service, contains('fetchUnreadSummary'));
+    expect(service, isNot(contains('fetchUnreadSummary')));
+    expect(service, isNot(contains('SystemNotificationUnreadSummary')));
     expect(service, contains('markRead'));
     expect(service, contains('markUnread'));
     expect(service, contains('readAll'));
 
-    expect(provider, contains('systemNotificationUnreadProvider'));
+    expect(provider, isNot(contains('systemNotificationUnreadProvider')));
+    expect(provider, isNot(contains('SystemNotificationUnreadNotifier')));
     expect(provider, contains('SystemNotificationListNotifier'));
 
     expect(messages, contains('系统通知'));
     expect(messages, contains('_SystemNotificationEntryCard'));
-    expect(messages, contains('systemNotificationUnreadProvider'));
+    expect(messages, isNot(contains('systemNotificationUnreadProvider')));
+    expect(messages, isNot(contains('_NotificationBadge')));
     expect(messages, contains('AppRoutes.systemNotifications'));
 
-    expect(shell, contains('_systemNotificationUnreadCount'));
-    expect(shell, contains('_imUnreadCount + _systemNotificationUnreadCount'));
-    expect(shell, contains('system_notification_unread_changed'));
+    expect(shell, isNot(contains('_systemNotificationUnreadCount')));
+    expect(
+      shell,
+      isNot(contains('_imUnreadCount + _systemNotificationUnreadCount')),
+    );
+    expect(shell, isNot(contains('system_notification_unread_changed')));
+    expect(shell, isNot(contains('system_popup_pending')));
+    expect(shell, isNot(contains('_handleSystemPopupPending')));
+    expect(shell, contains('fetchStartupSystemPopups'));
 
     expect(listPage, contains('暂无系统通知'));
     expect(listPage, contains('PopupMenuButton'));
@@ -78,6 +87,8 @@ void main() {
     );
     expect(listPage, isNot(contains('删除')));
     expect(detailPage, contains('SystemNotificationDetailPage'));
+    expect(detailPage, contains('systemNotificationListProvider'));
+    expect(detailPage, isNot(contains('systemNotificationUnreadProvider')));
     expect(detailPage, contains('SelectableText'));
     expect(detailPage, contains('_formatNotificationTime'));
     expect(detailPage, contains('_formatNotificationTime(detail.publishAt)'));

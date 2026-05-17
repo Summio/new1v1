@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/storage/storage.dart';
 import 'core/network/dio_client.dart';
 import 'core/device/screen_awake_service.dart';
+import 'app/providers/auth_provider.dart';
 import 'app/theme/app_theme.dart';
 import 'app/routes/app_router.dart';
 import 'services/teen_mode_service.dart';
@@ -44,8 +45,22 @@ void main() async {
   );
 }
 
-class HuanxiApp extends StatelessWidget {
+class HuanxiApp extends ConsumerStatefulWidget {
   const HuanxiApp({super.key});
+
+  @override
+  ConsumerState<HuanxiApp> createState() => _HuanxiAppState();
+}
+
+class _HuanxiAppState extends ConsumerState<HuanxiApp> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(ref.read(appInitProvider.notifier).init());
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

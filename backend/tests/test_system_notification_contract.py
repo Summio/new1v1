@@ -1,6 +1,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+APP_FILE = ROOT / "app/__init__.py"
 MODEL_FILE = ROOT / "app/models/system_notification.py"
 SCHEMA_FILE = ROOT / "app/schemas/system_notification.py"
 SERVICE_FILE = ROOT / "app/services/system_notification_service.py"
@@ -38,8 +39,8 @@ def test_system_notification_backend_files_and_models_exist() -> None:
     schema_text = SCHEMA_FILE.read_text(encoding="utf-8")
     assert "NotificationType" in schema_text
     assert "SystemNotificationTaskCreateIn" in schema_text
-    assert "SystemNotificationUnreadOut" in schema_text
-    assert "SystemNotificationLatestOut" in schema_text
+    assert "SystemNotificationUnreadOut" not in schema_text
+    assert "SystemNotificationLatestOut" not in schema_text
     assert "title: str" not in schema_text
     assert "summary: str" not in schema_text
 
@@ -50,6 +51,8 @@ def test_system_notification_backend_files_and_models_exist() -> None:
     assert "estimate_target_count" in service_text
     assert "create_business_notification" in service_text
     assert "mark_notification_unread" in service_text
+    assert "push_system_notification_unread_changed" not in service_text
+    assert "_push_unread_changed" not in service_text
     assert '"title":' not in service_text
     assert '"summary":' not in service_text
 
@@ -61,7 +64,7 @@ def test_system_notification_routes_and_websocket_are_registered() -> None:
     assert APP_API_FILE.exists()
     app_api_text = APP_API_FILE.read_text(encoding="utf-8")
     assert '@router.get("/notifications"' in app_api_text
-    assert '@router.get("/notifications/unread-count"' in app_api_text
+    assert '@router.get("/notifications/unread-count"' not in app_api_text
     assert '@router.get("/notifications/{notification_id}"' in app_api_text
     assert '@router.post("/notifications/{notification_id}/read"' in app_api_text
     assert '@router.post("/notifications/{notification_id}/unread"' in app_api_text
@@ -89,8 +92,8 @@ def test_system_notification_routes_and_websocket_are_registered() -> None:
     )
 
     ws_text = WS_EVENTS_FILE.read_text(encoding="utf-8")
-    assert "push_system_notification_unread_changed" in ws_text
-    assert "system_notification_unread_changed" in ws_text
+    assert "push_system_notification_unread_changed" not in ws_text
+    assert "system_notification_unread_changed" not in ws_text
 
 
 def test_system_notification_migration_and_admin_web_exist() -> None:
@@ -102,7 +105,6 @@ def test_system_notification_migration_and_admin_web_exist() -> None:
     assert "system_notification_biz_key" in migration_text
     assert "DROP COLUMN `title`" in migration_text
     assert "DROP COLUMN `summary`" in migration_text
-    assert "/api/v1/app/notifications/unread-count" in migration_text
     assert "/api/v1/notification/estimate-target-count" in migration_text
     assert "/api/v1/notification/update" in migration_text
     assert "/api/v1/notification/publish" in migration_text
@@ -148,6 +150,13 @@ def test_system_notification_migration_and_admin_web_exist() -> None:
     assert '<QueryBarItem label="类型" :label-width="45" :content-width="140">' in web_view_text
     assert '<QueryBarItem label="状态" :label-width="45" :content-width="140">' in web_view_text
     assert '<QueryBarItem label="发送模式" :label-width="70" :content-width="160">' in web_view_text
+
+
+def test_system_notification_scheduler_is_not_started_in_api_lifespan() -> None:
+    app_text = APP_FILE.read_text(encoding="utf-8")
+
+    assert "run_system_notification_scheduler" not in app_text
+    assert "notification_task" not in app_text
 
 
 def test_admin_query_bar_item_applies_content_width() -> None:

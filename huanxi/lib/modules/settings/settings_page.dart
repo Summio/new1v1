@@ -1,17 +1,66 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../app/routes/app_router.dart';
+
 import '../../app/providers/auth_provider.dart';
+import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
+import '../../core/permissions/mandatory_permission_service.dart';
 import '../../services/teen_mode_service.dart';
 
-/// 设置页面
-class SettingsPage extends ConsumerWidget {
+class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends ConsumerState<SettingsPage> {
+  bool _keepAliveReady = MandatoryPermissionService.instance.allGranted;
+  bool _keepAliveBusy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshKeepAliveState();
+  }
+
+  Future<void> _refreshKeepAliveState() async {
+    final state = await MandatoryPermissionService.instance.check();
+    if (!mounted) return;
+    setState(() {
+      _keepAliveReady = state.allGranted;
+    });
+  }
+
+  Future<void> _ensureKeepAlive(bool value) async {
+    if (_keepAliveBusy) return;
+    setState(() {
+      _keepAliveBusy = true;
+    });
+    try {
+      if (value) {
+        final state = await MandatoryPermissionService.instance
+            .startKeepAliveForLoggedInUser();
+        if (!state.requiredGranted && mounted) {
+          context.go(AppRoutes.mandatoryPermissions);
+          return;
+        }
+      } else {
+        await MandatoryPermissionService.instance.stopKeepAliveForLogout();
+      }
+      await _refreshKeepAliveState();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _keepAliveBusy = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
     final teenModeEnabled = TeenModeService.instance.isLocked;
 
@@ -24,8 +73,6 @@ class SettingsPage extends ConsumerWidget {
       body: ListView(
         children: [
           const SizedBox(height: 8),
-
-          // 账号信息
           const _SectionTitle(title: '账号'),
           _SettingsTile(
             icon: Icons.person_outline,
@@ -34,15 +81,15 @@ class SettingsPage extends ConsumerWidget {
           ),
           _SettingsTile(
             icon: Icons.notifications_outlined,
-            title: '消息通知',
+            title: '后台接听模式',
+            subtitle: _keepAliveReady ? '已开启，后台可保持在线' : '未开启时可能影响后台来电提醒',
             trailing: Switch(
-              value: true,
-              onChanged: (v) {},
+              value: _keepAliveReady,
+              onChanged: _keepAliveBusy ? null : _ensureKeepAlive,
               activeThumbColor: AppTheme.primaryColor,
               activeTrackColor: AppTheme.primaryColor.withValues(alpha: 0.4),
             ),
           ),
-
           const SizedBox(height: 8),
           const _SectionTitle(title: '隐私与安全'),
           _SettingsTile(
@@ -60,7 +107,6 @@ class SettingsPage extends ConsumerWidget {
               }
             },
           ),
-
           const SizedBox(height: 8),
           const _SectionTitle(title: '其他'),
           _SettingsTile(
@@ -94,10 +140,7 @@ class SettingsPage extends ConsumerWidget {
             title: '隐私政策',
             onTap: () => context.push(AppRoutes.settingsPrivacy),
           ),
-
           const SizedBox(height: 24),
-
-          // 退出登录
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Container(
@@ -144,17 +187,13 @@ class SettingsPage extends ConsumerWidget {
               ),
             ),
           ),
-
           const SizedBox(height: 16),
-
-          // 版本信息
           Center(
             child: Text(
               '欢喜 v1.0.0 | ${authState.userId != null ? 'ID: ${authState.userId}' : ''}',
               style: const TextStyle(color: AppTheme.textHint, fontSize: 12),
             ),
           ),
-
           const SizedBox(height: 32),
         ],
       ),

@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from app.services import system_popup_service
 from app.services.system_popup_service import (
     PopupValidationError,
     ack_user_popup,
@@ -164,7 +165,9 @@ async def test_ack_user_popup_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> 
 
 
 @pytest.mark.asyncio
-async def test_publish_popup_task_once_rejects_too_many_online_targets(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_publish_popup_task_once_creates_popup_without_online_filter_receipts_or_push(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     task = SimpleNamespace(
         id=8,
         next_run_at=datetime(2026, 5, 14, 10, 0),
@@ -172,28 +175,141 @@ async def test_publish_popup_task_once_rejects_too_many_online_targets(monkeypat
         target_mode="all",
         target_user_ids=[],
         target_filters=None,
+        title="Notice",
+        content="Hello",
+        type="announcement",
     )
+
+    class FakeTransaction:
+        async def __aenter__(self) -> None:
+            return None
+
+        async def __aexit__(self, *_: object) -> None:
+            return None
 
     class FakePopupQuery:
         async def first(self):
             return None
 
     class FakePopup:
+        id = 88
+
         @classmethod
         def filter(cls, **kwargs):
             return FakePopupQuery()
 
-    async def fake_resolve_online_target_user_ids(**kwargs):
-        return list(range(1, 5002))
+        @classmethod
+        async def create(cls, **kwargs):
+            assert kwargs["task_id"] == 8
+            assert kwargs["title"] == "Notice"
+            assert kwargs["content"] == "Hello"
+            return cls()
+
+    async def fail_resolve_online_target_user_ids(**kwargs):
+        raise AssertionError("发布弹窗不应再筛选在线用户")
+
+    class FakeReceipt:
+        @classmethod
+        async def bulk_create(cls, *args, **kwargs):
+            raise AssertionError("发布弹窗不应再批量创建在线用户 receipt")
 
     monkeypatch.setattr("app.services.system_popup_service.SystemPopup", FakePopup)
+    monkeypatch.setattr("app.services.system_popup_service.SystemPopupReceipt", FakeReceipt)
     monkeypatch.setattr(
         "app.services.system_popup_service.resolve_online_target_user_ids",
-        fake_resolve_online_target_user_ids,
+        fail_resolve_online_target_user_ids,
+        raising=False,
     )
+    monkeypatch.setattr("app.services.system_popup_service.in_transaction", lambda: FakeTransaction())
 
-    with pytest.raises(PopupValidationError, match="在线目标人数超过上限"):
-        await publish_popup_task_once(task)
+    popup = await publish_popup_task_once(task)
+
+    assert isinstance(popup, FakePopup)
+
+
+@pytest.mark.asyncio
+async def test_fetch_pending_popups_returns_targeted_unacked_items_and_creates_receipts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    task_targeted = SimpleNamespace(id=8, target_mode="all", target_user_ids=[], target_filters=None)
+    task_not_targeted = SimpleNamespace(id=9, target_mode="user_ids", target_user_ids=[99], target_filters=None)
+    popups = [
+        SimpleNamespace(
+            id=1,
+            title="Notice 1",
+            content="Hello 1",
+            type="announcement",
+            publish_at=None,
+            published_at=datetime(2026, 5, 14, 10, 1),
+            task=task_targeted,
+        ),
+        SimpleNamespace(
+            id=2,
+            title="Notice 2",
+            content="Hello 2",
+            type="announcement",
+            publish_at=None,
+            published_at=datetime(2026, 5, 14, 10, 2),
+            task=task_targeted,
+        ),
+        SimpleNamespace(
+            id=3,
+            title="Notice 3",
+            content="Hello 3",
+            type="announcement",
+            publish_at=None,
+            published_at=datetime(2026, 5, 14, 10, 3),
+            task=task_not_targeted,
+        ),
+    ]
+    created_receipts: list[tuple[int, int]] = []
+
+    class FakePopupQuery:
+        def order_by(self, *args):
+            return self
+
+        def limit(self, value):
+            return self
+
+        def __await__(self):
+            async def _result():
+                return popups
+
+            return _result().__await__()
+
+    class FakePopup:
+        @classmethod
+        def filter(cls, **kwargs):
+            assert kwargs == {"published_at__not_isnull": True}
+            return FakePopupQuery()
+
+    class FakeReceiptQuery:
+        def __init__(self, popup_id: int):
+            self.popup_id = popup_id
+
+        async def first(self):
+            if self.popup_id == 2:
+                return SimpleNamespace(ack_at=datetime(2026, 5, 14, 10, 5))
+            return None
+
+    class FakeReceipt:
+        @classmethod
+        def filter(cls, **kwargs):
+            assert kwargs["user_id"] == 34
+            return FakeReceiptQuery(kwargs["popup_id"])
+
+        @classmethod
+        async def get_or_create(cls, **kwargs):
+            created_receipts.append((kwargs["popup_id"], kwargs["user_id"]))
+            return SimpleNamespace(ack_at=None), True
+
+    monkeypatch.setattr("app.services.system_popup_service.SystemPopup", FakePopup)
+    monkeypatch.setattr("app.services.system_popup_service.SystemPopupReceipt", FakeReceipt)
+
+    items = await system_popup_service.fetch_pending_popups_for_user(user_id=34)
+
+    assert [item["id"] for item in items] == [1]
+    assert created_receipts == [(1, 34)]
 
 
 @pytest.mark.asyncio

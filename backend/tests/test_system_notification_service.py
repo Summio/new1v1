@@ -1,5 +1,4 @@
 import json
-import asyncio
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -310,12 +309,9 @@ async def test_publish_task_once_rejects_target_count_over_limit(monkeypatch: py
 
 
 @pytest.mark.asyncio
-async def test_publish_task_once_bulk_creates_receipts_in_batches(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_publish_task_once_bulk_creates_receipts_without_websocket_push(monkeypatch: pytest.MonkeyPatch) -> None:
     target_user_ids = list(range(1, MAX_NOTIFICATION_TARGET_USERS + 1))
     batch_sizes: list[int] = []
-    pushed_user_ids: list[int] = []
-    current_pushes = 0
-    max_parallel_pushes = 0
 
     class FakeTransaction:
         async def __aenter__(self) -> None:
@@ -351,23 +347,19 @@ async def test_publish_task_once_bulk_creates_receipts_in_batches(monkeypatch: p
     async def fake_resolve_target_user_ids(**_: object) -> list[int]:
         return target_user_ids
 
-    async def fake_filter_online_user_ids(user_ids: list[int]) -> set[int]:
-        return set(user_ids)
-
-    async def fake_push_unread_changed(user_id: int) -> None:
-        nonlocal current_pushes, max_parallel_pushes
-        current_pushes += 1
-        max_parallel_pushes = max(max_parallel_pushes, current_pushes)
-        await asyncio.sleep(0)
-        pushed_user_ids.append(user_id)
-        current_pushes -= 1
+    async def fail_push_unread_changed_for_users(user_ids: list[int]) -> None:
+        raise AssertionError("发布系统通知不应再推送未读数变化")
 
     monkeypatch.setattr(system_notification_service, "SystemNotification", FakeNotification)
     monkeypatch.setattr(system_notification_service, "SystemNotificationReceipt", FakeReceipt)
     monkeypatch.setattr(system_notification_service, "resolve_target_user_ids", fake_resolve_target_user_ids)
-    monkeypatch.setattr(system_notification_service, "filter_online_user_ids", fake_filter_online_user_ids)
     monkeypatch.setattr(system_notification_service, "in_transaction", lambda: FakeTransaction())
-    monkeypatch.setattr(system_notification_service, "_push_unread_changed", fake_push_unread_changed)
+    monkeypatch.setattr(
+        system_notification_service,
+        "_push_unread_changed_for_users",
+        fail_push_unread_changed_for_users,
+        raising=False,
+    )
 
     task = SimpleNamespace(
         id=1,
@@ -386,27 +378,6 @@ async def test_publish_task_once_bulk_creates_receipts_in_batches(monkeypatch: p
     assert batch_sizes == [RECEIPT_BULK_CREATE_BATCH_SIZE] * (
         MAX_NOTIFICATION_TARGET_USERS // RECEIPT_BULK_CREATE_BATCH_SIZE
     )
-    assert len(pushed_user_ids) == MAX_NOTIFICATION_TARGET_USERS
-    assert max_parallel_pushes <= 20
-
-
-@pytest.mark.asyncio
-async def test_push_unread_changed_for_users_filters_to_online_users(monkeypatch: pytest.MonkeyPatch) -> None:
-    pushed_user_ids: list[int] = []
-
-    async def fake_filter_online_user_ids(user_ids: list[int]) -> set[int]:
-        assert user_ids == [1, 2, 3]
-        return {2}
-
-    async def fake_push_unread_changed(user_id: int) -> None:
-        pushed_user_ids.append(user_id)
-
-    monkeypatch.setattr(system_notification_service, "filter_online_user_ids", fake_filter_online_user_ids)
-    monkeypatch.setattr(system_notification_service, "_push_unread_changed", fake_push_unread_changed)
-
-    await system_notification_service._push_unread_changed_for_users([1, 2, 3])
-
-    assert pushed_user_ids == [2]
 
 
 @pytest.mark.asyncio

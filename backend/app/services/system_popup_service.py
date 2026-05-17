@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import calendar
 from datetime import datetime, time, timedelta
 from enum import Enum
@@ -12,8 +11,6 @@ from tortoise.transactions import in_transaction
 
 from app.core.time_utils import now_local_naive, to_local_naive_for_db
 from app.models import AppUser, SystemPopup, SystemPopupReceipt, SystemPopupTask
-from app.websocket.events import push_system_popup
-from app.websocket.presence import filter_online_user_ids
 
 POPUP_TYPES = {"announcement", "account", "review", "interaction"}
 SEND_MODES = {"immediate", "once", "repeat", "app_start"}
@@ -21,11 +18,10 @@ TASK_STATUSES = {"draft", "scheduled", "running", "paused", "completed", "cancel
 TARGET_MODES = {"all", "user_ids", "filter"}
 REPEAT_TYPES = {"daily", "weekly", "monthly"}
 TARGET_FILTER_KEYS = {"gender", "is_certified_user"}
-ONLINE_POPUP_TARGET_LIMIT = 5000
-POPUP_RECEIPT_BULK_BATCH_SIZE = 1000
-POPUP_PUSH_CONCURRENCY = 20
 STARTUP_POPUP_TASK_SCAN_LIMIT = 5
 STARTUP_POPUP_RETURN_LIMIT = 3
+PENDING_POPUP_SCAN_LIMIT = 50
+PENDING_POPUP_RETURN_LIMIT = 10
 
 
 class PopupValidationError(ValueError):
@@ -279,22 +275,7 @@ async def resolve_target_user_ids(
     return [int(row["id"]) for row in rows]
 
 
-async def resolve_online_target_user_ids(
-    *,
-    target_mode: str,
-    target_user_ids: list[int] | None,
-    target_filters: dict[str, Any] | None,
-) -> list[int]:
-    target_ids = await resolve_target_user_ids(
-        target_mode=target_mode,
-        target_user_ids=target_user_ids,
-        target_filters=target_filters,
-    )
-    online_ids = await filter_online_user_ids(target_ids)
-    return sorted(int(user_id) for user_id in online_ids)
-
-
-async def estimate_online_target_count(
+async def estimate_target_count(
     *,
     target_mode: str,
     target_user_ids: list[int] | str | None = None,
@@ -303,13 +284,8 @@ async def estimate_online_target_count(
     normalized = normalize_user_ids(target_user_ids)
     if target_mode == "filter":
         target_filters = _normalize_target_filters(target_mode, target_filters)
-    return len(
-        await resolve_online_target_user_ids(
-            target_mode=target_mode,
-            target_user_ids=normalized,
-            target_filters=target_filters,
-        )
-    )
+    q = _target_query(target_mode, normalized, target_filters)
+    return await AppUser.filter(q).count()
 
 
 def _initial_task_status(data: dict[str, Any]) -> str:
@@ -419,13 +395,6 @@ async def publish_popup_task_once(task: SystemPopupTask, *, scheduled_run_at: da
     if existing:
         return existing
     run_key = build_popup_run_key(task_id=int(task.id), scheduled_run_at=scheduled)
-    online_target_user_ids = await resolve_online_target_user_ids(
-        target_mode=task.target_mode,
-        target_user_ids=task.target_user_ids or [],
-        target_filters=task.target_filters or None,
-    )
-    if len(online_target_user_ids) > ONLINE_POPUP_TARGET_LIMIT:
-        raise PopupValidationError(f"在线目标人数超过上限（最多{ONLINE_POPUP_TARGET_LIMIT}人）")
     published_at = now_local_naive()
     async with in_transaction():
         try:
@@ -441,33 +410,6 @@ async def publish_popup_task_once(task: SystemPopupTask, *, scheduled_run_at: da
             )
         except IntegrityError:
             return await SystemPopup.filter(task_id=task.id, scheduled_run_at=scheduled).first()
-        receipts = [
-            SystemPopupReceipt(
-                popup_id=popup.id,
-                user_id=user_id,
-                pushed_at=published_at,
-            )
-            for user_id in online_target_user_ids
-        ]
-        if receipts:
-            for index in range(0, len(receipts), POPUP_RECEIPT_BULK_BATCH_SIZE):
-                await SystemPopupReceipt.bulk_create(
-                    receipts[index : index + POPUP_RECEIPT_BULK_BATCH_SIZE],
-                    ignore_conflicts=True,
-                )
-
-    data = _dump_app_popup(popup)
-
-    semaphore = asyncio.Semaphore(POPUP_PUSH_CONCURRENCY)
-
-    async def _push_one(user_id: int) -> None:
-        async with semaphore:
-            try:
-                await push_system_popup(user_id=user_id, popup=data)
-            except Exception:
-                return
-
-    await asyncio.gather(*(_push_one(user_id) for user_id in online_target_user_ids))
     return popup
 
 
@@ -544,6 +486,57 @@ async def fetch_startup_popups_for_user(*, user_id: int, launch_id: str) -> list
 
         popups.append(_dump_app_popup(popup))
     return popups
+
+
+async def _get_popup_task(popup: SystemPopup) -> SystemPopupTask | None:
+    task = getattr(popup, "task", None)
+    if task is not None:
+        return task
+    task_id = getattr(popup, "task_id", None)
+    if task_id is None:
+        return None
+    return await SystemPopupTask.filter(id=int(task_id)).first()
+
+
+async def fetch_pending_popups_for_user(
+    *,
+    user_id: int,
+    limit: int = PENDING_POPUP_RETURN_LIMIT,
+) -> list[dict[str, Any]]:
+    popups = (
+        await SystemPopup.filter(published_at__not_isnull=True)
+        .order_by("-published_at", "-id")
+        .limit(PENDING_POPUP_SCAN_LIMIT)
+    )
+    items: list[dict[str, Any]] = []
+    for popup in popups:
+        if len(items) >= limit:
+            break
+        task = await _get_popup_task(popup)
+        if task is None or getattr(task, "send_mode", None) == "app_start":
+            continue
+        if not await is_user_targeted_by_popup_task(
+            user_id=user_id,
+            target_mode=task.target_mode,
+            target_user_ids=task.target_user_ids or [],
+            target_filters=task.target_filters or None,
+        ):
+            continue
+
+        receipt = await SystemPopupReceipt.filter(popup_id=int(popup.id), user_id=int(user_id)).first()
+        if receipt is not None and receipt.ack_at is not None:
+            continue
+        if receipt is None:
+            receipt, _ = await SystemPopupReceipt.get_or_create(
+                popup_id=int(popup.id),
+                user_id=int(user_id),
+                defaults={"pushed_at": popup.published_at or now_local_naive()},
+            )
+            if receipt.ack_at is not None:
+                continue
+
+        items.append(_dump_app_popup(popup))
+    return items
 
 
 def _should_complete_repeat(task: SystemPopupTask, now: datetime) -> bool:

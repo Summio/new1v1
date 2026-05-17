@@ -83,18 +83,6 @@ class SystemNotificationEstimateIn(NotificationTargetIn):
     pass
 
 
-class SystemNotificationLatestOut(BaseModel):
-    id: int
-    content: str
-    type: str
-    publish_at: datetime | None = None
-
-
-class SystemNotificationUnreadOut(BaseModel):
-    count: int = 0
-    latest: SystemNotificationLatestOut | None = None
-
-
 class SystemNotificationListItemOut(BaseModel):
     id: int
     content: str

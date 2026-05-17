@@ -7,12 +7,13 @@ import 'package:uuid/uuid.dart';
 
 import '../../app/providers/auth_provider.dart';
 import '../../app/providers/certified_user_provider.dart';
-import '../../app/providers/system_notification_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/constants/api_endpoints.dart';
+import '../../core/device/incoming_call_notification_bridge.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/network/response_parsers.dart';
+import '../../core/permissions/mandatory_permission_service.dart';
 import '../../core/storage/storage.dart';
 import '../../services/im_service.dart';
 import '../../services/system_popup_service.dart';
@@ -63,8 +64,8 @@ class _MainShellState extends ConsumerState<MainShell>
   final IMService _imService = IMService();
   bool _incomingRouteOpening = false;
   String? _lastHandledIncomingKey;
+  final Set<int> _notifiedIncomingCallIds = <int>{};
   int _imUnreadCount = 0;
-  int _systemNotificationUnreadCount = 0;
   void Function(int)? _imUnreadListener;
   Function(dynamic)? _imMessageListener;
   bool _isInitGlobalIMUnreadRunning = false;
@@ -92,12 +93,15 @@ class _MainShellState extends ConsumerState<MainShell>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _initGlobalIMUnread();
+    IncomingCallNotificationBridge.configure(
+      onOpenIncomingCall: _openIncomingCallFromNotification,
+    );
     _initWebSocket();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ref.read(authProvider.notifier).refreshBalance();
       ref.read(authProvider.notifier).fetchUserInfo();
-      _refreshSystemNotificationUnreadCount();
+      unawaited(_openLaunchIncomingCallIfNeeded());
       unawaited(_fetchStartupSystemPopups());
     });
   }
@@ -109,15 +113,26 @@ class _MainShellState extends ConsumerState<MainShell>
       ref.read(authProvider.notifier).refreshBalance();
       ref.read(authProvider.notifier).fetchUserInfo();
       ref.read(certifiedUserListProvider.notifier).refresh();
+      unawaited(_ensureMandatoryPermissionsOnResume());
       _openPendingIncomingOnResume();
+      unawaited(_openLaunchIncomingCallIfNeeded());
       WsService.instance.connect();
       if (_imService.isInitialized) {
         _refreshUnreadCount();
       } else {
         _initGlobalIMUnread();
       }
-      _refreshSystemNotificationUnreadCount();
+      unawaited(_fetchPendingSystemPopups());
     }
+  }
+
+  Future<void> _ensureMandatoryPermissionsOnResume() async {
+    final permissionState = await MandatoryPermissionService.instance
+        .ensureReadyForLoggedInUser();
+    if (!mounted || permissionState.requiredGranted) {
+      return;
+    }
+    context.go(AppRoutes.mandatoryPermissions);
   }
 
   Future<void> _initGlobalIMUnread() async {
@@ -174,19 +189,6 @@ class _MainShellState extends ConsumerState<MainShell>
       await _imService.syncTotalUnreadCount();
     } catch (e) {
       debugPrint('mainShell.refreshUnreadCount error: $e');
-    }
-  }
-
-  Future<void> _refreshSystemNotificationUnreadCount() async {
-    try {
-      await ref.read(systemNotificationUnreadProvider.notifier).refresh();
-      final count = ref.read(systemNotificationUnreadProvider).count;
-      if (!mounted || count == _systemNotificationUnreadCount) return;
-      setState(() {
-        _systemNotificationUnreadCount = count;
-      });
-    } catch (e) {
-      debugPrint('mainShell.refreshSystemNotificationUnreadCount error: $e');
     }
   }
 
@@ -252,6 +254,47 @@ class _MainShellState extends ConsumerState<MainShell>
     await _openIncomingCallPage(pending);
   }
 
+  Future<void> _openLaunchIncomingCallIfNeeded() async {
+    try {
+      final payload =
+          await IncomingCallNotificationBridge.takeLaunchIncomingCall();
+      if (payload == null) return;
+      await _openIncomingCallPage(_payloadFromNotification(payload));
+    } catch (e) {
+      _log('take launch incoming call error: $e');
+    }
+  }
+
+  CallSessionPayload _payloadFromNotification(
+    IncomingCallNotificationPayload payload,
+  ) {
+    return CallSessionPayload(
+      callId: payload.callId,
+      status: 'pending',
+      role: 'callee',
+      endReason: null,
+      peerUserId: payload.peerUserId,
+      peerNickname: payload.peerName,
+      peerAvatar: payload.peerAvatar,
+      callPrice: 0,
+      ringTimeoutSeconds: 30,
+      leftSeconds: payload.leftSeconds,
+      createdAt: null,
+      connectedAt: null,
+      duration: 0,
+      canAccept: true,
+      canReject: true,
+      canCancel: false,
+      canHangup: false,
+    );
+  }
+
+  void _openIncomingCallFromNotification(
+    IncomingCallNotificationPayload payload,
+  ) {
+    unawaited(_openIncomingCallPage(_payloadFromNotification(payload)));
+  }
+
   Future<void> _openIncomingCallPage(CallSessionPayload payload) async {
     if (_shouldGuardIncomingRouteByRole() && _incomingRouteOpening) return;
     final dedupKey = _incomingDedupKey(payload);
@@ -262,6 +305,14 @@ class _MainShellState extends ConsumerState<MainShell>
 
     _incomingRouteOpening = true;
     _lastHandledIncomingKey = dedupKey;
+    if (payload.callId != null) {
+      _notifiedIncomingCallIds.remove(payload.callId);
+      unawaited(
+        IncomingCallNotificationBridge.cancelIncomingCall(
+          callId: payload.callId!,
+        ),
+      );
+    }
     try {
       final callUri = Uri(
         path: AppRoutes.callIncoming,
@@ -301,14 +352,13 @@ class _MainShellState extends ConsumerState<MainShell>
       case 'call_incoming':
         _handleWsIncomingCall(event.data);
         break;
+      case 'call_cancelled':
+      case 'call_timeout':
+      case 'call_ended':
+        _handleCallClosedEvent(event.data);
+        break;
       case 'presence':
         _handlePresenceEvent(event.data);
-        break;
-      case 'system_notification_unread_changed':
-        _handleSystemNotificationUnreadChanged(event.data);
-        break;
-      case 'system_popup_pending':
-        unawaited(_handleSystemPopupPending(event.data));
         break;
     }
   }
@@ -369,10 +419,50 @@ class _MainShellState extends ConsumerState<MainShell>
         _openIncomingCallPage(payload);
       } else {
         _pendingIncomingWhenBackground = payload;
+        unawaited(_showIncomingCallNotification(payload));
       }
     } catch (e) {
       _log('[WS] 来电事件解析失败: $e');
     }
+  }
+
+  Future<void> _showIncomingCallNotification(
+    CallSessionPayload payload,
+  ) async {
+    final callId = payload.callId;
+    final peerUserId = payload.peerUserId;
+    if (callId == null || callId <= 0 || peerUserId == null || peerUserId <= 0) {
+      return;
+    }
+    if (_notifiedIncomingCallIds.contains(callId)) {
+      return;
+    }
+    _notifiedIncomingCallIds.add(callId);
+    try {
+      await IncomingCallNotificationBridge.showIncomingCall(
+        IncomingCallNotificationPayload(
+          callId: callId,
+          peerUserId: peerUserId,
+          peerName: payload.peerNickname,
+          peerAvatar: payload.peerAvatar,
+          leftSeconds: payload.leftSeconds > 0 ? payload.leftSeconds : 30,
+        ),
+      );
+    } catch (e) {
+      _notifiedIncomingCallIds.remove(callId);
+      _log('show incoming notification error: $e');
+    }
+  }
+
+  void _handleCallClosedEvent(Map<String, dynamic> data) {
+    final callId = (data['call_id'] as num?)?.toInt();
+    if (callId == null || callId <= 0) return;
+    _notifiedIncomingCallIds.remove(callId);
+    final pending = _pendingIncomingWhenBackground;
+    if (pending?.callId == callId) {
+      _pendingIncomingWhenBackground = null;
+    }
+    unawaited(IncomingCallNotificationBridge.cancelIncomingCall(callId: callId));
   }
 
   void _handlePresenceEvent(Map<String, dynamic> data) {
@@ -416,16 +506,6 @@ class _MainShellState extends ConsumerState<MainShell>
     }
   }
 
-  void _handleSystemNotificationUnreadChanged(Map<String, dynamic> data) {
-    final raw = data['unread_count'];
-    final count = raw is int ? raw : int.tryParse('$raw') ?? 0;
-    ref.read(systemNotificationUnreadProvider.notifier).syncCount(count);
-    if (!mounted || count == _systemNotificationUnreadCount) return;
-    setState(() {
-      _systemNotificationUnreadCount = count < 0 ? 0 : count;
-    });
-  }
-
   bool _isCallRoute(String? location) {
     if (location == null || location.isEmpty) {
       return false;
@@ -433,11 +513,6 @@ class _MainShellState extends ConsumerState<MainShell>
     return location.startsWith(AppRoutes.callRoom) ||
         location.startsWith(AppRoutes.callIncoming) ||
         location.startsWith(AppRoutes.callOutgoing);
-  }
-
-  Future<void> _handleSystemPopupPending(Map<String, dynamic> data) async {
-    final popup = SystemPopupItem.fromJson(data);
-    await _showSystemPopupIfAllowed(popup);
   }
 
   Future<void> _fetchStartupSystemPopups() async {
@@ -459,9 +534,11 @@ class _MainShellState extends ConsumerState<MainShell>
     }
 
     try {
-      final popups = await _systemPopupService.fetchStartupPopups(
+      final startupPopups = await _systemPopupService.fetchStartupPopups(
         _startupLaunchId,
       );
+      final pendingPopups = await _systemPopupService.fetchPendingPopups();
+      final popups = [...startupPopups, ...pendingPopups];
       for (final popup in popups) {
         if (!mounted ||
             _lifecycleState != AppLifecycleState.resumed ||
@@ -473,6 +550,34 @@ class _MainShellState extends ConsumerState<MainShell>
       }
     } catch (e) {
       debugPrint('mainShell.fetchStartupSystemPopups error: $e');
+    }
+  }
+
+  Future<void> _fetchPendingSystemPopups() async {
+    if (!mounted) {
+      return;
+    }
+    final auth = ref.read(authProvider);
+    if (!auth.isLoggedIn ||
+        _lifecycleState != AppLifecycleState.resumed ||
+        _systemPopupShowing ||
+        _isCallRoute(_currentMatchedLocation(context))) {
+      return;
+    }
+
+    try {
+      final popups = await _systemPopupService.fetchPendingPopups();
+      for (final popup in popups) {
+        if (!mounted ||
+            _lifecycleState != AppLifecycleState.resumed ||
+            _systemPopupShowing ||
+            _isCallRoute(_currentMatchedLocation(context))) {
+          return;
+        }
+        await _showSystemPopupIfAllowed(popup);
+      }
+    } catch (e) {
+      debugPrint('mainShell.fetchPendingSystemPopups error: $e');
     }
   }
 
@@ -559,7 +664,6 @@ class _MainShellState extends ConsumerState<MainShell>
       case 2:
         context.go(AppRoutes.messages);
         _refreshUnreadCount();
-        _refreshSystemNotificationUnreadCount();
         break;
       case 3:
         ref.read(authProvider.notifier).refreshBalance();
@@ -607,7 +711,6 @@ class _MainShellState extends ConsumerState<MainShell>
       _handleRouteBasedUnreadRefresh(currentLocation);
     }
     final currentIndex = _getCurrentIndex(context);
-    final combinedChatUnread = _imUnreadCount + _systemNotificationUnreadCount;
 
     return PopScope(
       canPop: !_shouldBlockRootBack(currentLocation),
@@ -650,7 +753,7 @@ class _MainShellState extends ConsumerState<MainShell>
                     activeIcon: Icons.chat_bubble_rounded,
                     label: '聊天',
                     isActive: currentIndex == 2,
-                    badgeCount: combinedChatUnread,
+                    badgeCount: _imUnreadCount,
                     onTap: () => _onTap(context, 2),
                   ),
                   _NavItem(

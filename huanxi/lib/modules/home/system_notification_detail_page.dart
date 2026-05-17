@@ -30,7 +30,7 @@ class _SystemNotificationDetailPageState
     final detail = await SystemNotificationService.instance.fetchDetail(
       widget.notificationId,
     );
-    await ref.read(systemNotificationUnreadProvider.notifier).refresh();
+    ref.read(systemNotificationListProvider.notifier).syncDetail(detail);
     return detail;
   }
 

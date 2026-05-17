@@ -206,16 +206,15 @@ class ApiEndpoints {
   /// 系统通知列表
   static const String systemNotifications = 'app/notifications';
 
-  /// 系统通知未读数和最近摘要
-  static const String systemNotificationUnreadCount =
-      'app/notifications/unread-count';
-
   /// 全部系统通知已读
   static const String systemNotificationReadAll = 'app/notifications/read-all';
 
   // ========== 在线弹窗模块 ==========
   /// App启动弹窗
   static const String systemPopupStartup = 'app/popups/startup';
+
+  /// 待展示弹窗
+  static const String systemPopupPending = 'app/popups/pending';
 
   /// 在线弹窗确认
   static const String systemPopupAckBase = 'app/popups';

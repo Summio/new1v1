@@ -8,7 +8,6 @@ import 'package:tencent_cloud_chat_sdk/models/v2_tim_user_full_info.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/widgets/status_view.dart';
 import '../../app/providers/auth_provider.dart';
-import '../../app/providers/system_notification_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/dio_client.dart';
@@ -77,7 +76,6 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
       _imService.removeTotalUnreadListener(_totalUnreadListener!);
       _imService.addTotalUnreadListener(_totalUnreadListener!);
       await _loadConversations(force: true);
-      await ref.read(systemNotificationUnreadProvider.notifier).refresh();
     } catch (e) {
       debugPrint('消息页 IM 初始化失败: $e');
       if (mounted) {
@@ -440,9 +438,6 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
           : RefreshIndicator(
               onRefresh: () async {
                 await _loadConversations(force: true);
-                await ref
-                    .read(systemNotificationUnreadProvider.notifier)
-                    .refresh();
               },
               child: ListView.separated(
                 itemCount: _conversations.length + 1,
@@ -522,13 +517,13 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
                           'peerAvatarUrl': _avatarUrl(conv),
                           'isCustomerService':
                               _matchesCustomerServiceConversation(
-                            userId,
-                            ref
-                                    .read(appInitProvider)
-                                    .customerServiceUserId
-                                    ?.trim() ??
-                                '',
-                          ),
+                                userId,
+                                ref
+                                        .read(appInitProvider)
+                                        .customerServiceUserId
+                                        ?.trim() ??
+                                    '',
+                              ),
                         },
                       );
                       if (!context.mounted) return;
@@ -556,16 +551,12 @@ class _PeerAppProfile {
   const _PeerAppProfile({this.nickname, this.avatarUrl});
 }
 
-class _SystemNotificationEntryCard extends ConsumerWidget {
+class _SystemNotificationEntryCard extends StatelessWidget {
   const _SystemNotificationEntryCard();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(systemNotificationUnreadProvider);
-    final latest = state.latest;
-    final subtitle = latest?.content.trim().isNotEmpty == true
-        ? latest!.content.trim()
-        : '暂无系统通知';
+  Widget build(BuildContext context) {
+    const subtitle = '查看平台公告、账户和审核通知';
     return InkWell(
       onTap: () => context.push(AppRoutes.systemNotifications),
       child: Container(
@@ -586,12 +577,6 @@ class _SystemNotificationEntryCard extends ConsumerWidget {
                     color: AppTheme.primaryColor,
                   ),
                 ),
-                if (state.count > 0)
-                  Positioned(
-                    right: -6,
-                    top: -6,
-                    child: _NotificationBadge(count: state.count),
-                  ),
               ],
             ),
             const SizedBox(width: 12),
@@ -620,39 +605,8 @@ class _SystemNotificationEntryCard extends ConsumerWidget {
                 ],
               ),
             ),
-            const Icon(
-              Icons.chevron_right_rounded,
-              color: AppTheme.textHint,
-            ),
+            const Icon(Icons.chevron_right_rounded, color: AppTheme.textHint),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-class _NotificationBadge extends StatelessWidget {
-  final int count;
-
-  const _NotificationBadge({required this.count});
-
-  @override
-  Widget build(BuildContext context) {
-    final text = count > 99 ? '99+' : '$count';
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-      constraints: const BoxConstraints(minWidth: 17, minHeight: 17),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: Colors.redAccent,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      child: Text(
-        text,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
         ),
       ),
     );

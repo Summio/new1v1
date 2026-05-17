@@ -9,6 +9,7 @@ import '../../core/storage/storage.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/network/media_payload_normalizer.dart';
 import '../../core/utils/app_logger.dart';
+import '../../core/permissions/mandatory_permission_service.dart';
 import '../../services/websocket_service.dart';
 
 /// 认证状态
@@ -759,6 +760,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   /// 退出登录
   Future<void> logout() async {
+    await MandatoryPermissionService.instance.stopKeepAliveForLogout();
     await StorageService.clearUserData();
     WsService.instance.disconnect();
     state = const AuthState();
@@ -768,11 +770,26 @@ class AuthNotifier extends StateNotifier<AuthState> {
 /// App 初始化配置 Provider
 class AppInitNotifier extends StateNotifier<AppInitState> {
   final DioClient _dio;
+  Future<void>? _pendingInit;
 
   AppInitNotifier(this._dio) : super(const AppInitState());
 
   Future<void> init() async {
-    if (state.loaded || state.isLoading) return;
+    if (state.loaded) return;
+    final pendingInit = _pendingInit;
+    if (pendingInit != null) {
+      await pendingInit;
+      return;
+    }
+    _pendingInit = _load();
+    try {
+      await _pendingInit;
+    } finally {
+      _pendingInit = null;
+    }
+  }
+
+  Future<void> _load() async {
     state = state.copyWith(isLoading: true);
     try {
       final data = await _dio.apiGet(ApiEndpoints.appBootstrap);
@@ -784,7 +801,7 @@ class AppInitNotifier extends StateNotifier<AppInitState> {
       state = AppInitState.fromBootstrapMap(respData);
     } catch (e) {
       AppLogger.debug('appInit.init error: $e');
-      state = state.copyWith(isLoading: false, loaded: true);
+      state = state.copyWith(isLoading: false);
     }
   }
 }

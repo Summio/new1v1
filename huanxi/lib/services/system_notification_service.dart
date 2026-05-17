@@ -64,28 +64,6 @@ class SystemNotificationDetail extends SystemNotificationItem {
   }
 }
 
-class SystemNotificationUnreadSummary {
-  final int count;
-  final SystemNotificationItem? latest;
-
-  const SystemNotificationUnreadSummary({required this.count, this.latest});
-
-  factory SystemNotificationUnreadSummary.fromJson(Map<String, dynamic> json) {
-    final data = json['data'] as Map<String, dynamic>? ?? json;
-    final latestRaw = data['latest'];
-    return SystemNotificationUnreadSummary(
-      count: int.tryParse('${data['count'] ?? 0}') ?? 0,
-      latest: latestRaw is Map<String, dynamic>
-          ? SystemNotificationItem.fromJson({
-              ...latestRaw,
-              'read_at': null,
-              'is_read': false,
-            })
-          : null,
-    );
-  }
-}
-
 class SystemNotificationListResult {
   final List<SystemNotificationItem> rows;
   final int total;
@@ -116,12 +94,14 @@ class SystemNotificationService {
         (data['data'] as List?) ?? (data['rows'] as List?) ?? const [];
     final rows = rowsRaw
         .whereType<Map>()
-        .map((item) => SystemNotificationItem.fromJson(
-              Map<String, dynamic>.from(item),
-            ))
+        .map(
+          (item) =>
+              SystemNotificationItem.fromJson(Map<String, dynamic>.from(item)),
+        )
         .where((item) => item.id > 0)
         .toList();
-    final total = int.tryParse('${data['total'] ?? rows.length}') ?? rows.length;
+    final total =
+        int.tryParse('${data['total'] ?? rows.length}') ?? rows.length;
     final hasMore =
         data['has_more'] == true || (page > 0 && page * pageSize < total);
     return SystemNotificationListResult(
@@ -129,13 +109,6 @@ class SystemNotificationService {
       total: total,
       hasMore: hasMore,
     );
-  }
-
-  Future<SystemNotificationUnreadSummary> fetchUnreadSummary() async {
-    final data = await DioClient.instance.apiGet(
-      ApiEndpoints.systemNotificationUnreadCount,
-    );
-    return SystemNotificationUnreadSummary.fromJson(data);
   }
 
   Future<SystemNotificationDetail> fetchDetail(int notificationId) async {

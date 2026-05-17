@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import calendar
 from datetime import datetime, time, timedelta
 from enum import Enum
@@ -17,8 +16,6 @@ from app.models import (
     SystemNotificationReceipt,
     SystemNotificationTask,
 )
-from app.websocket.events import push_system_notification_unread_changed
-from app.websocket.presence import filter_online_user_ids
 
 NOTIFICATION_TYPES = {"announcement", "account", "review", "interaction"}
 SEND_MODES = {"immediate", "once", "repeat"}
@@ -28,7 +25,6 @@ REPEAT_TYPES = {"daily", "weekly", "monthly"}
 TARGET_FILTER_KEYS = {"gender", "is_certified_user", "is_online"}
 MAX_NOTIFICATION_TARGET_USERS = 5000
 RECEIPT_BULK_CREATE_BATCH_SIZE = 500
-UNREAD_PUSH_CONCURRENCY = 20
 
 
 class NotificationValidationError(ValueError):
@@ -443,7 +439,6 @@ async def publish_task_once(
         ]
         await _bulk_create_receipts_in_batches(receipts)
 
-    await _push_unread_changed_for_users(target_user_ids)
     return notification
 
 
@@ -451,20 +446,6 @@ async def _bulk_create_receipts_in_batches(receipts: list[SystemNotificationRece
     for start in range(0, len(receipts), RECEIPT_BULK_CREATE_BATCH_SIZE):
         batch = receipts[start : start + RECEIPT_BULK_CREATE_BATCH_SIZE]
         await SystemNotificationReceipt.bulk_create(batch, ignore_conflicts=True)
-
-
-async def _push_unread_changed_for_users(user_ids: list[int]) -> None:
-    online_user_ids = sorted(await filter_online_user_ids(user_ids))
-    if not online_user_ids:
-        return
-
-    semaphore = asyncio.Semaphore(UNREAD_PUSH_CONCURRENCY)
-
-    async def push_one(user_id: int) -> None:
-        async with semaphore:
-            await _push_unread_changed(user_id)
-
-    await asyncio.gather(*(push_one(user_id) for user_id in online_user_ids))
 
 
 def _should_complete_repeat(task: SystemNotificationTask, now: datetime) -> bool:
@@ -546,7 +527,6 @@ async def create_business_notification(
     except IntegrityError:
         return await SystemNotification.filter(biz_key=biz_key).first()
     await SystemNotificationReceipt.create(notification_id=notification.id, user_id=int(user_id))
-    await _push_unread_changed(int(user_id))
     return notification
 
 
@@ -570,22 +550,6 @@ async def list_user_notifications(*, user_id: int, page: int, page_size: int) ->
     return rows, total
 
 
-async def get_user_unread_summary(*, user_id: int) -> dict[str, Any]:
-    unread_count = await SystemNotificationReceipt.filter(user_id=user_id, read_at__isnull=True).count()
-    latest_receipt = await SystemNotificationReceipt.filter(user_id=user_id).order_by("-created_at", "-id").first()
-    latest = None
-    if latest_receipt:
-        notification = await SystemNotification.filter(id=latest_receipt.notification_id).first()
-        if notification:
-            latest = {
-                "id": int(notification.id),
-                "content": notification.content,
-                "type": notification.type,
-                "publish_at": format_notification_datetime(notification.published_at or notification.publish_at),
-            }
-    return {"count": unread_count, "latest": latest}
-
-
 async def get_user_notification_detail(*, user_id: int, notification_id: int) -> dict[str, Any] | None:
     receipt = await SystemNotificationReceipt.filter(user_id=user_id, notification_id=notification_id).first()
     if not receipt:
@@ -596,7 +560,6 @@ async def get_user_notification_detail(*, user_id: int, notification_id: int) ->
     if receipt.read_at is None:
         receipt.read_at = now_local_naive()
         await receipt.save()
-        await _push_unread_changed(user_id)
     return _dump_user_notification(notification, receipt, include_content=True)
 
 
@@ -607,7 +570,6 @@ async def mark_notification_read(*, user_id: int, notification_id: int) -> bool:
     if receipt.read_at is None:
         receipt.read_at = now_local_naive()
         await receipt.save()
-        await _push_unread_changed(user_id)
     return True
 
 
@@ -618,15 +580,12 @@ async def mark_notification_unread(*, user_id: int, notification_id: int) -> boo
     if receipt.read_at is not None:
         receipt.read_at = None
         await receipt.save()
-        await _push_unread_changed(user_id)
     return True
 
 
 async def mark_all_notifications_read(*, user_id: int) -> int:
     now = now_local_naive()
     updated = await SystemNotificationReceipt.filter(user_id=user_id, read_at__isnull=True).update(read_at=now)
-    if updated:
-        await _push_unread_changed(user_id)
     return updated
 
 
@@ -645,11 +604,3 @@ def _dump_user_notification(
         "is_read": receipt.read_at is not None,
     }
     return data
-
-
-async def _push_unread_changed(user_id: int) -> None:
-    try:
-        summary = await get_user_unread_summary(user_id=user_id)
-        await push_system_notification_unread_changed(user_id=user_id, unread_count=int(summary["count"]))
-    except Exception:
-        return

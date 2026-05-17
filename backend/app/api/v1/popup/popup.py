@@ -19,7 +19,7 @@ from app.services.system_popup_service import (
     activate_popup_task,
     count_task_receipts,
     create_popup_task,
-    estimate_online_target_count,
+    estimate_target_count,
     format_popup_datetime,
     normalize_popup_choice,
     recalculate_popup_task_next_run_at,
@@ -31,7 +31,7 @@ router = APIRouter()
 
 async def _dump_task(task: SystemPopupTask) -> dict:
     try:
-        estimated_count = await estimate_online_target_count(
+        estimated_count = await estimate_target_count(
             target_mode=task.target_mode,
             target_user_ids=task.target_user_ids or [],
             target_filters=task.target_filters or None,
@@ -107,7 +107,7 @@ async def get_popup_task(id: int = Query(..., ge=1)):
 @router.post("/estimate-target-count", summary="预计当前在线可触达人数")
 async def estimate_popup_target_count(req_in: SystemPopupEstimateIn):
     try:
-        count = await estimate_online_target_count(
+        count = await estimate_target_count(
             target_mode=req_in.target_mode.value,
             target_user_ids=req_in.target_user_ids,
             target_filters=req_in.target_filters,

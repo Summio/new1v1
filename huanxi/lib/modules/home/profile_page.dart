@@ -23,6 +23,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      ref.read(appInitProvider.notifier).init();
       ref.read(authProvider.notifier).fetchUserInfo();
     });
   }

@@ -13,7 +13,9 @@ import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/api_exception.dart';
+import '../../core/device/call_keep_alive_bridge.dart';
 import '../../core/network/dio_client.dart';
+import '../../core/permissions/mandatory_permission_service.dart';
 import '../../core/network/response_parsers.dart';
 import '../../core/storage/storage.dart';
 import '../../core/utils/app_toast.dart';
@@ -88,10 +90,23 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
     AppLogger.debug('[CALL_FLOW][callId=${widget.callId}] $message');
   }
 
+  Future<void> _startCallKeepAlive() async {
+    final permissionState = await MandatoryPermissionService.instance
+        .ensureReadyForLoggedInUser();
+    if (permissionState.requiredGranted) {
+      try {
+        await CallKeepAliveBridge.startCallMode(callId: widget.callId);
+      } catch (e) {
+        _log('start call keep alive failed: $e');
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    unawaited(_startCallKeepAlive());
     _chatSessionStartedAt = DateTime.now();
     unawaited(
       SystemChrome.setPreferredOrientations(const [
@@ -339,6 +354,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
     await ref
         .read(callRtcControllerProvider(widget.callId).notifier)
         .leaveAndRelease(onLog: _log);
+    await MandatoryPermissionService.instance.ensureReadyForLoggedInUser();
     sessionNotifier.markEnded(endReason: endReason);
 
     if (!mounted) {
@@ -805,6 +821,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
     if (_shouldBestEffortTerminateOnDispose()) {
       unawaited(_bestEffortTerminateCall());
     }
+    unawaited(MandatoryPermissionService.instance.ensureReadyForLoggedInUser());
     super.dispose();
   }
 

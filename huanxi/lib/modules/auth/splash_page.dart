@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:permission_handler/permission_handler.dart';
-import 'dart:io' show Platform;
 import '../../app/routes/app_router.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../app/theme/app_theme.dart';
+import '../../core/permissions/mandatory_permission_service.dart';
 import '../../services/im_service.dart';
 
 /// Splash 页面
@@ -21,14 +20,14 @@ class _SplashPageState extends ConsumerState<SplashPage> {
   @override
   void initState() {
     super.initState();
-    _init();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _init();
+    });
   }
 
   Future<void> _init() async {
     try {
-      // 启动即请求通话核心权限（相机/麦克风）
-      await _requestMediaPermissions();
-
       // 初始化认证状态 + App 启动配置，设置一个总的超时兜底
       await Future.wait([
         ref.read(authProvider.notifier).init(),
@@ -51,7 +50,20 @@ class _SplashPageState extends ConsumerState<SplashPage> {
 
     // 根据登录状态跳转
     if (isLoggedIn) {
-      context.go(AppRoutes.index);
+      try {
+        final permissionState = await MandatoryPermissionService.instance
+            .check();
+        if (!mounted) return;
+        if (permissionState.requiredGranted) {
+          context.go(AppRoutes.index);
+        } else {
+          context.go(AppRoutes.mandatoryPermissions);
+        }
+      } catch (e) {
+        debugPrint('Splash Permission Check Error: $e');
+        if (!mounted) return;
+        context.go(AppRoutes.mandatoryPermissions);
+      }
     } else {
       context.go(AppRoutes.login);
     }
@@ -81,25 +93,6 @@ class _SplashPageState extends ConsumerState<SplashPage> {
       }
     } catch (e) {
       debugPrint('[Splash] IM 全局初始化失败: $e');
-    }
-  }
-
-  Future<void> _requestMediaPermissions() async {
-    try {
-      final permissions = <Permission>[
-        Permission.camera,
-        Permission.microphone,
-      ];
-
-      if (Platform.isIOS) {
-        permissions.add(Permission.photos);
-      } else if (Platform.isAndroid) {
-        permissions.add(Permission.storage);
-      }
-
-      await permissions.request();
-    } catch (e) {
-      debugPrint('Splash permission request error: $e');
     }
   }
 
@@ -184,10 +177,7 @@ class _SplashPageState extends ConsumerState<SplashPage> {
                 const SizedBox(height: 8),
                 const Text(
                   '1v1 视频交友',
-                  style: TextStyle(
-                    color: AppTheme.textSecondary,
-                    fontSize: 16,
-                  ),
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 16),
                 ),
                 const SizedBox(height: 48),
                 SizedBox(

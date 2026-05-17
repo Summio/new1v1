@@ -277,36 +277,3 @@ async def push_presence_for_users(user_ids: list[int] | tuple[int, ...] | set[in
     return ok
 
 
-async def push_system_notification_unread_changed(
-    user_id: int,
-    unread_count: int,
-) -> PushResult:
-    """推送系统通知未读数变化。"""
-    data = {"unread_count": int(unread_count)}
-    return await get_manager().push_to_user(
-        int(user_id),
-        "system_notification_unread_changed",
-        data,
-    )
-
-
-async def push_system_popup_pending(
-    user_id: int,
-    popup: dict,
-) -> PushResult:
-    """推送在线弹窗给当前在线用户。"""
-    data = {
-        "id": int(popup.get("id") or 0),
-        "title": str(popup.get("title") or ""),
-        "content": str(popup.get("content") or ""),
-        "type": str(popup.get("type") or ""),
-        "publish_at": popup.get("publish_at"),
-    }
-    return await get_manager().push_to_user(
-        int(user_id),
-        "system_popup_pending",
-        data,
-    )
-
-
-push_system_popup = push_system_popup_pending

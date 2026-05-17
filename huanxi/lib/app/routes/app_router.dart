@@ -4,6 +4,7 @@ import '../../modules/auth/splash_page.dart';
 import '../../modules/auth/login_page.dart';
 import '../../modules/auth/register_page.dart';
 import '../../modules/auth/initial_profile_page.dart';
+import '../../modules/auth/mandatory_permission_gate_page.dart';
 import '../../modules/home/home_page.dart';
 import '../../modules/home/discover_page.dart';
 import '../../modules/home/chat_page.dart';
@@ -41,6 +42,7 @@ import '../../modules/home/call_page.dart';
 import '../../app/providers/certified_user_provider.dart';
 import '../../app/providers/wallet_provider.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/permissions/mandatory_permission_service.dart';
 import '../../core/storage/storage.dart';
 import '../../services/teen_mode_service.dart';
 
@@ -50,6 +52,7 @@ class AppRoutes {
   static const String login = '/login';
   static const String register = '/register';
   static const String initialProfile = '/register/initial-profile';
+  static const String mandatoryPermissions = '/mandatory-permissions';
   static const String index = '/index';
   static const String discover = '/discover';
   static const String messages = '/messages';
@@ -104,6 +107,8 @@ final appRouter = GoRouter(
     final isOnRegister = state.matchedLocation == AppRoutes.register;
     final isOnInitialProfile =
         state.matchedLocation == AppRoutes.initialProfile;
+    final isOnMandatoryPermissions =
+        state.matchedLocation == AppRoutes.mandatoryPermissions;
     final isOnTeenModeVerify =
         state.matchedLocation == AppRoutes.teenModeVerify;
     final isTeenModeLocked = TeenModeService.instance.isLocked;
@@ -124,7 +129,17 @@ final appRouter = GoRouter(
     }
     if (isLoggedIn &&
         initialProfileCompleted &&
-        (isOnLogin || isOnRegister || isOnInitialProfile)) {
+        !MandatoryPermissionService.instance.requiredGranted &&
+        !isOnMandatoryPermissions) {
+      return AppRoutes.mandatoryPermissions;
+    }
+    if (isLoggedIn &&
+        initialProfileCompleted &&
+        MandatoryPermissionService.instance.requiredGranted &&
+        (isOnLogin ||
+            isOnRegister ||
+            isOnInitialProfile ||
+            isOnMandatoryPermissions)) {
       return AppRoutes.index;
     }
     return null;
@@ -145,6 +160,10 @@ final appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.initialProfile,
       builder: (context, state) => const InitialProfilePage(),
+    ),
+    GoRoute(
+      path: AppRoutes.mandatoryPermissions,
+      builder: (context, state) => const MandatoryPermissionGatePage(),
     ),
     ShellRoute(
       builder: (context, state, child) => MainShell(child: child),
