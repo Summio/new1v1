@@ -129,4 +129,20 @@ void main() {
     expect(controlsText, isNot(contains('余额')));
     expect(controlsText, isNot(contains('coins')));
   });
+
+  test('call top bar does not show per minute call price', () {
+    final text = File(
+      'lib/modules/call/call_room_page.dart',
+    ).readAsStringSync().replaceAll('\r\n', '\n');
+
+    final topBarStart = text.indexOf('class _CallTopBar');
+    final bottomControlsStart = text.indexOf(
+      'class _CallBottomControls',
+      topBarStart,
+    );
+    final topBarText = text.substring(topBarStart, bottomControlsStart);
+
+    expect(topBarText, isNot(contains('callPrice')));
+    expect(topBarText, isNot(contains('/min')));
+  });
 }

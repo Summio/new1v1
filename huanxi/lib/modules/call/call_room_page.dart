@@ -1450,7 +1450,6 @@ class _CallTopBar extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tokenNames = ref.watch(tokenNamesProvider);
     final certifiedUserState = ref.watch(certifiedUserListProvider);
     CertifiedUserInfo? certifiedUser;
     for (final item in certifiedUserState.certifiedUsers) {
@@ -1508,21 +1507,6 @@ class _CallTopBar extends ConsumerWidget {
                 ],
               ),
             ),
-            if (certifiedUser?.callPrice != null)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white24,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  '${certifiedUser!.callPrice!.toStringAsFixed(0)}${tokenNames.coinName}/min',
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                ),
-              ),
           ],
         ),
       ),
