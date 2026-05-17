@@ -16,7 +16,7 @@ class SettingsPage extends ConsumerStatefulWidget {
 }
 
 class _SettingsPageState extends ConsumerState<SettingsPage> {
-  bool _keepAliveReady = MandatoryPermissionService.instance.allGranted;
+  bool _keepAliveReady = false;
   bool _keepAliveBusy = false;
 
   @override
@@ -29,7 +29,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final state = await MandatoryPermissionService.instance.check();
     if (!mounted) return;
     setState(() {
-      _keepAliveReady = state.allGranted;
+      _keepAliveReady = state.keepAliveGranted;
     });
   }
 
@@ -83,6 +83,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             icon: Icons.notifications_outlined,
             title: '后台接听模式',
             subtitle: _keepAliveReady ? '已开启，后台可保持在线' : '未开启时可能影响后台来电提醒',
+            onTap: _keepAliveBusy
+                ? null
+                : () => _ensureKeepAlive(!_keepAliveReady),
             trailing: Switch(
               value: _keepAliveReady,
               onChanged: _keepAliveBusy ? null : _ensureKeepAlive,

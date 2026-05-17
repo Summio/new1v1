@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter/foundation.dart';
 import 'package:huanxi/services/websocket_service.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
@@ -70,5 +71,33 @@ void main() {
 
     await service.sendCallHeartbeat(callId: 456);
     expect(sink.sent, isEmpty);
+  });
+
+  test('online_status_ack should not be logged as unknown message', () async {
+    final service = WsService.instance;
+    service.debugResetForTest();
+    final sink = _FakeWebSocketSink();
+    final channel = _FakeWebSocketChannel(sink);
+    service.debugInstallChannelForTest(channel, authenticated: true);
+
+    final logs = <String>[];
+    final originalDebugPrint = debugPrint;
+    debugPrint = (String? message, {int? wrapWidth}) {
+      if (message != null) logs.add(message);
+    };
+    addTearDown(() {
+      debugPrint = originalDebugPrint;
+      service.debugResetForTest();
+    });
+
+    service.debugHandleMessageForTest(
+      channel,
+      jsonEncode({'type': 'online_status_ack', 'online': true}),
+    );
+
+    expect(
+      logs.where((line) => line.contains('收到未知类型消息')),
+      isEmpty,
+    );
   });
 }

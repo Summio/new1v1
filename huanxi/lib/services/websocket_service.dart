@@ -269,6 +269,10 @@ class WsService {
         return; // 忽略 pong 响应
       }
 
+      if (type == 'online_status_ack') {
+        return; // 手动在线状态切换确认，无需分发业务事件
+      }
+
       // 业务事件: {"type": "event", "event": "call_incoming", "data": {...}}
       if (type == 'event') {
         try {
@@ -381,6 +385,11 @@ class WsService {
   }) {
     _channel = channel;
     _authenticated = authenticated;
+  }
+
+  @visibleForTesting
+  void debugHandleMessageForTest(WebSocketChannel channel, dynamic data) {
+    _onMessage(channel, data);
   }
 
   @visibleForTesting

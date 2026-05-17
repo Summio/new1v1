@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:huanxi/core/permissions/mandatory_permission_service.dart';
 
 void main() {
   test('mandatory permission gate is part of logged-in routing', () {
@@ -53,6 +54,37 @@ void main() {
     expect(service, contains('startKeepAliveForLoggedInUser'));
     expect(service, contains('CallKeepAliveBridge.startOnlineMode'));
     expect(settings, contains('startKeepAliveForLoggedInUser'));
+    expect(settings, contains('state.keepAliveGranted'));
+    expect(settings, contains('onTap: _keepAliveBusy'));
+  });
+
+  test('keep alive state is independent from optional notification permission', () {
+    const state = MandatoryPermissionState(
+      checks: [
+        MandatoryPermissionCheck(
+          kind: MandatoryPermissionKind.notification,
+          granted: false,
+          required: false,
+        ),
+        MandatoryPermissionCheck(
+          kind: MandatoryPermissionKind.camera,
+          granted: true,
+        ),
+        MandatoryPermissionCheck(
+          kind: MandatoryPermissionKind.microphone,
+          granted: true,
+        ),
+        MandatoryPermissionCheck(
+          kind: MandatoryPermissionKind.androidKeepAlive,
+          granted: true,
+          required: false,
+        ),
+      ],
+    );
+
+    expect(state.requiredGranted, isTrue);
+    expect(state.allGranted, isFalse);
+    expect(state.keepAliveGranted, isTrue);
   });
 
   test('android foreground service bridge and settings entry exist', () {

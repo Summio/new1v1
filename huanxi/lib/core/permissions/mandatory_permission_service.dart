@@ -62,6 +62,10 @@ class MandatoryPermissionState {
   bool get requiredGranted =>
       checks.where((item) => item.required).every((item) => item.granted);
 
+  bool get keepAliveGranted => checks
+      .where((item) => item.kind == MandatoryPermissionKind.androidKeepAlive)
+      .any((item) => item.granted);
+
   List<MandatoryPermissionCheck> get missing =>
       checks.where((item) => !item.granted).toList(growable: false);
 
