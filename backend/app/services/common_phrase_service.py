@@ -1,5 +1,6 @@
-from datetime import datetime
 from typing import Any
+
+from app.core.time_utils import now_local_naive
 
 COMMON_PHRASE_SLOT_COUNT = 3
 COMMON_PHRASE_MAX_LENGTH = 50
@@ -91,7 +92,7 @@ def apply_common_phrase_review(row: dict, *, status: str, review_remark: str | N
     next_row = dict(row)
     next_row["review_status"] = normalized_status
     next_row["review_remark"] = "" if normalized_status == "approved" else remark
-    next_row["reviewed_at"] = datetime.now()
+    next_row["reviewed_at"] = now_local_naive()
     if normalized_status == "approved":
         next_row["approved_content"] = pending_content
         next_row["pending_content"] = ""

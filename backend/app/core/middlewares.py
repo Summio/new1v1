@@ -1,6 +1,6 @@
 import json
 import re
-from datetime import datetime
+import time
 from typing import Any, AsyncGenerator
 
 from fastapi import FastAPI
@@ -241,11 +241,10 @@ class HttpAuditLogMiddleware(BaseHTTPMiddleware):
         return response
 
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
-        start_time: datetime = datetime.now()
+        start_time = time.perf_counter()
         await self.before_request(request)
         response = await call_next(request)
-        end_time: datetime = datetime.now()
-        process_time = int((end_time.timestamp() - start_time.timestamp()) * 1000)
+        process_time = int((time.perf_counter() - start_time) * 1000)
         await self.after_request(request, response, process_time)
         return response
 

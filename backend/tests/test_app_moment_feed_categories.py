@@ -3,6 +3,7 @@ from pathlib import Path
 
 from app.api.v1.app import moment as app_moment
 from app.models.moments import Moment
+from app.services import recommended_user_cache
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
 APP_MOMENT_API = BACKEND_ROOT / "app/api/v1/app/moment.py"
@@ -40,12 +41,16 @@ def test_app_moment_feed_filters_blocked_authors_before_pagination() -> None:
 
 
 def test_app_moment_feed_recommend_rule_allows_single_moment_override() -> None:
-    source = inspect.getsource(app_moment)
+    moment_source = inspect.getsource(app_moment)
+    feed_source = inspect.getsource(app_moment.get_moment_feed)
+    cache_source = inspect.getsource(recommended_user_cache)
 
-    assert "recommend_override=True" in source
-    assert "is_recommended=True" in source
-    assert "recommend_override__isnull=True" in source
-    assert "recommended_user_ids" in source
+    assert "recommend_override=True" in moment_source
+    assert "get_recommended_user_ids" in feed_source
+    assert "is_recommended=True" in cache_source
+    assert "RECOMMENDED_USER_IDS_CACHE_TTL_SECONDS" in cache_source
+    assert "recommend_override__isnull=True" in moment_source
+    assert "recommended_user_ids" in moment_source
 
 
 def test_app_moment_feed_uses_pinned_then_latest_order() -> None:

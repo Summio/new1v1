@@ -1,5 +1,4 @@
 import asyncio
-from datetime import datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
@@ -53,7 +52,9 @@ from app.services.user_block_service import (
     UserBlockError,
     ensure_not_blocked,
     get_block_relation,
+    invalidate_blocked_user_ids_cache,
 )
+from app.core.time_utils import now_local_naive
 from app.settings.config import settings
 from app.utils.media_url import normalize_media_list, to_relative_media_url
 from app.utils.upload_files import (
@@ -417,7 +418,7 @@ async def update_user_profile(req_in: AppUserProfileUpdateIn):
                 before_snapshot=review_payload["before_snapshot"],
                 after_snapshot=review_payload["after_snapshot"],
                 review_items=review_items,
-                submitted_at=datetime.now(),
+                submitted_at=now_local_naive(),
                 using_db=conn,
             )
     elif direct_update_data:
@@ -655,6 +656,7 @@ async def block_user(req_in: UserBlockIn):
             | Q(follower_id=target_user.id, following_id=current_user_id)
         ).using_db(conn).delete()
 
+    await invalidate_blocked_user_ids_cache(current_user_id, int(target_user.id))
     return Success(
         data=UserBlockActionOut(
             target_user_id=int(target_user.id),
@@ -673,6 +675,7 @@ async def unblock_user(user_id: int = Query(..., description="目标用户ID")):
         return Fail(code=400, msg="不能解除自己")
 
     await UserBlock.filter(blocker_id=current_user_id, blocked_id=user_id).delete()
+    await invalidate_blocked_user_ids_cache(current_user_id, user_id)
     return Success(
         data=UserBlockActionOut(
             target_user_id=user_id,

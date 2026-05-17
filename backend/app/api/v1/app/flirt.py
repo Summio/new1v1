@@ -1,3 +1,5 @@
+import asyncio
+
 from fastapi import APIRouter, BackgroundTasks, Query
 from loguru import logger
 
@@ -28,6 +30,9 @@ from app.services.user_block_service import exclude_blocked_user_ids
 from app.utils.media_url import normalize_media_list, to_relative_media_url
 
 router = APIRouter()
+
+FLIRT_GREET_TARGET_LIMIT = 100
+FLIRT_GREET_SEND_CONCURRENCY = 10
 
 FLIRT_AVAILABILITY_RANK = {
     "online": 3,
@@ -150,7 +155,12 @@ async def _fetch_flirt_user_page(q, page: int, page_size: int) -> tuple[int, lis
     return total, selected
 
 
-async def _fetch_online_flirt_users(current_user: AppUser, config) -> list[AppUser]:
+async def _fetch_online_flirt_users(
+    current_user: AppUser,
+    config,
+    *,
+    limit: int | None = None,
+) -> list[AppUser]:
     from app.websocket.presence import get_online_user_ids
 
     online_ids = await get_online_user_ids()
@@ -158,7 +168,10 @@ async def _fetch_online_flirt_users(current_user: AppUser, config) -> list[AppUs
     if not online_ids:
         return []
     q = await _build_flirt_user_query(current_user, config)
-    return list(await q.filter(id__in=list(online_ids)).order_by("-coins", "-id"))
+    q = q.filter(id__in=list(online_ids)).order_by("-coins", "-id")
+    if limit is not None:
+        q = q.limit(limit)
+    return list(await q)
 
 
 @router.get("/flirt/list", summary="搭讪用户列表")
@@ -229,7 +242,7 @@ async def flirt_greet(req_in: FlirtGreetIn, background_tasks: BackgroundTasks):
     if quota_status == "exhausted":
         return Fail(code=429, msg="今日打招呼次数已用完", data={"quota": quota})
 
-    target_users = await _fetch_online_flirt_users(current_user, config)
+    target_users = await _fetch_online_flirt_users(current_user, config, limit=FLIRT_GREET_TARGET_LIMIT)
     if not target_users:
         try:
             await release_greet_quota(redis, user_id=int(current_user.id))
@@ -338,12 +351,57 @@ async def _run_flirt_greet_send_task(
 ) -> None:
     sent_count = 0
     im_failed_count = 0
-    for target_id in target_user_ids:
-        ok = await send_text_message(sender_id, target_id, content)
-        if ok:
-            sent_count += 1
+    concurrency = min(FLIRT_GREET_SEND_CONCURRENCY, len(target_user_ids))
+    if concurrency > 0:
+        semaphore = asyncio.Semaphore(FLIRT_GREET_SEND_CONCURRENCY)
+        queue: asyncio.Queue[int] = asyncio.Queue()
+        for target_id in target_user_ids:
+            queue.put_nowait(target_id)
+
+        try:
+            import httpx
+        except Exception:  # noqa: BLE001
+            tim_client = None
         else:
-            im_failed_count += 1
+            tim_client = httpx.AsyncClient(timeout=8.0)
+
+        async def send_worker() -> tuple[int, int]:
+            worker_sent_count = 0
+            worker_im_failed_count = 0
+            while True:
+                try:
+                    target_id = queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    break
+
+                try:
+                    async with semaphore:
+                        try:
+                            ok = await send_text_message(sender_id, target_id, content, http_client=tim_client)
+                        except Exception as exc:  # noqa: BLE001
+                            logger.warning(
+                                "flirt greet text send failed: sender_id={}, target_id={}, err={}",
+                                sender_id,
+                                target_id,
+                                str(exc),
+                            )
+                            ok = False
+                    if ok:
+                        worker_sent_count += 1
+                    else:
+                        worker_im_failed_count += 1
+                finally:
+                    queue.task_done()
+            return worker_sent_count, worker_im_failed_count
+
+        try:
+            tasks = [asyncio.create_task(send_worker()) for _ in range(concurrency)]
+            for worker_sent_count, worker_im_failed_count in await asyncio.gather(*tasks):
+                sent_count += worker_sent_count
+                im_failed_count += worker_im_failed_count
+        finally:
+            if tim_client is not None:
+                await tim_client.aclose()
 
     logger.info(
         "flirt greet background send finished: sender_id={}, target_count={}, sent_count={}, text_dnd_failed_count={}, interaction_limit_failed_count={}, im_failed_count={}",

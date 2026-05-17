@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import calendar
 from datetime import datetime, time, timedelta
 from enum import Enum
@@ -9,7 +10,7 @@ from tortoise.exceptions import IntegrityError
 from tortoise.expressions import Q
 from tortoise.transactions import in_transaction
 
-from app.core.time_utils import now_local_naive
+from app.core.time_utils import now_local_naive, to_local_naive_for_db
 from app.models import AppUser, SystemPopup, SystemPopupReceipt, SystemPopupTask
 from app.websocket.events import push_system_popup
 from app.websocket.presence import filter_online_user_ids
@@ -20,6 +21,11 @@ TASK_STATUSES = {"draft", "scheduled", "running", "paused", "completed", "cancel
 TARGET_MODES = {"all", "user_ids", "filter"}
 REPEAT_TYPES = {"daily", "weekly", "monthly"}
 TARGET_FILTER_KEYS = {"gender", "is_certified_user"}
+ONLINE_POPUP_TARGET_LIMIT = 5000
+POPUP_RECEIPT_BULK_BATCH_SIZE = 1000
+POPUP_PUSH_CONCURRENCY = 20
+STARTUP_POPUP_TASK_SCAN_LIMIT = 5
+STARTUP_POPUP_RETURN_LIMIT = 3
 
 
 class PopupValidationError(ValueError):
@@ -30,6 +36,12 @@ def format_popup_datetime(value: datetime | None) -> str | None:
     if value is None:
         return None
     return value.isoformat(timespec="seconds")
+
+
+def _normalize_schedule_datetime(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    return to_local_naive_for_db(value)
 
 
 def _scalar_value(value: Any, default: str = "") -> str:
@@ -309,16 +321,16 @@ def _initial_task_status(data: dict[str, Any]) -> str:
 
 
 def _initial_next_run_at(data: dict[str, Any], now: datetime | None = None) -> datetime | None:
-    now = now or now_local_naive()
+    now = _normalize_schedule_datetime(now) or now_local_naive()
     send_mode = data.get("send_mode")
     if data.get("status") == "draft":
         return None
     if send_mode == "immediate":
         return now
     if send_mode == "once":
-        return data.get("publish_at")
+        return _normalize_schedule_datetime(data.get("publish_at"))
     if send_mode == "repeat":
-        start = data.get("start_at") or now
+        start = _normalize_schedule_datetime(data.get("start_at")) or now
         after = start - timedelta(seconds=1)
         next_run_at = calculate_next_run_at(
             repeat_type=data["repeat_type"],
@@ -345,7 +357,8 @@ async def create_popup_task(data: dict[str, Any], *, created_by: int | None = No
     payload["status"] = _initial_task_status(payload)
     payload["next_run_at"] = _initial_next_run_at(payload)
     task = await SystemPopupTask.create(**payload)
-    if task.next_run_at and task.next_run_at <= now_local_naive():
+    next_run_at = _normalize_schedule_datetime(task.next_run_at)
+    if next_run_at and next_run_at <= now_local_naive():
         await publish_due_popup_task(task)
     return task
 
@@ -376,7 +389,8 @@ async def activate_popup_task(task: SystemPopupTask) -> SystemPopupTask:
     task.status = _initial_task_status(payload)
     task.next_run_at = _initial_next_run_at(payload)
     await task.save()
-    if task.next_run_at and task.next_run_at <= now_local_naive():
+    next_run_at = _normalize_schedule_datetime(task.next_run_at)
+    if next_run_at and next_run_at <= now_local_naive():
         await publish_due_popup_task(task)
     return task
 
@@ -395,7 +409,12 @@ async def recalculate_popup_task_next_run_at(task: SystemPopupTask) -> SystemPop
 
 
 async def publish_popup_task_once(task: SystemPopupTask, *, scheduled_run_at: datetime | None = None) -> SystemPopup:
-    scheduled = scheduled_run_at or task.next_run_at or task.publish_at or now_local_naive()
+    scheduled = (
+        _normalize_schedule_datetime(scheduled_run_at)
+        or _normalize_schedule_datetime(task.next_run_at)
+        or _normalize_schedule_datetime(task.publish_at)
+        or now_local_naive()
+    )
     existing = await SystemPopup.filter(task_id=task.id, scheduled_run_at=scheduled).first()
     if existing:
         return existing
@@ -405,6 +424,8 @@ async def publish_popup_task_once(task: SystemPopupTask, *, scheduled_run_at: da
         target_user_ids=task.target_user_ids or [],
         target_filters=task.target_filters or None,
     )
+    if len(online_target_user_ids) > ONLINE_POPUP_TARGET_LIMIT:
+        raise PopupValidationError(f"在线目标人数超过上限（最多{ONLINE_POPUP_TARGET_LIMIT}人）")
     published_at = now_local_naive()
     async with in_transaction():
         try:
@@ -429,14 +450,24 @@ async def publish_popup_task_once(task: SystemPopupTask, *, scheduled_run_at: da
             for user_id in online_target_user_ids
         ]
         if receipts:
-            await SystemPopupReceipt.bulk_create(receipts, ignore_conflicts=True)
+            for index in range(0, len(receipts), POPUP_RECEIPT_BULK_BATCH_SIZE):
+                await SystemPopupReceipt.bulk_create(
+                    receipts[index : index + POPUP_RECEIPT_BULK_BATCH_SIZE],
+                    ignore_conflicts=True,
+                )
 
     data = _dump_app_popup(popup)
-    for user_id in online_target_user_ids:
-        try:
-            await push_system_popup(user_id=user_id, popup=data)
-        except Exception:
-            continue
+
+    semaphore = asyncio.Semaphore(POPUP_PUSH_CONCURRENCY)
+
+    async def _push_one(user_id: int) -> None:
+        async with semaphore:
+            try:
+                await push_system_popup(user_id=user_id, popup=data)
+            except Exception:
+                return
+
+    await asyncio.gather(*(_push_one(user_id) for user_id in online_target_user_ids))
     return popup
 
 
@@ -462,10 +493,16 @@ async def fetch_startup_popups_for_user(*, user_id: int, launch_id: str) -> list
     if not launch_id:
         raise PopupValidationError("启动标识不能为空")
 
-    tasks = await SystemPopupTask.filter(send_mode="app_start", status="running").order_by("-created_at", "-id")
+    tasks = (
+        await SystemPopupTask.filter(send_mode="app_start", status="running")
+        .order_by("-created_at", "-id")
+        .limit(STARTUP_POPUP_TASK_SCAN_LIMIT)
+    )
     popups: list[dict[str, Any]] = []
     published_at = now_local_naive()
     for task in tasks:
+        if len(popups) >= STARTUP_POPUP_RETURN_LIMIT:
+            break
         if not await is_user_targeted_by_popup_task(
             user_id=user_id,
             target_mode=task.target_mode,
@@ -512,20 +549,22 @@ async def fetch_startup_popups_for_user(*, user_id: int, launch_id: str) -> list
 def _should_complete_repeat(task: SystemPopupTask, now: datetime) -> bool:
     if task.max_runs is not None and int(task.run_count or 0) >= int(task.max_runs):
         return True
-    if task.end_at is not None and now >= task.end_at:
+    end_at = _normalize_schedule_datetime(task.end_at)
+    if end_at is not None and now >= end_at:
         return True
     return False
 
 
 async def publish_due_popup_task(task: SystemPopupTask, *, now: datetime | None = None) -> None:
-    now = now or now_local_naive()
+    now = _normalize_schedule_datetime(now) or now_local_naive()
+    next_run_at = _normalize_schedule_datetime(task.next_run_at)
     if task.send_mode == "app_start":
         return
     if task.status not in {"scheduled", "running"}:
         return
-    if task.next_run_at is None or task.next_run_at > now:
+    if next_run_at is None or next_run_at > now:
         return
-    scheduled = task.next_run_at
+    scheduled = next_run_at
     await publish_popup_task_once(task, scheduled_run_at=scheduled)
     task.run_count = int(task.run_count or 0) + 1
     task.last_run_at = scheduled
@@ -543,7 +582,8 @@ async def publish_due_popup_task(task: SystemPopupTask, *, now: datetime | None 
             repeat_weekday=task.repeat_weekday,
             repeat_month_day=task.repeat_month_day,
         )
-        if task.end_at is not None and next_run > task.end_at:
+        end_at = _normalize_schedule_datetime(task.end_at)
+        if end_at is not None and next_run > end_at:
             task.status = "completed"
             task.next_run_at = None
         else:
@@ -552,7 +592,7 @@ async def publish_due_popup_task(task: SystemPopupTask, *, now: datetime | None 
 
 
 async def publish_due_popups(*, now: datetime | None = None, limit: int = 100) -> int:
-    now = now or now_local_naive()
+    now = _normalize_schedule_datetime(now) or now_local_naive()
     tasks = (
         await SystemPopupTask.filter(
             status__in=["scheduled", "running"], next_run_at__not_isnull=True, next_run_at__lte=now

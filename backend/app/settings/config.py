@@ -72,6 +72,10 @@ class Settings(BaseSettings):
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
     REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
     REDIS_PASSWORD: typing.Optional[str] = os.getenv("REDIS_PASSWORD") or None
+    REDIS_SOCKET_CONNECT_TIMEOUT: float = float(os.getenv("REDIS_SOCKET_CONNECT_TIMEOUT", "2"))
+    REDIS_SOCKET_TIMEOUT: float = float(os.getenv("REDIS_SOCKET_TIMEOUT", "2"))
+    REDIS_HEALTH_CHECK_INTERVAL: int = int(os.getenv("REDIS_HEALTH_CHECK_INTERVAL", "30"))
+    REDIS_MAX_CONNECTIONS: int = int(os.getenv("REDIS_MAX_CONNECTIONS", "100"))
 
     # 可信代理 IP 列表（逗号分隔），仅当请求来自这些 IP 时才读取 X-Forwarded-For 头
     # 生产环境建议在内网入口处（Nginx/网关）配置，不填写则完全信任 X-Forwarded-For（有安全风险）

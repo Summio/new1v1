@@ -158,12 +158,14 @@ class TestPubsubLoopRouting:
         manager = ConnectionManager()
         mock_redis = AsyncMock()
         mock_redis.sadd = AsyncMock()
+        mock_redis.setex = AsyncMock()
         mock_redis.set = AsyncMock()
         mock_redis.srem = AsyncMock()
         mock_redis.delete = AsyncMock()
 
         ws_old = AsyncMock()
         ws_old.send_json = AsyncMock()
+        ws_old.close = AsyncMock()
         ws_new = AsyncMock()
         ws_new.send_json = AsyncMock()
 
@@ -178,6 +180,7 @@ class TestPubsubLoopRouting:
         assert sent is True
         ws_new.send_json.assert_called_once_with({"type": "event", "event": "call_incoming", "data": {}})
         ws_old.send_json.assert_not_called()
+        ws_old.close.assert_awaited_once_with(code=4000)
 
     @pytest.mark.asyncio
     async def test_cross_worker_stale_disconnect_should_not_mark_user_offline(self):
@@ -193,6 +196,10 @@ class TestPubsubLoopRouting:
             async def sadd(self, key: str, value: int):
                 self._sets.setdefault(key, set()).add(int(value))
                 return 1
+
+            async def setex(self, key: str, _ttl: int, value: str):
+                self._strings[key] = str(value)
+                return True
 
             async def srem(self, key: str, value: int):
                 self._sets.setdefault(key, set()).discard(int(value))
@@ -265,6 +272,148 @@ class TestPubsubLoopRouting:
         mock_broadcast.assert_awaited_once_with(manager=manager, user_id=100, online=False)
 
 
+class TestOnlineLease:
+    """测试在线租约，避免异常退出后 Redis 在线状态长期残留。"""
+
+    @pytest.mark.asyncio
+    async def test_connect_writes_online_lease_and_disconnect_deletes_it(self):
+        from app.websocket import manager as manager_module
+        from app.websocket.manager import ConnectionManager
+
+        class _FakeRedis:
+            def __init__(self):
+                self.setex_calls: list[tuple[str, int, str]] = []
+                self.deleted_keys: list[str] = []
+
+            async def sadd(self, *_args):
+                return 1
+
+            async def setex(self, key: str, ttl: int, value: str):
+                self.setex_calls.append((key, ttl, value))
+                return True
+
+            async def set(self, *_args):
+                return True
+
+            async def get(self, _key: str):
+                return "101"
+
+            async def srem(self, *_args):
+                return 1
+
+            async def delete(self, *keys):
+                self.deleted_keys.extend(keys)
+                return len(keys)
+
+            async def zadd(self, *_args, **_kwargs):
+                return 1
+
+            async def zrem(self, *_args):
+                return 1
+
+        fake_redis = _FakeRedis()
+        manager = ConnectionManager()
+        manager._pid = 101
+        ws = AsyncMock()
+
+        with patch("app.websocket.manager.get_redis", return_value=fake_redis):
+            with patch("app.websocket.presence.get_redis", return_value=fake_redis):
+                await manager.connect(100, ws)
+                await manager.disconnect(100, websocket=ws)
+
+        lease_key = manager_module._online_lease_key(100)
+        assert (lease_key, manager_module._ONLINE_LEASE_TTL_SECONDS, "1") in fake_redis.setex_calls
+        assert lease_key in fake_redis.deleted_keys
+
+    @pytest.mark.asyncio
+    async def test_refresh_online_lease_only_refreshes_current_connection(self):
+        from app.websocket import manager as manager_module
+        from app.websocket.manager import ConnectionManager
+
+        class _FakeRedis:
+            def __init__(self):
+                self.setex_calls: list[tuple[str, int, str]] = []
+
+            async def setex(self, key: str, ttl: int, value: str):
+                self.setex_calls.append((key, ttl, value))
+                return True
+
+        fake_redis = _FakeRedis()
+        manager = ConnectionManager()
+        ws_current = AsyncMock()
+        ws_stale = AsyncMock()
+        async with manager._lock:
+            manager._ws_conns[100] = ws_current
+
+        with patch("app.websocket.manager.get_redis", return_value=fake_redis):
+            await manager.refresh_online_lease(100, websocket=ws_stale)
+            await manager.refresh_online_lease(100, websocket=ws_current)
+
+        assert fake_redis.setex_calls == [
+            (
+                manager_module._online_lease_key(100),
+                manager_module._ONLINE_LEASE_TTL_SECONDS,
+                "1",
+            )
+        ]
+
+    @pytest.mark.asyncio
+    async def test_presence_filters_stale_online_set_members_without_lease(self):
+        from app.websocket import presence
+
+        class _FakeRedis:
+            def __init__(self):
+                self.srem_calls: list[tuple] = []
+                self.zrem_calls: list[tuple] = []
+
+            async def smembers(self, _key: str):
+                return {b"100", b"200"}
+
+            async def mget(self, keys):
+                if all(key.startswith("ws:online_lease:") for key in keys):
+                    return ["1" if key.endswith(":100") else None for key in keys]
+                if all(key.startswith("ws:manual_offline:") for key in keys):
+                    return [None for _ in keys]
+                return [None for _ in keys]
+
+            async def srem(self, *args):
+                self.srem_calls.append(args)
+                return 1
+
+            async def zrem(self, *args):
+                self.zrem_calls.append(args)
+                return 1
+
+        fake_redis = _FakeRedis()
+        with patch("app.websocket.presence.get_redis", return_value=fake_redis):
+            online_ids = await presence.get_online_user_ids()
+
+        assert online_ids == {100}
+        assert ("ws:online", 200) in fake_redis.srem_calls
+
+    @pytest.mark.asyncio
+    async def test_presence_filter_degrades_to_offline_when_redis_times_out(self):
+        from redis.exceptions import TimeoutError
+
+        from app.websocket import presence
+
+        class _FailingPipeline:
+            def sismember(self, *_args):
+                return self
+
+            async def execute(self):
+                raise TimeoutError("Timeout connecting to server")
+
+        class _FailingRedis:
+            def pipeline(self):
+                return _FailingPipeline()
+
+        with patch("app.websocket.presence.get_redis", return_value=_FailingRedis()):
+            online_ids = await presence.filter_online_user_ids([100, 200])
+
+        assert online_ids == set()
+
+
 class TestCriticalEventMarkers:
     """测试关键事件集合标记"""
 
@@ -291,6 +440,81 @@ class TestCriticalEventMarkers:
 
         manager = ConnectionManager()
         assert "balance_updated" in manager._CRITICAL_EVENTS
+
+
+@pytest.mark.asyncio
+async def test_pubsub_loop_closes_pubsub_before_retrying_after_listen_error():
+    """Pub/Sub 监听异常后，重试前必须释放旧订阅连接。"""
+    from redis.exceptions import TimeoutError
+
+    from app.websocket.manager import ConnectionManager
+
+    manager = ConnectionManager()
+    manager._pubsub_running = True
+
+    class FakePubSub:
+        def __init__(self) -> None:
+            self.unsubscribe = AsyncMock()
+            self.close = AsyncMock()
+
+        async def subscribe(self, _channel: str) -> None:
+            return None
+
+        async def listen(self):
+            raise TimeoutError("Timeout reading from 127.0.0.1:6379")
+            yield
+
+    fake_pubsub = FakePubSub()
+    fake_redis = MagicMock()
+    fake_redis.pubsub.return_value = fake_pubsub
+
+    async def fake_sleep(_delay: float) -> None:
+        fake_pubsub.unsubscribe.assert_awaited_once()
+        fake_pubsub.close.assert_awaited_once()
+        raise asyncio.CancelledError
+
+    with patch("app.websocket.manager._get_pubsub_redis", AsyncMock(return_value=fake_redis)):
+        with patch("app.websocket.manager.asyncio.sleep", side_effect=fake_sleep):
+            with pytest.raises(asyncio.CancelledError):
+                await manager._pubsub_loop()
+
+
+@pytest.mark.asyncio
+async def test_pubsub_loop_uses_dedicated_redis_client():
+    """Pub/Sub 监听不应复用普通业务 Redis client。"""
+    from app.websocket.manager import ConnectionManager
+
+    manager = ConnectionManager()
+    manager._pubsub_running = True
+
+    class FakePubSub:
+        def __init__(self) -> None:
+            self.unsubscribe = AsyncMock()
+            self.close = AsyncMock()
+
+        async def subscribe(self, _channel: str) -> None:
+            return None
+
+        async def listen(self):
+            raise asyncio.CancelledError
+            yield
+
+    fake_redis = MagicMock()
+    fake_redis.pubsub.return_value = FakePubSub()
+    dedicated_getter = AsyncMock(return_value=fake_redis)
+
+    async def fake_sleep(_delay: float) -> None:
+        raise asyncio.CancelledError
+
+    with patch("app.websocket.manager._get_pubsub_redis", dedicated_getter, create=True):
+        with patch("app.websocket.manager.get_redis", side_effect=AssertionError("shared Redis client should not be used")):
+            with patch("app.websocket.manager.asyncio.sleep", side_effect=fake_sleep):
+                try:
+                    await manager._pubsub_loop()
+                except asyncio.CancelledError:
+                    pass
+
+    dedicated_getter.assert_awaited_once()
 
 
 class TestPubsubLifecycle:

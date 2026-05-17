@@ -1,5 +1,6 @@
 import asyncio
-from datetime import datetime, timedelta
+import time
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends
 from tortoise.expressions import F, Q
@@ -910,7 +911,7 @@ async def _ws_push_call_ended_to_peer(
                 "caller_id": caller_id,
                 "callee_id": callee_id,
                 "end_reason": end_reason,
-                "ts": int(datetime.now().timestamp()),
+                "ts": int(time.time()),
             },
             critical=True,
         )

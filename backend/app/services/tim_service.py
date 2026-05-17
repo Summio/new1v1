@@ -175,6 +175,7 @@ class TIMService:
         from_account: str,
         to_account: str,
         text: str,
+        http_client=None,
     ) -> bool:
         try:
             import httpx
@@ -209,8 +210,11 @@ class TIMService:
 
         for attempt in range(_MAX_RETRIES):
             try:
-                async with httpx.AsyncClient(timeout=8.0) as client:
-                    resp = await client.post(url, json=payload)
+                if http_client is not None:
+                    resp = await http_client.post(url, json=payload)
+                else:
+                    async with httpx.AsyncClient(timeout=8.0) as client:
+                        resp = await client.post(url, json=payload)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("tim text send failed (attempt {}/{}): {}", attempt + 1, _MAX_RETRIES, str(exc))
                 if attempt < _MAX_RETRIES - 1:
@@ -258,6 +262,7 @@ class TIMService:
         sender_id: int,
         receiver_id: int,
         text: str,
+        http_client=None,
     ) -> bool:
         content = (text or "").strip()
         if not content:
@@ -288,6 +293,7 @@ class TIMService:
             from_account=self._to_im_account(sender_id),
             to_account=self._to_im_account(receiver_id),
             text=content,
+            http_client=http_client,
         )
 
     async def send_gift_notification(
@@ -415,10 +421,11 @@ async def send_gift_notification(
     )
 
 
-async def send_text_message(sender_id: int, receiver_id: int, text: str) -> bool:
+async def send_text_message(sender_id: int, receiver_id: int, text: str, http_client=None) -> bool:
     """发送普通 C2C 文本消息。"""
     return await get_tim_service().send_text_message(
         sender_id=sender_id,
         receiver_id=receiver_id,
         text=text,
+        http_client=http_client,
     )

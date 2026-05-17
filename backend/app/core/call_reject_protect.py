@@ -1,7 +1,7 @@
 import math
-from datetime import datetime, timezone
+from datetime import datetime
 
-from app.core.time_utils import to_utc_aware
+from app.core.time_utils import now_utc, to_utc_aware
 
 
 def calc_left_seconds(
@@ -13,7 +13,7 @@ def calc_left_seconds(
     if event_time is None or protect_seconds <= 0:
         return 0
 
-    current = to_utc_aware(now) if now is not None else datetime.now(timezone.utc)
+    current = to_utc_aware(now) if now is not None else now_utc()
     elapsed = (current - to_utc_aware(event_time)).total_seconds()
     left = protect_seconds - elapsed
     return max(0, math.ceil(left))

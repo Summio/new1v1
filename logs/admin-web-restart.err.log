@@ -1,0 +1,9 @@
+
+ ERROR  (node:22508) [DEP0060] DeprecationWarning: The util._extend API is deprecated. Please use Object.assign() instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+
+
+ ERROR  [2m12:14:35[22m [31m[1m[vite][22m[39m [31mhttp proxy error at /api/v1/base/usermenu:[39m
+Error: connect ECONNREFUSED 127.0.0.1:9999
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1645:16)
+

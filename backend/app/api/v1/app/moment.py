@@ -20,6 +20,7 @@ from app.services.review_entry_guard_service import (
     MOMENT_REVIEW_PENDING_MESSAGE,
     has_pending_moment_review,
 )
+from app.services.recommended_user_cache import get_recommended_user_ids
 from app.services.user_block_service import exclude_blocked_user_ids
 from app.settings.config import settings
 from app.utils.media_url import to_relative_media_url
@@ -310,10 +311,8 @@ async def get_moment_feed(
         following_ids = await UserFollow.filter(follower_id=app_user.id).values_list("following_id", flat=True)
         q &= Q(user_id__in=list(following_ids))
     elif category_value == "recommend":
-        recommended_user_ids = await AppUser.filter(is_recommended=True).values_list("id", flat=True)
-        q &= Q(recommend_override=True) | (
-            Q(recommend_override__isnull=True) & Q(user_id__in=list(recommended_user_ids))
-        )
+        recommended_user_ids = await get_recommended_user_ids()
+        q &= Q(recommend_override=True) | (Q(recommend_override__isnull=True) & Q(user_id__in=recommended_user_ids))
 
     blocked_user_ids = await exclude_blocked_user_ids(int(app_user.id))
     query = Moment.filter(q)

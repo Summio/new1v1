@@ -1,9 +1,8 @@
-from datetime import datetime
-
 from fastapi import APIRouter, Query
 from tortoise.expressions import Q
 
 from app.core.ctx import CTX_USER_ID
+from app.core.time_utils import now_local_naive
 from app.models import AppUser, Moment, MomentMedia
 from app.schemas.moments import MomentReviewIn
 from app.schemas.base import Fail, Success, SuccessExtra
@@ -192,7 +191,7 @@ async def review_moment(req_in: MomentReviewIn):
 
     await Moment.filter(id=req_in.id).update(
         review_status=normalized_status,
-        reviewed_at=datetime.now(),
+        reviewed_at=now_local_naive(),
         reviewed_by=int(CTX_USER_ID.get() or 0) or None,
         review_remark=review_remark or None,
     )
@@ -214,7 +213,7 @@ async def pin_moment(moment_id: int = Query(..., ge=1, alias="id", description="
     moment = await Moment.filter(id=moment_id).first()
     if not moment:
         return _moment_missing()
-    await Moment.filter(id=moment_id).update(is_pinned=True, pinned_at=datetime.now())
+    await Moment.filter(id=moment_id).update(is_pinned=True, pinned_at=now_local_naive())
     return Success(msg="置顶成功")
 
 

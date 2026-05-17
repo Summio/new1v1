@@ -122,6 +122,8 @@ async def ws_app(websocket: WebSocket) -> None:
             if msg is None:
                 continue
 
+            await manager.refresh_online_lease(user_id, websocket=websocket)
+
             msg_type = msg.get("type", "")
 
             if msg_type == "ping":

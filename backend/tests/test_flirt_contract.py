@@ -1,8 +1,10 @@
+import asyncio
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
+from app.api.v1.app import flirt
 from app.schemas.system import FlirtConfigIn
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -116,16 +118,69 @@ def test_app_flirt_greet_api_contract() -> None:
     assert "await release_greet_quota" in route_body
 
 
-def test_flirt_greet_background_send_uses_serial_tim_sends() -> None:
+def test_flirt_greet_has_target_cap_and_bounded_background_concurrency() -> None:
     api_text = FLIRT_API.read_text(encoding="utf-8")
     task_body = api_text.split("async def _run_flirt_greet_send_task", 1)[1]
 
-    assert "for target_id in target_user_ids" in task_body
-    assert "await send_text_message(sender_id, target_id, content)" in task_body
+    assert "FLIRT_GREET_TARGET_LIMIT = 100" in api_text
+    assert "FLIRT_GREET_SEND_CONCURRENCY = 10" in api_text
+    assert "limit=FLIRT_GREET_TARGET_LIMIT" in api_text
+    assert ".limit(limit)" in api_text
+    assert "asyncio.Semaphore(FLIRT_GREET_SEND_CONCURRENCY)" in task_body
+    assert "asyncio.create_task" in task_body
     assert "interaction_limit_failed_count" in task_body
-    assert "FLIRT_GREET_SEND_CONCURRENCY" not in api_text
-    assert "asyncio.Semaphore" not in task_body
-    assert "asyncio.gather" not in task_body
+
+
+@pytest.mark.asyncio
+async def test_flirt_greet_background_send_limits_concurrency(monkeypatch: pytest.MonkeyPatch) -> None:
+    active = 0
+    max_active = 0
+    sent_to: list[int] = []
+
+    async def fake_send_text_message(sender_id: int, receiver_id: int, text: str, **kwargs) -> bool:
+        nonlocal active, max_active
+        active += 1
+        max_active = max(max_active, active)
+        await asyncio.sleep(0.01)
+        sent_to.append(receiver_id)
+        active -= 1
+        return True
+
+    monkeypatch.setattr(flirt, "send_text_message", fake_send_text_message)
+
+    await flirt._run_flirt_greet_send_task(
+        sender_id=100001,
+        target_user_ids=list(range(1, 26)),
+        text_dnd_user_ids=[101],
+        interaction_limit_failed_user_ids=[102],
+        content="你好",
+    )
+
+    assert sorted(sent_to) == list(range(1, 26))
+    assert max_active == flirt.FLIRT_GREET_SEND_CONCURRENCY
+
+
+@pytest.mark.asyncio
+async def test_flirt_greet_background_send_isolates_single_im_exception(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent_to: list[int] = []
+
+    async def fake_send_text_message(sender_id: int, receiver_id: int, text: str, **kwargs) -> bool:
+        if receiver_id == 3:
+            raise RuntimeError("tim down")
+        sent_to.append(receiver_id)
+        return True
+
+    monkeypatch.setattr(flirt, "send_text_message", fake_send_text_message)
+
+    await flirt._run_flirt_greet_send_task(
+        sender_id=100001,
+        target_user_ids=[1, 2, 3, 4, 5],
+        text_dnd_user_ids=[],
+        interaction_limit_failed_user_ids=[],
+        content="你好",
+    )
+
+    assert sorted(sent_to) == [1, 2, 4, 5]
 
 
 def test_flirt_list_uses_bounded_candidate_scan_not_full_table_sort() -> None:

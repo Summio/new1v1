@@ -5,6 +5,7 @@ Redis Pub/Sub 版：支持多 worker 部署，每个 worker 维护自己的连�
 
 Redis 键：
   ws:online                  - SET，所有在线用户 ID（WS 连接时 sadd，断开时 srem）
+  ws:online_lease:{user_id}  - STRING，在线租约（连接时 setex，收到消息刷新，进程异常退出后自动过期）
   ws:online_since            - ZSET，用户上线时间戳（用于首页活跃排序）
   ws:user:{user_id}:pid     - STRING，用户所在进程 PID（连接时设，断开时删）
   ws:pid:{pid}:users        - SET，该进程所有连接用户（连接时增，断开时删）
@@ -23,14 +24,17 @@ import os
 from typing import Any
 
 from loguru import logger
+import redis.asyncio as redis_async
 from redis.exceptions import ResponseError
 
 from app.core.redis import get_redis
+from app.settings.config import settings
 
 # ===== Redis Key Builders =====
 
 _WS_ONLINE_KEY = "ws:online"
 _WS_BROADCAST_CHANNEL = "ws:broadcast"
+_ONLINE_LEASE_TTL_SECONDS = 120
 _WATCHDOG_LEADER_KEY = "watchdog:leader"
 _WATCHDOG_LEADER_TTL = 60  # 秒，leader 续期间隔
 _WATCHDOG_REFRESH_LEADER_SCRIPT = """
@@ -50,6 +54,10 @@ def _pid_users_key(pid: int) -> str:
     return f"ws:pid:{pid}:users"
 
 
+def _online_lease_key(user_id: int) -> str:
+    return f"ws:online_lease:{int(user_id)}"
+
+
 # ===== Connection Manager =====
 
 _connected: dict[int, Any] = {}  # user_id -> WebSocket（模块级，本 worker 内存）
@@ -58,6 +66,32 @@ _pubsub_started = False
 _pubsub_started_lock = asyncio.Lock()
 _pubsub_task: asyncio.Task | None = None
 _redis_client_for_pubsub: Any = None  # 独立 Redis 连接用于 pub/sub
+
+
+async def _get_pubsub_redis() -> redis_async.Redis:
+    """获取 Pub/Sub 专用 Redis client，避免长连接占用业务连接池。"""
+    global _redis_client_for_pubsub
+    if _redis_client_for_pubsub is None:
+        connection_pool = redis_async.ConnectionPool(
+            host=settings.REDIS_HOST,
+            port=settings.REDIS_PORT,
+            db=settings.REDIS_DB,
+            password=settings.REDIS_PASSWORD or None,
+            decode_responses=True,
+            socket_connect_timeout=settings.REDIS_SOCKET_CONNECT_TIMEOUT,
+            socket_timeout=None,
+            health_check_interval=settings.REDIS_HEALTH_CHECK_INTERVAL,
+            max_connections=2,
+        )
+        _redis_client_for_pubsub = redis_async.Redis(connection_pool=connection_pool)
+    return _redis_client_for_pubsub
+
+
+async def _close_pubsub_redis() -> None:
+    global _redis_client_for_pubsub
+    if _redis_client_for_pubsub is not None:
+        await _redis_client_for_pubsub.close()
+        _redis_client_for_pubsub = None
 
 
 class ConnectionManager:
@@ -79,8 +113,13 @@ class ConnectionManager:
 
     async def connect(self, user_id: int, websocket: Any) -> None:
         """将用户 WebSocket 连接注册到本实例。"""
+        old_websocket: Any | None = None
         async with self._lock:
+            old_websocket = self._ws_conns.get(user_id)
             self._ws_conns[user_id] = websocket
+
+        if old_websocket is not None and old_websocket is not websocket:
+            await self._close_stale_websocket(user_id=user_id, websocket=old_websocket)
 
         # 更新 Redis 在线状态
         try:
@@ -88,6 +127,7 @@ class ConnectionManager:
 
             redis = await get_redis()
             await redis.sadd(_WS_ONLINE_KEY, user_id)
+            await redis.setex(_online_lease_key(user_id), _ONLINE_LEASE_TTL_SECONDS, "1")
             await redis.set(_user_pid_key(user_id), self._pid)
             await redis.sadd(_pid_users_key(self._pid), user_id)
             is_certified_user = False
@@ -110,6 +150,18 @@ class ConnectionManager:
             await broadcast_presence(manager=self, user_id=user_id, online=True)
         except Exception as e:
             logger.warning(f"[WS] presence broadcast on connect failed: {e}")
+
+    async def refresh_online_lease(self, user_id: int, websocket: Any | None = None) -> None:
+        """刷新当前活跃连接的在线租约。"""
+        async with self._lock:
+            current_ws = self._ws_conns.get(user_id)
+            if current_ws is None or (websocket is not None and current_ws is not websocket):
+                return
+        try:
+            redis = await get_redis()
+            await redis.setex(_online_lease_key(user_id), _ONLINE_LEASE_TTL_SECONDS, "1")
+        except Exception as e:
+            logger.warning(f"[WS] refresh online lease failed for user {user_id}: {e}")
 
     async def disconnect(self, user_id: int, websocket: Any | None = None) -> None:
         """将用户 WebSocket 连接从本实例移除。"""
@@ -149,6 +201,7 @@ class ConnectionManager:
 
                 await redis.srem(_WS_ONLINE_KEY, user_id)
                 await redis.delete(_user_pid_key(user_id))
+                await redis.delete(_online_lease_key(user_id))
                 await clear_online_since(user_id)
                 removed_global_online = True
             else:
@@ -170,6 +223,13 @@ class ConnectionManager:
                 await broadcast_presence(manager=self, user_id=user_id, online=False)
             except Exception as e:
                 logger.warning(f"[WS] presence broadcast on disconnect failed: {e}")
+
+    async def _close_stale_websocket(self, *, user_id: int, websocket: Any) -> None:
+        try:
+            await websocket.close(code=4000)
+            logger.info(f"[WS] closed stale websocket for user {user_id} on pid {self._pid}")
+        except Exception as e:
+            logger.debug(f"[WS] close stale websocket failed for user {user_id}: {e}")
 
     async def _send_ws(self, user_id: int, payload: dict) -> bool:
         """向本实例的 WebSocket 发送消息，不存在则静默忽略。"""
@@ -274,16 +334,18 @@ class ConnectionManager:
     async def _pubsub_loop(self) -> None:
         """Pub/Sub 监听循环，支持断线重连。"""
         delay = 1.0
-        while True:
+        while self._pubsub_running:
+            pubsub: Any = None
             try:
-                # 使用独立 Redis 连接订阅（不影响主 Redis 连接池）
-                redis = await get_redis()
-                self._pubsub = redis.pubsub()
-                await self._pubsub.subscribe(_WS_BROADCAST_CHANNEL)
+                # Pub/Sub 会长期占用连接；每轮异常后必须显式释放订阅对象。
+                redis_client = await _get_pubsub_redis()
+                pubsub = redis_client.pubsub()
+                self._pubsub = pubsub
+                await pubsub.subscribe(_WS_BROADCAST_CHANNEL)
                 delay = 1.0  # 重连成功后重置延迟
                 logger.info(f"[WS] pubsub subscribed to {_WS_BROADCAST_CHANNEL}")
 
-                async for raw in self._pubsub.listen():
+                async for raw in pubsub.listen():
                     if not self._pubsub_running:
                         break
                     if raw.get("type") != "message":
@@ -306,17 +368,26 @@ class ConnectionManager:
                 break
             except Exception as e:
                 logger.warning(f"[WS] pubsub loop error: {e}, retry in {delay}s")
+                if pubsub is not None:
+                    try:
+                        await pubsub.unsubscribe(_WS_BROADCAST_CHANNEL)
+                        await pubsub.close()
+                    except Exception:
+                        pass
+                    if self._pubsub is pubsub:
+                        self._pubsub = None
+                    pubsub = None
                 await asyncio.sleep(delay)
                 delay = min(delay * 2, 30)
-
-        # 清理
-        if self._pubsub:
-            try:
-                await self._pubsub.unsubscribe(_WS_BROADCAST_CHANNEL)
-                await self._pubsub.close()
-            except Exception:
-                pass
-            self._pubsub = None
+            finally:
+                if pubsub is not None:
+                    try:
+                        await pubsub.unsubscribe(_WS_BROADCAST_CHANNEL)
+                        await pubsub.close()
+                    except Exception:
+                        pass
+                    if self._pubsub is pubsub:
+                        self._pubsub = None
 
     async def stop_pubsub(self) -> None:
         """停止 Pub/Sub 监听（进程退出时调用）。"""
@@ -332,6 +403,7 @@ class ConnectionManager:
             self._pubsub_task = None
         _pubsub_task = None
         _pubsub_started = False
+        await _close_pubsub_redis()
 
 
 # ===== 全局单例 =====

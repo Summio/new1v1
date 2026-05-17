@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/storage/storage.dart';
 import 'core/network/dio_client.dart';
+import 'core/device/screen_awake_service.dart';
 import 'app/theme/app_theme.dart';
 import 'app/routes/app_router.dart';
 import 'services/teen_mode_service.dart';
@@ -30,6 +33,9 @@ void main() async {
 
   // 初始化 Dio
   DioClient.instance.init();
+
+  // App 前台全局保持屏幕常亮，避免通话、来电等待等场景自动锁屏
+  await ScreenAwakeService.instance.enableGlobal();
 
   runApp(
     const ProviderScope(
@@ -59,11 +65,50 @@ class HuanxiApp extends StatelessWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       builder: (context, child) {
-        return HeroMode(
-          enabled: false,
-          child: child ?? const SizedBox.shrink(),
+        return _AppKeepAwake(
+          child: HeroMode(
+            enabled: false,
+            child: child ?? const SizedBox.shrink(),
+          ),
         );
       },
     );
+  }
+}
+
+class _AppKeepAwake extends StatefulWidget {
+  const _AppKeepAwake({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_AppKeepAwake> createState() => _AppKeepAwakeState();
+}
+
+class _AppKeepAwakeState extends State<_AppKeepAwake>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    unawaited(ScreenAwakeService.instance.reapplyIfNeeded());
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(ScreenAwakeService.instance.reapplyIfNeeded());
+    }
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.child;
   }
 }

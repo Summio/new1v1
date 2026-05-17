@@ -504,9 +504,7 @@ class _MainShellState extends ConsumerState<MainShell>
         builder: (dialogContext) {
           return AlertDialog(
             title: Text(popup.title),
-            content: SingleChildScrollView(
-              child: Text(popup.content),
-            ),
+            content: SingleChildScrollView(child: Text(popup.content)),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(dialogContext).pop(true),
@@ -541,6 +539,13 @@ class _MainShellState extends ConsumerState<MainShell>
       debugPrint('mainShell.getCurrentIndex error: $e');
     }
     return 0;
+  }
+
+  bool _shouldBlockRootBack(String location) {
+    return location == AppRoutes.index ||
+        location == AppRoutes.discover ||
+        location == AppRoutes.messages ||
+        location == AppRoutes.profile;
   }
 
   void _onTap(BuildContext context, int index) {
@@ -604,56 +609,59 @@ class _MainShellState extends ConsumerState<MainShell>
     final currentIndex = _getCurrentIndex(context);
     final combinedChatUnread = _imUnreadCount + _systemNotificationUnreadCount;
 
-    return Scaffold(
-      body: widget.child,
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(
-              color: AppTheme.shadowLight,
-              blurRadius: 10,
-              offset: const Offset(0, -2),
-            ),
-          ],
-        ),
-        child: SafeArea(
-          child: Container(
-            height: 64,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _NavItem(
-                  icon: Icons.home_outlined,
-                  activeIcon: Icons.home,
-                  label: '首页',
-                  isActive: currentIndex == 0,
-                  onTap: () => _onTap(context, 0),
-                ),
-                _NavItem(
-                  icon: Icons.explore_outlined,
-                  activeIcon: Icons.explore,
-                  label: '发现',
-                  isActive: currentIndex == 1,
-                  onTap: () => _onTap(context, 1),
-                ),
-                _NavItem(
-                  icon: Icons.chat_bubble_outline_rounded,
-                  activeIcon: Icons.chat_bubble_rounded,
-                  label: '聊天',
-                  isActive: currentIndex == 2,
-                  badgeCount: combinedChatUnread,
-                  onTap: () => _onTap(context, 2),
-                ),
-                _NavItem(
-                  icon: Icons.person_outline_rounded,
-                  activeIcon: Icons.person_rounded,
-                  label: '我的',
-                  isActive: currentIndex == 3,
-                  onTap: () => _onTap(context, 3),
-                ),
-              ],
+    return PopScope(
+      canPop: !_shouldBlockRootBack(currentLocation),
+      child: Scaffold(
+        body: widget.child,
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.shadowLight,
+                blurRadius: 10,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          child: SafeArea(
+            child: Container(
+              height: 64,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _NavItem(
+                    icon: Icons.home_outlined,
+                    activeIcon: Icons.home,
+                    label: '首页',
+                    isActive: currentIndex == 0,
+                    onTap: () => _onTap(context, 0),
+                  ),
+                  _NavItem(
+                    icon: Icons.explore_outlined,
+                    activeIcon: Icons.explore,
+                    label: '发现',
+                    isActive: currentIndex == 1,
+                    onTap: () => _onTap(context, 1),
+                  ),
+                  _NavItem(
+                    icon: Icons.chat_bubble_outline_rounded,
+                    activeIcon: Icons.chat_bubble_rounded,
+                    label: '聊天',
+                    isActive: currentIndex == 2,
+                    badgeCount: combinedChatUnread,
+                    onTap: () => _onTap(context, 2),
+                  ),
+                  _NavItem(
+                    icon: Icons.person_outline_rounded,
+                    activeIcon: Icons.person_rounded,
+                    label: '我的',
+                    isActive: currentIndex == 3,
+                    onTap: () => _onTap(context, 3),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

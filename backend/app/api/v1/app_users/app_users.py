@@ -9,6 +9,7 @@ from tortoise.transactions import in_transaction
 
 from app.core.china_locations import normalize_location_city
 from app.core.ctx import CTX_USER_ID
+from app.core.time_utils import now_local_naive
 from app.core.profile_basic_fields import (
     normalize_birth_date,
     normalize_height_cm,
@@ -304,7 +305,7 @@ async def update_app_user(req_in: AppUserAdminUpdateIn):
         update_data["is_certified_user"] = req_in.is_certified_user
         if req_in.is_certified_user:
             update_data["certification_status"] = "approved"
-            update_data["certification_reviewed_at"] = datetime.now()
+            update_data["certification_reviewed_at"] = now_local_naive()
     if req_in.is_recommended is not None:
         update_data["is_recommended"] = req_in.is_recommended
     if req_in.recommend_weight is not None:
@@ -337,7 +338,7 @@ async def update_app_user(req_in: AppUserAdminUpdateIn):
             else app_user.certification_face_image
         )
         update_data["certification_status"] = req_in.certification_status
-        update_data["certification_reviewed_at"] = datetime.now()
+        update_data["certification_reviewed_at"] = now_local_naive()
         if req_in.certification_status == "approved":
             if not target_face_image:
                 return Fail(code=400, msg="申请正面照缺失，无法通过审核")
@@ -350,7 +351,7 @@ async def update_app_user(req_in: AppUserAdminUpdateIn):
                 return Fail(code=400, msg="驳回时必须填写驳回原因")
             update_data["certification_reject_reason"] = reject_reason
         if req_in.certification_status == "pending":
-            update_data["certification_apply_at"] = datetime.now()
+            update_data["certification_apply_at"] = now_local_naive()
             update_data["certification_reviewed_at"] = None
             update_data["certification_reject_reason"] = None
     if "is_certified_user" in update_data or "certified_call_price" in update_data:
@@ -395,7 +396,7 @@ async def review_certification(req_in: CertificationReviewIn):
             is_certified_user=True,
             certification_status="approved",
             certification_reject_reason=None,
-            certification_reviewed_at=datetime.now(),
+            certification_reviewed_at=now_local_naive(),
             certified_call_price=await normalize_certified_call_price(
                 price=int(app_user.certified_call_price or 0),
                 is_certified_user=True,
@@ -410,7 +411,7 @@ async def review_certification(req_in: CertificationReviewIn):
         is_certified_user=False,
         certification_status="rejected",
         certification_reject_reason=reject_reason,
-        certification_reviewed_at=datetime.now(),
+        certification_reviewed_at=now_local_naive(),
         certified_call_price=0,
     )
     return Success(msg="已驳回申请")
@@ -591,10 +592,10 @@ async def complete_profile_review(req_in: ProfileReviewBulkIn):
         await AppUser.filter(id=user.id).using_db(conn).update(**update_data)
         await AppUserProfileReviewApply.filter(id=apply.id).using_db(conn).update(
             status="completed",
-            completed_at=datetime.now(),
+            completed_at=now_local_naive(),
             completed_by=int(CTX_USER_ID.get() or 0) or None,
             review_remark=(req_in.review_remark or "").strip() or None,
-            updated_at=datetime.now(),
+            updated_at=now_local_naive(),
         )
 
     return Success(msg="审核完成")
@@ -681,7 +682,7 @@ async def review_common_phrase(req_in: CommonPhraseReviewIn):
     row.pending_content = next_row["pending_content"]
     row.review_status = next_row["review_status"]
     row.review_remark = next_row["review_remark"]
-    row.reviewed_at = datetime.now()
+    row.reviewed_at = now_local_naive()
     row.reviewed_by = int(CTX_USER_ID.get() or 0) or None
     await row.save(
         update_fields=[

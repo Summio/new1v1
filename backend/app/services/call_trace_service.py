@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import random
-from datetime import datetime, timezone
+import time
 from typing import Any, Awaitable, Callable
 from urllib.parse import urlencode
 
@@ -47,7 +47,7 @@ def _safe_int(value: Any, default: int = 0) -> int:
 
 
 def _now_ts_seconds() -> int:
-    return int(datetime.now(timezone.utc).timestamp())
+    return int(time.time())
 
 
 def _to_im_account(user_id: int) -> str:

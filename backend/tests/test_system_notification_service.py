@@ -1,12 +1,16 @@
 import json
-from datetime import datetime
+import asyncio
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
 
 from app.api.v1.notification.notification import _dump_task
 from app.schemas.system_notification import SystemNotificationTaskCreateIn
+from app.services import system_notification_service
 from app.services.system_notification_service import (
+    MAX_NOTIFICATION_TARGET_USERS,
+    RECEIPT_BULK_CREATE_BATCH_SIZE,
     NotificationValidationError,
     _dump_user_notification,
     build_business_notification_key,
@@ -15,6 +19,8 @@ from app.services.system_notification_service import (
     ensure_repeat_has_end_condition,
     format_notification_datetime,
     normalize_user_ids,
+    publish_due_task,
+    publish_task_once,
     validate_task_payload,
 )
 
@@ -265,3 +271,176 @@ async def test_admin_task_dump_normalizes_legacy_enum_text(monkeypatch: pytest.M
     assert data["status"] == "scheduled"
     assert data["send_mode"] == "once"
     assert data["target_mode"] == "all"
+
+
+@pytest.mark.asyncio
+async def test_publish_task_once_rejects_target_count_over_limit(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeNotificationQuery:
+        async def first(self) -> None:
+            return None
+
+    class FakeNotification:
+        @staticmethod
+        def filter(**_: object) -> FakeNotificationQuery:
+            return FakeNotificationQuery()
+
+        @staticmethod
+        async def create(**_: object) -> object:
+            raise AssertionError("超过人数上限时不应创建通知")
+
+    async def fake_resolve_target_user_ids(**_: object) -> list[int]:
+        return list(range(1, MAX_NOTIFICATION_TARGET_USERS + 2))
+
+    monkeypatch.setattr(system_notification_service, "SystemNotification", FakeNotification)
+    monkeypatch.setattr(system_notification_service, "resolve_target_user_ids", fake_resolve_target_user_ids)
+
+    task = SimpleNamespace(
+        id=1,
+        next_run_at=datetime(2026, 5, 12, 18, 0),
+        publish_at=None,
+        target_mode="all",
+        target_user_ids=[],
+        target_filters={},
+        content="上线维护通知",
+        type="announcement",
+    )
+
+    with pytest.raises(NotificationValidationError, match="单次通知最多支持 5000 人"):
+        await publish_task_once(task)
+
+
+@pytest.mark.asyncio
+async def test_publish_task_once_bulk_creates_receipts_in_batches(monkeypatch: pytest.MonkeyPatch) -> None:
+    target_user_ids = list(range(1, MAX_NOTIFICATION_TARGET_USERS + 1))
+    batch_sizes: list[int] = []
+    pushed_user_ids: list[int] = []
+    current_pushes = 0
+    max_parallel_pushes = 0
+
+    class FakeTransaction:
+        async def __aenter__(self) -> None:
+            return None
+
+        async def __aexit__(self, *_: object) -> None:
+            return None
+
+    class FakeNotificationQuery:
+        async def first(self) -> None:
+            return None
+
+    class FakeNotification:
+        id = 99
+
+        @staticmethod
+        def filter(**_: object) -> FakeNotificationQuery:
+            return FakeNotificationQuery()
+
+        @staticmethod
+        async def create(**_: object) -> "FakeNotification":
+            return FakeNotification()
+
+    class FakeReceipt:
+        def __init__(self, **kwargs: object) -> None:
+            self.kwargs = kwargs
+
+        @staticmethod
+        async def bulk_create(receipts: list["FakeReceipt"], ignore_conflicts: bool = False) -> None:
+            assert ignore_conflicts is True
+            batch_sizes.append(len(receipts))
+
+    async def fake_resolve_target_user_ids(**_: object) -> list[int]:
+        return target_user_ids
+
+    async def fake_filter_online_user_ids(user_ids: list[int]) -> set[int]:
+        return set(user_ids)
+
+    async def fake_push_unread_changed(user_id: int) -> None:
+        nonlocal current_pushes, max_parallel_pushes
+        current_pushes += 1
+        max_parallel_pushes = max(max_parallel_pushes, current_pushes)
+        await asyncio.sleep(0)
+        pushed_user_ids.append(user_id)
+        current_pushes -= 1
+
+    monkeypatch.setattr(system_notification_service, "SystemNotification", FakeNotification)
+    monkeypatch.setattr(system_notification_service, "SystemNotificationReceipt", FakeReceipt)
+    monkeypatch.setattr(system_notification_service, "resolve_target_user_ids", fake_resolve_target_user_ids)
+    monkeypatch.setattr(system_notification_service, "filter_online_user_ids", fake_filter_online_user_ids)
+    monkeypatch.setattr(system_notification_service, "in_transaction", lambda: FakeTransaction())
+    monkeypatch.setattr(system_notification_service, "_push_unread_changed", fake_push_unread_changed)
+
+    task = SimpleNamespace(
+        id=1,
+        next_run_at=datetime(2026, 5, 12, 18, 0),
+        publish_at=None,
+        target_mode="all",
+        target_user_ids=[],
+        target_filters={},
+        content="上线维护通知",
+        type="announcement",
+    )
+
+    notification = await publish_task_once(task)
+
+    assert isinstance(notification, FakeNotification)
+    assert batch_sizes == [RECEIPT_BULK_CREATE_BATCH_SIZE] * (
+        MAX_NOTIFICATION_TARGET_USERS // RECEIPT_BULK_CREATE_BATCH_SIZE
+    )
+    assert len(pushed_user_ids) == MAX_NOTIFICATION_TARGET_USERS
+    assert max_parallel_pushes <= 20
+
+
+@pytest.mark.asyncio
+async def test_push_unread_changed_for_users_filters_to_online_users(monkeypatch: pytest.MonkeyPatch) -> None:
+    pushed_user_ids: list[int] = []
+
+    async def fake_filter_online_user_ids(user_ids: list[int]) -> set[int]:
+        assert user_ids == [1, 2, 3]
+        return {2}
+
+    async def fake_push_unread_changed(user_id: int) -> None:
+        pushed_user_ids.append(user_id)
+
+    monkeypatch.setattr(system_notification_service, "filter_online_user_ids", fake_filter_online_user_ids)
+    monkeypatch.setattr(system_notification_service, "_push_unread_changed", fake_push_unread_changed)
+
+    await system_notification_service._push_unread_changed_for_users([1, 2, 3])
+
+    assert pushed_user_ids == [2]
+
+
+@pytest.mark.asyncio
+async def test_publish_due_task_accepts_timezone_aware_schedule_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    saved = False
+    published_schedules: list[datetime] = []
+
+    async def fake_publish_task_once(task: object, *, scheduled_run_at: datetime | None = None) -> None:
+        published_schedules.append(scheduled_run_at)
+
+    class FakeTask(SimpleNamespace):
+        async def save(self) -> None:
+            nonlocal saved
+            saved = True
+
+    aware_zone = timezone(timedelta(hours=8))
+    task = FakeTask(
+        id=7,
+        status="scheduled",
+        send_mode="once",
+        next_run_at=datetime(2026, 5, 17, 8, 0, tzinfo=aware_zone),
+        publish_at=None,
+        end_at=datetime(2026, 5, 18, 8, 0, tzinfo=aware_zone),
+        max_runs=None,
+        run_count=0,
+        last_run_at=None,
+    )
+
+    monkeypatch.setattr(system_notification_service, "publish_task_once", fake_publish_task_once)
+
+    await publish_due_task(task, now=datetime(2026, 5, 17, 8, 1))
+
+    assert published_schedules == [datetime(2026, 5, 17, 8, 0)]
+    assert task.last_run_at == datetime(2026, 5, 17, 8, 0)
+    assert task.status == "completed"
+    assert task.next_run_at is None
+    assert saved is True

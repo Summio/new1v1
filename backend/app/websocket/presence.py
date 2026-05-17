@@ -10,6 +10,7 @@
 
 Redis 键：
   ws:online                    - SET，所有在线用户 ID（WS 连接时 sadd，断开时 srem）
+  ws:online_lease:{user_id}    - STRING，在线租约（进程异常退出后自动过期）
   ws:online_since              - ZSET，用户上线时间戳（用于首页活跃排序）
   ws:online_certified_user_since - ZSET，认证用户上线时间戳（用于首页在线认证用户排序）
   ws:online_anchor_since       - ZSET，旧认证用户排序 key，兼容历史 Redis 数据
@@ -17,6 +18,7 @@ Redis 键：
 
 is_online(user_id) 逻辑：
   return sismember("ws:online", user_id)
+         AND exists("ws:online_lease:{user_id}")
          AND NOT exists("ws:manual_offline:{user_id}")
 """
 
@@ -26,6 +28,9 @@ import asyncio
 import time
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
+
+from loguru import logger
+from redis.exceptions import RedisError
 
 from app.core.redis import get_redis
 
@@ -37,7 +42,9 @@ _WS_ONLINE_SINCE_KEY = "ws:online_since"
 _WS_ONLINE_CERTIFIED_USER_SINCE_KEY = "ws:online_certified_user_since"
 _WS_ONLINE_ANCHOR_SINCE_KEY = "ws:online_anchor_since"  # legacy key
 _MANUAL_OFFLINE_KEY_PREFIX = "ws:manual_offline:"
+_ONLINE_LEASE_KEY_PREFIX = "ws:online_lease:"
 _MANUAL_OFFLINE_TTL = 24 * 60 * 60  # 24 小时，手动离线状态超时自动清除
+_PRESENCE_READ_ERRORS = (RedisError, asyncio.TimeoutError, OSError)
 
 
 def _normalize_user_ids(user_ids: Iterable[int]) -> list[int]:
@@ -63,14 +70,35 @@ async def _sync_legacy_certified_online_since(redis) -> None:
     )
 
 
+async def _drop_stale_online_ids(redis, user_ids: Iterable[int]) -> None:
+    stale_ids = _normalize_user_ids(user_ids)
+    if not stale_ids:
+        return
+    try:
+        await redis.srem(_WS_ONLINE_KEY, *stale_ids)
+        await redis.zrem(_WS_ONLINE_SINCE_KEY, *stale_ids)
+        await redis.zrem(_WS_ONLINE_CERTIFIED_USER_SINCE_KEY, *stale_ids)
+        await redis.zrem(_WS_ONLINE_ANCHOR_SINCE_KEY, *stale_ids)
+    except Exception:
+        pass
+
+
 async def is_online(user_id: int) -> bool:
     """判断用户是否在线（WS 已连接 且 未手动离线）。"""
-    redis = await get_redis()
-    connected = await redis.sismember(_WS_ONLINE_KEY, user_id)
-    if not connected:
+    try:
+        redis = await get_redis()
+        connected = await redis.sismember(_WS_ONLINE_KEY, user_id)
+        if not connected:
+            return False
+        lease_alive = await redis.exists(f"{_ONLINE_LEASE_KEY_PREFIX}{user_id}")
+        if not lease_alive:
+            await _drop_stale_online_ids(redis, [user_id])
+            return False
+        offline = await redis.exists(f"{_MANUAL_OFFLINE_KEY_PREFIX}{user_id}")
+        return not bool(offline)
+    except _PRESENCE_READ_ERRORS as e:
+        logger.warning("presence is_online degraded to offline: user_id={} error={}", user_id, str(e))
         return False
-    offline = await redis.exists(f"{_MANUAL_OFFLINE_KEY_PREFIX}{user_id}")
-    return not bool(offline)
 
 
 async def filter_online_user_ids(user_ids: Iterable[int]) -> set[int]:
@@ -79,18 +107,30 @@ async def filter_online_user_ids(user_ids: Iterable[int]) -> set[int]:
     if not ids:
         return set()
 
-    redis = await get_redis()
-    pipe = redis.pipeline()
-    for user_id in ids:
-        pipe.sismember(_WS_ONLINE_KEY, user_id)
-    connected_flags = await pipe.execute()
-    connected_ids = [user_id for user_id, connected in zip(ids, connected_flags) if connected]
-    if not connected_ids:
-        return set()
+    try:
+        redis = await get_redis()
+        pipe = redis.pipeline()
+        for user_id in ids:
+            pipe.sismember(_WS_ONLINE_KEY, user_id)
+        connected_flags = await pipe.execute()
+        connected_ids = [user_id for user_id, connected in zip(ids, connected_flags) if connected]
+        if not connected_ids:
+            return set()
 
-    manual_offline_keys = [f"{_MANUAL_OFFLINE_KEY_PREFIX}{user_id}" for user_id in connected_ids]
-    flags = await redis.mget(manual_offline_keys)
-    return {user_id for user_id, flag in zip(connected_ids, flags) if flag is None}
+        online_lease_keys = [f"{_ONLINE_LEASE_KEY_PREFIX}{user_id}" for user_id in connected_ids]
+        lease_flags = await redis.mget(online_lease_keys)
+        stale_ids = [user_id for user_id, flag in zip(connected_ids, lease_flags) if flag is None]
+        await _drop_stale_online_ids(redis, stale_ids)
+        connected_ids = [user_id for user_id, flag in zip(connected_ids, lease_flags) if flag is not None]
+        if not connected_ids:
+            return set()
+
+        manual_offline_keys = [f"{_MANUAL_OFFLINE_KEY_PREFIX}{user_id}" for user_id in connected_ids]
+        flags = await redis.mget(manual_offline_keys)
+        return {user_id for user_id, flag in zip(connected_ids, flags) if flag is None}
+    except _PRESENCE_READ_ERRORS as e:
+        logger.warning("presence filter_online_user_ids degraded to empty: count={} error={}", len(ids), str(e))
+        return set()
 
 
 async def set_manual_offline(user_id: int) -> None:
@@ -132,9 +172,13 @@ async def clear_online_since(user_id: int) -> None:
 
 async def count_online_user_ids() -> int:
     """获取当前在线认证用户数量，用于首页分页计算。"""
-    redis = await get_redis()
-    await _sync_legacy_certified_online_since(redis)
-    return int(await redis.zcard(_WS_ONLINE_CERTIFIED_USER_SINCE_KEY))
+    try:
+        redis = await get_redis()
+        await _sync_legacy_certified_online_since(redis)
+        return int(await redis.zcard(_WS_ONLINE_CERTIFIED_USER_SINCE_KEY))
+    except _PRESENCE_READ_ERRORS as e:
+        logger.warning("presence count_online_user_ids degraded to zero: error={}", str(e))
+        return 0
 
 
 async def get_online_user_id_page(offset: int, limit: int) -> list[int]:
@@ -142,37 +186,53 @@ async def get_online_user_id_page(offset: int, limit: int) -> list[int]:
     if limit <= 0:
         return []
 
-    redis = await get_redis()
-    await _sync_legacy_certified_online_since(redis)
-    start = max(0, int(offset))
-    stop = start + int(limit) - 1
-    members = await redis.zrevrange(_WS_ONLINE_CERTIFIED_USER_SINCE_KEY, start, stop)
-    ids: list[int] = []
-    for member in members:
-        try:
-            ids.append(int(member.decode("utf-8") if isinstance(member, bytes) else member))
-        except (TypeError, ValueError):
-            continue
-    if not ids:
-        return []
+    try:
+        redis = await get_redis()
+        await _sync_legacy_certified_online_since(redis)
+        start = max(0, int(offset))
+        stop = start + int(limit) - 1
+        members = await redis.zrevrange(_WS_ONLINE_CERTIFIED_USER_SINCE_KEY, start, stop)
+        ids: list[int] = []
+        for member in members:
+            try:
+                ids.append(int(member.decode("utf-8") if isinstance(member, bytes) else member))
+            except (TypeError, ValueError):
+                continue
+        if not ids:
+            return []
 
-    manual_offline_keys = [f"{_MANUAL_OFFLINE_KEY_PREFIX}{user_id}" for user_id in ids]
-    flags = await redis.mget(manual_offline_keys)
-    return [user_id for user_id, flag in zip(ids, flags) if flag is None]
+        online_lease_keys = [f"{_ONLINE_LEASE_KEY_PREFIX}{user_id}" for user_id in ids]
+        lease_flags = await redis.mget(online_lease_keys)
+        stale_ids = [user_id for user_id, flag in zip(ids, lease_flags) if flag is None]
+        await _drop_stale_online_ids(redis, stale_ids)
+        ids = [user_id for user_id, flag in zip(ids, lease_flags) if flag is not None]
+        if not ids:
+            return []
+
+        manual_offline_keys = [f"{_MANUAL_OFFLINE_KEY_PREFIX}{user_id}" for user_id in ids]
+        flags = await redis.mget(manual_offline_keys)
+        return [user_id for user_id, flag in zip(ids, flags) if flag is None]
+    except _PRESENCE_READ_ERRORS as e:
+        logger.warning("presence get_online_user_id_page degraded to empty: error={}", str(e))
+        return []
 
 
 async def get_online_since_map() -> dict[int, int]:
     """获取在线用户上线时间映射。"""
-    redis = await get_redis()
-    rows = await redis.zrange(_WS_ONLINE_SINCE_KEY, 0, -1, withscores=True)
-    result: dict[int, int] = {}
-    for member, score in rows:
-        try:
-            user_id = int(member.decode("utf-8") if isinstance(member, bytes) else member)
-            result[user_id] = int(score)
-        except (TypeError, ValueError):
-            continue
-    return result
+    try:
+        redis = await get_redis()
+        rows = await redis.zrange(_WS_ONLINE_SINCE_KEY, 0, -1, withscores=True)
+        result: dict[int, int] = {}
+        for member, score in rows:
+            try:
+                user_id = int(member.decode("utf-8") if isinstance(member, bytes) else member)
+                result[user_id] = int(score)
+            except (TypeError, ValueError):
+                continue
+        return result
+    except _PRESENCE_READ_ERRORS as e:
+        logger.warning("presence get_online_since_map degraded to empty: error={}", str(e))
+        return {}
 
 
 async def broadcast_presence(
@@ -190,14 +250,26 @@ async def broadcast_presence(
 
 async def get_online_user_ids() -> set[int]:
     """获取业务在线用户 ID 集合（WS 在线且未手动离线）。"""
-    redis = await get_redis()
-    members = await redis.smembers(_WS_ONLINE_KEY)
-    online_ids = {int(m) for m in members}
-    if not online_ids:
-        return set()
+    try:
+        redis = await get_redis()
+        members = await redis.smembers(_WS_ONLINE_KEY)
+        online_ids = {int(m) for m in members}
+        if not online_ids:
+            return set()
 
-    online_id_list = list(online_ids)
-    manual_offline_keys = [f"{_MANUAL_OFFLINE_KEY_PREFIX}{user_id}" for user_id in online_id_list]
-    flags = await redis.mget(manual_offline_keys)
-    offline_ids = {user_id for user_id, flag in zip(online_id_list, flags) if flag is not None}
-    return online_ids - offline_ids
+        online_id_list = list(online_ids)
+        online_lease_keys = [f"{_ONLINE_LEASE_KEY_PREFIX}{user_id}" for user_id in online_id_list]
+        lease_flags = await redis.mget(online_lease_keys)
+        stale_ids = [user_id for user_id, flag in zip(online_id_list, lease_flags) if flag is None]
+        await _drop_stale_online_ids(redis, stale_ids)
+        online_id_list = [user_id for user_id, flag in zip(online_id_list, lease_flags) if flag is not None]
+        if not online_id_list:
+            return set()
+
+        manual_offline_keys = [f"{_MANUAL_OFFLINE_KEY_PREFIX}{user_id}" for user_id in online_id_list]
+        flags = await redis.mget(manual_offline_keys)
+        offline_ids = {user_id for user_id, flag in zip(online_id_list, flags) if flag is not None}
+        return set(online_id_list) - offline_ids
+    except _PRESENCE_READ_ERRORS as e:
+        logger.warning("presence get_online_user_ids degraded to empty: error={}", str(e))
+        return set()

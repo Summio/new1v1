@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
-  test('first-level tab routes do not use RootBackGuard', () {
+  test('first-level tab routes use MainShell root back guard only', () {
     final guard = File('lib/core/widgets/root_back_guard.dart');
     expect(guard.existsSync(), isFalse);
 
@@ -13,6 +13,7 @@ void main() {
       isNot(contains("import '../../core/widgets/root_back_guard.dart';")),
     );
     expect(router, isNot(contains('RootBackGuard')));
+    expect(router, contains('MainShell(child: child)'));
     expect(router, contains('NoTransitionPage(child: HomePage())'));
     expect(router, contains('NoTransitionPage(child: DiscoverPage())'));
     expect(router, contains('child: ChatPage('));
@@ -28,6 +29,7 @@ void main() {
       final source = File(path).readAsStringSync();
       expect(source, isNot(contains('RootBackGuard')), reason: path);
       expect(source, isNot(contains('root_back_guard.dart')), reason: path);
+      expect(source, isNot(contains('PopScope')), reason: path);
     }
 
     final secondLevelPages = [
@@ -41,5 +43,9 @@ void main() {
       final source = File(path).readAsStringSync();
       expect(source, isNot(contains('RootBackGuard')), reason: path);
     }
+
+    final shell = File('lib/modules/home/main_shell.dart').readAsStringSync();
+    expect(shell, contains('PopScope'));
+    expect(shell, contains('_shouldBlockRootBack'));
   });
 }

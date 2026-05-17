@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
 import pytest
@@ -8,8 +8,11 @@ from app.services.system_popup_service import (
     ack_user_popup,
     build_popup_run_key,
     build_startup_popup_run_key,
+    fetch_startup_popups_for_user,
     is_user_targeted_by_popup_task,
     normalize_user_ids,
+    publish_due_popup_task,
+    publish_popup_task_once,
     validate_popup_task_payload,
 )
 
@@ -63,10 +66,7 @@ def test_normalize_user_ids_and_run_key_are_stable() -> None:
         build_popup_run_key(task_id=8, scheduled_run_at=datetime(2026, 5, 14, 10, 0))
         == "popup_task:8:2026-05-14T10:00:00"
     )
-    assert (
-        build_startup_popup_run_key(task_id=8, user_id=34, launch_id="launch-1")
-        == "popup_start:8:34:launch-1"
-    )
+    assert build_startup_popup_run_key(task_id=8, user_id=34, launch_id="launch-1") == "popup_start:8:34:launch-1"
 
 
 def test_validate_popup_payload_accepts_app_start_without_schedule() -> None:
@@ -161,3 +161,151 @@ async def test_ack_user_popup_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> 
 
     assert await ack_user_popup(user_id=34, popup_id=12) is True
     assert saved["count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_publish_popup_task_once_rejects_too_many_online_targets(monkeypatch: pytest.MonkeyPatch) -> None:
+    task = SimpleNamespace(
+        id=8,
+        next_run_at=datetime(2026, 5, 14, 10, 0),
+        publish_at=None,
+        target_mode="all",
+        target_user_ids=[],
+        target_filters=None,
+    )
+
+    class FakePopupQuery:
+        async def first(self):
+            return None
+
+    class FakePopup:
+        @classmethod
+        def filter(cls, **kwargs):
+            return FakePopupQuery()
+
+    async def fake_resolve_online_target_user_ids(**kwargs):
+        return list(range(1, 5002))
+
+    monkeypatch.setattr("app.services.system_popup_service.SystemPopup", FakePopup)
+    monkeypatch.setattr(
+        "app.services.system_popup_service.resolve_online_target_user_ids",
+        fake_resolve_online_target_user_ids,
+    )
+
+    with pytest.raises(PopupValidationError, match="在线目标人数超过上限"):
+        await publish_popup_task_once(task)
+
+
+@pytest.mark.asyncio
+async def test_publish_due_popup_task_accepts_timezone_aware_schedule_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    saved = False
+    published_schedules: list[datetime] = []
+
+    async def fake_publish_popup_task_once(task: object, *, scheduled_run_at: datetime | None = None) -> None:
+        published_schedules.append(scheduled_run_at)
+
+    class FakeTask(SimpleNamespace):
+        async def save(self) -> None:
+            nonlocal saved
+            saved = True
+
+    aware_zone = timezone(timedelta(hours=8))
+    task = FakeTask(
+        id=8,
+        status="scheduled",
+        send_mode="once",
+        next_run_at=datetime(2026, 5, 14, 10, 0, tzinfo=aware_zone),
+        publish_at=None,
+        end_at=datetime(2026, 5, 15, 10, 0, tzinfo=aware_zone),
+        max_runs=None,
+        run_count=0,
+        last_run_at=None,
+    )
+
+    monkeypatch.setattr("app.services.system_popup_service.publish_popup_task_once", fake_publish_popup_task_once)
+
+    await publish_due_popup_task(task, now=datetime(2026, 5, 14, 10, 1))
+
+    assert published_schedules == [datetime(2026, 5, 14, 10, 0)]
+    assert task.last_run_at == datetime(2026, 5, 14, 10, 0)
+    assert task.status == "completed"
+    assert task.next_run_at is None
+    assert saved is True
+
+
+@pytest.mark.asyncio
+async def test_fetch_startup_popups_limits_running_tasks_and_returned_items(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    queried = {"limit": None}
+    tasks = [
+        SimpleNamespace(
+            id=index,
+            title=f"Notice {index}",
+            content="Hello",
+            type="announcement",
+            target_mode="all",
+            target_user_ids=[],
+            target_filters=None,
+        )
+        for index in range(1, 8)
+    ]
+
+    class FakeTaskQuery:
+        def __init__(self):
+            self.items = tasks
+
+        def order_by(self, *args):
+            return self
+
+        def limit(self, value):
+            queried["limit"] = value
+            self.items = tasks[:value]
+            return self
+
+        def __await__(self):
+            async def _result():
+                return self.items
+
+            return _result().__await__()
+
+    class FakeTask:
+        @classmethod
+        def filter(cls, **kwargs):
+            assert kwargs == {"send_mode": "app_start", "status": "running"}
+            return FakeTaskQuery()
+
+    class FakePopupQuery:
+        def __init__(self, run_key):
+            self.run_key = run_key
+
+        async def first(self):
+            task_id = int(self.run_key.split(":")[1])
+            return SimpleNamespace(
+                id=task_id,
+                title=f"Notice {task_id}",
+                content="Hello",
+                type="announcement",
+                published_at=datetime(2026, 5, 14, 10, task_id),
+                publish_at=None,
+            )
+
+    class FakePopup:
+        @classmethod
+        def filter(cls, **kwargs):
+            return FakePopupQuery(kwargs["run_key"])
+
+    class FakeReceipt:
+        @classmethod
+        async def get_or_create(cls, **kwargs):
+            return SimpleNamespace(), False
+
+    monkeypatch.setattr("app.services.system_popup_service.SystemPopupTask", FakeTask)
+    monkeypatch.setattr("app.services.system_popup_service.SystemPopup", FakePopup)
+    monkeypatch.setattr("app.services.system_popup_service.SystemPopupReceipt", FakeReceipt)
+
+    items = await fetch_startup_popups_for_user(user_id=34, launch_id="launch-1")
+
+    assert queried["limit"] == 5
+    assert len(items) == 3
+    assert [item["title"] for item in items] == ["Notice 1", "Notice 2", "Notice 3"]

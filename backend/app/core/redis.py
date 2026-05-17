@@ -11,13 +11,18 @@ _redis_client: Optional[redis.Redis] = None
 async def get_redis() -> redis.Redis:
     global _redis_client
     if _redis_client is None:
-        _redis_client = redis.Redis(
+        connection_pool = redis.ConnectionPool(
             host=settings.REDIS_HOST,
             port=settings.REDIS_PORT,
             db=settings.REDIS_DB,
             password=settings.REDIS_PASSWORD or None,
             decode_responses=True,
+            socket_connect_timeout=settings.REDIS_SOCKET_CONNECT_TIMEOUT,
+            socket_timeout=settings.REDIS_SOCKET_TIMEOUT,
+            health_check_interval=settings.REDIS_HEALTH_CHECK_INTERVAL,
+            max_connections=settings.REDIS_MAX_CONNECTIONS,
         )
+        _redis_client = redis.Redis(connection_pool=connection_pool)
     return _redis_client
 
 

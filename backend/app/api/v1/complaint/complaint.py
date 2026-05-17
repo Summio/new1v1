@@ -4,6 +4,7 @@ from fastapi import APIRouter, Query
 from tortoise.expressions import Q
 
 from app.core.ctx import CTX_USER_ID
+from app.core.time_utils import now_local_naive
 from app.models import AppUser, UserComplaint
 from app.schemas.base import Fail, Success, SuccessExtra
 from app.schemas.user_complaint import ComplaintHandleIn, ComplaintListItem
@@ -122,6 +123,6 @@ async def handle_complaint(req_in: ComplaintHandleIn):
         status=req_in.status,
         handle_remark=req_in.handle_remark.strip() or None,
         handled_by=int(CTX_USER_ID.get() or 0) or None,
-        handled_at=datetime.now(),
+        handled_at=now_local_naive(),
     )
     return Success(msg="处理成功")

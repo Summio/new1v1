@@ -1,6 +1,6 @@
 import asyncio
 import time
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from typing import AsyncGenerator
 
 from fastapi import HTTPException, Request
@@ -9,6 +9,7 @@ from jose import ExpiredSignatureError, JWTError, jwt
 
 from app.core.ctx import CTX_APP_USER_ID, CTX_APP_USER_OBJ
 from app.core.redis import get_redis
+from app.core.time_utils import now_utc
 from app.models import AppUser
 from app.settings.config import settings
 
@@ -80,14 +81,14 @@ async def is_app_authed(token: str) -> AppUser | None:
 def create_app_access_token(user_id: int, expires_delta: timedelta | None = None) -> str:
     """生成 App 用户 JWT access_token。"""
     default_expires = timedelta(minutes=settings.JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
-    expire = datetime.now(timezone.utc) + (expires_delta or default_expires)
+    expire = now_utc() + (expires_delta or default_expires)
     payload = {"sub": str(user_id), "exp": expire}
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
 
 
 def create_app_refresh_token(user_id: int) -> str:
     """生成 App 用户 JWT refresh_token（有效期 30 天）。"""
-    expire = datetime.now(timezone.utc) + timedelta(days=30)
+    expire = now_utc() + timedelta(days=30)
     payload = {"sub": str(user_id), "type": "refresh", "exp": expire}
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=ALGORITHM)
 
@@ -178,7 +179,7 @@ async def logout_app_user(token: str, expire_seconds: int | None = None) -> bool
             if payload:
                 exp = payload.get("exp")
                 if exp:
-                    ttl = max(0, int(exp - datetime.now(timezone.utc).timestamp()))
+                    ttl = max(0, int(exp - now_utc().timestamp()))
                     ttl = min(ttl, 7 * 24 * 3600)
 
         if ttl and ttl > 0:

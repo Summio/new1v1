@@ -1,10 +1,11 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, UploadFile
 
 from app.core.app_auth import DependAppAuth
 from app.core.ctx import CTX_APP_USER_OBJ
+from app.core.time_utils import now_local_naive
 from app.models import AppUser
 from app.models.app_user_common_phrase import AppUserCommonPhrase
 from app.schemas.app_user import (
@@ -97,8 +98,9 @@ async def apply_certification(req_in: CertificationApplyIn):
 
     if app_user.certification_status == "rejected" and app_user.certification_reviewed_at:
         cooldown_deadline = app_user.certification_reviewed_at + timedelta(hours=CERTIFICATION_REAPPLY_COOLDOWN_HOURS)
-        if datetime.now() < cooldown_deadline:
-            remaining_hours = int((cooldown_deadline - datetime.now()).total_seconds() / 3600) + 1
+        now = now_local_naive()
+        if now < cooldown_deadline:
+            remaining_hours = int((cooldown_deadline - now).total_seconds() / 3600) + 1
             return Fail(
                 code=400,
                 msg=f"距离上次驳回需等待 {CERTIFICATION_REAPPLY_COOLDOWN_HOURS} 小时后再申请（还剩 {remaining_hours} 小时）",
@@ -107,7 +109,7 @@ async def apply_certification(req_in: CertificationApplyIn):
     await AppUser.filter(id=app_user.id).update(
         certification_face_image=face_photo_url,
         certification_status="pending",
-        certification_apply_at=datetime.now(),
+        certification_apply_at=now_local_naive(),
         certification_reject_reason=None,
         certification_reviewed_at=None,
     )
@@ -195,7 +197,7 @@ async def update_common_phrase(slot_index: int, req_in: CommonPhraseUpdateIn):
         row.pending_content = content
         row.review_status = "pending"
         row.review_remark = ""
-        row.submitted_at = datetime.now()
+        row.submitted_at = now_local_naive()
         row.reviewed_at = None
         row.reviewed_by = None
         await row.save(
@@ -216,6 +218,6 @@ async def update_common_phrase(slot_index: int, req_in: CommonPhraseUpdateIn):
             pending_content=content,
             review_status="pending",
             review_remark="",
-            submitted_at=datetime.now(),
+            submitted_at=now_local_naive(),
         )
     return Success(data={"phrase": build_common_phrase_slots([row])[normalized_slot - 1]}, msg="已提交审核")

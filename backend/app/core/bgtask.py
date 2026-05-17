@@ -1,8 +1,10 @@
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 
 from loguru import logger
 from starlette.background import BackgroundTasks
+
+from app.core.time_utils import now_local_naive
 
 from .ctx import CTX_BG_TASKS
 
@@ -17,7 +19,7 @@ async def cleanup_old_audit_logs(retention_days: int = AUDIT_LOG_RETENTION_DAYS)
     """
     from app.models.admin import AuditLog
 
-    cutoff = datetime.now(timezone(timedelta(hours=8))) - timedelta(days=retention_days)
+    cutoff = now_local_naive() - timedelta(days=retention_days)
     try:
         deleted = await AuditLog.filter(created_at__lt=cutoff).delete()
         logger.info("audit log cleanup: deleted {} records older than {} days", deleted, retention_days)

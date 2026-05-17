@@ -1,0 +1,23 @@
+D:\1v1\new1v1\backend\app\settings\config.py:13: UserWarning: 使用了开发用 SECRET_KEY，生产环境请通过环境变量 SECRET_KEY 配置
+  class Settings(BaseSettings):
+D:\1v1\new1v1\backend\app\settings\config.py:13: UserWarning: 使用了默认数据库密码 123456，生产环境请通过环境变量 DB_PASSWORD 配置
+  class Settings(BaseSettings):
+2026-05-14 21:00:18 - INFO - Started server process [10532]
+2026-05-14 21:00:18 - INFO - Waiting for application startup.
+2026-05-14 21:00:18 - INFO - Application startup complete.
+2026-05-14 21:00:18 - INFO - Uvicorn running on http://0.0.0.0:9999 (Press CTRL+C to quit)
+2026-05-14 21:00:18 - INFO - ('192.168.31.179', 57170) - "WebSocket /api/v1/ws/app" [accepted]
+2026-05-14 21:00:18 - INFO - connection open
+2026-05-14 21:00:30 - INFO - ('192.168.31.179', 58160) - "WebSocket /api/v1/ws/app" [accepted]
+2026-05-14 21:00:30 - INFO - connection open
+2026-05-14 21:00:50 - INFO - ('192.168.31.179', 35080) - "WebSocket /api/v1/ws/app" [accepted]
+2026-05-14 21:00:50 - INFO - connection open
+2026-05-14 21:01:00 - INFO - connection closed
+2026-05-14 21:01:20 - INFO - connection closed
+2026-05-14 21:01:26 - INFO - connection closed
+2026-05-14 21:01:33 - INFO - ('192.168.31.179', 47874) - "WebSocket /api/v1/ws/app" [accepted]
+2026-05-14 21:01:33 - INFO - connection open
+2026-05-14 21:01:48 - INFO - connection closed
+2026-05-14 21:01:54 - INFO - ('192.168.31.179', 42692) - "WebSocket /api/v1/ws/app" [accepted]
+2026-05-14 21:01:54 - INFO - connection open
+2026-05-14 21:02:29 - INFO - connection closed

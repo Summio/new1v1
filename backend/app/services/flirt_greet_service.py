@@ -1,5 +1,7 @@
 from datetime import datetime, timedelta
 
+from app.core.time_utils import now_local_naive
+
 FLIRT_GREET_COOLDOWN_SECONDS = 10
 _GREET_RESERVE_LUA = """
 local cooldown_ttl = redis.call('TTL', KEYS[2])
@@ -19,7 +21,7 @@ return {count, 0}
 
 
 def _now_local(now: datetime | None = None) -> datetime:
-    return now or datetime.now()
+    return now or now_local_naive()
 
 
 def build_greet_daily_key(user_id: int, *, now: datetime | None = None) -> str:

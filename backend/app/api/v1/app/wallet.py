@@ -10,6 +10,7 @@ from app.core.app_auth import DependAppAuth
 from app.core.ctx import CTX_APP_USER_ID, CTX_APP_USER_OBJ
 from app.core.dependency import LimitCallback
 from app.core.redis import get_redis
+from app.core.time_utils import now_local_naive
 from app.models import (
     AppUser,
     RechargeOrder,
@@ -125,11 +126,10 @@ async def recharge_create(req_in: RechargeCreateIn):
 
     # P27: 生成唯一订单号（UUID 后缀保证极低冲突概率，兜底重试）
     import uuid
-    from datetime import datetime
 
     order_no = None
     for _ in range(3):
-        candidate = f"R{datetime.now().strftime('%Y%m%d%H%M%S')}{uuid.uuid4().hex[:8].upper()}"
+        candidate = f"R{now_local_naive().strftime('%Y%m%d%H%M%S')}{uuid.uuid4().hex[:8].upper()}"
         exists = await RechargeOrder.filter(order_no=candidate).exists()
         if not exists:
             order_no = candidate
