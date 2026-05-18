@@ -712,7 +712,8 @@ class _CertifiedUserCardState extends State<_CertifiedUserCard> {
                     children: [
                       Row(
                         children: [
-                          Expanded(
+                          Flexible(
+                            fit: FlexFit.loose,
                             child: Text(
                               certifiedUser.username ?? '匿名用户',
                               maxLines: 1,

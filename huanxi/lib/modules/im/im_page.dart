@@ -19,6 +19,7 @@ import '../../core/im/call_trace_message.dart';
 import '../../app/providers/auth_provider.dart';
 import 'package:tencent_cloud_chat_sdk/models/v2_tim_message.dart';
 import 'package:huanxi/core/utils/app_toast.dart';
+import '../../app/widgets/vip_badge.dart';
 import '../gift/gift_panel.dart';
 import '../home/main_shell.dart';
 import '../home/user_more_actions.dart';
@@ -791,16 +792,29 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Text(
-          _peerDisplayName(),
-          textAlign: TextAlign.center,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: AppTheme.textPrimary,
-            fontSize: 18,
-            fontWeight: FontWeight.w600,
-          ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Flexible(
+              fit: FlexFit.loose,
+              child: Text(
+                _peerDisplayName(),
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            if (_peerIsVip) ...[
+              const SizedBox(width: 4),
+              const VipBadge(dense: true),
+            ],
+          ],
         ),
         const SizedBox(height: 2),
         Row(

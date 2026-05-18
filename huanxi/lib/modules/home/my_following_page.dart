@@ -8,6 +8,7 @@ import '../../app/providers/user_follow_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/widgets/status_view.dart';
+import '../../app/widgets/vip_badge.dart';
 import '../../services/user_home_service.dart' show FollowingUserItem;
 import 'main_shell.dart';
 
@@ -308,7 +309,8 @@ class _FollowingTile extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Expanded(
+                        Flexible(
+                          fit: FlexFit.loose,
                           child: Text(
                             name,
                             maxLines: 1,
@@ -320,6 +322,10 @@ class _FollowingTile extends StatelessWidget {
                             ),
                           ),
                         ),
+                        if (user.isVip) ...[
+                          const SizedBox(width: 4),
+                          const VipBadge(dense: true),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 6),

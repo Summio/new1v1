@@ -161,7 +161,8 @@ class _UserSearchTile extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Expanded(
+                        Flexible(
+                          fit: FlexFit.loose,
                           child: Text(
                             name,
                             maxLines: 1,

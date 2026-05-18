@@ -43,6 +43,8 @@ void main() {
 
   test('nickname adjacent VIP badges use compact spacing', () {
     const nicknameBadgeFiles = [
+      'lib/modules/im/im_page.dart',
+      'lib/modules/home/my_following_page.dart',
       'lib/modules/home/user_search_page.dart',
       'lib/modules/home/moment_card.dart',
       'lib/modules/home/messages_page.dart',
@@ -69,6 +71,55 @@ void main() {
       );
     }
   });
+
+  test(
+    'chat detail and relationship lists render VIP badge from loaded user data',
+    () {
+      final imPage = File('lib/modules/im/im_page.dart').readAsStringSync();
+      final followingPage = File(
+        'lib/modules/home/my_following_page.dart',
+      ).readAsStringSync();
+
+      expect(imPage, contains("import '../../app/widgets/vip_badge.dart';"));
+      expect(imPage, contains('_peerIsVip = payload[\'is_vip\'] == true'));
+      expect(imPage, contains('if (_peerIsVip) ...['));
+      expect(imPage, contains('const VipBadge(dense: true)'));
+
+      expect(
+        followingPage,
+        contains("import '../../app/widgets/vip_badge.dart';"),
+      );
+      expect(followingPage, contains('if (user.isVip) ...['));
+      expect(followingPage, contains('const VipBadge(dense: true)'));
+    },
+  );
+
+  test(
+    'nickname VIP badges stay adjacent instead of being pushed to row edge',
+    () {
+      const nicknameBadgeFiles = [
+        'lib/modules/home/user_search_page.dart',
+        'lib/modules/home/messages_page.dart',
+        'lib/modules/home/discover_page.dart',
+        'lib/modules/home/home_page.dart',
+        'lib/modules/home/my_following_page.dart',
+      ];
+      final expandedBeforeBadgePattern = RegExp(
+        r'Expanded\(\s*child: Text\([\s\S]{0,500}?if \([^)]*isVip[^)]*\) \.\.\.\[',
+        multiLine: true,
+      );
+
+      for (final filePath in nicknameBadgeFiles) {
+        final content = File(filePath).readAsStringSync();
+
+        expect(
+          expandedBeforeBadgePattern.hasMatch(content),
+          isFalse,
+          reason: '$filePath pushes nickname VIP badge away from nickname',
+        );
+      }
+    },
+  );
 
   testWidgets('VIP page package grid does not overflow on small screens', (
     tester,

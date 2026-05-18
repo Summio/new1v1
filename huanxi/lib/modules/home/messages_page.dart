@@ -494,7 +494,8 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
                     leading: _buildConversationAvatar(conv, avatarUrl),
                     title: Row(
                       children: [
-                        Expanded(
+                        Flexible(
+                          fit: FlexFit.loose,
                           child: Text(
                             _displayName(conv),
                             maxLines: 1,

@@ -493,7 +493,8 @@ class _RankingTile extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Expanded(
+                        Flexible(
+                          fit: FlexFit.loose,
                           child: Text(
                             item.nickname.isNotEmpty
                                 ? item.nickname
