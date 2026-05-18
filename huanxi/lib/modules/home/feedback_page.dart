@@ -115,6 +115,7 @@ class _FeedbackPageState extends ConsumerState<FeedbackPage> {
                       decoration: const InputDecoration(
                         hintText: '请输入您的意见反馈',
                         alignLabelWithHint: true,
+                        counterText: '',
                       ),
                     ),
                     const SizedBox(height: 4),

@@ -23,6 +23,7 @@ void main() {
     expect(page, contains('虚假资料'));
     expect(page, contains('其他'));
     expect(page, contains('maxLength: 1000'));
+    expect(page, contains("counterText: ''"));
     expect(page, contains('createComplaint'));
     expect(page, isNot(contains('widget.scene')));
     expect(page, contains('投诉已提交'));

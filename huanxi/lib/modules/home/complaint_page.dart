@@ -146,6 +146,7 @@ class _ComplaintPageState extends State<ComplaintPage> {
                               labelText: '补充说明',
                               hintText: '请描述具体情况',
                               alignLabelWithHint: true,
+                              counterText: '',
                             ),
                           ),
                           const SizedBox(height: 4),
