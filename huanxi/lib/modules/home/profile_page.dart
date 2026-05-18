@@ -153,7 +153,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        _buildGenderChip(_genderIcon(authState.gender)),
+                        _buildGenderChip(
+                          icon: _genderIcon(authState.gender),
+                          color: _genderColor(authState.gender),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -341,14 +344,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     );
   }
 
-  Widget _buildGenderChip(IconData genderIcon) {
+  Widget _buildGenderChip({required IconData icon, required Color color}) {
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: const Color(0xFFFF69B4).withValues(alpha: 0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(6),
       ),
-      child: Icon(genderIcon, size: 14, color: const Color(0xFFFF69B4)),
+      child: Icon(icon, size: 14, color: color),
     );
   }
 
@@ -393,6 +396,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
 
   IconData _genderIcon(String gender) {
     return gender == 'male' ? Icons.male : Icons.female;
+  }
+
+  Color _genderColor(String gender) {
+    return gender == 'male' ? AppTheme.primaryColor : const Color(0xFFFF69B4);
   }
 
   String _availabilityText(AuthState authState) {

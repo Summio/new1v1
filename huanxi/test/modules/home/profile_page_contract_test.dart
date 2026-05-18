@@ -9,8 +9,11 @@ void main() {
     expect(page, contains("'真人认证'"));
     expect(page, isNot(contains("'已真人认证'")));
     expect(page, contains('_genderIcon(authState.gender)'));
+    expect(page, contains('_genderColor(authState.gender)'));
     expect(page, contains('Icons.male'));
     expect(page, contains('Icons.female'));
+    expect(page, contains("gender == 'male' ? AppTheme.primaryColor"));
+    expect(page, contains('const Color(0xFFFF69B4)'));
     expect(page, isNot(contains('_genderText(authState.gender)')));
     expect(page, contains('_availabilityText(authState)'));
     expect(page, contains('_buildCertificationChip()'));

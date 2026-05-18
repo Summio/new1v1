@@ -548,7 +548,7 @@ class _CertifiedUserDetailPageState
                                     label: age == null
                                         ? _genderText(certifiedUser.gender)
                                         : '$age岁',
-                                    color: const Color(0xFFFF69B4),
+                                    color: _genderColor(certifiedUser.gender),
                                   ),
                                   const SizedBox(width: 8),
                                   _buildTag(
@@ -950,6 +950,10 @@ class _CertifiedUserDetailPageState
     if (value == 'male') return '男';
     if (value == 'female') return '女';
     return '男';
+  }
+
+  Color _genderColor(String? value) {
+    return value == 'male' ? AppTheme.primaryColor : const Color(0xFFFF69B4);
   }
 
   String _locationLabel(String? value) {

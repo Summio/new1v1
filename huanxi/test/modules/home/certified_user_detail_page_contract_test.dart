@@ -22,4 +22,14 @@ void main() {
     expect(page, isNot(contains('photos.sort')));
     expect(page, isNot(contains('..sort')));
   });
+
+  test('certified user detail colors male gender tag blue', () {
+    final page = File(
+      'lib/modules/home/certified_user_detail_page.dart',
+    ).readAsStringSync();
+
+    expect(page, contains('_genderColor(certifiedUser.gender)'));
+    expect(page, contains("value == 'male' ? AppTheme.primaryColor"));
+    expect(page, contains('const Color(0xFFFF69B4)'));
+  });
 }
