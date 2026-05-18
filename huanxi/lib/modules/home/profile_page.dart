@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/providers/auth_provider.dart';
@@ -161,12 +162,33 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                       ),
                     ],
                     const SizedBox(height: 4),
-                    Text(
-                      'ID: ${authState.userId ?? '-'}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        color: AppTheme.textSecondary,
-                      ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'ID: ${authState.userId ?? '-'}',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                        if (authState.userId != null) ...[
+                          const SizedBox(width: 4),
+                          InkWell(
+                            key: const ValueKey('profile_user_id_copy_button'),
+                            borderRadius: BorderRadius.circular(12),
+                            onTap: () => _copyUserId(authState.userId!),
+                            child: const Padding(
+                              padding: EdgeInsets.all(3),
+                              child: Icon(
+                                Icons.copy_rounded,
+                                size: 14,
+                                color: AppTheme.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ],
                 ),
@@ -307,6 +329,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         ),
       ],
     );
+  }
+
+  Future<void> _copyUserId(int userId) async {
+    await Clipboard.setData(ClipboardData(text: userId.toString()));
+    if (!mounted) return;
+    AppToast.showSnackBar(context, const SnackBar(content: Text('ID已复制')));
   }
 
   Future<void> _openEditProfile() async {

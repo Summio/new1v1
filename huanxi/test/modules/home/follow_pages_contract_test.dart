@@ -77,6 +77,22 @@ void main() {
     expect(editProfilePage, contains('profileEditRestrictionMessage'));
   });
 
+  test('profile page exposes same user id copy affordance as detail page', () {
+    final profilePage = File(
+      'lib/modules/home/profile_page.dart',
+    ).readAsStringSync();
+
+    expect(profilePage, contains("import 'package:flutter/services.dart';"));
+    expect(profilePage, contains('Future<void> _copyUserId(int userId) async'));
+    expect(profilePage, contains('Clipboard.setData'));
+    expect(
+      profilePage,
+      contains("const ValueKey('profile_user_id_copy_button')"),
+    );
+    expect(profilePage, contains('Icons.copy_rounded'));
+    expect(profilePage, contains('ID已复制'));
+  });
+
   test('profile page does not expose logout entry', () {
     final profilePage = File(
       'lib/modules/home/profile_page.dart',
