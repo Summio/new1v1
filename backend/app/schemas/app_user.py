@@ -145,6 +145,7 @@ class AppUserAdminUpdateIn(BaseModel):
     )
     certification_reject_reason: Optional[str] = Field(default=None, max_length=500, description="真人认证拒绝原因")
     certification_face_image: Optional[str] = Field(default=None, max_length=500, description="真人认证正面照URL")
+    vip_expires_at: Optional[datetime] = Field(default=None, description="VIP到期时间，传 null 表示取消VIP")
 
 
 class AppUserBalanceAdjustIn(BaseModel):

@@ -101,7 +101,7 @@ class _VipPageState extends ConsumerState<VipPage> {
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
                             crossAxisCount: 2,
-                            childAspectRatio: 1.45,
+                            mainAxisExtent: 132,
                             crossAxisSpacing: 10,
                             mainAxisSpacing: 10,
                           ),
@@ -265,62 +265,73 @@ class _VipPackageCard extends StatelessWidget {
         ),
         boxShadow: isSelected ? AppTheme.cardShadow : null,
       ),
-      child: Stack(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisAlignment: MainAxisAlignment.center,
+          Row(
             children: [
-              Text(
-                package.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  color: AppTheme.textPrimary,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '${package.durationDays}天',
-                style: const TextStyle(
-                  color: AppTheme.textSecondary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '¥${package.amountYuan}',
-                style: const TextStyle(
-                  color: Color(0xFFD79A2B),
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ],
-          ),
-          if (package.tag != null)
-            Positioned(
-              top: 0,
-              right: 0,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: _parseColor(package.tagColor),
-                  borderRadius: BorderRadius.circular(5),
-                ),
+              Expanded(
                 child: Text(
-                  package.tag!,
+                  package.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 10,
+                    color: AppTheme.textPrimary,
+                    fontSize: 17,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
               ),
+              if (package.tag != null) ...[
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _parseColor(package.tagColor),
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: Text(
+                      package.tag!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const Spacer(),
+          Text(
+            '${package.durationDays}天',
+            style: const TextStyle(
+              color: AppTheme.textSecondary,
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
             ),
+          ),
+          const SizedBox(height: 8),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              '¥${package.amountYuan}',
+              maxLines: 1,
+              style: const TextStyle(
+                color: Color(0xFFD79A2B),
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
         ],
       ),
     );

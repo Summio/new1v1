@@ -3,6 +3,7 @@ import { computed, h, onMounted, reactive, ref, watch } from 'vue'
 import {
   NButton,
   NDataTable,
+  NDatePicker,
   NForm,
   NFormItem,
   NImage,
@@ -174,6 +175,39 @@ const certificationStatusOptions = [
   { label: '已驳回', value: 'rejected' },
 ]
 
+function formatDateTimeValue(value) {
+  if (!value) return ''
+  const date = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  const pad = (item) => String(item).padStart(2, '0')
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
+    date.getHours()
+  )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+}
+
+function handleVipSwitch(enabled) {
+  modalForm.value.is_vip = !!enabled
+  if (!enabled) {
+    modalForm.value.vip_expires_at = ''
+    return
+  }
+  if (!modalForm.value.vip_expires_at) {
+    setVipExpiresAfterDays(30)
+  }
+}
+
+function setVipExpiresAfterDays(days) {
+  const date = new Date()
+  date.setDate(date.getDate() + days)
+  modalForm.value.vip_expires_at = formatDateTimeValue(date)
+  modalForm.value.is_vip = true
+}
+
+function clearVipExpiresAt() {
+  modalForm.value.vip_expires_at = ''
+  modalForm.value.is_vip = false
+}
+
 async function fetchCertifiedCallPriceOptions() {
   try {
     const res = await api.getCertifiedCallPriceConfig()
@@ -327,7 +361,7 @@ function openEditModal(row) {
     diamonds: row.diamonds ?? 0,
     frozen_diamonds: row.frozen_diamonds ?? 0,
     is_vip: !!row.is_vip,
-    vip_expires_at: row.vip_expires_at || '',
+    vip_expires_at: formatDateTimeValue(row.vip_expires_at),
     created_at: row.created_at || '',
     last_login: row.last_login || '',
   }
@@ -675,6 +709,17 @@ async function handleSave() {
   saving.value = true
   try {
     const album = normalizeAlbum(modalForm.value.album_photos)
+    const vipExpiresAt = (modalForm.value.vip_expires_at || '').trim()
+    if (modalForm.value.is_vip && !vipExpiresAt) {
+      $message?.warning('请设置VIP到期时间')
+      saving.value = false
+      return
+    }
+    if (vipExpiresAt && new Date(vipExpiresAt).getTime() <= Date.now()) {
+      $message?.warning('VIP到期时间必须晚于当前时间，取消VIP请点击清空VIP')
+      saving.value = false
+      return
+    }
     const payload = {
       id: modalForm.value.id,
       nickname: (modalForm.value.nickname || '').trim(),
@@ -698,6 +743,7 @@ async function handleSave() {
         : 0,
       album_photos: album,
       cover_url: (modalForm.value.cover_url || '').trim(),
+      vip_expires_at: vipExpiresAt || null,
     }
     await api.updateAppUser(payload)
     $message?.success('保存成功')
@@ -1214,19 +1260,34 @@ const columns = [
             <NFormItem label="真人认证">
               <NSwitch v-model:value="modalForm.is_certified_user" />
             </NFormItem>
-            <NFormItem label="VIP状态">
-              <NInput
-                :value="
-                  modalForm.is_vip
-                    ? `VIP 至 ${
-                        modalForm.vip_expires_at
-                          ? formatDate(modalForm.vip_expires_at, 'YYYY-MM-DD HH:mm:ss')
-                          : '-'
-                      }`
-                    : '非VIP'
-                "
-                readonly
-              />
+            <NFormItem label="VIP会员">
+              <div class="vip-editor">
+                <div class="vip-editor-row">
+                  <NSwitch :value="modalForm.is_vip" @update:value="handleVipSwitch" />
+                  <NTag :type="modalForm.is_vip ? 'warning' : 'default'">
+                    {{ modalForm.is_vip ? 'VIP' : '非VIP' }}
+                  </NTag>
+                  <NButton size="tiny" secondary @click="setVipExpiresAfterDays(30)">
+                    赠送30天
+                  </NButton>
+                  <NButton size="tiny" secondary @click="setVipExpiresAfterDays(365)">
+                    赠送1年
+                  </NButton>
+                  <NButton size="tiny" type="error" secondary @click="clearVipExpiresAt">
+                    清空VIP
+                  </NButton>
+                </div>
+                <NDatePicker
+                  v-model:formatted-value="modalForm.vip_expires_at"
+                  type="datetime"
+                  clearable
+                  value-format="yyyy-MM-dd HH:mm:ss"
+                  format="yyyy-MM-dd HH:mm:ss"
+                  placeholder="选择VIP到期时间"
+                  style="width: 100%"
+                  @update:formatted-value="modalForm.is_vip = !!modalForm.vip_expires_at"
+                />
+              </div>
             </NFormItem>
             <NFormItem label="通话价格">
               <NSelect
@@ -1708,6 +1769,20 @@ const columns = [
   align-items: center;
   justify-content: center;
   gap: 6px;
+  flex-wrap: wrap;
+}
+
+.vip-editor {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.vip-editor-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex-wrap: wrap;
 }
 </style>

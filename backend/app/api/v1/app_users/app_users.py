@@ -334,6 +334,8 @@ async def update_app_user(req_in: AppUserAdminUpdateIn):
     if req_in.certification_face_image is not None:
         v = to_relative_media_url(req_in.certification_face_image)
         update_data["certification_face_image"] = v or None
+    if "vip_expires_at" in req_in.model_fields_set:
+        update_data["vip_expires_at"] = req_in.vip_expires_at
     if req_in.certification_status is not None:
         reject_reason = (req_in.certification_reject_reason or "").strip()
         target_face_image = to_relative_media_url(

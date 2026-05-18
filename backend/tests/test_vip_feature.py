@@ -5,6 +5,7 @@ import pytest
 from pydantic import ValidationError
 
 from app.core.time_utils import now_local_naive
+from app.schemas.app_user import AppUserAdminUpdateIn
 from app.schemas.system import VipConfigIn, VipPackageItem
 from app.services.im_text_billing_service import should_charge_im_text_message
 from app.services.vip_service import (
@@ -105,6 +106,7 @@ def test_vip_admin_web_contract_exists() -> None:
     api_content = _read_backend_file("web/src/api/system.js")
     page_path = BACKEND_ROOT / "web/src/views/system/vip-config/index.vue"
     user_page = _read_backend_file("web/src/views/operation/app-user/index.vue")
+    user_api = _read_backend_file("app/api/v1/app_users/app_users.py")
 
     assert "getVipConfig" in api_content
     assert "updateVipConfig" in api_content
@@ -113,3 +115,8 @@ def test_vip_admin_web_contract_exists() -> None:
     assert "amount" in page_content
     assert "/ 100" in page_content
     assert "vip_expires_at" in user_page
+    assert "NDatePicker" in user_page
+    assert 'v-model:formatted-value="modalForm.vip_expires_at"' in user_page
+    assert "清空VIP" in user_page
+    assert "vip_expires_at" in AppUserAdminUpdateIn.model_fields
+    assert '"vip_expires_at" in req_in.model_fields_set' in user_api
