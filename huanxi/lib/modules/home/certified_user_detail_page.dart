@@ -539,7 +539,9 @@ class _CertifiedUserDetailPageState
                                 ],
                               ),
                               const SizedBox(height: 8),
-                              Row(
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
                                 children: [
                                   _buildTag(
                                     icon: certifiedUser.gender == 'male'
@@ -550,21 +552,19 @@ class _CertifiedUserDetailPageState
                                         : '$age岁',
                                     color: _genderColor(certifiedUser.gender),
                                   ),
-                                  const SizedBox(width: 8),
                                   _buildTag(
                                     icon: Icons.auto_awesome,
                                     label: zodiac ?? '星座未填',
                                     color: AppTheme.primaryColor,
                                   ),
+                                  ..._buildProfileFactTags(certifiedUser),
                                   if ((certifiedUser.status ?? 'normal') ==
-                                      'banned') ...[
-                                    const SizedBox(width: 8),
+                                      'banned')
                                     _buildTag(
                                       icon: Icons.block_rounded,
                                       label: '封禁',
                                       color: AppTheme.errorColor,
                                     ),
-                                  ],
                                 ],
                               ),
                             ],
@@ -607,29 +607,6 @@ class _CertifiedUserDetailPageState
                               ),
                             ],
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    Wrap(
-                      spacing: 10,
-                      runSpacing: 10,
-                      children: [
-                        _buildInfoChip(
-                          icon: Icons.height,
-                          label: certifiedUser.heightCm == null
-                              ? '身高未填'
-                              : '${certifiedUser.heightCm}cm',
-                        ),
-                        _buildInfoChip(
-                          icon: Icons.monitor_weight_outlined,
-                          label: certifiedUser.weightKg == null
-                              ? '体重未填'
-                              : '${certifiedUser.weightKg}kg',
-                        ),
-                        _buildInfoChip(
-                          icon: Icons.location_on_outlined,
-                          label: _locationLabel(certifiedUser.locationCity),
                         ),
                       ],
                     ),
@@ -878,29 +855,28 @@ class _CertifiedUserDetailPageState
     );
   }
 
-  Widget _buildInfoChip({required IconData icon, required String label}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppTheme.backgroundColor,
-        borderRadius: BorderRadius.circular(18),
+  List<Widget> _buildProfileFactTags(CertifiedUserInfo certifiedUser) {
+    return [
+      _buildTag(
+        icon: Icons.height,
+        label: certifiedUser.heightCm == null
+            ? '身高未填'
+            : '${certifiedUser.heightCm}cm',
+        color: AppTheme.primaryColor,
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 16, color: AppTheme.textSecondary),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 13,
-              color: AppTheme.textPrimary,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
+      _buildTag(
+        icon: Icons.monitor_weight_outlined,
+        label: certifiedUser.weightKg == null
+            ? '体重未填'
+            : '${certifiedUser.weightKg}kg',
+        color: AppTheme.primaryColor,
       ),
-    );
+      _buildTag(
+        icon: Icons.location_on_outlined,
+        label: _locationLabel(certifiedUser.locationCity),
+        color: AppTheme.primaryColor,
+      ),
+    ];
   }
 
   List<String> _detailPhotos(CertifiedUserInfo certifiedUser) {

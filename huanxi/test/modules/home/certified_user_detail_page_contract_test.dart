@@ -32,4 +32,16 @@ void main() {
     expect(page, contains("value == 'male' ? AppTheme.primaryColor"));
     expect(page, contains('const Color(0xFFFF69B4)'));
   });
+
+  test('certified user detail shows profile facts as top tags', () {
+    final page = File(
+      'lib/modules/home/certified_user_detail_page.dart',
+    ).readAsStringSync();
+
+    expect(page, contains('_buildProfileFactTags(certifiedUser)'));
+    expect(page, contains("'身高未填'"));
+    expect(page, contains("'体重未填'"));
+    expect(page, contains('_locationLabel(certifiedUser.locationCity)'));
+    expect(page, isNot(contains('_buildInfoChip(')));
+  });
 }
