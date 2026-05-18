@@ -147,6 +147,7 @@ class _RechargePageState extends ConsumerState<RechargePage> {
         backgroundColor: AppTheme.backgroundColor,
         appBar: AppBar(
           backgroundColor: AppTheme.surfaceColor,
+          centerTitle: true,
           title: const Text('充值'),
         ),
         body: Center(
@@ -194,6 +195,7 @@ class _RechargePageState extends ConsumerState<RechargePage> {
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         backgroundColor: AppTheme.surfaceColor,
+        centerTitle: true,
         title: const Text('充值'),
         actions: [
           TextButton(
@@ -280,7 +282,9 @@ class _RechargePageState extends ConsumerState<RechargePage> {
                                     : const Color(0xFFF0F0F0),
                                 width: isSelected ? 2 : 1,
                               ),
-                              boxShadow: isSelected ? AppTheme.cardShadow : null,
+                              boxShadow: isSelected
+                                  ? AppTheme.cardShadow
+                                  : null,
                             ),
                             child: Stack(
                               children: [
@@ -319,7 +323,9 @@ class _RechargePageState extends ConsumerState<RechargePage> {
                                         vertical: 1,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: _parseColor(pkg['tag_color']?.toString()),
+                                        color: _parseColor(
+                                          pkg['tag_color']?.toString(),
+                                        ),
                                         borderRadius: BorderRadius.circular(4),
                                       ),
                                       child: Text(

@@ -50,11 +50,10 @@ class _CoinTransactionsPageState extends ConsumerState<CoinTransactionsPage> {
         params: {'type': 'coins', 'page': targetPage, 'page_size': 20},
       );
       final payload = data['data'] as Map<String, dynamic>?;
-      final list =
-          (payload?['records'] as List<dynamic>? ?? const <dynamic>[])
-              .whereType<Map<String, dynamic>>()
-              .map(_CoinRecord.fromJson)
-              .toList();
+      final list = (payload?['records'] as List<dynamic>? ?? const <dynamic>[])
+          .whereType<Map<String, dynamic>>()
+          .map(_CoinRecord.fromJson)
+          .toList();
       if (!mounted) return;
       setState(() {
         if (reset) {
@@ -101,6 +100,7 @@ class _CoinTransactionsPageState extends ConsumerState<CoinTransactionsPage> {
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         backgroundColor: AppTheme.surfaceColor,
+        centerTitle: true,
         title: Text('${tokenNames.coinName}明细'),
       ),
       body: Column(
@@ -200,7 +200,9 @@ class _CoinTransactionsPageState extends ConsumerState<CoinTransactionsPage> {
                             return const Padding(
                               padding: EdgeInsets.all(16),
                               child: Center(
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               ),
                             );
                           }
@@ -230,7 +232,8 @@ class _CoinTransactionsPageState extends ConsumerState<CoinTransactionsPage> {
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         row.title,
@@ -260,7 +263,7 @@ class _CoinTransactionsPageState extends ConsumerState<CoinTransactionsPage> {
                                   ),
                                 ),
                                 Text(
-                                '${row.isIncome ? '+' : '-'}${_formatAmount(row.amount)}',
+                                  '${row.isIncome ? '+' : '-'}${_formatAmount(row.amount)}',
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,

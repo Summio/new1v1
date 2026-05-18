@@ -353,7 +353,7 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F7FB),
-      appBar: AppBar(title: const Text('编辑资料')),
+      appBar: AppBar(centerTitle: true, title: const Text('编辑资料')),
       body: _isEntryChecking
           ? const Center(child: CircularProgressIndicator())
           : GestureDetector(

@@ -93,6 +93,7 @@ class _WithdrawAccountPageState extends ConsumerState<WithdrawAccountPage> {
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         backgroundColor: AppTheme.surfaceColor,
+        centerTitle: true,
         title: const Text('提现账户'),
       ),
       body: SingleChildScrollView(

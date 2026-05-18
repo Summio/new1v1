@@ -48,6 +48,7 @@ class _WalletPageState extends ConsumerState<WalletPage> {
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         backgroundColor: AppTheme.surfaceColor,
+        centerTitle: true,
         title: const Text('我的钱包'),
         leading: IconButton(
           onPressed: () => context.pop(),

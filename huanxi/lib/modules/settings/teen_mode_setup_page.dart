@@ -41,10 +41,7 @@ class _TeenModeSetupPageState extends State<TeenModeSetupPage> {
     try {
       await TeenModeService.instance.enable(pin);
       if (!mounted) return;
-      AppToast.showSnackBar(
-        context,
-        const SnackBar(content: Text('青少年模式已开启')),
-      );
+      AppToast.showSnackBar(context, const SnackBar(content: Text('青少年模式已开启')));
       context.pop(true);
     } finally {
       if (mounted) {
@@ -54,10 +51,7 @@ class _TeenModeSetupPageState extends State<TeenModeSetupPage> {
   }
 
   void _showMessage(String message) {
-    AppToast.showSnackBar(
-      context,
-      SnackBar(content: Text(message)),
-    );
+    AppToast.showSnackBar(context, SnackBar(content: Text(message)));
   }
 
   @override
@@ -66,6 +60,7 @@ class _TeenModeSetupPageState extends State<TeenModeSetupPage> {
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         backgroundColor: AppTheme.surfaceColor,
+        centerTitle: true,
         title: const Text('设置青少年模式'),
       ),
       body: ListView(

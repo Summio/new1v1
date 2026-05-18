@@ -344,7 +344,11 @@ class _CallPageState extends ConsumerState<CallPage> {
       backgroundColor: AppTheme.backgroundColor,
       appBar: widget.embedded
           ? null
-          : AppBar(backgroundColor: Colors.white, title: const Text('通话记录')),
+          : AppBar(
+              backgroundColor: Colors.white,
+              centerTitle: true,
+              title: const Text('通话记录'),
+            ),
       body: _isLoading
           ? StatusView.loading(message: '正在加载通话记录...')
           : (_errorMessage != null && _records.isEmpty)

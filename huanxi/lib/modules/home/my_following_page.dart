@@ -146,6 +146,7 @@ class _MyFollowingPageState extends ConsumerState<MyFollowingPage> {
       appBar: widget.embedded
           ? null
           : AppBar(
+              centerTitle: true,
               title: Text(title),
               backgroundColor: Colors.white,
               foregroundColor: AppTheme.textPrimary,

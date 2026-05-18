@@ -46,6 +46,7 @@ class _DoNotDisturbPageState extends ConsumerState<DoNotDisturbPage> {
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         backgroundColor: AppTheme.surfaceColor,
+        centerTitle: true,
         title: const Text('勿扰模式'),
       ),
       body: state.isLoading

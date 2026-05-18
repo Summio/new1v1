@@ -70,6 +70,7 @@ class _ChangePasswordPageState extends ConsumerState<ChangePasswordPage> {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
+        centerTitle: true,
         title: const Text('修改密码'),
         backgroundColor: AppTheme.surfaceColor,
         elevation: 0,

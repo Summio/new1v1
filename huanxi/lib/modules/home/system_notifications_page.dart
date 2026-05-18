@@ -52,6 +52,7 @@ class _SystemNotificationsPageState
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
+        centerTitle: true,
         title: const Text('系统通知'),
         actions: [
           TextButton(

@@ -67,6 +67,7 @@ class _PublishMomentPageState extends ConsumerState<PublishMomentPage> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
+        centerTitle: true,
         leading: IconButton(
           icon: const Icon(Icons.close),
           onPressed: () => _confirmExit(),

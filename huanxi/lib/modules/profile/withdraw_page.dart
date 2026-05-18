@@ -136,10 +136,7 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
   Future<void> _submitWithdraw() async {
     if (_isSubmitting || _packages.isEmpty) return;
     if (!_account.isComplete) {
-      AppToast.showSnackBar(
-        context,
-        const SnackBar(content: Text('请先填写提现账户')),
-      );
+      AppToast.showSnackBar(context, const SnackBar(content: Text('请先填写提现账户')));
       await _editAccount();
       return;
     }
@@ -310,6 +307,7 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
   AppBar _appBar() {
     return AppBar(
       backgroundColor: AppTheme.surfaceColor,
+      centerTitle: true,
       title: const Text('钻石提现'),
       actions: [
         TextButton(

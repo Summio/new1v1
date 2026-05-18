@@ -49,10 +49,7 @@ class _TeenModeVerifyPageState extends State<TeenModeVerifyPage> {
   }
 
   void _showMessage(String message) {
-    AppToast.showSnackBar(
-      context,
-      SnackBar(content: Text(message)),
-    );
+    AppToast.showSnackBar(context, SnackBar(content: Text(message)));
   }
 
   @override
@@ -64,6 +61,7 @@ class _TeenModeVerifyPageState extends State<TeenModeVerifyPage> {
         appBar: AppBar(
           automaticallyImplyLeading: false,
           backgroundColor: AppTheme.surfaceColor,
+          centerTitle: true,
           title: const Text('青少年模式'),
         ),
         body: Center(

@@ -69,6 +69,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         backgroundColor: AppTheme.surfaceColor,
+        centerTitle: true,
         title: const Text('设置'),
       ),
       body: ListView(

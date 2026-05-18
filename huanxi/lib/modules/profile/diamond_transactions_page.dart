@@ -53,11 +53,10 @@ class _DiamondTransactionsPageState
         params: {'type': 'diamonds', 'page': targetPage, 'page_size': 20},
       );
       final payload = data['data'] as Map<String, dynamic>?;
-      final list =
-          (payload?['records'] as List<dynamic>? ?? const <dynamic>[])
-              .whereType<Map<String, dynamic>>()
-              .map(_DiamondRecord.fromJson)
-              .toList();
+      final list = (payload?['records'] as List<dynamic>? ?? const <dynamic>[])
+          .whereType<Map<String, dynamic>>()
+          .map(_DiamondRecord.fromJson)
+          .toList();
       if (!mounted) return;
       setState(() {
         if (reset) {
@@ -104,6 +103,7 @@ class _DiamondTransactionsPageState
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         backgroundColor: AppTheme.surfaceColor,
+        centerTitle: true,
         title: Text('${tokenNames.diamondName}明细'),
         actions: [
           TextButton(
@@ -209,7 +209,9 @@ class _DiamondTransactionsPageState
                             return const Padding(
                               padding: EdgeInsets.all(16),
                               child: Center(
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               ),
                             );
                           }
@@ -239,7 +241,8 @@ class _DiamondTransactionsPageState
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         row.title,
@@ -251,7 +254,9 @@ class _DiamondTransactionsPageState
                                       ),
                                       if (row.type == 'withdraw') ...[
                                         const SizedBox(height: 4),
-                                        _WithdrawStatusBadge(status: row.status),
+                                        _WithdrawStatusBadge(
+                                          status: row.status,
+                                        ),
                                       ],
                                       const SizedBox(height: 2),
                                       Text(
@@ -275,7 +280,7 @@ class _DiamondTransactionsPageState
                                   ),
                                 ),
                                 Text(
-                                '${row.isIncome ? '+' : '-'}${_formatAmount(row.amount)}',
+                                  '${row.isIncome ? '+' : '-'}${_formatAmount(row.amount)}',
                                   style: TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,

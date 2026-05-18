@@ -81,6 +81,7 @@ class _ComplaintPageState extends State<ComplaintPage> {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
+        centerTitle: true,
         title: const Text('投诉用户'),
         backgroundColor: AppTheme.surfaceColor,
         elevation: 0,

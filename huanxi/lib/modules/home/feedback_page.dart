@@ -69,6 +69,7 @@ class _FeedbackPageState extends ConsumerState<FeedbackPage> {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
+        centerTitle: true,
         title: const Text('意见反馈'),
         backgroundColor: AppTheme.surfaceColor,
         elevation: 0,

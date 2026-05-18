@@ -38,7 +38,7 @@ class _SystemNotificationDetailPageState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      appBar: AppBar(title: const Text('系统通知')),
+      appBar: AppBar(centerTitle: true, title: const Text('系统通知')),
       body: FutureBuilder<SystemNotificationDetail>(
         future: _future,
         builder: (context, snapshot) {

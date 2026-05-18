@@ -207,6 +207,7 @@ class _CertificationHomePageState extends ConsumerState<CertificationHomePage> {
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
+        centerTitle: true,
         title: const Text('认证中心'),
         backgroundColor: Colors.white,
         foregroundColor: AppTheme.textPrimary,
@@ -370,6 +371,7 @@ class _CertificationApplyPageState
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
+        centerTitle: true,
         title: const Text('真人认证'),
         backgroundColor: Colors.white,
         foregroundColor: AppTheme.textPrimary,
@@ -864,6 +866,7 @@ class _CertifiedCallPricePageState
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
+        centerTitle: true,
         title: const Text('通话价格'),
         backgroundColor: Colors.white,
         foregroundColor: AppTheme.textPrimary,
@@ -1044,6 +1047,7 @@ class _CertifiedCommonPhrasesPageState
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
+        centerTitle: true,
         title: const Text('常用语'),
         backgroundColor: Colors.white,
         foregroundColor: AppTheme.textPrimary,
@@ -1437,6 +1441,7 @@ class _FrontCameraCapturePageState extends State<_FrontCameraCapturePage> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
+        centerTitle: true,
         title: const Text('前置摄像头自拍'),
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
