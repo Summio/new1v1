@@ -2,7 +2,9 @@ import 'dart:io' show Platform;
 
 import 'package:permission_handler/permission_handler.dart';
 
+import '../constants/app_constants.dart';
 import '../device/call_keep_alive_bridge.dart';
+import '../storage/storage.dart';
 import '../../services/websocket_service.dart';
 
 enum MandatoryPermissionKind {
@@ -89,12 +91,19 @@ class MandatoryPermissionService {
 
   bool get requiredGranted => _lastState?.requiredGranted ?? false;
 
+  bool get keepAlivePreferenceEnabled =>
+      StorageService.getBool(AppConstants.storageKeepAliveEnabled) ?? false;
+
+  Future<void> setKeepAlivePreference(bool enabled) async {
+    await StorageService.saveBool(
+      AppConstants.storageKeepAliveEnabled,
+      enabled,
+    );
+  }
+
   Future<MandatoryPermissionState> check() async {
     final checks = <MandatoryPermissionCheck>[
-      await _checkPermission(
-        MandatoryPermissionKind.camera,
-        Permission.camera,
-      ),
+      await _checkPermission(MandatoryPermissionKind.camera, Permission.camera),
       await _checkPermission(
         MandatoryPermissionKind.microphone,
         Permission.microphone,
@@ -144,8 +153,13 @@ class MandatoryPermissionService {
 
   Future<MandatoryPermissionState> ensureReadyForLoggedInUser() async {
     var state = await requestMissing();
-    if (state.requiredGranted && Platform.isAndroid) {
-      await _bestEffortSetOnline();
+    if (state.requiredGranted &&
+        Platform.isAndroid &&
+        keepAlivePreferenceEnabled) {
+      try {
+        await CallKeepAliveBridge.startOnlineMode();
+        await _bestEffortSetOnline();
+      } catch (_) {}
       state = await check();
     }
     return state;
@@ -161,10 +175,20 @@ class MandatoryPermissionService {
       await _bestEffortSetOnline();
     } catch (_) {}
     state = await check();
+    if (state.keepAliveGranted) {
+      await setKeepAlivePreference(true);
+    }
     return state;
   }
 
   Future<void> stopKeepAliveForLogout() async {
+    if (Platform.isAndroid) {
+      await CallKeepAliveBridge.stopOnlineMode();
+    }
+  }
+
+  Future<void> stopKeepAliveByUser() async {
+    await setKeepAlivePreference(false);
     if (Platform.isAndroid) {
       await CallKeepAliveBridge.stopOnlineMode();
     }

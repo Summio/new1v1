@@ -53,39 +53,45 @@ void main() {
 
     expect(service, contains('startKeepAliveForLoggedInUser'));
     expect(service, contains('CallKeepAliveBridge.startOnlineMode'));
+    expect(service, contains('setKeepAlivePreference'));
+    expect(service, contains('keepAlivePreferenceEnabled'));
+    expect(service, contains('storageKeepAliveEnabled'));
     expect(settings, contains('startKeepAliveForLoggedInUser'));
-    expect(settings, contains('state.keepAliveGranted'));
+    expect(settings, contains('keepAlivePreferenceEnabled'));
     expect(settings, contains('onTap: _keepAliveBusy'));
   });
 
-  test('keep alive state is independent from optional notification permission', () {
-    const state = MandatoryPermissionState(
-      checks: [
-        MandatoryPermissionCheck(
-          kind: MandatoryPermissionKind.notification,
-          granted: false,
-          required: false,
-        ),
-        MandatoryPermissionCheck(
-          kind: MandatoryPermissionKind.camera,
-          granted: true,
-        ),
-        MandatoryPermissionCheck(
-          kind: MandatoryPermissionKind.microphone,
-          granted: true,
-        ),
-        MandatoryPermissionCheck(
-          kind: MandatoryPermissionKind.androidKeepAlive,
-          granted: true,
-          required: false,
-        ),
-      ],
-    );
+  test(
+    'keep alive state is independent from optional notification permission',
+    () {
+      const state = MandatoryPermissionState(
+        checks: [
+          MandatoryPermissionCheck(
+            kind: MandatoryPermissionKind.notification,
+            granted: false,
+            required: false,
+          ),
+          MandatoryPermissionCheck(
+            kind: MandatoryPermissionKind.camera,
+            granted: true,
+          ),
+          MandatoryPermissionCheck(
+            kind: MandatoryPermissionKind.microphone,
+            granted: true,
+          ),
+          MandatoryPermissionCheck(
+            kind: MandatoryPermissionKind.androidKeepAlive,
+            granted: true,
+            required: false,
+          ),
+        ],
+      );
 
-    expect(state.requiredGranted, isTrue);
-    expect(state.allGranted, isFalse);
-    expect(state.keepAliveGranted, isTrue);
-  });
+      expect(state.requiredGranted, isTrue);
+      expect(state.allGranted, isFalse);
+      expect(state.keepAliveGranted, isTrue);
+    },
+  );
 
   test('android foreground service bridge and settings entry exist', () {
     final bridge = File(
@@ -105,7 +111,10 @@ void main() {
     ).readAsStringSync();
 
     expect(bridge, contains('huanxi/call_keep_alive'));
-    expect(settings, contains('后台接听模式'));
+    expect(settings, contains('后台保持在线'));
+    expect(settings, isNot(contains('后台接听模式')));
+    expect(settings, isNot(contains('已开启，后台可保持在线')));
+    expect(settings, isNot(contains('未开启时可能影响后台来电提醒')));
     expect(manifest, contains('android.permission.FOREGROUND_SERVICE'));
     expect(manifest, contains('android.permission.POST_NOTIFICATIONS'));
     expect(manifest, isNot(contains('FOREGROUND_SERVICE_PHONE_CALL')));
@@ -115,6 +124,20 @@ void main() {
     expect(activity, contains('result.error'));
     expect(service, contains('try {'));
     expect(service, contains('startForeground'));
+  });
+
+  test('android keep alive foreground notification copy is concise', () {
+    final service = File(
+      'android/app/src/main/kotlin/com/huanxi/huanxi/CallKeepAliveService.kt',
+    ).readAsStringSync();
+
+    expect(service, contains('"正在保持在线"'));
+    expect(service, contains('"通话中"'));
+    expect(service, contains('"点击返回通话"'));
+    expect(service, isNot(contains('欢喜正在保持在线')));
+    expect(service, isNot(contains('欢喜通话中')));
+    expect(service, isNot(contains('可接收 1v1 来电')));
+    expect(service, isNot(contains('可接收1v1来电')));
   });
 
   test('background incoming call uses android system notification bridge', () {

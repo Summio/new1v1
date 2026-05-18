@@ -173,27 +173,42 @@ void main() {
     expect(chatPage, isNot(contains('黑名单功能开发中')));
     expect(chatPage, contains('MyBlacklistPage.embedded'));
     expect(followingPage, contains('class MyBlacklistPage'));
-    expect(followingPage, contains('解除拉黑'));
+    expect(followingPage, contains('我拉黑的人'));
+    expect(followingPage, contains('拉黑于'));
+    expect(followingPage, isNot(contains('解除拉黑')));
+    expect(followingPage, isNot(contains('确认解除拉黑')));
     expect(followingPage, contains('我拉黑的人'));
     expect(provider, contains('myBlacklistProvider'));
     expect(provider, contains('getBlockedUsers'));
     expect(service, contains('getBlockedUsers'));
-    expect(service, contains('unblockUser'));
     expect(endpoints, contains('userBlockList'));
     expect(endpoints, contains('app/user/block/list'));
   });
 
-  test('unfollow action asks for confirmation before request', () {
+  test('relationship lists hide certification badge and inline actions', () {
     final followingPage = File(
       'lib/modules/home/my_following_page.dart',
     ).readAsStringSync();
-    final certifiedUserDetailPage = File(
-      'lib/modules/home/certified_user_detail_page.dart',
-    ).readAsStringSync();
 
-    expect(followingPage, contains('确认取消关注'));
-    expect(followingPage, contains('确定不再关注'));
-    expect(certifiedUserDetailPage, contains('确认取消关注'));
-    expect(certifiedUserDetailPage, contains('确定不再关注'));
+    expect(followingPage, isNot(contains('_UserTypeBadge')));
+    expect(followingPage, isNot(contains('取消关注')));
+    expect(followingPage, isNot(contains('解除拉黑')));
+    expect(followingPage, isNot(contains('确认取消关注')));
+    expect(followingPage, isNot(contains('确认解除拉黑')));
+    expect(followingPage, isNot(contains('OutlinedButton.icon')));
+    expect(followingPage, contains('availabilityLabel'));
+    expect(followingPage, contains('dateLabel'));
   });
+
+  test(
+    'user detail keeps unfollow confirmation outside relationship lists',
+    () {
+      final certifiedUserDetailPage = File(
+        'lib/modules/home/certified_user_detail_page.dart',
+      ).readAsStringSync();
+
+      expect(certifiedUserDetailPage, contains('确认取消关注'));
+      expect(certifiedUserDetailPage, contains('确定不再关注'));
+    },
+  );
 }

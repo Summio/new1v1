@@ -56,8 +56,7 @@ class CallKeepAliveService : Service() {
     }
 
     private fun buildNotification(mode: String, callId: Int): Notification {
-        val title = if (mode == MODE_CALL) "欢喜通话中" else "欢喜正在保持在线"
-        val text = if (mode == MODE_CALL) "点击返回通话" else "可接收 1v1 来电"
+        val title = if (mode == MODE_CALL) "通话中" else "正在保持在线"
         val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
             ?: Intent(this, MainActivity::class.java)
         launchIntent.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
@@ -71,15 +70,17 @@ class CallKeepAliveService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        return NotificationCompat.Builder(this, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(applicationInfo.icon)
             .setContentTitle(title)
-            .setContentText(text)
             .setContentIntent(pendingIntent)
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_CALL)
-            .build()
+        if (mode == MODE_CALL) {
+            builder.setContentText("点击返回通话")
+        }
+        return builder.build()
     }
 
     companion object {

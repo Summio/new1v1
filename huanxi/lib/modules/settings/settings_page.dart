@@ -26,10 +26,12 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _refreshKeepAliveState() async {
-    final state = await MandatoryPermissionService.instance.check();
+    final service = MandatoryPermissionService.instance;
+    final preferenceEnabled = service.keepAlivePreferenceEnabled;
+    final state = await service.check();
     if (!mounted) return;
     setState(() {
-      _keepAliveReady = state.keepAliveGranted;
+      _keepAliveReady = preferenceEnabled && state.keepAliveGranted;
     });
   }
 
@@ -47,7 +49,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           return;
         }
       } else {
-        await MandatoryPermissionService.instance.stopKeepAliveForLogout();
+        await MandatoryPermissionService.instance.stopKeepAliveByUser();
       }
       await _refreshKeepAliveState();
     } finally {
@@ -81,8 +83,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           ),
           _SettingsTile(
             icon: Icons.notifications_outlined,
-            title: '后台接听模式',
-            subtitle: _keepAliveReady ? '已开启，后台可保持在线' : '未开启时可能影响后台来电提醒',
+            title: '后台保持在线',
             onTap: _keepAliveBusy
                 ? null
                 : () => _ensureKeepAlive(!_keepAliveReady),
