@@ -196,6 +196,15 @@ void main() {
     final toggleText = text.substring(toggleStart, toggleEnd);
     expect(toggleText, contains('_closeChatInput();'));
     expect(toggleText, contains('_callChromeVisible.value = !visible;'));
+
+    final closeInputIndex = toggleText.indexOf('_closeChatInput();');
+    final returnIndex = toggleText.indexOf('return;', closeInputIndex);
+    final toggleChromeIndex = toggleText.indexOf(
+      '_callChromeVisible.value = !visible;',
+    );
+    expect(toggleText, contains('if (_chatInputVisible.value)'));
+    expect(returnIndex, greaterThan(closeInputIndex));
+    expect(toggleChromeIndex, greaterThan(returnIndex));
   });
 
   test('call chrome widgets and chat overlay follow chrome visibility', () {

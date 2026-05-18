@@ -704,10 +704,11 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
   }
 
   void _toggleCallChrome() {
-    final visible = _callChromeVisible.value;
-    if (visible) {
+    if (_chatInputVisible.value) {
       _closeChatInput();
+      return;
     }
+    final visible = _callChromeVisible.value;
     _callChromeVisible.value = !visible;
   }
 
