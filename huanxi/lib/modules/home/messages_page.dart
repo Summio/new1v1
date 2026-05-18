@@ -8,6 +8,7 @@ import 'package:tencent_cloud_chat_sdk/models/v2_tim_user_full_info.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/widgets/status_view.dart';
 import '../../app/providers/auth_provider.dart';
+import '../../app/providers/system_notification_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/dio_client.dart';
@@ -48,6 +49,10 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
   void initState() {
     super.initState();
     _initAndLoad();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(systemNotificationListProvider.notifier).refresh();
+    });
   }
 
   @override
@@ -362,6 +367,35 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
     return '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
   }
 
+  void _openConversationAvatarDetail(V2TimConversation conv) {
+    final imUserId = conv.userID?.trim() ?? '';
+    if (imUserId.isEmpty) return;
+    final appInitState = ref.read(appInitProvider);
+    if (_matchesCustomerServiceConversation(
+      imUserId,
+      appInitState.customerServiceUserId?.trim() ?? '',
+    )) {
+      return;
+    }
+    final targetUserId = _extractAppUserId(imUserId);
+    if (targetUserId == null || targetUserId <= 0) return;
+    context.push('${AppRoutes.certifiedUserDetail}?userId=$targetUserId');
+  }
+
+  Widget _buildConversationAvatar(V2TimConversation conv, String? avatarUrl) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _openConversationAvatarDetail(conv),
+      child: CircleAvatar(
+        backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.15),
+        backgroundImage: avatarUrl == null ? null : NetworkImage(avatarUrl),
+        child: avatarUrl == null
+            ? const Icon(Icons.person, color: AppTheme.primaryColor)
+            : null,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -450,20 +484,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
                   final conv = _conversations[convIndex];
                   final avatarUrl = _avatarUrl(conv);
                   return ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: AppTheme.primaryColor.withValues(
-                        alpha: 0.15,
-                      ),
-                      backgroundImage: avatarUrl == null
-                          ? null
-                          : NetworkImage(avatarUrl),
-                      child: avatarUrl == null
-                          ? const Icon(
-                              Icons.person,
-                              color: AppTheme.primaryColor,
-                            )
-                          : null,
-                    ),
+                    leading: _buildConversationAvatar(conv, avatarUrl),
                     title: Text(
                       _displayName(conv),
                       maxLines: 1,
@@ -551,12 +572,24 @@ class _PeerAppProfile {
   const _PeerAppProfile({this.nickname, this.avatarUrl});
 }
 
-class _SystemNotificationEntryCard extends StatelessWidget {
+class _SystemNotificationEntryCard extends ConsumerWidget {
   const _SystemNotificationEntryCard();
 
   @override
-  Widget build(BuildContext context) {
-    const subtitle = '查看平台公告、账户和审核通知';
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(systemNotificationListProvider);
+    final latestContent = state.items.isEmpty
+        ? ''
+        : state.items.first.content.trim();
+    final subtitle = latestContent.isNotEmpty
+        ? latestContent
+        : state.items.isNotEmpty
+        ? '暂无内容'
+        : state.isLoading
+        ? '正在加载通知...'
+        : state.error != null
+        ? '通知加载失败，点击查看'
+        : '暂无系统通知';
     return InkWell(
       onTap: () => context.push(AppRoutes.systemNotifications),
       child: Container(

@@ -772,6 +772,15 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
     return '';
   }
 
+  void _openUserDetailFromChatAvatar({required bool isMe}) {
+    if (!isMe && _isCustomerServiceConversation) return;
+    final targetUserId = isMe
+        ? _extractAppUserId(_myUserId ?? '')
+        : _extractAppUserId(_peerUserId ?? widget.userId);
+    if (targetUserId == null || targetUserId <= 0) return;
+    context.push('${AppRoutes.certifiedUserDetail}?userId=$targetUserId');
+  }
+
   Widget _buildAppBarTitle() {
     if (_isCustomerServiceConversation) {
       return const Text('在线客服', maxLines: 1, overflow: TextOverflow.ellipsis);
@@ -1030,6 +1039,13 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
                                       avatarUrl: msg.isMe
                                           ? _myAvatarUrl
                                           : _peerAvatarUrl,
+                                      onAvatarTap:
+                                          !msg.isMe &&
+                                              _isCustomerServiceConversation
+                                          ? null
+                                          : () => _openUserDetailFromChatAvatar(
+                                              isMe: msg.isMe,
+                                            ),
                                     );
                                   },
                                 ),
@@ -1162,6 +1178,7 @@ class _MessageBubble extends StatelessWidget {
   final String coinName;
   final String diamondName;
   final String? avatarUrl;
+  final VoidCallback? onAvatarTap;
 
   const _MessageBubble({
     super.key,
@@ -1172,6 +1189,7 @@ class _MessageBubble extends StatelessWidget {
     required this.coinName,
     required this.diamondName,
     required this.avatarUrl,
+    required this.onAvatarTap,
   });
 
   @override
@@ -1182,6 +1200,7 @@ class _MessageBubble extends StatelessWidget {
         maxBubbleWidth: maxBubbleWidth,
         avatarUrl: avatarUrl,
         coinName: coinName,
+        onAvatarTap: onAvatarTap,
       );
     }
     if (message.isCallTrace) {
@@ -1204,7 +1223,7 @@ class _MessageBubble extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!message.isMe) ...[
-            _BubbleAvatar(avatarUrl: avatarUrl),
+            _BubbleAvatar(avatarUrl: avatarUrl, onTap: onAvatarTap),
             const SizedBox(width: 8),
           ],
           Container(
@@ -1245,7 +1264,7 @@ class _MessageBubble extends StatelessWidget {
           ),
           if (message.isMe) ...[
             const SizedBox(width: 8),
-            _BubbleAvatar(avatarUrl: avatarUrl),
+            _BubbleAvatar(avatarUrl: avatarUrl, onTap: onAvatarTap),
           ],
         ],
       ),
@@ -1258,12 +1277,14 @@ class _GiftMessageCard extends StatelessWidget {
   final double maxBubbleWidth;
   final String? avatarUrl;
   final String coinName;
+  final VoidCallback? onAvatarTap;
 
   const _GiftMessageCard({
     required this.message,
     required this.maxBubbleWidth,
     required this.avatarUrl,
     required this.coinName,
+    required this.onAvatarTap,
   });
 
   @override
@@ -1279,7 +1300,7 @@ class _GiftMessageCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           if (!message.isMe) ...[
-            _BubbleAvatar(avatarUrl: avatarUrl),
+            _BubbleAvatar(avatarUrl: avatarUrl, onTap: onAvatarTap),
             const SizedBox(width: 8),
           ],
           Container(
@@ -1352,7 +1373,7 @@ class _GiftMessageCard extends StatelessWidget {
           ),
           if (message.isMe) ...[
             const SizedBox(width: 8),
-            _BubbleAvatar(avatarUrl: avatarUrl),
+            _BubbleAvatar(avatarUrl: avatarUrl, onTap: onAvatarTap),
           ],
         ],
       ),
@@ -1525,19 +1546,26 @@ class _GiftFullscreenOverlay extends StatelessWidget {
 
 class _BubbleAvatar extends StatelessWidget {
   final String? avatarUrl;
+  final VoidCallback? onTap;
 
-  const _BubbleAvatar({required this.avatarUrl});
+  const _BubbleAvatar({required this.avatarUrl, this.onTap});
 
   @override
   Widget build(BuildContext context) {
     final hasAvatar = avatarUrl != null && avatarUrl!.trim().isNotEmpty;
-    return CircleAvatar(
+    final avatar = CircleAvatar(
       radius: 16,
       backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.15),
       backgroundImage: hasAvatar ? NetworkImage(avatarUrl!.trim()) : null,
       child: hasAvatar
           ? null
           : const Icon(Icons.person, size: 16, color: AppTheme.primaryColor),
+    );
+    if (onTap == null) return avatar;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: onTap,
+      child: avatar,
     );
   }
 }

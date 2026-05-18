@@ -60,9 +60,16 @@ void main() {
 
     expect(messages, contains('系统通知'));
     expect(messages, contains('_SystemNotificationEntryCard'));
+    expect(messages, contains('systemNotificationListProvider'));
+    expect(messages, contains('正在加载通知...'));
+    expect(messages, contains('暂无系统通知'));
+    expect(messages, contains('通知加载失败，点击查看'));
+    expect(messages, isNot(contains('查看平台公告、账户和审核通知')));
     expect(messages, isNot(contains('systemNotificationUnreadProvider')));
     expect(messages, isNot(contains('_NotificationBadge')));
     expect(messages, contains('AppRoutes.systemNotifications'));
+    expect(messages, contains('_openConversationAvatarDetail'));
+    expect(messages, contains('AppRoutes.certifiedUserDetail'));
 
     expect(shell, isNot(contains('_systemNotificationUnreadCount')));
     expect(
@@ -94,84 +101,120 @@ void main() {
     expect(detailPage, contains('_formatNotificationTime(detail.publishAt)'));
   });
 
-  test('system notifications stay http pull based and refresh on page entry', () {
-    final page = File(
-      'lib/modules/home/system_notifications_page.dart',
-    ).readAsStringSync();
-    final detailPage = File(
-      'lib/modules/home/system_notification_detail_page.dart',
-    ).readAsStringSync();
-    final service = File(
-      'lib/services/system_notification_service.dart',
-    ).readAsStringSync();
-    final provider = File(
-      'lib/app/providers/system_notification_provider.dart',
-    ).readAsStringSync();
+  test(
+    'system notifications stay http pull based and refresh on page entry',
+    () {
+      final page = File(
+        'lib/modules/home/system_notifications_page.dart',
+      ).readAsStringSync();
+      final detailPage = File(
+        'lib/modules/home/system_notification_detail_page.dart',
+      ).readAsStringSync();
+      final service = File(
+        'lib/services/system_notification_service.dart',
+      ).readAsStringSync();
+      final provider = File(
+        'lib/app/providers/system_notification_provider.dart',
+      ).readAsStringSync();
 
-    expect(service, contains('fetchNotifications'));
-    expect(service, contains('fetchDetail'));
-    expect(service, contains('markRead'));
-    expect(service, contains('markUnread'));
-    expect(service, contains('readAll'));
-    expect(service, isNot(contains('unread-count')));
+      expect(service, contains('fetchNotifications'));
+      expect(service, contains('fetchDetail'));
+      expect(service, contains('markRead'));
+      expect(service, contains('markUnread'));
+      expect(service, contains('readAll'));
+      expect(service, isNot(contains('unread-count')));
 
-    expect(provider, contains('Future<void> refresh()'));
-    expect(provider, contains('fetchNotifications(page: 1)'));
-    expect(provider, contains('loadMore'));
-    expect(provider, contains('syncDetail'));
-    expect(page, contains('systemNotificationListProvider.notifier).refresh()'));
-    expect(page, contains('RefreshIndicator'));
-    expect(page, contains('loadMore'));
-    expect(detailPage, contains('fetchDetail'));
-    expect(detailPage, contains('syncDetail'));
-    expect(page, isNot(contains('system_notification_unread_changed')));
-  });
+      expect(provider, contains('Future<void> refresh()'));
+      expect(provider, contains('fetchNotifications(page: 1)'));
+      expect(provider, contains('loadMore'));
+      expect(provider, contains('syncDetail'));
+      expect(
+        page,
+        contains('systemNotificationListProvider.notifier).refresh()'),
+      );
+      expect(page, contains('RefreshIndicator'));
+      expect(page, contains('loadMore'));
+      expect(detailPage, contains('fetchDetail'));
+      expect(detailPage, contains('syncDetail'));
+      expect(page, isNot(contains('system_notification_unread_changed')));
+    },
+  );
 
-  test('admin operation pages explain lazy pull delivery and keep controls', () {
-    final notificationPage = File(
-      '../backend/web/src/views/operation/system-notification/index.vue',
-    ).readAsStringSync();
-    final popupPage = File(
-      '../backend/web/src/views/operation/popup/index.vue',
-    ).readAsStringSync();
+  test(
+    'chat message and call avatars route to user detail only from avatars',
+    () {
+      final messages = File(
+        'lib/modules/home/messages_page.dart',
+      ).readAsStringSync();
+      final callPage = File(
+        'lib/modules/home/call_page.dart',
+      ).readAsStringSync();
+      final imPage = File('lib/modules/im/im_page.dart').readAsStringSync();
 
-    expect(notificationPage, contains('发布后不会主动推送'));
-    expect(notificationPage, contains('下次拉取通知列表'));
-    expect(notificationPage, isNot(contains('WebSocket')));
-    expect(popupPage, contains('发布后不会主动推送'));
-    expect(popupPage, contains('App 启动或前台轮询接口拉取'));
-    expect(popupPage, contains('ack 后不再重复展示同一期'));
-    expect(popupPage, isNot(contains('WebSocket')));
+      expect(messages, contains('_openConversationAvatarDetail'));
+      expect(messages, contains('_buildConversationAvatar'));
+      expect(messages, contains('_matchesCustomerServiceConversation'));
+      expect(messages, contains('AppRoutes.certifiedUserDetail'));
 
-    for (final value in ['immediate', 'once', 'repeat']) {
-      expect(notificationPage, contains(value));
-    }
-    for (final value in ['immediate', 'once', 'repeat', 'app_start']) {
-      expect(popupPage, contains(value));
-    }
-    for (final action in [
-      'createSystemNotification',
-      'updateSystemNotification',
-      'publishSystemNotification',
-      'pauseSystemNotification',
-      'resumeSystemNotification',
-      'cancelSystemNotification',
-      'deleteSystemNotification',
-      'estimateSystemNotificationTargetCount',
-    ]) {
-      expect(notificationPage, contains(action));
-    }
-    for (final action in [
-      'createSystemPopup',
-      'updateSystemPopup',
-      'publishSystemPopup',
-      'pauseSystemPopup',
-      'resumeSystemPopup',
-      'cancelSystemPopup',
-      'deleteSystemPopup',
-      'estimateSystemPopupTargetCount',
-    ]) {
-      expect(popupPage, contains(action));
-    }
-  });
+      expect(callPage, contains('peerUserId'));
+      expect(callPage, contains('_openCallRecordAvatarDetail'));
+      expect(callPage, contains('AppRoutes.certifiedUserDetail'));
+
+      expect(imPage, contains('_openUserDetailFromChatAvatar'));
+      expect(imPage, contains('onAvatarTap'));
+      expect(imPage, contains('_BubbleAvatar'));
+      expect(imPage, contains('AppRoutes.certifiedUserDetail'));
+    },
+  );
+
+  test(
+    'admin operation pages explain lazy pull delivery and keep controls',
+    () {
+      final notificationPage = File(
+        '../backend/web/src/views/operation/system-notification/index.vue',
+      ).readAsStringSync();
+      final popupPage = File(
+        '../backend/web/src/views/operation/popup/index.vue',
+      ).readAsStringSync();
+
+      expect(notificationPage, contains('发布后不会主动推送'));
+      expect(notificationPage, contains('下次拉取通知列表'));
+      expect(notificationPage, isNot(contains('WebSocket')));
+      expect(popupPage, contains('发布后不会主动推送'));
+      expect(popupPage, contains('App 启动或前台轮询接口拉取'));
+      expect(popupPage, contains('ack 后不再重复展示同一期'));
+      expect(popupPage, isNot(contains('WebSocket')));
+
+      for (final value in ['immediate', 'once', 'repeat']) {
+        expect(notificationPage, contains(value));
+      }
+      for (final value in ['immediate', 'once', 'repeat', 'app_start']) {
+        expect(popupPage, contains(value));
+      }
+      for (final action in [
+        'createSystemNotification',
+        'updateSystemNotification',
+        'publishSystemNotification',
+        'pauseSystemNotification',
+        'resumeSystemNotification',
+        'cancelSystemNotification',
+        'deleteSystemNotification',
+        'estimateSystemNotificationTargetCount',
+      ]) {
+        expect(notificationPage, contains(action));
+      }
+      for (final action in [
+        'createSystemPopup',
+        'updateSystemPopup',
+        'publishSystemPopup',
+        'pauseSystemPopup',
+        'resumeSystemPopup',
+        'cancelSystemPopup',
+        'deleteSystemPopup',
+        'estimateSystemPopupTargetCount',
+      ]) {
+        expect(popupPage, contains(action));
+      }
+    },
+  );
 }
