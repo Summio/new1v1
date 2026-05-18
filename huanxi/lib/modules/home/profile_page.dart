@@ -157,27 +157,20 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    _buildAvailabilityChip(
-                      label: _availabilityText(authState),
-                      color: _availabilityColor(authState),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildAvailabilityChip(
+                          label: _availabilityText(authState),
+                          color: _availabilityColor(authState),
+                        ),
+                        if (isCertifiedUser) ...[
+                          const SizedBox(width: 6),
+                          _buildCertificationChip(),
+                        ],
+                      ],
                     ),
-                    if (isCertifiedUser) ...[
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppTheme.secondaryColor,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Text(
-                          '真人认证',
-                          style: TextStyle(color: Colors.white, fontSize: 12),
-                        ),
-                      ),
-                    ],
                     const SizedBox(height: 4),
                     Row(
                       mainAxisSize: MainAxisSize.min,
@@ -387,6 +380,20 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildCertificationChip() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppTheme.secondaryColor,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Text(
+        '真人认证',
+        style: TextStyle(color: Colors.white, fontSize: 12),
       ),
     );
   }

@@ -10,6 +10,8 @@ void main() {
     expect(page, isNot(contains("'已真人认证'")));
     expect(page, contains('_genderText(authState.gender)'));
     expect(page, contains('_availabilityText(authState)'));
+    expect(page, contains('_buildCertificationChip()'));
+    expect(page, contains('if (isCertifiedUser) ...['));
     expect(page, contains('authState.videoDndEnabled'));
     expect(page, contains("'在线'"));
     expect(page, contains("'勿扰'"));
