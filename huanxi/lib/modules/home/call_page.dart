@@ -184,6 +184,7 @@ class _CallPageState extends ConsumerState<CallPage> {
       conversation: conversation,
       imUserId: peerImUserId,
     );
+    final peerUserId = _extractAppUserId(peerImUserId);
     final seenEventIds = <String>{};
     final records = <_CallRecordItem>[];
 
@@ -196,6 +197,7 @@ class _CallPageState extends ConsumerState<CallPage> {
       records.add(
         _CallRecordItem(
           trace: trace,
+          peerUserId: peerUserId,
           peerName: peer.displayName,
           peerAvatarUrl: peer.avatarUrl,
           timestamp: _resolveMessageTime(trace: trace, message: message),
@@ -289,6 +291,12 @@ class _CallPageState extends ConsumerState<CallPage> {
     final month = time.month.toString().padLeft(2, '0');
     final day = time.day.toString().padLeft(2, '0');
     return '$month-$day $hh:$mm';
+  }
+
+  void _openCallRecordAvatarDetail(_CallRecordItem item) {
+    final peerUserId = item.peerUserId;
+    if (peerUserId == null || peerUserId <= 0) return;
+    context.push('${AppRoutes.certifiedUserDetail}?userId=$peerUserId');
   }
 
   String _phaseTagText(String phase) {
@@ -435,19 +443,25 @@ class _CallPageState extends ConsumerState<CallPage> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          CircleAvatar(
-                            radius: 22,
-                            backgroundColor: iconColor.withValues(alpha: 0.12),
-                            backgroundImage:
-                                (item.peerAvatarUrl != null &&
-                                    item.peerAvatarUrl!.isNotEmpty)
-                                ? NetworkImage(item.peerAvatarUrl!)
-                                : null,
-                            child:
-                                (item.peerAvatarUrl == null ||
-                                    item.peerAvatarUrl!.isEmpty)
-                                ? Icon(icon, size: 20, color: iconColor)
-                                : null,
+                          GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () => _openCallRecordAvatarDetail(item),
+                            child: CircleAvatar(
+                              radius: 22,
+                              backgroundColor: iconColor.withValues(
+                                alpha: 0.12,
+                              ),
+                              backgroundImage:
+                                  (item.peerAvatarUrl != null &&
+                                      item.peerAvatarUrl!.isNotEmpty)
+                                  ? NetworkImage(item.peerAvatarUrl!)
+                                  : null,
+                              child:
+                                  (item.peerAvatarUrl == null ||
+                                      item.peerAvatarUrl!.isEmpty)
+                                  ? Icon(icon, size: 20, color: iconColor)
+                                  : null,
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -532,12 +546,14 @@ class _CallPageState extends ConsumerState<CallPage> {
 
 class _CallRecordItem {
   final CallTraceMessage trace;
+  final int? peerUserId;
   final String peerName;
   final String? peerAvatarUrl;
   final DateTime timestamp;
 
   const _CallRecordItem({
     required this.trace,
+    required this.peerUserId,
     required this.peerName,
     required this.peerAvatarUrl,
     required this.timestamp,
