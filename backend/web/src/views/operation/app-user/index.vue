@@ -980,29 +980,11 @@ const columns = [
     key: 'account',
     width: 200,
     render(row) {
+      const genderMap = { male: '男', female: '女' }
       return h('div', { class: 'meta-wrap' }, [
         infoLine('手机号', row.phone || '-'),
         infoLine('昵称', row.nickname || '-'),
-      ])
-    },
-  },
-  {
-    title: '资料信息',
-    key: 'profile',
-    width: 260,
-    render(row) {
-      const genderMap = { male: '男', female: '女' }
-      const hw = [
-        row.height_cm ? `${row.height_cm}cm` : '',
-        row.weight_kg ? `${row.weight_kg}kg` : '',
-      ]
-        .filter(Boolean)
-        .join(' / ')
-      return h('div', { class: 'meta-wrap' }, [
-        infoLine('性别', genderMap[row.gender] || '男'),
-        infoLine('生日', row.birth_date || '-'),
-        infoLine('身高体重', hw || '-'),
-        infoLine('所在地', row.location_city || '-'),
+        infoLine('性别', genderMap[row.gender] || '-'),
       ])
     },
   },
