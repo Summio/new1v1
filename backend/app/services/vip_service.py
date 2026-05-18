@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 from tortoise.transactions import in_transaction
 
-from app.core.time_utils import now_local_naive
+from app.core.time_utils import now_local_naive, to_local_naive_for_db
 from app.models import AppUser, SystemConfig, VipOrder
 from app.schemas.system import VipPackageItem
 
@@ -46,18 +46,24 @@ async def load_vip_packages(config_map: dict[str, str] | None = None) -> list[Vi
     return parse_vip_packages(raw_value)
 
 
+def normalize_vip_datetime(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    return to_local_naive_for_db(value)
+
+
 def is_user_vip(user: AppUser | None, *, now: datetime | None = None) -> bool:
     if user is None:
         return False
-    expires_at = getattr(user, "vip_expires_at", None)
+    expires_at = normalize_vip_datetime(getattr(user, "vip_expires_at", None))
     if expires_at is None:
         return False
-    current = now or now_local_naive()
+    current = normalize_vip_datetime(now) if now else now_local_naive()
     return expires_at > current
 
 
 def vip_payload(user: AppUser | None, *, now: datetime | None = None) -> dict[str, object]:
-    expires_at = getattr(user, "vip_expires_at", None) if user is not None else None
+    expires_at = normalize_vip_datetime(getattr(user, "vip_expires_at", None) if user is not None else None)
     return {
         "is_vip": is_user_vip(user, now=now),
         "vip_expires_at": expires_at.isoformat() if expires_at else None,
@@ -70,13 +76,14 @@ def resolve_next_vip_expires_at(
     duration_days: int,
     now: datetime | None = None,
 ) -> datetime:
-    current = now or now_local_naive()
-    base = current_expires_at if current_expires_at and current_expires_at > current else current
+    current = normalize_vip_datetime(now) if now else now_local_naive()
+    expires_at = normalize_vip_datetime(current_expires_at)
+    base = expires_at if expires_at and expires_at > current else current
     return base + timedelta(days=int(duration_days))
 
 
 def create_vip_order_no(*, now: datetime | None = None, random_hex: str | None = None) -> str:
-    current = now or now_local_naive()
+    current = normalize_vip_datetime(now) if now else now_local_naive()
     suffix = (random_hex or uuid.uuid4().hex[:8]).upper()
     return f"V{current.strftime('%Y%m%d%H%M%S')}{suffix}"
 

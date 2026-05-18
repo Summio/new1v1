@@ -1,5 +1,6 @@
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
@@ -11,7 +12,9 @@ from app.services.im_text_billing_service import should_charge_im_text_message
 from app.services.vip_service import (
     create_vip_order_no,
     dump_vip_package,
+    is_user_vip,
     resolve_next_vip_expires_at,
+    vip_payload,
 )
 
 BACKEND_ROOT = Path(__file__).resolve().parents[1]
@@ -65,6 +68,27 @@ def test_vip_renewal_starts_now_when_expired() -> None:
     )
 
     assert next_expiry == now + timedelta(days=30)
+
+
+def test_vip_status_handles_aware_datetime() -> None:
+    now = datetime(2026, 5, 19, 10, 0, 0, tzinfo=timezone.utc)
+    user = SimpleNamespace(vip_expires_at=datetime(2026, 5, 19, 19, 0, 0, tzinfo=timezone.utc))
+
+    assert is_user_vip(user, now=now)
+    assert vip_payload(user, now=now)["vip_expires_at"] == "2026-05-20T03:00:00"
+
+
+def test_vip_renewal_handles_aware_datetime() -> None:
+    now = datetime(2026, 5, 19, 10, 0, 0, tzinfo=timezone.utc)
+    current_expiry = datetime(2026, 5, 20, 10, 0, 0, tzinfo=timezone.utc)
+
+    next_expiry = resolve_next_vip_expires_at(
+        current_expires_at=current_expiry,
+        duration_days=30,
+        now=now,
+    )
+
+    assert next_expiry == datetime(2026, 6, 19, 18, 0, 0)
 
 
 def test_vip_sender_is_not_charged_for_im_text() -> None:

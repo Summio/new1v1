@@ -14,7 +14,7 @@ from app.core.profile_basic_fields import (
     normalize_height_cm,
     normalize_weight_kg,
 )
-from app.core.time_utils import now_local_naive
+from app.core.time_utils import now_local_naive, to_local_naive_for_db
 from app.models import (
     AppUser,
     AppUserCommonPhrase,
@@ -335,7 +335,7 @@ async def update_app_user(req_in: AppUserAdminUpdateIn):
         v = to_relative_media_url(req_in.certification_face_image)
         update_data["certification_face_image"] = v or None
     if "vip_expires_at" in req_in.model_fields_set:
-        update_data["vip_expires_at"] = req_in.vip_expires_at
+        update_data["vip_expires_at"] = to_local_naive_for_db(req_in.vip_expires_at) if req_in.vip_expires_at else None
     if req_in.certification_status is not None:
         reject_reason = (req_in.certification_reject_reason or "").strip()
         target_face_image = to_relative_media_url(
