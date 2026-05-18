@@ -286,7 +286,7 @@ class _IncomingCallPageState extends ConsumerState<IncomingCallPage> {
                         ),
                       ),
                       if (widget.peerIsVip) ...[
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 4),
                         const VipBadge(),
                       ],
                     ],

@@ -502,7 +502,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
                           ),
                         ),
                         if (_isVipConversation(conv)) ...[
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 4),
                           const VipBadge(dense: true),
                         ],
                       ],

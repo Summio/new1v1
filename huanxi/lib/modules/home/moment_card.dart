@@ -82,7 +82,7 @@ class MomentCard extends StatelessWidget {
                             ),
                           ),
                           if (moment.user?.isVip == true) ...[
-                            const SizedBox(width: 6),
+                            const SizedBox(width: 4),
                             const VipBadge(dense: true),
                           ],
                         ],

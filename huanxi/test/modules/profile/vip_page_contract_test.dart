@@ -41,6 +41,35 @@ void main() {
     expect(badge, contains('VIP'));
   });
 
+  test('nickname adjacent VIP badges use compact spacing', () {
+    const nicknameBadgeFiles = [
+      'lib/modules/home/user_search_page.dart',
+      'lib/modules/home/moment_card.dart',
+      'lib/modules/home/messages_page.dart',
+      'lib/modules/home/discover_page.dart',
+      'lib/modules/home/home_page.dart',
+      'lib/modules/home/flirt_user_list_page.dart',
+      'lib/modules/home/call_page.dart',
+      'lib/modules/call/call_room_page.dart',
+      'lib/modules/call/incoming_call_page.dart',
+      'lib/modules/call/call_outgoing_page.dart',
+    ];
+    final wideSpacingPattern = RegExp(
+      r'const SizedBox\(width: (?:[5-9]|[1-9]\d+)\),\s*const VipBadge',
+      multiLine: true,
+    );
+
+    for (final filePath in nicknameBadgeFiles) {
+      final content = File(filePath).readAsStringSync();
+
+      expect(
+        wideSpacingPattern.hasMatch(content),
+        isFalse,
+        reason: '$filePath has more than 4px before nickname VIP badge',
+      );
+    }
+  });
+
   testWidgets('VIP page package grid does not overflow on small screens', (
     tester,
   ) async {

@@ -510,7 +510,7 @@ class _RankingTile extends StatelessWidget {
                           ),
                         ),
                         if (item.isVip) ...[
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 4),
                           const VipBadge(dense: true),
                         ],
                       ],

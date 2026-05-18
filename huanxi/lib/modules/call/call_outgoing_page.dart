@@ -454,7 +454,7 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
                         ),
                       ),
                       if (_peerIsVip) ...[
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 4),
                         const VipBadge(),
                       ],
                     ],

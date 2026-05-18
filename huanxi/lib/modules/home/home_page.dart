@@ -725,7 +725,7 @@ class _CertifiedUserCardState extends State<_CertifiedUserCard> {
                             ),
                           ),
                           if (certifiedUser.isVip) ...[
-                            const SizedBox(width: 5),
+                            const SizedBox(width: 4),
                             const VipBadge(dense: true),
                           ],
                         ],

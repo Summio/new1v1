@@ -174,7 +174,7 @@ class _UserSearchTile extends StatelessWidget {
                           ),
                         ),
                         if (user.isVip) ...[
-                          const SizedBox(width: 6),
+                          const SizedBox(width: 4),
                           const VipBadge(dense: true),
                         ],
                         const SizedBox(width: 6),

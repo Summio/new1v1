@@ -502,7 +502,7 @@ class _CallPageState extends ConsumerState<CallPage> {
                                             ),
                                           ),
                                           if (item.peerIsVip) ...[
-                                            const SizedBox(width: 6),
+                                            const SizedBox(width: 4),
                                             const VipBadge(dense: true),
                                           ],
                                         ],
