@@ -59,11 +59,11 @@ void main() {
       ),
       _CenteredTitleSpec(
         'lib/modules/profile/recharge_page.dart',
-        "title: const Text('充值')",
+        "title: Text('\${tokenNames.coinName}充值')",
       ),
       _CenteredTitleSpec(
         'lib/modules/profile/withdraw_page.dart',
-        "title: const Text('钻石提现')",
+        "title: Text('\$diamondName提现')",
       ),
       _CenteredTitleSpec(
         'lib/modules/profile/withdraw_account_page.dart',

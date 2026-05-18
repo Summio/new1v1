@@ -188,7 +188,7 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
     if (!_isLoadingPackages && (_loadError != null || _packages.isEmpty)) {
       return Scaffold(
         backgroundColor: AppTheme.backgroundColor,
-        appBar: _appBar(),
+        appBar: _appBar(tokenNames.diamondName),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(32),
@@ -224,7 +224,7 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
-      appBar: _appBar(),
+      appBar: _appBar(tokenNames.diamondName),
       body: Column(
         children: [
           Expanded(
@@ -304,11 +304,11 @@ class _WithdrawPageState extends ConsumerState<WithdrawPage> {
     );
   }
 
-  AppBar _appBar() {
+  AppBar _appBar(String diamondName) {
     return AppBar(
       backgroundColor: AppTheme.surfaceColor,
       centerTitle: true,
-      title: const Text('钻石提现'),
+      title: Text('$diamondName提现'),
       actions: [
         TextButton(
           onPressed: () => context.push(AppRoutes.diamondTransactions),

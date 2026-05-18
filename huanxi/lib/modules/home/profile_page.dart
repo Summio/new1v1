@@ -153,7 +153,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        _buildGenderChip(_genderText(authState.gender)),
+                        _buildGenderChip(_genderIcon(authState.gender)),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -341,21 +341,14 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     );
   }
 
-  Widget _buildGenderChip(String genderText) {
+  Widget _buildGenderChip(IconData genderIcon) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: AppTheme.primaryColor.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
+        color: const Color(0xFFFF69B4).withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
       ),
-      child: Text(
-        genderText,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: AppTheme.primaryColor,
-        ),
-      ),
+      child: Icon(genderIcon, size: 14, color: const Color(0xFFFF69B4)),
     );
   }
 
@@ -398,8 +391,8 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
     );
   }
 
-  String _genderText(String gender) {
-    return gender == 'female' ? '女' : '男';
+  IconData _genderIcon(String gender) {
+    return gender == 'male' ? Icons.male : Icons.female;
   }
 
   String _availabilityText(AuthState authState) {

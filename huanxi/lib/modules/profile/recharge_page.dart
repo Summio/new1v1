@@ -148,7 +148,7 @@ class _RechargePageState extends ConsumerState<RechargePage> {
         appBar: AppBar(
           backgroundColor: AppTheme.surfaceColor,
           centerTitle: true,
-          title: const Text('充值'),
+          title: Text('${tokenNames.coinName}充值'),
         ),
         body: Center(
           child: Padding(
@@ -196,7 +196,7 @@ class _RechargePageState extends ConsumerState<RechargePage> {
       appBar: AppBar(
         backgroundColor: AppTheme.surfaceColor,
         centerTitle: true,
-        title: const Text('充值'),
+        title: Text('${tokenNames.coinName}充值'),
         actions: [
           TextButton(
             onPressed: () => context.push(AppRoutes.coinTransactions),
