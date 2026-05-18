@@ -32,16 +32,19 @@ void main() {
     expect(service, isNot(contains('storageTeenModePinHash')));
   });
 
-  test('teen mode service stores hashed four digit pin and clears on verify', () {
-    final service = read('lib/services/teen_mode_service.dart');
+  test(
+    'teen mode service stores hashed four digit pin and clears on verify',
+    () {
+      final service = read('lib/services/teen_mode_service.dart');
 
-    expect(service, contains(r"RegExp(r'^\d{4}$')"));
-    expect(service, contains('sha256.convert'));
-    expect(service, contains('enable(String pin)'));
-    expect(service, contains('verifyAndDisable(String pin)'));
-    expect(service, contains('clear()'));
-    expect(service, isNot(contains('unlocked')));
-  });
+      expect(service, contains(r"RegExp(r'^\d{4}$')"));
+      expect(service, contains('sha256.convert'));
+      expect(service, contains('enable(String pin)'));
+      expect(service, contains('verifyAndDisable(String pin)'));
+      expect(service, contains('clear()'));
+      expect(service, isNot(contains('unlocked')));
+    },
+  );
 
   test('settings page uses real teen mode flow instead of placeholder', () {
     final settings = read('lib/modules/settings/settings_page.dart');
@@ -51,6 +54,8 @@ void main() {
     expect(settings, contains('AppRoutes.teenModeSetup'));
     expect(settings, contains('AppRoutes.teenModeVerify'));
     expect(settings, isNot(contains('青少年模式功能开发中')));
+    expect(settings, isNot(contains("subtitle: teenModeEnabled")));
+    expect(settings, isNot(contains("'已开启' : '未开启'")));
   });
 
   test('setup and verify pages enforce no recovery flow', () {

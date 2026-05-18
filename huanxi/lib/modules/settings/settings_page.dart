@@ -64,7 +64,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
-    final teenModeEnabled = TeenModeService.instance.isLocked;
 
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
@@ -99,7 +98,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           _SettingsTile(
             icon: Icons.child_care,
             title: '青少年模式',
-            subtitle: teenModeEnabled ? '已开启' : '未开启',
             onTap: () async {
               if (TeenModeService.instance.isLocked) {
                 context.go(AppRoutes.teenModeVerify);
@@ -228,14 +226,12 @@ class _SectionTitle extends StatelessWidget {
 class _SettingsTile extends StatelessWidget {
   final IconData icon;
   final String title;
-  final String? subtitle;
   final Widget? trailing;
   final VoidCallback? onTap;
 
   const _SettingsTile({
     required this.icon,
     required this.title,
-    this.subtitle,
     this.trailing,
     this.onTap,
   });
@@ -268,12 +264,6 @@ class _SettingsTile extends StatelessWidget {
             color: AppTheme.textPrimary,
           ),
         ),
-        subtitle: subtitle != null
-            ? Text(
-                subtitle!,
-                style: const TextStyle(fontSize: 12, color: AppTheme.textHint),
-              )
-            : null,
         trailing:
             trailing ??
             const Icon(Icons.chevron_right, color: AppTheme.textHint),
