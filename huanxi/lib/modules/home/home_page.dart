@@ -9,6 +9,7 @@ import '../../app/providers/auth_provider.dart';
 import '../../app/providers/certified_user_provider.dart';
 import '../../app/providers/main_tab_memory_provider.dart';
 import '../../app/theme/app_theme.dart';
+import '../../app/widgets/vip_badge.dart';
 import '../../app/widgets/status_view.dart';
 import '../../core/utils/app_toast.dart';
 import 'flirt_user_list_page.dart';
@@ -709,13 +710,25 @@ class _CertifiedUserCardState extends State<_CertifiedUserCard> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        certifiedUser.username ?? '匿名用户',
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              certifiedUser.username ?? '匿名用户',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                          if (certifiedUser.isVip) ...[
+                            const SizedBox(width: 5),
+                            const VipBadge(dense: true),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 2),
                       Row(

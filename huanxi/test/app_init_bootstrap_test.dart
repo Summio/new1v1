@@ -67,6 +67,50 @@ void main() {
     expect(state.iosPreventScreenshotEnabled, isTrue);
   });
 
+  test('AppInitState parses VIP packages from bootstrap config', () {
+    final state = AppInitState.fromBootstrapMap({
+      'vip_packages': [
+        {
+          'amount': 1990,
+          'duration_days': 30,
+          'label': '月卡',
+          'tag': '推荐',
+          'tag_color': '#D7A84F',
+        },
+      ],
+    });
+
+    expect(state.vipPackages, hasLength(1));
+    expect(state.vipPackages.first.amount, 1990);
+    expect(state.vipPackages.first.amountYuan, '19.90');
+    expect(state.vipPackages.first.durationDays, 30);
+    expect(state.vipPackages.first.label, '月卡');
+    expect(state.vipPackages.first.tag, '推荐');
+    expect(state.vipPackages.first.tagColor, '#D7A84F');
+  });
+
+  test('AuthState stores VIP status from user info payload', () async {
+    final adapter = _UserInfoAdapter({
+      'code': 200,
+      'data': {
+        'id': 1,
+        'nickname': '用户1',
+        'gender': 'male',
+        'initial_profile_completed': true,
+        'is_vip': true,
+        'vip_expires_at': '2026-06-18T12:00:00',
+      },
+    });
+    _ensureDioClientInitialized();
+    DioClient.instance.dio.httpClientAdapter = adapter;
+    final notifier = AuthNotifier(DioClient.instance);
+
+    await notifier.fetchUserInfo();
+
+    expect(notifier.state.isVip, isTrue);
+    expect(notifier.state.vipExpiresAt, '2026-06-18T12:00:00');
+  });
+
   test('AppInitNotifier retries bootstrap after a failed load', () async {
     final adapter = _BootstrapAdapter([
       DioException(
@@ -222,6 +266,31 @@ class _BlockingBootstrapAdapter implements HttpClientAdapter {
     expect(options.path, ApiEndpoints.appBootstrap);
     requestCount += 1;
     await releaseResponse.future;
+    return ResponseBody.fromString(
+      jsonEncode(response),
+      200,
+      headers: {
+        Headers.contentTypeHeader: [Headers.jsonContentType],
+      },
+    );
+  }
+
+  @override
+  void close({bool force = false}) {}
+}
+
+class _UserInfoAdapter implements HttpClientAdapter {
+  final Map<String, dynamic> response;
+
+  _UserInfoAdapter(this.response);
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<List<int>>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    expect(options.path, ApiEndpoints.userInfo);
     return ResponseBody.fromString(
       jsonEncode(response),
       200,

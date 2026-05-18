@@ -27,6 +27,7 @@ from app.services.user_availability_service import (
     resolve_availability_payload,
 )
 from app.services.user_block_service import exclude_blocked_user_ids
+from app.services.vip_service import vip_payload
 from app.utils.media_url import normalize_media_list, to_relative_media_url
 
 router = APIRouter()
@@ -67,6 +68,7 @@ def _serialize_flirt_user(user: AppUser, availability_payload: dict) -> dict:
         "signature": user.signature or "",
         "coins": decimal_to_float_2(user.coins),
         "is_certified_user": bool(user.is_certified_user),
+        **vip_payload(user),
         "certification_status": user.certification_status or "none",
         "call_price": int(user.certified_call_price or 0),
         "text_dnd_enabled": bool(user.text_dnd_enabled),

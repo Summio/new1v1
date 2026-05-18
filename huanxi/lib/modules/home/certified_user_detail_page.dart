@@ -8,6 +8,7 @@ import '../../app/providers/certified_user_provider.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
+import '../../app/widgets/vip_badge.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/utils/formatters.dart';
 import '../../services/moment_service.dart';
@@ -138,6 +139,7 @@ class _CertifiedUserDetailPageState
                   'targetUserId': certifiedUser.userId.toString(),
                   'peerName': certifiedUser.username ?? '认证用户',
                   'peerAvatar': certifiedUser.avatar ?? '',
+                  'peerIsVip': certifiedUser.isVip ? '1' : '0',
                   'callPrice':
                       certifiedUser.callPrice?.toStringAsFixed(0) ?? '0',
                 },
@@ -550,6 +552,7 @@ class _CertifiedUserDetailPageState
                                 crossAxisAlignment: WrapCrossAlignment.center,
                                 children: [
                                   _buildAvailabilityStatusChip(certifiedUser),
+                                  if (certifiedUser.isVip) const VipBadge(),
                                   if (certifiedUser.isCertifiedUser)
                                     _buildCertificationStatusChip(),
                                 ],

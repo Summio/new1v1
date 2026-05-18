@@ -17,6 +17,7 @@ from app.services.user_availability_service import (
     resolve_availability_payload,
 )
 from app.services.user_block_service import exclude_blocked_user_ids
+from app.services.vip_service import vip_payload
 from app.utils.media_url import normalize_media_list, to_relative_media_url
 
 router = APIRouter()
@@ -298,6 +299,7 @@ async def certified_user_list(
                 **availability_payload,
                 "status": user.status or "normal",
                 "is_certified_user": bool(user.is_certified_user),
+                **vip_payload(user),
                 "is_recommended": bool(user.is_recommended),
                 "recommend_weight": int(user.recommend_weight or 0),
             }

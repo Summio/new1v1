@@ -6,6 +6,7 @@ import '../../app/providers/user_search_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/widgets/status_view.dart';
+import '../../app/widgets/vip_badge.dart';
 
 class UserSearchPage extends ConsumerStatefulWidget {
   const UserSearchPage({super.key});
@@ -79,10 +80,7 @@ class _UserSearchPageState extends ConsumerState<UserSearchPage> {
           onChanged: (_) => setState(() {}),
         ),
         actions: [
-          TextButton(
-            onPressed: _submitSearch,
-            child: const Text('搜索'),
-          ),
+          TextButton(onPressed: _submitSearch, child: const Text('搜索')),
           const SizedBox(width: 8),
         ],
       ),
@@ -100,7 +98,8 @@ class _UserSearchPageState extends ConsumerState<UserSearchPage> {
     if (state.error != null && state.users.isEmpty) {
       return StatusView.error(
         message: state.error!,
-        onRetry: () => ref.read(userSearchProvider.notifier).search(state.keyword),
+        onRetry: () =>
+            ref.read(userSearchProvider.notifier).search(state.keyword),
       );
     }
     if (state.users.isEmpty) {
@@ -132,7 +131,9 @@ class _UserSearchTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = user.username?.trim().isNotEmpty == true ? user.username! : '用户${user.userId}';
+    final name = user.username?.trim().isNotEmpty == true
+        ? user.username!
+        : '用户${user.userId}';
     return Material(
       color: AppTheme.surfaceColor,
       borderRadius: BorderRadius.circular(18),
@@ -172,6 +173,11 @@ class _UserSearchTile extends StatelessWidget {
                             ),
                           ),
                         ),
+                        if (user.isVip) ...[
+                          const SizedBox(width: 6),
+                          const VipBadge(dense: true),
+                        ],
+                        const SizedBox(width: 6),
                         _UserTypeBadge(isCertifiedUser: user.isCertifiedUser),
                       ],
                     ),
@@ -214,7 +220,9 @@ class _UserTypeBadge extends StatelessWidget {
       child: Text(
         isCertifiedUser ? '认证用户' : '用户',
         style: TextStyle(
-          color: isCertifiedUser ? AppTheme.primaryColor : AppTheme.textSecondary,
+          color: isCertifiedUser
+              ? AppTheme.primaryColor
+              : AppTheme.textSecondary,
           fontSize: 11,
           fontWeight: FontWeight.w700,
         ),

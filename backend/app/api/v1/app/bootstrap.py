@@ -4,12 +4,13 @@ from fastapi import APIRouter
 
 from app.schemas.base import Success
 from app.services.capability_limit_service import parse_capability_limit_config
+from app.services.certification_price_service import parse_certified_call_price_tiers
+from app.services.customer_service import load_customer_service_config
 from app.services.im_text_billing_service import (
     dump_im_text_billing_config,
     parse_im_text_billing_config,
 )
-from app.services.certification_price_service import parse_certified_call_price_tiers
-from app.services.customer_service import load_customer_service_config
+from app.services.vip_service import dump_vip_package, load_vip_packages
 
 router = APIRouter()
 _DEFAULT_CERTIFIED_CALL_PRICE_TIERS = [0, 100, 200, 300, 500]
@@ -83,6 +84,7 @@ async def get_app_bootstrap():
     )
     certified_call_price_tiers = parse_certified_call_price_tiers(certified_call_price_tiers_raw)
     customer_service = await load_customer_service_config(config_map)
+    vip_packages = await load_vip_packages(config_map)
     capability_limits = parse_capability_limit_config(config_map).dump()
     android_prevent_screenshot_enabled = _parse_bool_config(
         config_map.get("security_android_prevent_screenshot_enabled"),
@@ -111,6 +113,7 @@ async def get_app_bootstrap():
                 "reject_pair_protect_seconds": call_reject_pair_protect_seconds,
             },
             "recharge_packages": recharge_packages,
+            "vip_packages": [dump_vip_package(item) for item in vip_packages],
             "withdraw_packages": withdraw_packages,
             "certified_call_price_tiers": certified_call_price_tiers,
             "capability_limits": capability_limits,

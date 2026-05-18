@@ -33,6 +33,8 @@ class RankingItem {
   final int? userId;
   final String nickname;
   final String avatar;
+  final bool isVip;
+  final String? vipExpiresAt;
   final bool isAnonymous;
   final double scoreGapFromTop;
   final String scoreGapText;
@@ -42,6 +44,8 @@ class RankingItem {
     required this.userId,
     required this.nickname,
     required this.avatar,
+    this.isVip = false,
+    this.vipExpiresAt,
     required this.isAnonymous,
     required this.scoreGapFromTop,
     required this.scoreGapText,
@@ -53,6 +57,8 @@ class RankingItem {
       userId: (json['user_id'] as num?)?.toInt(),
       nickname: (json['nickname'] as String?)?.trim() ?? '',
       avatar: (json['avatar'] as String?)?.trim() ?? '',
+      isVip: json['is_vip'] == true,
+      vipExpiresAt: json['vip_expires_at'] as String?,
       isAnonymous: json['is_anonymous'] == true,
       scoreGapFromTop: _toDouble(json['score_gap_from_top']),
       scoreGapText: (json['score_gap_text'] as String?)?.trim() ?? '',

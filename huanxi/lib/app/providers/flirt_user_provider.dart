@@ -19,6 +19,8 @@ class FlirtUserInfo {
   final String? signature;
   final double coins;
   final bool isCertifiedUser;
+  final bool isVip;
+  final String? vipExpiresAt;
   final String certificationStatus;
   final double? callPrice;
   final bool? isOnline;
@@ -45,6 +47,8 @@ class FlirtUserInfo {
     this.signature,
     this.coins = 0,
     this.isCertifiedUser = false,
+    this.isVip = false,
+    this.vipExpiresAt,
     this.certificationStatus = 'none',
     this.callPrice,
     this.isOnline,
@@ -95,6 +99,8 @@ class FlirtUserInfo {
       signature: (json['signature'] as String?)?.trim(),
       coins: _asDouble(json['coins']),
       isCertifiedUser: json['is_certified_user'] as bool? ?? false,
+      isVip: json['is_vip'] as bool? ?? false,
+      vipExpiresAt: json['vip_expires_at'] as String?,
       certificationStatus: json['certification_status'] as String? ?? 'none',
       callPrice: (json['call_price'] as num?)?.toDouble(),
       isOnline: isOnline,
@@ -159,6 +165,8 @@ class FlirtUserInfo {
       signature: signature,
       coins: coins,
       isCertifiedUser: isCertifiedUser,
+      isVip: isVip,
+      vipExpiresAt: vipExpiresAt,
       certificationStatus: certificationStatus,
       callPrice: callPrice,
       isOnline: isOnline ?? this.isOnline,
@@ -260,8 +268,7 @@ class FlirtGreetResult {
       targetCount: (json['target_count'] as num?)?.toInt() ?? 0,
       sentCount: (json['sent_count'] as num?)?.toInt() ?? 0,
       failedCount: (json['failed_count'] as num?)?.toInt() ?? 0,
-      textDndFailedCount:
-          (json['text_dnd_failed_count'] as num?)?.toInt() ?? 0,
+      textDndFailedCount: (json['text_dnd_failed_count'] as num?)?.toInt() ?? 0,
       imFailedCount: (json['im_failed_count'] as num?)?.toInt() ?? 0,
       quota: quotaRaw is Map<String, dynamic>
           ? FlirtGreetQuota.fromJson(quotaRaw)

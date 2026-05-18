@@ -28,6 +28,7 @@ async def push_call_incoming(
     caller_id: int,
     caller_name: str,
     caller_avatar: str | None,
+    caller_is_vip: bool,
     call_price: int,
     left_seconds: int,
 ) -> PushResult:
@@ -37,6 +38,7 @@ async def push_call_incoming(
         "caller_id": int(caller_id),
         "caller_name": caller_name,
         "caller_avatar": caller_avatar,
+        "caller_is_vip": bool(caller_is_vip),
         "call_price": int(call_price),
         "left_seconds": int(left_seconds),
     }
@@ -275,5 +277,3 @@ async def push_presence_for_users(user_ids: list[int] | tuple[int, ...] | set[in
         except Exception:  # noqa: BLE001
             ok = False
     return ok
-
-

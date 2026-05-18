@@ -40,14 +40,24 @@ class MomentUser {
   final int id;
   final String nickname;
   final String avatar;
+  final bool isVip;
+  final String? vipExpiresAt;
 
-  MomentUser({required this.id, required this.nickname, this.avatar = ''});
+  MomentUser({
+    required this.id,
+    required this.nickname,
+    this.avatar = '',
+    this.isVip = false,
+    this.vipExpiresAt,
+  });
 
   factory MomentUser.fromJson(Map<String, dynamic> json) {
     return MomentUser(
       id: json['id'] as int? ?? 0,
       nickname: json['nickname'] as String? ?? '未知用户',
       avatar: json['avatar'] as String? ?? '',
+      isVip: json['is_vip'] == true,
+      vipExpiresAt: json['vip_expires_at'] as String?,
     );
   }
 }
@@ -67,6 +77,7 @@ class Moment {
   final int? reviewedBy;
   final String? reviewRemark;
   final bool authorIsCertifiedUser;
+  final bool authorIsVip;
   final bool authorIsRecommended;
   final List<MomentMedia> mediaList;
   final MomentUser? user;
@@ -85,6 +96,7 @@ class Moment {
     this.reviewedBy,
     this.reviewRemark,
     this.authorIsCertifiedUser = false,
+    this.authorIsVip = false,
     this.authorIsRecommended = false,
     this.mediaList = const [],
     this.user,
@@ -105,6 +117,7 @@ class Moment {
       reviewedBy: json['reviewed_by'] as int?,
       reviewRemark: json['review_remark'] as String?,
       authorIsCertifiedUser: json['author_is_certified_user'] as bool? ?? false,
+      authorIsVip: json['author_is_vip'] as bool? ?? false,
       authorIsRecommended: json['author_is_recommended'] as bool? ?? false,
       mediaList:
           (json['media_list'] as List<dynamic>?)

@@ -7,6 +7,7 @@ import 'package:tencent_cloud_chat_sdk/models/v2_tim_conversation.dart';
 import 'package:tencent_cloud_chat_sdk/models/v2_tim_user_full_info.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/widgets/status_view.dart';
+import '../../app/widgets/vip_badge.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../app/providers/system_notification_provider.dart';
 import '../../app/routes/app_router.dart';
@@ -241,6 +242,7 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
             _PeerAppProfile(
               nickname: (nickname?.isNotEmpty ?? false) ? nickname : null,
               avatarUrl: avatarUrl.isNotEmpty ? avatarUrl : null,
+              isVip: payload['is_vip'] == true,
             ),
           );
         } catch (_) {
@@ -302,6 +304,11 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
       return showName;
     }
     return '';
+  }
+
+  bool _isVipConversation(V2TimConversation conv) {
+    final userId = conv.userID?.trim() ?? '';
+    return _appProfileByUserId[userId]?.isVip == true;
   }
 
   bool _isTechnicalImId(String id) {
@@ -485,10 +492,20 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
                   final avatarUrl = _avatarUrl(conv);
                   return ListTile(
                     leading: _buildConversationAvatar(conv, avatarUrl),
-                    title: Text(
-                      _displayName(conv),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                    title: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _displayName(conv),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (_isVipConversation(conv)) ...[
+                          const SizedBox(width: 6),
+                          const VipBadge(dense: true),
+                        ],
+                      ],
                     ),
                     subtitle: Text(
                       _lastText(conv),
@@ -568,8 +585,9 @@ class _MessagesPageState extends ConsumerState<MessagesPage> {
 class _PeerAppProfile {
   final String? nickname;
   final String? avatarUrl;
+  final bool isVip;
 
-  const _PeerAppProfile({this.nickname, this.avatarUrl});
+  const _PeerAppProfile({this.nickname, this.avatarUrl, this.isVip = false});
 }
 
 class _SystemNotificationEntryCard extends ConsumerWidget {

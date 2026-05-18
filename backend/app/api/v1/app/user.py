@@ -13,6 +13,7 @@ from app.core.profile_basic_fields import (
     normalize_height_cm,
     normalize_weight_kg,
 )
+from app.core.time_utils import now_local_naive
 from app.models import AppUser, AppUserProfileReviewApply, UserBlock, UserFollow
 from app.schemas.app_api import DndSettingsIn, DndSettingsOut
 from app.schemas.app_user import (
@@ -54,7 +55,7 @@ from app.services.user_block_service import (
     get_block_relation,
     invalidate_blocked_user_ids_cache,
 )
-from app.core.time_utils import now_local_naive
+from app.services.vip_service import vip_payload
 from app.settings.config import settings
 from app.utils.media_url import normalize_media_list, to_relative_media_url
 from app.utils.upload_files import (
@@ -184,6 +185,7 @@ async def _serialize_user_home(
         "is_certified_user": bool(app_user.is_certified_user),
         "certification_status": app_user.certification_status or "none",
         "diamonds": int(app_user.diamonds or 0),
+        **vip_payload(app_user),
         "is_following": is_following,
         **relation_payload,
     }
@@ -238,6 +240,7 @@ async def get_user_info():
             "is_certified_user": app_user.is_certified_user,
             "certification_status": app_user.certification_status or "none",
             "certified_call_price": int(app_user.certified_call_price or 0),
+            **vip_payload(app_user),
             "initial_profile_completed": bool(getattr(app_user, "initial_profile_completed", False)),
             **_serialize_dnd_settings(app_user),
             "created_at": app_user.created_at.isoformat() if app_user.created_at else None,

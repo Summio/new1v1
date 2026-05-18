@@ -94,6 +94,8 @@ class AppUserInfoOut(BaseModel):
     status: str = "normal"
     ban_reason: Optional[str] = None
     is_certified_user: bool = False
+    is_vip: bool = False
+    vip_expires_at: Optional[datetime] = None
     certification_status: str = "none"
     certified_call_price: int = 0
     initial_profile_completed: bool = False

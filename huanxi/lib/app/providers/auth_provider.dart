@@ -34,6 +34,8 @@ class AuthState {
   final bool textDndEnabled;
   final bool videoDndEnabled;
   final bool rankingInvisibleEnabled;
+  final bool isVip;
+  final String? vipExpiresAt;
   final double coins;
   final double diamonds;
   final Map<String, dynamic>? lastProfileUpdateData;
@@ -60,6 +62,8 @@ class AuthState {
     this.textDndEnabled = false,
     this.videoDndEnabled = false,
     this.rankingInvisibleEnabled = false,
+    this.isVip = false,
+    this.vipExpiresAt,
     this.coins = 0,
     this.diamonds = 0,
     this.lastProfileUpdateData,
@@ -87,6 +91,9 @@ class AuthState {
     bool? textDndEnabled,
     bool? videoDndEnabled,
     bool? rankingInvisibleEnabled,
+    bool? isVip,
+    String? vipExpiresAt,
+    bool clearVipExpiresAt = false,
     double? coins,
     double? diamonds,
     Map<String, dynamic>? lastProfileUpdateData,
@@ -116,6 +123,10 @@ class AuthState {
       videoDndEnabled: videoDndEnabled ?? this.videoDndEnabled,
       rankingInvisibleEnabled:
           rankingInvisibleEnabled ?? this.rankingInvisibleEnabled,
+      isVip: isVip ?? this.isVip,
+      vipExpiresAt: clearVipExpiresAt
+          ? null
+          : vipExpiresAt ?? this.vipExpiresAt,
       coins: coins ?? this.coins,
       diamonds: diamonds ?? this.diamonds,
       lastProfileUpdateData: clearLastProfileUpdateData
@@ -123,6 +134,53 @@ class AuthState {
           : lastProfileUpdateData ?? this.lastProfileUpdateData,
       isLoading: isLoading ?? this.isLoading,
       error: error ?? this.error,
+    );
+  }
+}
+
+class VipPackage {
+  final int amount;
+  final int durationDays;
+  final String label;
+  final String? tag;
+  final String? tagColor;
+
+  const VipPackage({
+    required this.amount,
+    required this.durationDays,
+    required this.label,
+    this.tag,
+    this.tagColor,
+  });
+
+  String get amountYuan => (amount / 100).toStringAsFixed(2);
+
+  static VipPackage? fromMap(dynamic raw) {
+    if (raw is! Map<String, dynamic>) return null;
+    final amountRaw = raw['amount'];
+    final amount = amountRaw is num
+        ? amountRaw.toInt()
+        : int.tryParse('${amountRaw ?? ''}');
+    final daysRaw = raw['duration_days'];
+    final days = daysRaw is num
+        ? daysRaw.toInt()
+        : int.tryParse('${daysRaw ?? ''}');
+    final label = raw['label']?.toString().trim() ?? '';
+    if (amount == null ||
+        amount <= 0 ||
+        days == null ||
+        days <= 0 ||
+        label.isEmpty) {
+      return null;
+    }
+    final tag = raw['tag']?.toString().trim();
+    final tagColor = raw['tag_color']?.toString().trim();
+    return VipPackage(
+      amount: amount,
+      durationDays: days,
+      label: label,
+      tag: (tag == null || tag.isEmpty) ? null : tag,
+      tagColor: (tagColor == null || tagColor.isEmpty) ? null : tagColor,
     );
   }
 }
@@ -210,6 +268,7 @@ class AppInitState {
   final int imTextBillingPrice;
   final int imTextBillingAnchorShareBps;
   final List<int> certifiedCallPriceTiers;
+  final List<VipPackage> vipPackages;
   final CapabilityLimitsState capabilityLimits;
   final bool androidPreventScreenshotEnabled;
   final bool iosPreventScreenshotEnabled;
@@ -229,6 +288,7 @@ class AppInitState {
     this.imTextBillingPrice = 0,
     this.imTextBillingAnchorShareBps = 5000,
     this.certifiedCallPriceTiers = const [],
+    this.vipPackages = const [],
     this.capabilityLimits = const CapabilityLimitsState(),
     this.androidPreventScreenshotEnabled = true,
     this.iosPreventScreenshotEnabled = false,
@@ -249,6 +309,7 @@ class AppInitState {
     int? imTextBillingPrice,
     int? imTextBillingAnchorShareBps,
     List<int>? certifiedCallPriceTiers,
+    List<VipPackage>? vipPackages,
     CapabilityLimitsState? capabilityLimits,
     bool? androidPreventScreenshotEnabled,
     bool? iosPreventScreenshotEnabled,
@@ -274,6 +335,7 @@ class AppInitState {
           imTextBillingAnchorShareBps ?? this.imTextBillingAnchorShareBps,
       certifiedCallPriceTiers:
           certifiedCallPriceTiers ?? this.certifiedCallPriceTiers,
+      vipPackages: vipPackages ?? this.vipPackages,
       capabilityLimits: capabilityLimits ?? this.capabilityLimits,
       androidPreventScreenshotEnabled:
           androidPreventScreenshotEnabled ??
@@ -299,6 +361,13 @@ class AppInitState {
     );
     final capabilityLimits = CapabilityLimitsState.fromBootstrapMap(respData);
     final tierRaw = respData['certified_call_price_tiers'];
+    final vipPackagesRaw = respData['vip_packages'];
+    final vipPackages = vipPackagesRaw is List
+        ? vipPackagesRaw
+              .map(VipPackage.fromMap)
+              .whereType<VipPackage>()
+              .toList()
+        : <VipPackage>[];
     final tiers = tierRaw is List
         ? tierRaw
               .map((item) => item is num ? item.toInt() : int.tryParse('$item'))
@@ -334,6 +403,7 @@ class AppInitState {
           ? imTextShareRaw.toInt()
           : int.tryParse('${imTextShareRaw ?? 5000}') ?? 5000,
       certifiedCallPriceTiers: tiers,
+      vipPackages: vipPackages,
       capabilityLimits: capabilityLimits,
       androidPreventScreenshotEnabled:
           screenSecurity?['android_prevent_screenshot_enabled'] != false,
@@ -467,6 +537,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
           videoDndEnabled: cachedInfo['video_dnd_enabled'] == true,
           rankingInvisibleEnabled:
               cachedInfo['ranking_invisible_enabled'] == true,
+          isVip: _parseBool(cachedInfo['is_vip']),
+          vipExpiresAt: cachedInfo['vip_expires_at'] as String?,
+          clearVipExpiresAt: cachedInfo['vip_expires_at'] == null,
           coins: _parseDouble(cachedInfo['coins']),
           diamonds: _parseDouble(cachedInfo['diamonds']),
         );
@@ -555,6 +628,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
         textDndEnabled: respData['text_dnd_enabled'] == true,
         videoDndEnabled: respData['video_dnd_enabled'] == true,
         rankingInvisibleEnabled: respData['ranking_invisible_enabled'] == true,
+        isVip: _parseBool(respData['is_vip']),
+        vipExpiresAt: respData['vip_expires_at'] as String?,
+        clearVipExpiresAt: respData['vip_expires_at'] == null,
         coins: _parseDouble(respData['coins']),
         diamonds: _parseDouble(respData['diamonds']),
         isLoading: false,
@@ -625,6 +701,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
         textDndEnabled: respData['text_dnd_enabled'] == true,
         videoDndEnabled: respData['video_dnd_enabled'] == true,
         rankingInvisibleEnabled: respData['ranking_invisible_enabled'] == true,
+        isVip: _parseBool(respData['is_vip']),
+        vipExpiresAt: respData['vip_expires_at'] as String?,
+        clearVipExpiresAt: respData['vip_expires_at'] == null,
         coins: _parseDouble(respData['coins']),
         diamonds: _parseDouble(respData['diamonds']),
       );

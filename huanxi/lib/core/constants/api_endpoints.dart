@@ -142,6 +142,12 @@ class ApiEndpoints {
   /// 创建充值订单
   static const String rechargeCreate = 'app/recharge/create';
 
+  /// 创建VIP订单
+  static const String vipOrderCreate = 'app/vip/order/create';
+
+  /// VIP订单支付回调（仅Mock回调开关开启时可用）
+  static const String vipOrderCallback = 'app/vip/order/callback';
+
   /// 申请提现
   static const String withdrawApply = 'app/withdraw/apply';
 

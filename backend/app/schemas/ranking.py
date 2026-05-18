@@ -32,6 +32,8 @@ class AppRankingItemOut(BaseModel):
     user_id: int | None
     nickname: str
     avatar: str = ""
+    is_vip: bool = False
+    vip_expires_at: datetime | None = None
     is_anonymous: bool = False
     score_gap_from_top: float = 0
     score_gap_text: str = ""

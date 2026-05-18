@@ -5,6 +5,7 @@ from .base import BaseModel, TimestampMixin
 
 class AppUser(BaseModel, TimestampMixin):
     """App 用户（普通用户 + 认证用户）"""
+
     phone = fields.CharField(max_length=20, unique=True, description="手机号(登录账号)", db_index=True)
     password = fields.CharField(max_length=128, description="密码(加密)")
     nickname = fields.CharField(max_length=30, null=True, description="昵称")
@@ -40,6 +41,7 @@ class AppUser(BaseModel, TimestampMixin):
     text_dnd_enabled = fields.BooleanField(default=False, description="文字勿扰开关")
     video_dnd_enabled = fields.BooleanField(default=False, description="视频勿扰开关")
     ranking_invisible_enabled = fields.BooleanField(default=False, description="榜单隐身开关")
+    vip_expires_at = fields.DatetimeField(null=True, description="VIP到期时间", db_index=True)
     initial_profile_completed = fields.BooleanField(
         default=False,
         description="是否已完成初始资料",

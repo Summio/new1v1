@@ -15,6 +15,7 @@ import '../../modules/call/call_room_page.dart';
 import '../../modules/call/call_outgoing_page.dart';
 import '../../modules/call/incoming_call_page.dart';
 import '../../modules/profile/recharge_page.dart';
+import '../../modules/profile/vip_page.dart';
 import '../../modules/profile/coin_transactions_page.dart';
 import '../../modules/profile/diamond_transactions_page.dart';
 import '../../modules/profile/withdraw_account_page.dart';
@@ -45,6 +46,11 @@ import '../../core/permissions/mandatory_permission_service.dart';
 import '../../core/storage/storage.dart';
 import '../../services/teen_mode_service.dart';
 
+bool _parseRouteBool(String? value) {
+  final normalized = value?.trim().toLowerCase();
+  return normalized == '1' || normalized == 'true';
+}
+
 class AppRoutes {
   AppRoutes._();
   static const String splash = '/';
@@ -59,6 +65,7 @@ class AppRoutes {
   static const String userSearch = '/search';
   static const String profile = '/profile';
   static const String recharge = '/profile/recharge';
+  static const String vip = '/profile/vip';
   static const String withdraw = '/profile/withdraw';
   static const String withdrawAccount = '/profile/withdraw/account';
   static const String coinTransactions = '/profile/recharge/transactions';
@@ -216,6 +223,7 @@ final appRouter = GoRouter(
           peerAvatar: state.uri.queryParameters['peerAvatar'],
           targetUserId: state.uri.queryParameters['targetUserId'],
           callPrice: callPrice,
+          peerIsVip: _parseRouteBool(state.uri.queryParameters['peerIsVip']),
         );
       },
     ),
@@ -237,6 +245,7 @@ final appRouter = GoRouter(
           peerName: state.uri.queryParameters['peerName'] ?? '',
           peerAvatar: state.uri.queryParameters['peerAvatar'],
           leftSeconds: leftSeconds,
+          peerIsVip: _parseRouteBool(state.uri.queryParameters['peerIsVip']),
         );
       },
     ),
@@ -255,6 +264,7 @@ final appRouter = GoRouter(
           peerUserId: state.uri.queryParameters['peerUserId'] ?? '',
           targetUserId: state.uri.queryParameters['targetUserId'],
           peerName: state.uri.queryParameters['peerName'] ?? '',
+          peerIsVip: _parseRouteBool(state.uri.queryParameters['peerIsVip']),
         );
       },
     ),
@@ -316,6 +326,7 @@ final appRouter = GoRouter(
       path: AppRoutes.recharge,
       builder: (context, state) => const RechargePage(),
     ),
+    GoRoute(path: AppRoutes.vip, builder: (context, state) => const VipPage()),
     GoRoute(
       path: AppRoutes.withdraw,
       builder: (context, state) => const WithdrawPage(),

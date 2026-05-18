@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
+import '../../app/widgets/vip_badge.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/utils/app_toast.dart';
@@ -20,6 +21,7 @@ class IncomingCallPage extends ConsumerStatefulWidget {
   final String peerName;
   final String? peerAvatar;
   final int leftSeconds;
+  final bool peerIsVip;
 
   const IncomingCallPage({
     super.key,
@@ -28,6 +30,7 @@ class IncomingCallPage extends ConsumerStatefulWidget {
     required this.peerName,
     this.peerAvatar,
     this.leftSeconds = 30,
+    this.peerIsVip = false,
   });
 
   @override
@@ -65,7 +68,10 @@ class _IncomingCallPageState extends ConsumerState<IncomingCallPage> {
       ref.read(callIncomingControllerProvider.notifier).setPageClosing(false);
       ref
           .read(callIncomingControllerProvider.notifier)
-          .initCountdown(initLeft, onTimeout: () => _closeWithReason('timeout'));
+          .initCountdown(
+            initLeft,
+            onTimeout: () => _closeWithReason('timeout'),
+          );
       _initWebSocket();
     });
   }
@@ -96,7 +102,9 @@ class _IncomingCallPageState extends ConsumerState<IncomingCallPage> {
         event.state == WsConnectionState.authFailed) {
       _wsDisconnectTimer ??= Timer(_wsGracePeriod, () {
         final current = ref.read(callIncomingControllerProvider);
-        if (!mounted || current.isPageClosing || WsService.instance.isConnected) {
+        if (!mounted ||
+            current.isPageClosing ||
+            WsService.instance.isConnected) {
           return;
         }
         unawaited(_closeWithReason('network_lost'));
@@ -169,18 +177,18 @@ class _IncomingCallPageState extends ConsumerState<IncomingCallPage> {
             'callId': widget.callId.toString(),
             'peerUserId': widget.peerUserId,
             'peerName': widget.peerName,
+            'peerIsVip': widget.peerIsVip ? '1' : '0',
           },
         ).toString(),
       );
     } catch (_) {
       if (!mounted) return;
-      AppToast.showSnackBar(
-        context,
-        const SnackBar(content: Text('接听失败，请重试')),
-      );
+      AppToast.showSnackBar(context, const SnackBar(content: Text('接听失败，请重试')));
     } finally {
       if (mounted) {
-        ref.read(callIncomingControllerProvider.notifier).setActionInFlight(false);
+        ref
+            .read(callIncomingControllerProvider.notifier)
+            .setActionInFlight(false);
       }
     }
   }
@@ -200,13 +208,12 @@ class _IncomingCallPageState extends ConsumerState<IncomingCallPage> {
       _exitPage();
     } catch (_) {
       if (!mounted) return;
-      AppToast.showSnackBar(
-        context,
-        const SnackBar(content: Text('拒绝失败，请重试')),
-      );
+      AppToast.showSnackBar(context, const SnackBar(content: Text('拒绝失败，请重试')));
     } finally {
       if (mounted) {
-        ref.read(callIncomingControllerProvider.notifier).setActionInFlight(false);
+        ref
+            .read(callIncomingControllerProvider.notifier)
+            .setActionInFlight(false);
       }
     }
   }
@@ -246,21 +253,43 @@ class _IncomingCallPageState extends ConsumerState<IncomingCallPage> {
                   radius: 56,
                   backgroundColor: Colors.white12,
                   backgroundImage:
-                      (widget.peerAvatar != null && widget.peerAvatar!.isNotEmpty)
+                      (widget.peerAvatar != null &&
+                          widget.peerAvatar!.isNotEmpty)
                       ? NetworkImage(widget.peerAvatar!)
                       : null,
                   child:
                       (widget.peerAvatar == null || widget.peerAvatar!.isEmpty)
-                      ? const Icon(Icons.person, color: Colors.white70, size: 50)
+                      ? const Icon(
+                          Icons.person,
+                          color: Colors.white70,
+                          size: 50,
+                        )
                       : null,
                 ),
                 const SizedBox(height: 18),
-                Text(
-                  widget.peerName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w700,
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          widget.peerName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      if (widget.peerIsVip) ...[
+                        const SizedBox(width: 8),
+                        const VipBadge(),
+                      ],
+                    ],
                   ),
                 ),
                 const SizedBox(height: 8),

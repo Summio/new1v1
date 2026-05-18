@@ -8,6 +8,7 @@ import '../../app/routes/app_router.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/widgets/status_view.dart';
+import '../../app/widgets/vip_badge.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/im/call_trace_message.dart';
 import '../../core/network/dio_client.dart';
@@ -154,6 +155,7 @@ class _CallPageState extends ConsumerState<CallPage> {
             _PeerAppProfile(
               nickname: (nickname?.isNotEmpty ?? false) ? nickname : null,
               avatarUrl: avatar.isNotEmpty ? avatar : null,
+              isVip: data['is_vip'] == true,
             ),
           );
         } catch (_) {
@@ -200,6 +202,7 @@ class _CallPageState extends ConsumerState<CallPage> {
           peerUserId: peerUserId,
           peerName: peer.displayName,
           peerAvatarUrl: peer.avatarUrl,
+          peerIsVip: peer.isVip,
           timestamp: _resolveMessageTime(trace: trace, message: message),
         ),
       );
@@ -233,6 +236,7 @@ class _CallPageState extends ConsumerState<CallPage> {
       return _PeerResolvedInfo(
         displayName: appNickname,
         avatarUrl: appProfile?.avatarUrl,
+        isVip: appProfile?.isVip ?? false,
       );
     }
 
@@ -241,6 +245,7 @@ class _CallPageState extends ConsumerState<CallPage> {
       return _PeerResolvedInfo(
         displayName: imNickname,
         avatarUrl: _imService.normalizeMediaUrl(imProfile?.faceUrl?.trim()),
+        isVip: appProfile?.isVip ?? false,
       );
     }
 
@@ -249,6 +254,7 @@ class _CallPageState extends ConsumerState<CallPage> {
       return _PeerResolvedInfo(
         displayName: showName,
         avatarUrl: _imService.normalizeMediaUrl(conversation.faceUrl?.trim()),
+        isVip: appProfile?.isVip ?? false,
       );
     }
 
@@ -258,13 +264,18 @@ class _CallPageState extends ConsumerState<CallPage> {
         : '未知用户';
     final appAvatar = appProfile?.avatarUrl;
     if (appAvatar != null && appAvatar.trim().isNotEmpty) {
-      return _PeerResolvedInfo(displayName: fallbackName, avatarUrl: appAvatar);
+      return _PeerResolvedInfo(
+        displayName: fallbackName,
+        avatarUrl: appAvatar,
+        isVip: appProfile?.isVip ?? false,
+      );
     }
     return _PeerResolvedInfo(
       displayName: fallbackName,
       avatarUrl: _imService.normalizeMediaUrl(
         conversation.faceUrl?.trim() ?? imProfile?.faceUrl?.trim(),
       ),
+      isVip: appProfile?.isVip ?? false,
     );
   }
 
@@ -476,15 +487,25 @@ class _CallPageState extends ConsumerState<CallPage> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Expanded(
-                                      child: Text(
-                                        item.peerName,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w600,
-                                          color: AppTheme.textPrimary,
-                                        ),
+                                      child: Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              item.peerName,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: const TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w600,
+                                                color: AppTheme.textPrimary,
+                                              ),
+                                            ),
+                                          ),
+                                          if (item.peerIsVip) ...[
+                                            const SizedBox(width: 6),
+                                            const VipBadge(dense: true),
+                                          ],
+                                        ],
                                       ),
                                     ),
                                     const SizedBox(width: 8),
@@ -553,6 +574,7 @@ class _CallRecordItem {
   final int? peerUserId;
   final String peerName;
   final String? peerAvatarUrl;
+  final bool peerIsVip;
   final DateTime timestamp;
 
   const _CallRecordItem({
@@ -560,6 +582,7 @@ class _CallRecordItem {
     required this.peerUserId,
     required this.peerName,
     required this.peerAvatarUrl,
+    this.peerIsVip = false,
     required this.timestamp,
   });
 }
@@ -567,13 +590,19 @@ class _CallRecordItem {
 class _PeerAppProfile {
   final String? nickname;
   final String? avatarUrl;
+  final bool isVip;
 
-  const _PeerAppProfile({this.nickname, this.avatarUrl});
+  const _PeerAppProfile({this.nickname, this.avatarUrl, this.isVip = false});
 }
 
 class _PeerResolvedInfo {
   final String displayName;
   final String? avatarUrl;
+  final bool isVip;
 
-  const _PeerResolvedInfo({required this.displayName, required this.avatarUrl});
+  const _PeerResolvedInfo({
+    required this.displayName,
+    required this.avatarUrl,
+    this.isVip = false,
+  });
 }

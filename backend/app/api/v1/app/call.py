@@ -39,6 +39,7 @@ from app.services.service_fee_service import (
     get_call_service_fee_config,
 )
 from app.services.user_block_service import UserBlockError, ensure_not_blocked
+from app.services.vip_service import is_user_vip
 from app.utils.billing import calc_due_minutes as _calc_due_minutes_with_free
 from app.utils.media_url import to_relative_media_url
 from app.utils.parse import clamp_int, safe_parse_int
@@ -405,6 +406,7 @@ async def dialing(req_in: DialingIn):
         else f"用户{target_user.id}"
     )
     callee_avatar = to_relative_media_url(callee_user.avatar) if callee_user else None
+    callee_is_vip = is_user_vip(callee_user)
     # 推送 WebSocket 来电通知给被叫方（fire-and-forget）
     asyncio.create_task(
         _ws_push_call_incoming(
@@ -413,6 +415,7 @@ async def dialing(req_in: DialingIn):
             caller_id=int(caller_id),
             caller_name=app_user.nickname or f"用户{caller_id}",
             caller_avatar=to_relative_media_url(app_user.avatar),
+            caller_is_vip=is_user_vip(app_user),
             call_price=int(call_price or 0),
             left_seconds=CALL_RING_TIMEOUT_SECONDS,
         )
@@ -427,6 +430,7 @@ async def dialing(req_in: DialingIn):
             callee_id=int(target_user.id),
             callee_nickname=callee_nickname,
             callee_avatar=callee_avatar,
+            callee_is_vip=callee_is_vip,
             call_price=int(call_price or 0),
             ring_timeout_seconds=CALL_RING_TIMEOUT_SECONDS,
             left_seconds=CALL_RING_TIMEOUT_SECONDS,
@@ -827,6 +831,7 @@ async def _ws_push_call_incoming(
     caller_id: int,
     caller_name: str,
     caller_avatar: str | None,
+    caller_is_vip: bool,
     call_price: int,
     left_seconds: int,
 ) -> None:
@@ -837,6 +842,7 @@ async def _ws_push_call_incoming(
             caller_id=caller_id,
             caller_name=caller_name,
             caller_avatar=caller_avatar,
+            caller_is_vip=caller_is_vip,
             call_price=call_price,
             left_seconds=left_seconds,
         )

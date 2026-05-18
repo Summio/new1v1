@@ -7,6 +7,7 @@ import '../../app/providers/moment_provider.dart';
 import '../../app/providers/ranking_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
+import '../../app/widgets/vip_badge.dart';
 import 'moment_list_view.dart';
 
 /// 发现页 - 动态 / 排行榜
@@ -490,19 +491,29 @@ class _RankingTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      item.nickname.isNotEmpty
-                          ? item.nickname
-                          : item.isAnonymous
-                          ? '神秘人'
-                          : '用户${item.userId ?? ''}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            item.nickname.isNotEmpty
+                                ? item.nickname
+                                : item.isAnonymous
+                                ? '神秘人'
+                                : '用户${item.userId ?? ''}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        if (item.isVip) ...[
+                          const SizedBox(width: 6),
+                          const VipBadge(dense: true),
+                        ],
+                      ],
                     ),
                     if (!item.isAnonymous && item.userId != null) ...[
                       const SizedBox(height: 4),

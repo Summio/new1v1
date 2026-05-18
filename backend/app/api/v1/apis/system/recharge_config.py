@@ -4,8 +4,7 @@ import logging
 from fastapi import APIRouter, HTTPException
 
 from app.core.redis import get_redis
-from app.models.system_config import SYSTEM_CONFIG_CACHE_KEY
-from app.models.system_config import SystemConfig
+from app.models.system_config import SYSTEM_CONFIG_CACHE_KEY, SystemConfig
 from app.schemas.base import Success
 from app.schemas.system import RechargeConfigIn, RechargePackageItem
 
@@ -19,8 +18,8 @@ def _normalize_recharge_package(item: dict) -> dict:
     if not package.get("label"):
         amount = package.get("amount") or package.get("money") or 0
         try:
-            amount_yuan = int(amount) / 100
-            package["label"] = f"{amount_yuan:g}元"
+            amount_display = int(amount) / 100
+            package["label"] = f"{amount_display:g}元"
         except (TypeError, ValueError):
             package["label"] = "充值套餐"
     return package
@@ -37,7 +36,9 @@ async def get_recharge_config():
     except (json.JSONDecodeError, ValueError):
         packages_data = []
 
-    packages = [RechargePackageItem(**_normalize_recharge_package(item)) for item in packages_data if isinstance(item, dict)]
+    packages = [
+        RechargePackageItem(**_normalize_recharge_package(item)) for item in packages_data if isinstance(item, dict)
+    ]
     return Success(data={"packages": [p.model_dump() for p in packages]})
 
 

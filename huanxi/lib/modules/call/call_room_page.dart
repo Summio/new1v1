@@ -11,6 +11,7 @@ import '../../app/providers/auth_provider.dart';
 import '../../app/providers/gift_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
+import '../../app/widgets/vip_badge.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/device/call_keep_alive_bridge.dart';
@@ -41,6 +42,7 @@ class CallRoomPage extends ConsumerStatefulWidget {
   /// 礼物目标用户 ID（可选，缺省时尝试按 peerUserId 反查）
   final String? targetUserId;
   final String peerName;
+  final bool peerIsVip;
 
   const CallRoomPage({
     super.key,
@@ -48,6 +50,7 @@ class CallRoomPage extends ConsumerStatefulWidget {
     required this.peerUserId,
     this.targetUserId,
     this.peerName = '',
+    this.peerIsVip = false,
   });
 
   @override
@@ -970,6 +973,7 @@ class _CallRoomPageState extends ConsumerState<CallRoomPage>
                 callId: widget.callId,
                 peerUserId: widget.peerUserId,
                 routePeerName: widget.peerName,
+                routePeerIsVip: widget.peerIsVip,
                 formatDuration: _formatDuration,
                 callChromeVisible: _callChromeVisible,
               ),
@@ -1455,6 +1459,7 @@ class _CallTopBar extends ConsumerWidget {
   final int callId;
   final String peerUserId;
   final String routePeerName;
+  final bool routePeerIsVip;
   final String Function(Duration) formatDuration;
   final ValueNotifier<bool> callChromeVisible;
 
@@ -1462,6 +1467,7 @@ class _CallTopBar extends ConsumerWidget {
     required this.callId,
     required this.peerUserId,
     required this.routePeerName,
+    required this.routePeerIsVip,
     required this.formatDuration,
     required this.callChromeVisible,
   });
@@ -1479,6 +1485,7 @@ class _CallTopBar extends ConsumerWidget {
     final peerName = routePeerName.trim().isNotEmpty
         ? routePeerName.trim()
         : (certifiedUser?.username ?? '认证用户');
+    final peerIsVip = routePeerIsVip || (certifiedUser?.isVip == true);
 
     return ValueListenableBuilder<bool>(
       valueListenable: callChromeVisible,
@@ -1511,13 +1518,25 @@ class _CallTopBar extends ConsumerWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            peerName,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  peerName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              if (peerIsVip) ...[
+                                const SizedBox(width: 6),
+                                const VipBadge(dense: true),
+                              ],
+                            ],
                           ),
                           _CallDurationText(
                             callId: callId,

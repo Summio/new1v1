@@ -60,6 +60,8 @@ class CertifiedUserInfo {
   final String? lastActive;
   final String? status;
   final bool isCertifiedUser;
+  final bool isVip;
+  final String? vipExpiresAt;
   final int? diamonds;
   final bool blockedByMe;
   final bool blockedMe;
@@ -88,6 +90,8 @@ class CertifiedUserInfo {
     this.lastActive,
     this.status,
     this.isCertifiedUser = true,
+    this.isVip = false,
+    this.vipExpiresAt,
     this.diamonds,
     this.blockedByMe = false,
     this.blockedMe = false,
@@ -144,6 +148,8 @@ class CertifiedUserInfo {
       lastActive: json['last_active'] as String?,
       status: json['status'] as String?,
       isCertifiedUser: json['is_certified_user'] as bool? ?? true,
+      isVip: json['is_vip'] as bool? ?? false,
+      vipExpiresAt: json['vip_expires_at'] as String?,
       diamonds: (json['diamonds'] as num?)?.toInt(),
       blockedByMe: json['blocked_by_me'] as bool? ?? false,
       blockedMe: json['blocked_me'] as bool? ?? false,
@@ -196,6 +202,8 @@ class CertifiedUserInfo {
       lastActive: lastActive,
       status: status,
       isCertifiedUser: isCertifiedUser,
+      isVip: isVip,
+      vipExpiresAt: vipExpiresAt,
       diamonds: diamonds,
       blockedByMe: blockedByMe,
       blockedMe: blockedMe,

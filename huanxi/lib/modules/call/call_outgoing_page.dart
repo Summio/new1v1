@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
+import '../../app/widgets/vip_badge.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/network/api_exception.dart';
 import '../../core/network/dio_client.dart';
@@ -28,6 +29,7 @@ class CallOutgoingPage extends ConsumerStatefulWidget {
   final String? peerAvatar;
   final String? targetUserId;
   final int callPrice;
+  final bool peerIsVip;
 
   const CallOutgoingPage({
     super.key,
@@ -37,6 +39,7 @@ class CallOutgoingPage extends ConsumerStatefulWidget {
     this.peerAvatar,
     this.targetUserId,
     required this.callPrice,
+    this.peerIsVip = false,
   });
 
   @override
@@ -56,6 +59,7 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
   String _peerName = '';
   String? _peerAvatar;
   int _callPrice = 0;
+  bool _peerIsVip = false;
 
   void _dismissTransientOverlays() {
     final rootNavigator = Navigator.of(context, rootNavigator: true);
@@ -81,6 +85,7 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
     _peerName = widget.peerName;
     _peerAvatar = toAbsoluteMediaUrl(widget.peerAvatar);
     _callPrice = widget.callPrice;
+    _peerIsVip = widget.peerIsVip;
 
     // 使用 Future.microtask 延迟执行，避免 widget build 阶段修改 provider
     Future.microtask(() {
@@ -217,6 +222,7 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
           (dialingData?['callee_avatar'] as String?)?.trim(),
         );
         final callPrice = (dialingData?['call_price'] as num?)?.toInt();
+        final peerIsVip = dialingData?['callee_is_vip'] == true;
         if (peerUserId != null && peerUserId > 0) {
           _peerUserId = peerUserId.toString();
         }
@@ -229,6 +235,7 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
         if (callPrice != null && callPrice >= 0) {
           _callPrice = callPrice;
         }
+        _peerIsVip = peerIsVip;
       });
       final leftSeconds = (dialingData?['left_seconds'] as num?)?.toInt() ?? 30;
       ref
@@ -274,6 +281,7 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
           'peerUserId': _peerUserId,
           'targetUserId': widget.targetUserId,
           'peerName': _peerName,
+          'peerIsVip': _peerIsVip ? '1' : '0',
         },
       ).toString(),
     );
@@ -428,16 +436,28 @@ class _CallOutgoingPageState extends ConsumerState<CallOutgoingPage> {
                 const SizedBox(height: 18),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: Text(
-                    _peerName,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          _peerName,
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      if (_peerIsVip) ...[
+                        const SizedBox(width: 8),
+                        const VipBadge(),
+                      ],
+                    ],
                   ),
                 ),
                 const SizedBox(height: 8),

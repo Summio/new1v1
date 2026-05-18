@@ -13,6 +13,7 @@ from app.models import AppUser, RankingSnapshot, SystemConfig
 from app.models.system_config import SYSTEM_CONFIG_CACHE_KEY
 from app.services.customer_service import get_customer_service_user_id
 from app.services.gift_income_service import decimal_to_float_2, quantize_decimal_2
+from app.services.vip_service import vip_payload
 from app.utils.media_url import to_relative_media_url
 
 BOARD_CHARM = "charm"
@@ -383,6 +384,7 @@ async def enrich_snapshot_rows(snapshots: list[RankingSnapshot]) -> list[dict[st
                 "nickname": (user.nickname or "").strip() or (user.phone or "").strip() or f"用户{user.id}",
                 "avatar": to_relative_media_url(user.avatar),
                 "is_certified_user": bool(user.is_certified_user),
+                **vip_payload(user),
                 "ranking_invisible_enabled": bool(user.ranking_invisible_enabled),
                 "board": item.board,
                 "period": item.period,
@@ -412,6 +414,8 @@ def build_app_ranking_rows(rows: list[dict[str, Any]], *, board: str) -> list[di
                 "user_id": None if is_anonymous else int(row.get("user_id") or 0),
                 "nickname": "神秘人" if is_anonymous else str(row.get("nickname") or ""),
                 "avatar": "" if is_anonymous else str(row.get("avatar") or ""),
+                "is_vip": False if is_anonymous else bool(row.get("is_vip")),
+                "vip_expires_at": None if is_anonymous else row.get("vip_expires_at"),
                 "is_anonymous": is_anonymous,
                 "score_gap_from_top": decimal_to_float_2(gap),
                 "score_gap_text": f"距榜首 {format_score_value(gap)} {unit}",

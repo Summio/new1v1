@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../app/routes/app_router.dart';
 import '../../services/moment_service.dart';
 import '../../app/theme/app_theme.dart';
+import '../../app/widgets/vip_badge.dart';
 import 'moment_image_preview_page.dart';
 import 'moment_video_preview_page.dart';
 import 'moment_media_grid.dart';
@@ -56,20 +57,35 @@ class MomentCard extends StatelessWidget {
                           );
                         }
                       : null,
-                  child: _UserAvatar(avatar: moment.user?.avatar ?? '', size: 44),
+                  child: _UserAvatar(
+                    avatar: moment.user?.avatar ?? '',
+                    size: 44,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        moment.user?.nickname ?? '未知用户',
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: AppTheme.textPrimary,
-                        ),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              moment.user?.nickname ?? '未知用户',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: AppTheme.textPrimary,
+                              ),
+                            ),
+                          ),
+                          if (moment.user?.isVip == true) ...[
+                            const SizedBox(width: 6),
+                            const VipBadge(dense: true),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -113,7 +129,9 @@ class MomentCard extends StatelessWidget {
               ),
             ],
 
-            if (showReviewStatus && moment.reviewStatus == 'rejected' && (moment.reviewRemark?.trim().isNotEmpty ?? false)) ...[
+            if (showReviewStatus &&
+                moment.reviewStatus == 'rejected' &&
+                (moment.reviewRemark?.trim().isNotEmpty ?? false)) ...[
               const SizedBox(height: 10),
               Text(
                 '驳回原因：${moment.reviewRemark!.trim()}',
@@ -150,7 +168,6 @@ class MomentCard extends StatelessWidget {
                 },
               ),
             ],
-
           ],
         ),
       ),

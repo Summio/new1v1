@@ -9,6 +9,7 @@ import '../../app/providers/certified_common_phrase_provider.dart';
 import '../../app/providers/flirt_user_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
+import '../../app/widgets/vip_badge.dart';
 import '../../app/widgets/status_view.dart';
 import '../../core/utils/app_toast.dart';
 import 'home_page.dart';
@@ -201,10 +202,7 @@ class _FlirtUserListPageState extends ConsumerState<FlirtUserListPage> {
             : const SizedBox(height: 10),
         itemBuilder: (context, index) {
           if (index == 0) {
-            return _GreetingBar(
-              state: greetState,
-              onPressed: _sendGreeting,
-            );
+            return _GreetingBar(state: greetState, onPressed: _sendGreeting);
           }
           final userIndex = index - 1;
           if (state.users.isEmpty) {
@@ -277,11 +275,7 @@ class _GreetingBar extends StatelessWidget {
                 ),
               )
             : const Icon(Icons.chat_bubble_outline, size: 18),
-        label: Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
+        label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
         style: FilledButton.styleFrom(
           backgroundColor: Colors.black,
           foregroundColor: Colors.white,
@@ -291,13 +285,8 @@ class _GreetingBar extends StatelessWidget {
           disabledForegroundColor: state.isSending
               ? Colors.white
               : AppTheme.textSecondary,
-          textStyle: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w800,
-          ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
+          textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
       ),
     );
@@ -384,6 +373,10 @@ class _FlirtUserTile extends StatelessWidget {
                         ),
                       ),
                     ),
+                    if (user.isVip) ...[
+                      const SizedBox(width: 6),
+                      const VipBadge(dense: true),
+                    ],
                     const SizedBox(width: 8),
                     Container(
                       width: 7,
@@ -483,6 +476,7 @@ class _FlirtUserTile extends StatelessWidget {
           'targetUserId': user.userId.toString(),
           'peerName': user.username ?? '用户${user.userId}',
           'peerAvatar': user.avatar ?? '',
+          'peerIsVip': user.isVip ? '1' : '0',
           'callPrice': user.callPrice?.toStringAsFixed(0) ?? '0',
         },
       ).toString(),

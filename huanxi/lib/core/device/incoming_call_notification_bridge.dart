@@ -7,6 +7,7 @@ class IncomingCallNotificationPayload {
   final int peerUserId;
   final String peerName;
   final String? peerAvatar;
+  final bool peerIsVip;
   final int leftSeconds;
 
   const IncomingCallNotificationPayload({
@@ -14,6 +15,7 @@ class IncomingCallNotificationPayload {
     required this.peerUserId,
     required this.peerName,
     required this.peerAvatar,
+    this.peerIsVip = false,
     required this.leftSeconds,
   });
 
@@ -23,6 +25,7 @@ class IncomingCallNotificationPayload {
       'peerUserId': peerUserId,
       'peerName': peerName,
       'peerAvatar': peerAvatar ?? '',
+      'peerIsVip': peerIsVip,
       'leftSeconds': leftSeconds,
     };
   }
@@ -37,7 +40,11 @@ class IncomingCallNotificationPayload {
       peerUserId: peerUserId,
       peerName: '${map['peerName'] ?? map['peer_name'] ?? '用户'}',
       peerAvatar: _emptyToNull(map['peerAvatar'] ?? map['peer_avatar']),
-      leftSeconds: _toInt(map['leftSeconds'] ?? map['left_seconds'], fallback: 30),
+      peerIsVip: _toBool(map['peerIsVip'] ?? map['peer_is_vip']),
+      leftSeconds: _toInt(
+        map['leftSeconds'] ?? map['left_seconds'],
+        fallback: 30,
+      ),
     );
   }
 
@@ -52,6 +59,16 @@ class IncomingCallNotificationPayload {
     final text = value?.toString().trim();
     return text == null || text.isEmpty ? null : text;
   }
+
+  static bool _toBool(dynamic value) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    if (value is String) {
+      final normalized = value.trim().toLowerCase();
+      return normalized == '1' || normalized == 'true';
+    }
+    return false;
+  }
 }
 
 class IncomingCallNotificationBridge {
@@ -62,7 +79,8 @@ class IncomingCallNotificationBridge {
   );
 
   static void configure({
-    required void Function(IncomingCallNotificationPayload payload) onOpenIncomingCall,
+    required void Function(IncomingCallNotificationPayload payload)
+    onOpenIncomingCall,
   }) {
     _channel.setMethodCallHandler((call) async {
       if (call.method != 'openIncomingCall') return;
@@ -75,7 +93,8 @@ class IncomingCallNotificationBridge {
     });
   }
 
-  static Future<IncomingCallNotificationPayload?> takeLaunchIncomingCall() async {
+  static Future<IncomingCallNotificationPayload?>
+  takeLaunchIncomingCall() async {
     if (!Platform.isAndroid) return null;
     final raw = await _channel.invokeMethod<Map<dynamic, dynamic>>(
       'takeLaunchIncomingCall',

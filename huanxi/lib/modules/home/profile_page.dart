@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/providers/auth_provider.dart';
 import '../../app/theme/app_theme.dart';
+import '../../app/widgets/vip_badge.dart';
 import '../../core/utils/capability_limit_guard.dart';
 import '../../core/utils/app_toast.dart';
 import '../../services/review_entry_guard_service.dart';
@@ -168,6 +169,10 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                           label: _availabilityText(authState),
                           color: _availabilityColor(authState),
                         ),
+                        if (authState.isVip) ...[
+                          const SizedBox(width: 6),
+                          const VipBadge(),
+                        ],
                         if (isCertifiedUser) ...[
                           const SizedBox(width: 6),
                           _buildCertificationChip(),
@@ -246,6 +251,12 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                         ? AppTheme.primaryColor
                         : AppTheme.textHint,
                     onTap: () => _openCustomerService(context, ref),
+                  ),
+                  _buildMenuTile(
+                    icon: Icons.workspace_premium_outlined,
+                    title: 'VIP会员',
+                    iconColor: const Color(0xFFD79A2B),
+                    onTap: () => context.push(AppRoutes.vip),
                   ),
                   _buildMenuTile(
                     icon: Icons.do_not_disturb_on_outlined,

@@ -283,6 +283,7 @@ class _MainShellState extends ConsumerState<MainShell>
       peerUserId: payload.peerUserId,
       peerNickname: payload.peerName,
       peerAvatar: payload.peerAvatar,
+      peerIsVip: payload.peerIsVip,
       callPrice: 0,
       ringTimeoutSeconds: 30,
       leftSeconds: payload.leftSeconds,
@@ -328,6 +329,7 @@ class _MainShellState extends ConsumerState<MainShell>
           'peerUserId': payload.peerUserId.toString(),
           'peerName': payload.peerNickname,
           'peerAvatar': payload.peerAvatar ?? '',
+          'peerIsVip': payload.peerIsVip ? '1' : '0',
           'leftSeconds': payload.leftSeconds.toString(),
         },
       );
@@ -405,6 +407,7 @@ class _MainShellState extends ConsumerState<MainShell>
       wsData['peer_user_id'] = wsData['caller_id'];
       wsData['peer_nickname'] = wsData['caller_name'] ?? '用户';
       wsData['peer_avatar'] = wsData['caller_avatar'];
+      wsData['peer_is_vip'] = wsData['caller_is_vip'];
       wsData['status'] = 'pending';
       wsData['role'] = 'callee';
 
@@ -433,12 +436,13 @@ class _MainShellState extends ConsumerState<MainShell>
     }
   }
 
-  Future<void> _showIncomingCallNotification(
-    CallSessionPayload payload,
-  ) async {
+  Future<void> _showIncomingCallNotification(CallSessionPayload payload) async {
     final callId = payload.callId;
     final peerUserId = payload.peerUserId;
-    if (callId == null || callId <= 0 || peerUserId == null || peerUserId <= 0) {
+    if (callId == null ||
+        callId <= 0 ||
+        peerUserId == null ||
+        peerUserId <= 0) {
       return;
     }
     if (_notifiedIncomingCallIds.contains(callId)) {
@@ -452,6 +456,7 @@ class _MainShellState extends ConsumerState<MainShell>
           peerUserId: peerUserId,
           peerName: payload.peerNickname,
           peerAvatar: payload.peerAvatar,
+          peerIsVip: payload.peerIsVip,
           leftSeconds: payload.leftSeconds > 0 ? payload.leftSeconds : 30,
         ),
       );
@@ -469,7 +474,9 @@ class _MainShellState extends ConsumerState<MainShell>
     if (pending?.callId == callId) {
       _pendingIncomingWhenBackground = null;
     }
-    unawaited(IncomingCallNotificationBridge.cancelIncomingCall(callId: callId));
+    unawaited(
+      IncomingCallNotificationBridge.cancelIncomingCall(callId: callId),
+    );
   }
 
   void _handlePresenceEvent(Map<String, dynamic> data) {

@@ -25,6 +25,28 @@ class RechargeConfigOut(BaseModel):
     packages: List[RechargePackageItem]
 
 
+class VipPackageItem(BaseModel):
+    """VIP 套餐项，金额单位为分"""
+
+    amount: int = Field(ge=1, le=10000000, description="VIP金额（分），例如 1990 表示 19.90 元")
+    duration_days: int = Field(gt=0, le=36500, description="VIP时长（天）")
+    label: str = Field(min_length=1, max_length=20, description="套餐展示标签")
+    tag: Optional[str] = Field(None, max_length=10, description="角标文字")
+    tag_color: Optional[str] = Field(None, max_length=20, description="角标颜色（十六进制，如 #D7A84F）")
+
+
+class VipConfigIn(BaseModel):
+    """VIP 配置输入"""
+
+    packages: List[VipPackageItem] = Field(min_length=1, max_length=20, description="VIP套餐列表")
+
+
+class VipConfigOut(BaseModel):
+    """VIP 配置输出"""
+
+    packages: List[VipPackageItem]
+
+
 class WithdrawPackageItem(BaseModel):
     """提现套餐项"""
 

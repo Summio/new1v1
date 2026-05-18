@@ -8,6 +8,7 @@ from app.models import AppUser, ImTextMessageChargeRecord, SystemConfig
 from app.schemas.system import IMTextBillingConfigOut
 from app.services.customer_service import load_customer_service_config
 from app.services.gift_income_service import decimal_to_float_2, quantize_decimal_2
+from app.services.vip_service import is_user_vip
 from app.utils.parse import clamp_int, safe_parse_int
 
 DEFAULT_IM_TEXT_PRICE = 0
@@ -73,12 +74,14 @@ def should_charge_im_text_message(
     price: int,
     sender_is_certified_user: bool,
     receiver_is_certified_user: bool,
+    sender_is_vip: bool = False,
     receiver_is_customer_service: bool = False,
 ) -> bool:
     return (
         bool(enabled)
         and int(price or 0) > 0
         and not bool(sender_is_certified_user)
+        and not bool(sender_is_vip)
         and not bool(receiver_is_customer_service)
     )
 
@@ -153,6 +156,7 @@ async def charge_im_text_message(
         enabled=config.enabled,
         price=config.price,
         sender_is_certified_user=bool(sender.is_certified_user),
+        sender_is_vip=is_user_vip(sender),
         receiver_is_certified_user=bool(receiver.is_certified_user),
         receiver_is_customer_service=receiver_is_customer_service,
     )

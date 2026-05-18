@@ -228,6 +228,29 @@ class RechargeOrder(BaseModel, TimestampMixin):
         table = "recharge_order"
 
 
+class VipOrder(BaseModel, TimestampMixin):
+    """VIP 会员购买订单"""
+
+    user_id = fields.BigIntField(description="用户ID", db_index=True)
+    order_no = fields.CharField(max_length=64, unique=True, description="订单号", db_index=True)
+    amount = fields.BigIntField(description="VIP金额(分)")
+    duration_days = fields.IntField(description="VIP时长(天)")
+    package_snapshot = fields.JSONField(null=True, description="VIP套餐快照")
+    status = fields.CharField(
+        max_length=20,
+        default="pending",
+        description="pending/paid/cancelled/refunded",
+        db_index=True,
+    )
+    pay_channel = fields.CharField(max_length=20, null=True, description="支付渠道: wx/alipay")
+    paid_at = fields.DatetimeField(null=True, description="支付时间")
+    before_vip_expires_at = fields.DatetimeField(null=True, description="开通前VIP到期时间")
+    after_vip_expires_at = fields.DatetimeField(null=True, description="开通后VIP到期时间")
+
+    class Meta:
+        table = "vip_order"
+
+
 class WithdrawApply(BaseModel, TimestampMixin):
     """提现申请"""
 

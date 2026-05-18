@@ -24,6 +24,7 @@ from .register import router as register_router
 from .review_entry import router as review_entry_router
 from .rtc import router as rtc_router
 from .user import router as user_router
+from .vip import router as vip_router
 from .wallet import router as wallet_router
 
 app_router = APIRouter()
@@ -43,6 +44,7 @@ app_router.include_router(certification_router, prefix="", dependencies=[Depends
 app_router.include_router(call_router, prefix="", dependencies=[Depends(DependAppAuth)])
 app_router.include_router(gift_router, prefix="", dependencies=[Depends(DependAppAuth)])
 app_router.include_router(wallet_router, prefix="", dependencies=[Depends(DependAppAuth)])
+app_router.include_router(vip_router, prefix="", dependencies=[Depends(DependAppAuth)])
 app_router.include_router(im_router, prefix="", dependencies=[Depends(DependAppAuth)])
 app_router.include_router(rtc_router, prefix="", dependencies=[Depends(DependAppAuth)])
 app_router.include_router(agreement_router, prefix="", dependencies=[Depends(DependAppAuth)])

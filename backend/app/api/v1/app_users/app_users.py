@@ -9,12 +9,12 @@ from tortoise.transactions import in_transaction
 
 from app.core.china_locations import normalize_location_city
 from app.core.ctx import CTX_USER_ID
-from app.core.time_utils import now_local_naive
 from app.core.profile_basic_fields import (
     normalize_birth_date,
     normalize_height_cm,
     normalize_weight_kg,
 )
+from app.core.time_utils import now_local_naive
 from app.models import (
     AppUser,
     AppUserCommonPhrase,
@@ -49,6 +49,7 @@ from app.services.profile_review_service import (
     review_items_have_pending,
     update_review_item_status,
 )
+from app.services.vip_service import vip_payload
 from app.settings.config import settings
 from app.utils.media_url import normalize_media_list, to_relative_media_url
 from app.utils.upload_files import (
@@ -170,6 +171,8 @@ async def list_app_user(
         row["cover_url"] = to_relative_media_url(row.get("cover_url"))
         row["certification_face_image"] = to_relative_media_url(row.get("certification_face_image"))
         row["album_photos"] = _normalize_album(row.get("album_photos"))
+        user_obj = next((item for item in records if int(item.id) == int(row.get("id") or 0)), None)
+        row.update(vip_payload(user_obj))
         album = row.get("album_photos")
         row["album_count"] = len(album) if isinstance(album, list) else 0
     return SuccessExtra(data=data, total=total, page=page, page_size=page_size)
@@ -185,6 +188,7 @@ async def get_app_user(id: int = Query(..., ge=1, description="用户ID")):
     data["cover_url"] = to_relative_media_url(data.get("cover_url"))
     data["certification_face_image"] = to_relative_media_url(data.get("certification_face_image"))
     data["album_photos"] = _normalize_album(data.get("album_photos"))
+    data.update(vip_payload(app_user))
     album = data.get("album_photos")
     data["album_count"] = len(album) if isinstance(album, list) else 0
     return Success(data=data)

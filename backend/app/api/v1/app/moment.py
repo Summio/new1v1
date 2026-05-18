@@ -16,12 +16,13 @@ from app.services.customer_service import (
     get_customer_service_user_id,
     is_customer_service_user_id,
 )
+from app.services.recommended_user_cache import get_recommended_user_ids
 from app.services.review_entry_guard_service import (
     MOMENT_REVIEW_PENDING_MESSAGE,
     has_pending_moment_review,
 )
-from app.services.recommended_user_cache import get_recommended_user_ids
 from app.services.user_block_service import exclude_blocked_user_ids
+from app.services.vip_service import vip_payload
 from app.settings.config import settings
 from app.utils.media_url import to_relative_media_url
 from app.utils.upload_files import (
@@ -84,6 +85,8 @@ async def _serialize_moment(
         "reviewed_by": int(moment.reviewed_by or 0) or None,
         "review_remark": moment.review_remark or "",
         "author_is_certified_user": bool(resolved_user.is_certified_user) if resolved_user else False,
+        "author_is_vip": bool(vip_payload(resolved_user)["is_vip"]) if resolved_user else False,
+        "author_vip_expires_at": vip_payload(resolved_user)["vip_expires_at"] if resolved_user else None,
         "author_is_recommended": author_is_recommended,
         "media_list": [
             {
@@ -102,6 +105,7 @@ async def _serialize_moment(
                 (resolved_user.nickname or f"用户{resolved_user.id}") if resolved_user else f"用户{moment.user_id}"
             ),
             "avatar": to_relative_media_url(resolved_user.avatar) if resolved_user else "",
+            **vip_payload(resolved_user),
         },
     }
 
@@ -283,6 +287,7 @@ async def create_moment(req_in: MomentCreateIn):
                 "id": app_user.id,
                 "nickname": app_user.nickname or app_user.phone,
                 "avatar": to_relative_media_url(app_user.avatar),
+                **vip_payload(app_user),
             },
         }
     )

@@ -55,6 +55,7 @@ class DialingOut(BaseModel):
     callee_id: int
     callee_nickname: str
     callee_avatar: Optional[str] = None
+    callee_is_vip: bool = False
     call_price: int = 0
     ring_timeout_seconds: int = 30
     left_seconds: int = 30
@@ -161,6 +162,20 @@ class RechargeCreateOut(BaseModel):
     order_no: str
     pay_url: Optional[str] = None
     msg: str = "订单创建成功"
+
+
+class VipOrderCreateIn(BaseModel):
+    package_index: int = Field(..., ge=0, description="VIP套餐索引")
+    pay_channel: str = Field("wx", description="wx/alipay")
+
+
+class VipOrderCreateOut(BaseModel):
+    order_no: str
+    pay_url: Optional[str] = None
+    amount: int
+    duration_days: int
+    vip_expires_at: Optional[datetime] = None
+    msg: str = "订单创建成功，请完成支付"
 
 
 class RechargeReviewIn(BaseModel):

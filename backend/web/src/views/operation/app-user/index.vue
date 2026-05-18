@@ -57,6 +57,8 @@ const modalForm = ref({
   coins: 0,
   diamonds: 0,
   frozen_diamonds: 0,
+  is_vip: false,
+  vip_expires_at: '',
   created_at: '',
   last_login: '',
 })
@@ -324,6 +326,8 @@ function openEditModal(row) {
     coins: row.coins ?? 0,
     diamonds: row.diamonds ?? 0,
     frozen_diamonds: row.frozen_diamonds ?? 0,
+    is_vip: !!row.is_vip,
+    vip_expires_at: row.vip_expires_at || '',
     created_at: row.created_at || '',
     last_login: row.last_login || '',
   }
@@ -981,6 +985,26 @@ const columns = [
       )
     },
   },
+  {
+    title: 'VIP',
+    key: 'is_vip',
+    width: 120,
+    align: 'center',
+    render(row) {
+      return h('div', { class: 'meta-wrap' }, [
+        h(
+          NTag,
+          { type: row.is_vip ? 'warning' : 'default' },
+          { default: () => (row.is_vip ? 'VIP' : '非VIP') }
+        ),
+        h(
+          'span',
+          { class: 'meta-value' },
+          row.vip_expires_at ? formatDate(row.vip_expires_at) : '-'
+        ),
+      ])
+    },
+  },
   // prettier-ignore
   { title: '金币', key: 'coins', width: 150, align: 'center', render: (row) => renderBalanceActions(row, 'coins') },
   // prettier-ignore
@@ -1189,6 +1213,20 @@ const columns = [
             </NFormItem>
             <NFormItem label="真人认证">
               <NSwitch v-model:value="modalForm.is_certified_user" />
+            </NFormItem>
+            <NFormItem label="VIP状态">
+              <NInput
+                :value="
+                  modalForm.is_vip
+                    ? `VIP 至 ${
+                        modalForm.vip_expires_at
+                          ? formatDate(modalForm.vip_expires_at, 'YYYY-MM-DD HH:mm:ss')
+                          : '-'
+                      }`
+                    : '非VIP'
+                "
+                readonly
+              />
             </NFormItem>
             <NFormItem label="通话价格">
               <NSelect

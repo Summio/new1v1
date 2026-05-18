@@ -8,6 +8,7 @@ class CallSessionPayload {
   final int? peerUserId;
   final String peerNickname;
   final String? peerAvatar;
+  final bool peerIsVip;
   final int callPrice;
   final int ringTimeoutSeconds;
   final int leftSeconds;
@@ -27,6 +28,7 @@ class CallSessionPayload {
     required this.peerUserId,
     required this.peerNickname,
     required this.peerAvatar,
+    this.peerIsVip = false,
     required this.callPrice,
     required this.ringTimeoutSeconds,
     required this.leftSeconds,
@@ -63,10 +65,9 @@ class CallSessionPayload {
 
   factory CallSessionPayload.fromJson(Map<String, dynamic>? json) {
     final payload = json ?? const <String, dynamic>{};
-    final actions =
-        payload['actions'] is Map<String, dynamic>
-            ? payload['actions'] as Map<String, dynamic>
-            : const <String, dynamic>{};
+    final actions = payload['actions'] is Map<String, dynamic>
+        ? payload['actions'] as Map<String, dynamic>
+        : const <String, dynamic>{};
     final peerNicknameRaw = (payload['peer_nickname'] as String?)?.trim();
     return CallSessionPayload(
       callId: _toInt(payload['call_id'], fallback: 0) > 0
@@ -78,11 +79,13 @@ class CallSessionPayload {
       peerUserId: _toInt(payload['peer_user_id'], fallback: 0) > 0
           ? _toInt(payload['peer_user_id'], fallback: 0)
           : null,
-      peerNickname:
-          (peerNicknameRaw != null && peerNicknameRaw.isNotEmpty)
-              ? peerNicknameRaw
-              : '用户',
-      peerAvatar: toAbsoluteMediaUrl((payload['peer_avatar'] as String?)?.trim()),
+      peerNickname: (peerNicknameRaw != null && peerNicknameRaw.isNotEmpty)
+          ? peerNicknameRaw
+          : '用户',
+      peerAvatar: toAbsoluteMediaUrl(
+        (payload['peer_avatar'] as String?)?.trim(),
+      ),
+      peerIsVip: _toBool(payload['peer_is_vip']),
       callPrice: _toInt(payload['call_price']),
       ringTimeoutSeconds: _toInt(payload['ring_timeout_seconds'], fallback: 30),
       leftSeconds: _toInt(payload['left_seconds']),

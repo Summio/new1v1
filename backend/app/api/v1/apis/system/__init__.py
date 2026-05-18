@@ -5,10 +5,12 @@ from .flirt_config import router as flirt_config_router
 from .initial_profile import router as initial_profile_router
 from .im_text_billing_config import router as im_text_billing_config_router
 from .recharge_config import router as recharge_config_router
+from .vip_config import router as vip_config_router
 from .withdraw_config import router as withdraw_config_router
 
 system_router = APIRouter()
 system_router.include_router(recharge_config_router, prefix="/recharge-config", tags=["系统配置-充值"])
+system_router.include_router(vip_config_router, prefix="/vip-config", tags=["系统配置-VIP"])
 system_router.include_router(withdraw_config_router, prefix="/withdraw-config", tags=["系统配置-提现"])
 system_router.include_router(flirt_config_router, prefix="/flirt-config", tags=["系统配置-搭讪"])
 system_router.include_router(

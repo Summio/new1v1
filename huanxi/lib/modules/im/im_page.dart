@@ -59,6 +59,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
   String _peerAvailabilityStatus = 'offline';
   String _peerAvailabilityLabel = '离线';
   int? _peerCertifiedUserId;
+  bool _peerIsVip = false;
   String? _myAvatarUrl;
   final Set<String> _messageIds = <String>{};
   V2TimMessage? _lastHistoryMsg;
@@ -325,6 +326,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
             ? availabilityLabel!
             : _availabilityLabelForStatus(availabilityStatus);
         _peerCertifiedUserId = appCertifiedUserId;
+        _peerIsVip = payload['is_vip'] == true;
         _blockedByMe = payload['blocked_by_me'] as bool? ?? _blockedByMe;
         _blockedMe = payload['blocked_me'] as bool? ?? _blockedMe;
         _interactionBlocked =
@@ -903,6 +905,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
                   'targetUserId': targetUserId.toString(),
                   'peerName': _peerDisplayName(),
                   'peerAvatar': _peerAvatarUrl ?? '',
+                  'peerIsVip': _peerIsVip ? '1' : '0',
                   'callPrice': '0',
                 },
               ).toString(),
