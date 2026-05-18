@@ -65,6 +65,22 @@ class StorageService {
     return _prefs?.getBool(key);
   }
 
+  static bool isMessageSoundEnabled() {
+    return getBool(AppConstants.storageMessageSoundEnabled) ?? true;
+  }
+
+  static Future<void> setMessageSoundEnabled(bool enabled) async {
+    await saveBool(AppConstants.storageMessageSoundEnabled, enabled);
+  }
+
+  static bool isIncomingRingtoneEnabled() {
+    return getBool(AppConstants.storageIncomingRingtoneEnabled) ?? true;
+  }
+
+  static Future<void> setIncomingRingtoneEnabled(bool enabled) async {
+    await saveBool(AppConstants.storageIncomingRingtoneEnabled, enabled);
+  }
+
   /// 保存字符串
   static Future<void> saveString(String key, String value) async {
     await _prefs?.setString(key, value);

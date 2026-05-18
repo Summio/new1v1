@@ -5,6 +5,8 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.media.AudioAttributes
+import android.net.Uri
 import android.os.Build
 import androidx.core.app.NotificationCompat
 
@@ -16,7 +18,7 @@ object IncomingCallNotification {
     const val EXTRA_PEER_AVATAR = "peerAvatar"
     const val EXTRA_LEFT_SECONDS = "leftSeconds"
 
-    private const val CHANNEL_ID = "huanxi_incoming_call"
+    private const val CHANNEL_ID = "star_chat_incoming_call_sound_v1"
     private const val NOTIFICATION_BASE_ID = 3000
 
     fun show(
@@ -44,7 +46,7 @@ object IncomingCallNotification {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(context, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(context.applicationInfo.icon)
             .setContentTitle("视频通话邀请")
             .setContentText("${peerName}邀请你视频通话")
@@ -55,7 +57,12 @@ object IncomingCallNotification {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(true)
             .setAutoCancel(false)
-            .build()
+
+        incomingCallSoundUri(context)?.let { soundUri ->
+            builder.setSound(soundUri)
+        }
+
+        val notification = builder.build()
 
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.notify(notificationId(callId), notification)
@@ -88,9 +95,27 @@ object IncomingCallNotification {
             "视频来电",
             NotificationManager.IMPORTANCE_HIGH
         )
+        val soundUri = incomingCallSoundUri(context)
         channel.description = "后台接听模式下的视频通话邀请"
         channel.lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+        if (soundUri != null) {
+            val audioAttributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build()
+            channel.setSound(soundUri, audioAttributes)
+        }
         manager.createNotificationChannel(channel)
+    }
+
+    private fun incomingCallSoundUri(context: Context): Uri? {
+        val resId = context.resources.getIdentifier(
+            "incoming_call",
+            "raw",
+            context.packageName
+        )
+        if (resId == 0) return null
+        return Uri.parse("android.resource://${context.packageName}/raw/incoming_call")
     }
 
     private fun notificationId(callId: Int): Int = NOTIFICATION_BASE_ID + callId

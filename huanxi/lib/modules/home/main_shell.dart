@@ -10,6 +10,7 @@ import '../../app/providers/certified_user_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/constants/api_endpoints.dart';
+import '../../core/device/app_sound_service.dart';
 import '../../core/device/incoming_call_notification_bridge.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/network/response_parsers.dart';
@@ -237,9 +238,75 @@ class _MainShellState extends ConsumerState<MainShell>
     });
   }
 
-  void _onImMessageReceived(dynamic _) {
+  void _onImMessageReceived(dynamic message) {
     debugPrint('[IM_UNREAD] 收到新消息，刷新未读数');
+    if (_shouldPlayMessageSound(message)) {
+      unawaited(AppSoundService.instance.playMessageSound());
+    }
     _refreshUnreadCount();
+  }
+
+  bool _shouldPlayMessageSound(dynamic message) {
+    if (_lifecycleState != AppLifecycleState.resumed) {
+      return false;
+    }
+
+    final sender = _messageSender(message);
+    if (sender.isEmpty) {
+      return false;
+    }
+
+    final auth = ref.read(authProvider);
+    final currentUserId = auth.userId ?? StorageService.getUserId();
+    final currentImUserId = currentUserId == null
+        ? null
+        : 'chat_$currentUserId';
+    if (currentImUserId != null && sender == currentImUserId) {
+      return false;
+    }
+
+    if (_imService.parseCallTraceMessage(message) != null) {
+      return false;
+    }
+
+    if (_isCurrentImConversation(message)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  String _messageSender(dynamic message) {
+    try {
+      return (message.sender as String?)?.trim() ?? '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  bool _isCurrentImConversation(dynamic message) {
+    final peerImUserId = (message?.userID as String?)?.trim() ?? '';
+    if (peerImUserId.isEmpty || !mounted) {
+      return false;
+    }
+
+    String? currentPath;
+    try {
+      currentPath = GoRouterState.of(context).uri.path;
+    } catch (_) {
+      currentPath = _currentMatchedLocation(context);
+    }
+    if (currentPath == null || !currentPath.startsWith(AppRoutes.im)) {
+      return false;
+    }
+
+    final encodedPeer = Uri.encodeComponent(peerImUserId);
+    final appUserId = peerImUserId.startsWith('chat_')
+        ? peerImUserId.substring('chat_'.length)
+        : null;
+    return currentPath == '${AppRoutes.im}/$peerImUserId' ||
+        currentPath == '${AppRoutes.im}/$encodedPeer' ||
+        (appUserId != null && currentPath == '${AppRoutes.im}/$appUserId');
   }
 
   String? _incomingDedupKey(CallSessionPayload payload) {

@@ -8,6 +8,7 @@ import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../app/widgets/vip_badge.dart';
 import '../../core/constants/api_endpoints.dart';
+import '../../core/device/app_sound_service.dart';
 import '../../core/network/dio_client.dart';
 import '../../core/utils/app_toast.dart';
 import '../../services/websocket_service.dart';
@@ -50,6 +51,7 @@ class _IncomingCallPageState extends ConsumerState<IncomingCallPage> {
   }
 
   void _exitPage() {
+    _stopRingtone();
     _dismissTransientOverlays();
     if (context.canPop()) {
       context.pop();
@@ -61,6 +63,7 @@ class _IncomingCallPageState extends ConsumerState<IncomingCallPage> {
   @override
   void initState() {
     super.initState();
+    unawaited(AppSoundService.instance.startIncomingRingtone());
     final initLeft = widget.leftSeconds > 0 ? widget.leftSeconds : 30;
     // 使用 Future.microtask 延迟执行，避免 widget build 阶段修改 provider
     Future.microtask(() {
@@ -84,6 +87,10 @@ class _IncomingCallPageState extends ConsumerState<IncomingCallPage> {
     _wsConnectionSubscription = WsService.instance.connectionEvents.listen(
       _onWsConnectionEvent,
     );
+  }
+
+  void _stopRingtone() {
+    unawaited(AppSoundService.instance.stopIncomingRingtone());
   }
 
   void _onWsConnectionEvent(WsConnectionEvent event) {
@@ -150,6 +157,7 @@ class _IncomingCallPageState extends ConsumerState<IncomingCallPage> {
     final ctrl = ref.read(callIncomingControllerProvider);
     if (!mounted || ctrl.isPageClosing) return;
     ref.read(callIncomingControllerProvider.notifier).setPageClosing(true);
+    _stopRingtone();
     _wsDisconnectTimer?.cancel();
     AppToast.showSnackBar(
       context,
@@ -169,6 +177,7 @@ class _IncomingCallPageState extends ConsumerState<IncomingCallPage> {
       );
       if (!mounted) return;
       ref.read(callIncomingControllerProvider.notifier).setPageClosing(true);
+      _stopRingtone();
       _wsDisconnectTimer?.cancel();
       context.pushReplacement(
         Uri(
@@ -204,6 +213,7 @@ class _IncomingCallPageState extends ConsumerState<IncomingCallPage> {
       );
       if (!mounted) return;
       ref.read(callIncomingControllerProvider.notifier).setPageClosing(true);
+      _stopRingtone();
       _wsDisconnectTimer?.cancel();
       _exitPage();
     } catch (_) {
@@ -224,6 +234,7 @@ class _IncomingCallPageState extends ConsumerState<IncomingCallPage> {
     _wsDisconnectTimer?.cancel();
     _wsSubscription?.cancel();
     _wsConnectionSubscription?.cancel();
+    _stopRingtone();
     super.dispose();
   }
 

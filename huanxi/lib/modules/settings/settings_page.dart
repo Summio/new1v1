@@ -6,6 +6,7 @@ import '../../app/providers/auth_provider.dart';
 import '../../app/routes/app_router.dart';
 import '../../app/theme/app_theme.dart';
 import '../../core/permissions/mandatory_permission_service.dart';
+import '../../core/storage/storage.dart';
 import '../../services/teen_mode_service.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
@@ -18,11 +19,14 @@ class SettingsPage extends ConsumerStatefulWidget {
 class _SettingsPageState extends ConsumerState<SettingsPage> {
   bool _keepAliveReady = false;
   bool _keepAliveBusy = false;
+  bool _messageSoundEnabled = true;
+  bool _incomingRingtoneEnabled = true;
 
   @override
   void initState() {
     super.initState();
     _refreshKeepAliveState();
+    _refreshSoundSettings();
   }
 
   Future<void> _refreshKeepAliveState() async {
@@ -61,6 +65,27 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     }
   }
 
+  void _refreshSoundSettings() {
+    _messageSoundEnabled = StorageService.isMessageSoundEnabled();
+    _incomingRingtoneEnabled = StorageService.isIncomingRingtoneEnabled();
+  }
+
+  Future<void> _setMessageSoundEnabled(bool enabled) async {
+    await StorageService.setMessageSoundEnabled(enabled);
+    if (!mounted) return;
+    setState(() {
+      _messageSoundEnabled = enabled;
+    });
+  }
+
+  Future<void> _setIncomingRingtoneEnabled(bool enabled) async {
+    await StorageService.setIncomingRingtoneEnabled(enabled);
+    if (!mounted) return;
+    setState(() {
+      _incomingRingtoneEnabled = enabled;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
@@ -90,6 +115,30 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             trailing: Switch(
               value: _keepAliveReady,
               onChanged: _keepAliveBusy ? null : _ensureKeepAlive,
+              activeThumbColor: AppTheme.primaryColor,
+              activeTrackColor: AppTheme.primaryColor.withValues(alpha: 0.4),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const _SectionTitle(title: '声音'),
+          _SettingsTile(
+            icon: Icons.notifications_active_outlined,
+            title: '消息提示音',
+            onTap: () => _setMessageSoundEnabled(!_messageSoundEnabled),
+            trailing: Switch(
+              value: _messageSoundEnabled,
+              onChanged: _setMessageSoundEnabled,
+              activeThumbColor: AppTheme.primaryColor,
+              activeTrackColor: AppTheme.primaryColor.withValues(alpha: 0.4),
+            ),
+          ),
+          _SettingsTile(
+            icon: Icons.ring_volume_outlined,
+            title: '来电铃声',
+            onTap: () => _setIncomingRingtoneEnabled(!_incomingRingtoneEnabled),
+            trailing: Switch(
+              value: _incomingRingtoneEnabled,
+              onChanged: _setIncomingRingtoneEnabled,
               activeThumbColor: AppTheme.primaryColor,
               activeTrackColor: AppTheme.primaryColor.withValues(alpha: 0.4),
             ),

@@ -29,6 +29,9 @@ class AppConstants {
   static const String storageDarkMode = 'dark_mode';
   static const String storageTeenModeState = 'teen_mode_state';
   static const String storageKeepAliveEnabled = 'keep_alive_enabled';
+  static const String storageMessageSoundEnabled = 'message_sound_enabled';
+  static const String storageIncomingRingtoneEnabled =
+      'incoming_ringtone_enabled';
 
   /// Hive Box Names
   static const String hiveBoxUser = 'user_box';
