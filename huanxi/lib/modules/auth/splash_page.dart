@@ -174,11 +174,6 @@ class _SplashPageState extends ConsumerState<SplashPage> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 8),
-                const Text(
-                  '1v1 视频交友',
-                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 16),
-                ),
                 const SizedBox(height: 48),
                 SizedBox(
                   width: 32,
