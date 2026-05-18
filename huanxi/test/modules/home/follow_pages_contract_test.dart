@@ -173,11 +173,10 @@ void main() {
     expect(chatPage, isNot(contains('黑名单功能开发中')));
     expect(chatPage, contains('MyBlacklistPage.embedded'));
     expect(followingPage, contains('class MyBlacklistPage'));
-    expect(followingPage, contains('我拉黑的人'));
+    expect(followingPage, contains('我的黑名单'));
     expect(followingPage, contains('拉黑于'));
     expect(followingPage, isNot(contains('解除拉黑')));
     expect(followingPage, isNot(contains('确认解除拉黑')));
-    expect(followingPage, contains('我拉黑的人'));
     expect(provider, contains('myBlacklistProvider'));
     expect(provider, contains('getBlockedUsers'));
     expect(service, contains('getBlockedUsers'));
@@ -198,6 +197,31 @@ void main() {
     expect(followingPage, isNot(contains('OutlinedButton.icon')));
     expect(followingPage, contains('availabilityLabel'));
     expect(followingPage, contains('dateLabel'));
+  });
+
+  test('relationship list search hints match each relation type', () {
+    final followingPage = File(
+      'lib/modules/home/my_following_page.dart',
+    ).readAsStringSync();
+
+    expect(followingPage, contains('搜索关注的昵称或用户ID'));
+    expect(followingPage, contains('搜索粉丝的昵称或用户ID'));
+    expect(followingPage, contains('搜索拉黑的昵称或用户ID'));
+    expect(followingPage, isNot(contains('搜索已关注的昵称或用户ID')));
+    expect(followingPage, isNot(contains('搜索粉丝昵称或用户ID')));
+    expect(followingPage, isNot(contains('搜索我拉黑的人昵称或用户ID')));
+  });
+
+  test('relationship lists do not show visible count summaries', () {
+    final followingPage = File(
+      'lib/modules/home/my_following_page.dart',
+    ).readAsStringSync();
+
+    expect(followingPage, isNot(contains(r"state.totalCount > 0 ? '$title")));
+    expect(followingPage, isNot(contains(r'共 ${state.totalCount} 人')));
+    expect(followingPage, isNot(contains(r'我拉黑的人：${state.totalCount} 人')));
+    expect(followingPage, isNot(contains(r'筛选结果：${state.totalCount} 人')));
+    expect(followingPage, isNot(contains(r'关键词：${state.keyword}')));
   });
 
   test(

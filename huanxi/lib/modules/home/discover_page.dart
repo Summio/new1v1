@@ -119,17 +119,32 @@ class _FeedTab extends ConsumerStatefulWidget {
   ConsumerState<_FeedTab> createState() => _FeedTabState();
 }
 
-class _FeedTabState extends ConsumerState<_FeedTab> {
-  MomentFeedCategory _category = MomentFeedCategory.latest;
+class _FeedTabState extends ConsumerState<_FeedTab>
+    with SingleTickerProviderStateMixin {
+  late final TabController _momentCategoryController;
 
   @override
   void initState() {
     super.initState();
-    _category = ref.read(mainTabMemoryProvider).discoverMomentCategory;
-    // 首次加载
+    final rememberedCategory = ref
+        .read(mainTabMemoryProvider)
+        .discoverMomentCategory;
+    _momentCategoryController = TabController(
+      length: MomentFeedCategory.values.length,
+      initialIndex: MomentFeedCategory.values.indexOf(rememberedCategory),
+      vsync: this,
+    );
+    _momentCategoryController.addListener(_onMomentPageChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _ensureLoaded(_category);
+      _ensureLoaded(MomentFeedCategory.values[_momentCategoryController.index]);
     });
+  }
+
+  @override
+  void dispose() {
+    _momentCategoryController.removeListener(_onMomentPageChanged);
+    _momentCategoryController.dispose();
+    super.dispose();
   }
 
   void _ensureLoaded(MomentFeedCategory category) {
@@ -139,11 +154,8 @@ class _FeedTabState extends ConsumerState<_FeedTab> {
     }
   }
 
-  void _selectCategory(MomentFeedCategory category) {
-    if (_category == category) return;
-    setState(() {
-      _category = category;
-    });
+  void _onMomentPageChanged() {
+    final category = MomentFeedCategory.values[_momentCategoryController.index];
     ref
         .read(mainTabMemoryProvider.notifier)
         .setDiscoverMomentCategory(category);
@@ -152,28 +164,22 @@ class _FeedTabState extends ConsumerState<_FeedTab> {
 
   @override
   Widget build(BuildContext context) {
-    final state = ref.watch(momentFeedProvider(_category));
-
     return Column(
       children: [
         const SizedBox(height: 12),
-        _MomentFeedSegment(selected: _category, onSelected: _selectCategory),
+        _DiscoverCategorySegment(
+          labels: MomentFeedCategory.values
+              .map((category) => category.label)
+              .toList(),
+          controller: _momentCategoryController,
+        ),
         const SizedBox(height: 4),
         Expanded(
-          child: MomentListView(
-            moments: state.moments,
-            isLoading: state.isLoading,
-            isLoadingMore: state.isLoadingMore,
-            hasMore: state.hasMore,
-            error: state.error,
-            emptyTitle: _category.emptyTitle,
-            emptySubtitle: _category == MomentFeedCategory.following
-                ? '关注用户后可在这里查看动态'
-                : '稍后再来看看吧',
-            onRefresh: () =>
-                ref.read(momentFeedProvider(_category).notifier).load(),
-            onLoadMore: () =>
-                ref.read(momentFeedProvider(_category).notifier).loadMore(),
+          child: TabBarView(
+            controller: _momentCategoryController,
+            children: MomentFeedCategory.values.map((category) {
+              return _MomentCategoryPage(category: category);
+            }).toList(),
           ),
         ),
       ],
@@ -181,48 +187,95 @@ class _FeedTabState extends ConsumerState<_FeedTab> {
   }
 }
 
-class _MomentFeedSegment extends StatelessWidget {
-  final MomentFeedCategory selected;
-  final ValueChanged<MomentFeedCategory> onSelected;
+class _MomentCategoryPage extends ConsumerWidget {
+  final MomentFeedCategory category;
 
-  const _MomentFeedSegment({required this.selected, required this.onSelected});
+  const _MomentCategoryPage({required this.category});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(momentFeedProvider(category));
+
+    return MomentListView(
+      moments: state.moments,
+      isLoading: state.isLoading,
+      isLoadingMore: state.isLoadingMore,
+      hasMore: state.hasMore,
+      error: state.error,
+      emptyTitle: category.emptyTitle,
+      emptySubtitle: category == MomentFeedCategory.following
+          ? '关注用户后可在这里查看动态'
+          : '稍后再来看看吧',
+      onRefresh: () => ref.read(momentFeedProvider(category).notifier).load(),
+      onLoadMore: () =>
+          ref.read(momentFeedProvider(category).notifier).loadMore(),
+    );
+  }
+}
+
+class _DiscoverCategorySegment extends StatelessWidget {
+  final List<String> labels;
+  final TabController controller;
+  final int? selectedIndex;
+  final ValueChanged<int>? onSelected;
+
+  const _DiscoverCategorySegment({
+    required this.labels,
+    required this.controller,
+    this.selectedIndex,
+    this.onSelected,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF2F2F7),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: MomentFeedCategory.values.map((item) {
-          final active = item == selected;
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => onSelected(item),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                height: 36,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: active ? Colors.black : Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  item.label,
-                  style: TextStyle(
-                    color: active ? Colors.white : AppTheme.textSecondary,
-                    fontSize: 14,
-                    fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+    final animation = controller.animation;
+    return AnimatedBuilder(
+      animation: animation ?? controller,
+      builder: (context, _) {
+        final activeIndex = selectedIndex ?? controller.index;
+        return Container(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF2F2F7),
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: List.generate(labels.length, (index) {
+              final active = activeIndex == index;
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    final handler = onSelected;
+                    if (handler != null) {
+                      handler(index);
+                      return;
+                    }
+                    controller.animateTo(index);
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 160),
+                    height: 36,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: active ? Colors.black : Colors.transparent,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Text(
+                      labels[index],
+                      style: TextStyle(
+                        color: active ? Colors.white : AppTheme.textSecondary,
+                        fontSize: 14,
+                        fontWeight: active ? FontWeight.w800 : FontWeight.w600,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
+              );
+            }),
+          ),
+        );
+      },
     );
   }
 }
@@ -235,16 +288,70 @@ class _RankingTab extends ConsumerStatefulWidget {
   ConsumerState<_RankingTab> createState() => _RankingTabState();
 }
 
-class _RankingTabState extends ConsumerState<_RankingTab> {
+class _RankingTabState extends ConsumerState<_RankingTab>
+    with TickerProviderStateMixin {
+  late final TabController _rankingCategoryController;
+
   @override
   void initState() {
     super.initState();
+    final state = ref.read(rankingProvider);
+    _rankingCategoryController = TabController(
+      length: RankingBoard.values.length * RankingPeriod.values.length,
+      initialIndex: _rankingPageIndex(state.board, state.period),
+      vsync: this,
+    );
+    _rankingCategoryController.addListener(_onRankingPageChanged);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final state = ref.read(rankingProvider);
-      if (state.rows.isEmpty && !state.isLoading) {
+      final nextState = ref.read(rankingProvider);
+      if (nextState.rows.isEmpty && !nextState.isLoading) {
         ref.read(rankingProvider.notifier).load();
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _rankingCategoryController.removeListener(_onRankingPageChanged);
+    _rankingCategoryController.dispose();
+    super.dispose();
+  }
+
+  int _rankingPageIndex(RankingBoard board, RankingPeriod period) {
+    return RankingBoard.values.indexOf(board) * RankingPeriod.values.length +
+        RankingPeriod.values.indexOf(period);
+  }
+
+  RankingBoard _rankingBoardForPage(int index) {
+    return RankingBoard.values[index ~/ RankingPeriod.values.length];
+  }
+
+  RankingPeriod _rankingPeriodForPage(int index) {
+    return RankingPeriod.values[index % RankingPeriod.values.length];
+  }
+
+  void _onRankingPageChanged() {
+    final index = _rankingCategoryController.index;
+    ref
+        .read(rankingProvider.notifier)
+        .setSelection(
+          board: _rankingBoardForPage(index),
+          period: _rankingPeriodForPage(index),
+        );
+  }
+
+  void _selectRankingBoard(int index) {
+    final state = ref.read(rankingProvider);
+    _rankingCategoryController.animateTo(
+      _rankingPageIndex(RankingBoard.values[index], state.period),
+    );
+  }
+
+  void _selectRankingPeriod(int index) {
+    final state = ref.read(rankingProvider);
+    _rankingCategoryController.animateTo(
+      _rankingPageIndex(state.board, RankingPeriod.values[index]),
+    );
   }
 
   @override
@@ -254,85 +361,37 @@ class _RankingTabState extends ConsumerState<_RankingTab> {
     return Column(
       children: [
         const SizedBox(height: 14),
-        _RankingSegment<RankingBoard>(
-          values: RankingBoard.values,
-          selected: state.board,
-          labelBuilder: (item) => item.label,
-          onSelected: (item) =>
-              ref.read(rankingProvider.notifier).setBoard(item),
+        _DiscoverCategorySegment(
+          labels: RankingBoard.values.map((board) => board.label).toList(),
+          controller: _rankingCategoryController,
+          selectedIndex: RankingBoard.values.indexOf(state.board),
+          onSelected: _selectRankingBoard,
         ),
         const SizedBox(height: 10),
-        _RankingSegment<RankingPeriod>(
-          values: RankingPeriod.values,
-          selected: state.period,
-          labelBuilder: (item) => item.label,
-          onSelected: (item) =>
-              ref.read(rankingProvider.notifier).setPeriod(item),
+        _DiscoverCategorySegment(
+          labels: RankingPeriod.values.map((period) => period.label).toList(),
+          controller: _rankingCategoryController,
+          selectedIndex: RankingPeriod.values.indexOf(state.period),
+          onSelected: _selectRankingPeriod,
         ),
         const SizedBox(height: 10),
         Expanded(
-          child: RefreshIndicator(
-            onRefresh: () => ref.read(rankingProvider.notifier).refresh(),
-            child: _RankingContent(
-              state: state,
-              onRetry: () => ref.read(rankingProvider.notifier).load(),
-            ),
+          child: TabBarView(
+            controller: _rankingCategoryController,
+            children: RankingBoard.values.expand((_) {
+              return RankingPeriod.values.map((_) {
+                return RefreshIndicator(
+                  onRefresh: () => ref.read(rankingProvider.notifier).refresh(),
+                  child: _RankingContent(
+                    state: state,
+                    onRetry: () => ref.read(rankingProvider.notifier).load(),
+                  ),
+                );
+              });
+            }).toList(),
           ),
         ),
       ],
-    );
-  }
-}
-
-class _RankingSegment<T> extends StatelessWidget {
-  final List<T> values;
-  final T selected;
-  final String Function(T item) labelBuilder;
-  final ValueChanged<T> onSelected;
-
-  const _RankingSegment({
-    required this.values,
-    required this.selected,
-    required this.labelBuilder,
-    required this.onSelected,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF2F2F7),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: values.map((item) {
-          final active = item == selected;
-          return Expanded(
-            child: GestureDetector(
-              onTap: () => onSelected(item),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                height: 36,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: active ? Colors.black : Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Text(
-                  labelBuilder(item),
-                  style: TextStyle(
-                    color: active ? Colors.white : AppTheme.textSecondary,
-                    fontSize: 14,
-                    fontWeight: active ? FontWeight.w800 : FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
     );
   }
 }

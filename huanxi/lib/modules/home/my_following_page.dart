@@ -146,9 +146,7 @@ class _MyFollowingPageState extends ConsumerState<MyFollowingPage> {
       appBar: widget.embedded
           ? null
           : AppBar(
-              title: Text(
-                state.totalCount > 0 ? '$title (${state.totalCount})' : title,
-              ),
+              title: Text(title),
               backgroundColor: Colors.white,
               foregroundColor: AppTheme.textPrimary,
               elevation: 0,
@@ -173,8 +171,8 @@ class _MyFollowingPageState extends ConsumerState<MyFollowingPage> {
                 onChanged: (_) => setState(() {}),
                 decoration: InputDecoration(
                   hintText: widget.blacklistMode
-                      ? '搜索我拉黑的人昵称或用户ID'
-                      : (widget.fansMode ? '搜索粉丝昵称或用户ID' : '搜索已关注的昵称或用户ID'),
+                      ? '搜索拉黑的昵称或用户ID'
+                      : (widget.fansMode ? '搜索粉丝的昵称或用户ID' : '搜索关注的昵称或用户ID'),
                   prefixIcon: const Icon(Icons.search_rounded),
                   suffixIcon: _keywordController.text.isEmpty
                       ? null
@@ -183,40 +181,6 @@ class _MyFollowingPageState extends ConsumerState<MyFollowingPage> {
                           onPressed: _clearSearch,
                         ),
                 ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      state.keyword.isNotEmpty
-                          ? '筛选结果：${state.totalCount} 人'
-                          : (widget.blacklistMode
-                                ? '我拉黑的人：${state.totalCount} 人'
-                                : '共 ${state.totalCount} 人'),
-                      style: const TextStyle(
-                        color: AppTheme.textSecondary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                  if (state.keyword.isNotEmpty)
-                    Flexible(
-                      child: Text(
-                        '关键词：${state.keyword}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(
-                          color: AppTheme.textHint,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ),
-                ],
               ),
             ),
             if (state.error != null && state.users.isNotEmpty)

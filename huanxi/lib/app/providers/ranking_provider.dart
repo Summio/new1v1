@@ -101,6 +101,15 @@ class RankingNotifier extends StateNotifier<RankingState> {
     );
     load();
   }
+
+  void setSelection({
+    required RankingBoard board,
+    required RankingPeriod period,
+  }) {
+    if (state.board == board && state.period == period) return;
+    state = RankingState(board: board, period: period, scoreUnit: board.unit);
+    load();
+  }
 }
 
 final rankingProvider = StateNotifierProvider<RankingNotifier, RankingState>((
