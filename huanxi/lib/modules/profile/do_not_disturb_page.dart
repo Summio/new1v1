@@ -56,7 +56,7 @@ class _DoNotDisturbPageState extends ConsumerState<DoNotDisturbPage> {
                 _DndSwitchTile(
                   icon: Icons.chat_bubble_outline,
                   title: '文字勿扰',
-                  subtitle: '开启后不接收文字消息，客服消息除外',
+                  subtitle: '开启后不接收文字消息',
                   value: settings.textDndEnabled,
                   enabled: !state.isSaving,
                   onChanged: (value) =>
@@ -65,7 +65,7 @@ class _DoNotDisturbPageState extends ConsumerState<DoNotDisturbPage> {
                 _DndSwitchTile(
                   icon: Icons.videocam_outlined,
                   title: '视频勿扰',
-                  subtitle: '开启后不接受视频通话',
+                  subtitle: '开启后不接收视频通话',
                   value: settings.videoDndEnabled,
                   enabled: !state.isSaving,
                   onChanged: (value) =>
@@ -74,7 +74,7 @@ class _DoNotDisturbPageState extends ConsumerState<DoNotDisturbPage> {
                 _DndSwitchTile(
                   icon: Icons.visibility_off_outlined,
                   title: '榜单隐身',
-                  subtitle: '开启后在排行榜显示为神秘人',
+                  subtitle: '开启后不参与排行榜',
                   value: settings.rankingInvisibleEnabled,
                   enabled: !state.isSaving,
                   onChanged: (value) => _update(

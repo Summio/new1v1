@@ -136,13 +136,30 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    Text(
-                      authState.username ?? '未设置昵称',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.textPrimary,
-                      ),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            authState.username ?? '未设置昵称',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: AppTheme.textPrimary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        _buildGenderChip(_genderText(authState.gender)),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    _buildAvailabilityChip(
+                      label: _availabilityText(authState),
+                      color: _availabilityColor(authState),
                     ),
                     if (isCertifiedUser) ...[
                       const SizedBox(height: 4),
@@ -156,7 +173,7 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: const Text(
-                          '已真人认证',
+                          '真人认证',
                           style: TextStyle(color: Colors.white, fontSize: 12),
                         ),
                       ),
@@ -329,6 +346,63 @@ class _ProfilePageState extends ConsumerState<ProfilePage> {
         ),
       ],
     );
+  }
+
+  Widget _buildGenderChip(String genderText) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppTheme.primaryColor.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        genderText,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: AppTheme.primaryColor,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAvailabilityChip({required String label, required Color color}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('●', style: TextStyle(color: color, fontSize: 9, height: 1)),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _genderText(String gender) {
+    return gender == 'female' ? '女' : '男';
+  }
+
+  String _availabilityText(AuthState authState) {
+    return authState.videoDndEnabled ? '勿扰' : '在线';
+  }
+
+  Color _availabilityColor(AuthState authState) {
+    return authState.videoDndEnabled
+        ? const Color(0xFFAF52DE)
+        : AppTheme.onlineGreen;
   }
 
   Future<void> _copyUserId(int userId) async {
