@@ -117,6 +117,8 @@ def test_vip_admin_web_contract_exists() -> None:
     assert "vip_expires_at" in user_page
     assert "NDatePicker" in user_page
     assert 'v-model:formatted-value="modalForm.vip_expires_at"' in user_page
+    assert "vip_expires_at: null" in user_page
+    assert "row.is_vip && row.vip_expires_at" in user_page
     assert "清空VIP" in user_page
     assert "vip_expires_at" in AppUserAdminUpdateIn.model_fields
     assert '"vip_expires_at" in req_in.model_fields_set' in user_api

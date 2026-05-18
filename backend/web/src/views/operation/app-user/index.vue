@@ -59,7 +59,7 @@ const modalForm = ref({
   diamonds: 0,
   frozen_diamonds: 0,
   is_vip: false,
-  vip_expires_at: '',
+  vip_expires_at: null,
   created_at: '',
   last_login: '',
 })
@@ -176,9 +176,9 @@ const certificationStatusOptions = [
 ]
 
 function formatDateTimeValue(value) {
-  if (!value) return ''
+  if (!value) return null
   const date = value instanceof Date ? value : new Date(value)
-  if (Number.isNaN(date.getTime())) return ''
+  if (Number.isNaN(date.getTime())) return null
   const pad = (item) => String(item).padStart(2, '0')
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
     date.getHours()
@@ -188,7 +188,7 @@ function formatDateTimeValue(value) {
 function handleVipSwitch(enabled) {
   modalForm.value.is_vip = !!enabled
   if (!enabled) {
-    modalForm.value.vip_expires_at = ''
+    modalForm.value.vip_expires_at = null
     return
   }
   if (!modalForm.value.vip_expires_at) {
@@ -204,7 +204,7 @@ function setVipExpiresAfterDays(days) {
 }
 
 function clearVipExpiresAt() {
-  modalForm.value.vip_expires_at = ''
+  modalForm.value.vip_expires_at = null
   modalForm.value.is_vip = false
 }
 
@@ -709,7 +709,9 @@ async function handleSave() {
   saving.value = true
   try {
     const album = normalizeAlbum(modalForm.value.album_photos)
-    const vipExpiresAt = (modalForm.value.vip_expires_at || '').trim()
+    const vipExpiresAt = modalForm.value.vip_expires_at
+      ? String(modalForm.value.vip_expires_at).trim()
+      : ''
     if (modalForm.value.is_vip && !vipExpiresAt) {
       $message?.warning('请设置VIP到期时间')
       saving.value = false
@@ -1037,18 +1039,17 @@ const columns = [
     width: 120,
     align: 'center',
     render(row) {
-      return h('div', { class: 'meta-wrap' }, [
+      const children = [
         h(
           NTag,
           { type: row.is_vip ? 'warning' : 'default' },
           { default: () => (row.is_vip ? 'VIP' : '非VIP') }
         ),
-        h(
-          'span',
-          { class: 'meta-value' },
-          row.vip_expires_at ? formatDate(row.vip_expires_at) : '-'
-        ),
-      ])
+      ]
+      if (row.is_vip && row.vip_expires_at) {
+        children.push(h('span', { class: 'meta-value' }, formatDate(row.vip_expires_at)))
+      }
+      return h('div', { class: 'meta-wrap' }, children)
     },
   },
   // prettier-ignore
