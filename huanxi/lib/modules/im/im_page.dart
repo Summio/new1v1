@@ -20,6 +20,7 @@ import '../../app/providers/auth_provider.dart';
 import 'package:tencent_cloud_chat_sdk/models/v2_tim_message.dart';
 import 'package:huanxi/core/utils/app_toast.dart';
 import '../gift/gift_panel.dart';
+import '../home/main_shell.dart';
 import '../home/user_more_actions.dart';
 
 /// IM 聊天页面
@@ -55,6 +56,8 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
   String? _peerUserId;
   String? _peerNickname;
   String? _peerAvatarUrl;
+  String _peerAvailabilityStatus = 'offline';
+  String _peerAvailabilityLabel = '离线';
   int? _peerCertifiedUserId;
   String? _myAvatarUrl;
   final Set<String> _messageIds = <String>{};
@@ -67,6 +70,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
   GiftNotifyMessage? _fullscreenGift;
   Timer? _fullscreenGiftTimer;
   Timer? _cleanUnreadDebounceTimer;
+  StreamSubscription<PresenceEvent>? _presenceSubscription;
   bool _shouldAutoScroll = true;
   bool _stickToBottomForKeyboard = true;
   double _lastKeyboardInset = 0;
@@ -81,6 +85,9 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _scrollController.addListener(_onScroll);
     _inputFocusNode.addListener(_onInputFocusChanged);
+    _presenceSubscription = MainShell.presenceStream.listen(
+      _handlePresenceEvent,
+    );
     _initIM();
   }
 
@@ -301,12 +308,22 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
             (payload['certified_user_id'] as num?)?.toInt() ??
             (payload['user_id'] as num?)?.toInt() ??
             (payload['id'] as num?)?.toInt();
+        final availabilityStatus = _normalizeAvailabilityStatus(
+          payload['availability_status'] as String?,
+          payload['is_online'] as bool? ?? false,
+        );
+        final availabilityLabel = (payload['availability_label'] as String?)
+            ?.trim();
         if (appNick != null && appNick.isNotEmpty) {
           _peerNickname = appNick;
         }
         if (appAvatar.isNotEmpty) {
           _peerAvatarUrl = appAvatar;
         }
+        _peerAvailabilityStatus = availabilityStatus;
+        _peerAvailabilityLabel = availabilityLabel?.isNotEmpty == true
+            ? availabilityLabel!
+            : _availabilityLabelForStatus(availabilityStatus);
         _peerCertifiedUserId = appCertifiedUserId;
         _blockedByMe = payload['blocked_by_me'] as bool? ?? _blockedByMe;
         _blockedMe = payload['blocked_me'] as bool? ?? _blockedMe;
@@ -323,12 +340,63 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
     }
   }
 
+  void _handlePresenceEvent(PresenceEvent event) {
+    if (!mounted || _isCustomerServiceConversation) return;
+    final peerNumId = _extractAppUserId(_peerUserId ?? widget.userId);
+    if (peerNumId == null || peerNumId != event.userId) return;
+    setState(() {
+      _peerAvailabilityStatus = event.availabilityStatus;
+      _peerAvailabilityLabel = event.availabilityLabel.trim().isNotEmpty
+          ? event.availabilityLabel.trim()
+          : _availabilityLabelForStatus(event.availabilityStatus);
+    });
+  }
+
+  String _normalizeAvailabilityStatus(String? rawStatus, bool isOnline) {
+    final status = rawStatus?.trim();
+    if (status == 'online' ||
+        status == 'busy' ||
+        status == 'dnd' ||
+        status == 'offline') {
+      return status!;
+    }
+    return isOnline ? 'online' : 'offline';
+  }
+
+  String _availabilityLabelForStatus(String status) {
+    switch (status) {
+      case 'online':
+        return '在线';
+      case 'busy':
+        return '忙碌';
+      case 'dnd':
+        return '勿扰';
+      default:
+        return '离线';
+    }
+  }
+
+  Color _availabilityColor(String status) {
+    switch (status) {
+      case 'online':
+        return AppTheme.onlineGreen;
+      case 'busy':
+        return const Color(0xFFFF3B30);
+      case 'dnd':
+        return const Color(0xFFAF52DE);
+      default:
+        return AppTheme.offlineGray;
+    }
+  }
+
   Future<void> _refreshBlockStatus() async {
     if (_isCustomerServiceConversation) return;
     final peerNumId = _extractAppUserId(_peerUserId ?? widget.userId);
     if (peerNumId == null || peerNumId <= 0) return;
     try {
-      final status = await UserHomeService.instance.getUserBlockStatus(peerNumId);
+      final status = await UserHomeService.instance.getUserBlockStatus(
+        peerNumId,
+      );
       if (!mounted) return;
       setState(() {
         _blockedByMe = status.blockedByMe;
@@ -609,6 +677,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _presenceSubscription?.cancel();
     _imService.removeMessageListener(_onMessageReceived);
     _fullscreenGiftTimer?.cancel();
     _cleanUnreadDebounceTimer?.cancel();
@@ -701,6 +770,53 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
     final nick = _peerNickname?.trim() ?? '';
     if (nick.isNotEmpty) return nick;
     return '';
+  }
+
+  Widget _buildAppBarTitle() {
+    if (_isCustomerServiceConversation) {
+      return const Text('在线客服', maxLines: 1, overflow: TextOverflow.ellipsis);
+    }
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          _peerDisplayName(),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: AppTheme.textPrimary,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '●',
+              style: TextStyle(
+                color: _availabilityColor(_peerAvailabilityStatus),
+                fontSize: 9,
+                height: 1,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              _peerAvailabilityLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: AppTheme.textSecondary,
+                fontSize: 12,
+                height: 1.1,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
   }
 
   bool _matchesCustomerServiceConversation(
@@ -826,11 +942,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         backgroundColor: AppTheme.surfaceColor,
-        title: Text(
-          _peerDisplayName(),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
+        title: _buildAppBarTitle(),
         actions: _isCustomerServiceConversation
             ? const []
             : [
@@ -933,7 +1045,8 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
                                     Icons.videocam_outlined,
                                     color: AppTheme.textSecondary,
                                   ),
-                                  onPressed: _isStartingCall || _interactionBlocked
+                                  onPressed:
+                                      _isStartingCall || _interactionBlocked
                                       ? null
                                       : _startVideoCall,
                                 ),
@@ -943,7 +1056,9 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
                                     Icons.card_giftcard,
                                     color: AppTheme.textSecondary,
                                   ),
-                                  onPressed: _interactionBlocked ? null : _openGiftPanel,
+                                  onPressed: _interactionBlocked
+                                      ? null
+                                      : _openGiftPanel,
                                 ),
                               Expanded(
                                 child: TextField(
@@ -982,7 +1097,9 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
                                     Icons.send,
                                     color: Colors.white,
                                   ),
-                                  onPressed: _interactionBlocked ? null : _sendMessage,
+                                  onPressed: _interactionBlocked
+                                      ? null
+                                      : _sendMessage,
                                   disabledColor: AppTheme.textHint,
                                 ),
                               ),
