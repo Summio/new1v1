@@ -796,7 +796,10 @@ class _CertifiedUserDetailPageState
                                 const SizedBox(width: 8),
                                 Flexible(
                                   child: Text(
-                                    '立即通话 (${_formatCallPrice(certifiedUser.callPrice, tokenNames.coinName)})',
+                                    _formatCallPrice(
+                                      certifiedUser.callPrice,
+                                      tokenNames.coinName,
+                                    ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(

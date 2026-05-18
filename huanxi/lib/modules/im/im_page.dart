@@ -778,10 +778,11 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
     }
     return Column(
       mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Text(
           _peerDisplayName(),
+          textAlign: TextAlign.center,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
@@ -793,6 +794,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
         const SizedBox(height: 2),
         Row(
           mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
               '●',
@@ -805,6 +807,7 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
             const SizedBox(width: 4),
             Text(
               _peerAvailabilityLabel,
+              textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -942,6 +945,8 @@ class _ImPageState extends ConsumerState<ImPage> with WidgetsBindingObserver {
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
         backgroundColor: AppTheme.surfaceColor,
+        centerTitle: true,
+        titleSpacing: 0,
         title: _buildAppBarTitle(),
         actions: _isCustomerServiceConversation
             ? const []

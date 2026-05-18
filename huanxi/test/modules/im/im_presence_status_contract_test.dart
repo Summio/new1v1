@@ -33,6 +33,16 @@ void main() {
     expect(text, contains('AppTheme.offlineGray'));
   });
 
+  test('im page centers app bar nickname and availability status', () {
+    final text = File('lib/modules/im/im_page.dart').readAsStringSync();
+
+    expect(text, contains('centerTitle: true'));
+    expect(text, contains('titleSpacing: 0'));
+    expect(text, contains('crossAxisAlignment: CrossAxisAlignment.center'));
+    expect(text, contains('mainAxisAlignment: MainAxisAlignment.center'));
+    expect(text, contains('textAlign: TextAlign.center'));
+  });
+
   test('customer service conversation keeps app bar title status-free', () {
     final text = File('lib/modules/im/im_page.dart').readAsStringSync();
 
