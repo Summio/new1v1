@@ -46,29 +46,31 @@ class ChatPage extends ConsumerStatefulWidget {
 }
 
 class _ChatPageState extends ConsumerState<ChatPage>
-    with TickerProviderStateMixin {
+    with SingleTickerProviderStateMixin {
+  static const int _messagePageIndex = 0;
+  static const int _callPageIndex = 1;
+  static const int _relationFirstPageIndex = 2;
+  static const int _chatPageCount = 5;
+
   late final TabController _tabController;
+  late int _currentPageIndex;
 
   @override
   void initState() {
     super.initState();
-    final rememberedIndex = ref.read(mainTabMemoryProvider).chatTabIndex;
-    final initialIndex = widget.initialTabIndexOverride ?? rememberedIndex;
+    final memory = ref.read(mainTabMemoryProvider);
+    _currentPageIndex = _pageForMainTabIndex(
+      widget.initialTabIndexOverride ?? memory.chatTabIndex,
+      relationTabIndex:
+          widget.initialRelationTabIndexOverride ?? memory.relationTabIndex,
+    );
     _tabController = TabController(
-      length: 3,
-      initialIndex: initialIndex.clamp(0, 2),
+      length: _chatPageCount,
+      initialIndex: _currentPageIndex,
       vsync: this,
     );
     _tabController.addListener(_onTabChanged);
-    ref
-        .read(mainTabMemoryProvider.notifier)
-        .setChatTabIndex(_tabController.index);
-  }
-
-  void _onTabChanged() {
-    ref
-        .read(mainTabMemoryProvider.notifier)
-        .setChatTabIndex(_tabController.index);
+    _writeRememberedIndexes(_currentPageIndex);
   }
 
   @override
@@ -78,8 +80,73 @@ class _ChatPageState extends ConsumerState<ChatPage>
     super.dispose();
   }
 
+  int _pageForMainTabIndex(int index, {int? relationTabIndex}) {
+    switch (index) {
+      case 1:
+        return _callPageIndex;
+      case 2:
+        return _pageForRelationTabIndex(relationTabIndex ?? 0);
+      case 0:
+      default:
+        return _messagePageIndex;
+    }
+  }
+
+  int _pageForRelationTabIndex(int index) {
+    return _relationFirstPageIndex + index.clamp(0, 2);
+  }
+
+  int _mainTabIndexForPage(int pageIndex) {
+    if (pageIndex == _callPageIndex) return 1;
+    if (pageIndex >= _relationFirstPageIndex) return 2;
+    return 0;
+  }
+
+  int _relationTabIndexForPage(int pageIndex) {
+    return (pageIndex - _relationFirstPageIndex).clamp(0, 2);
+  }
+
+  bool _isRelationPage(int pageIndex) {
+    return pageIndex >= _relationFirstPageIndex;
+  }
+
+  void _onTabChanged() {
+    final nextIndex = _tabController.index;
+    if (_currentPageIndex != nextIndex) {
+      setState(() {
+        _currentPageIndex = nextIndex;
+      });
+    }
+    _writeRememberedIndexes(nextIndex);
+  }
+
+  void _writeRememberedIndexes(int pageIndex) {
+    final notifier = ref.read(mainTabMemoryProvider.notifier);
+    notifier.setChatTabIndex(_mainTabIndexForPage(pageIndex));
+    if (_isRelationPage(pageIndex)) {
+      notifier.setRelationTabIndex(_relationTabIndexForPage(pageIndex));
+    }
+  }
+
+  void _selectMainTab(int index) {
+    if (index == 2 && _isRelationPage(_currentPageIndex)) return;
+    final rememberedRelationIndex = ref
+        .read(mainTabMemoryProvider)
+        .relationTabIndex;
+    _tabController.animateTo(
+      _pageForMainTabIndex(index, relationTabIndex: rememberedRelationIndex),
+    );
+  }
+
+  void _selectRelationTab(int index) {
+    _tabController.animateTo(_pageForRelationTabIndex(index));
+  }
+
   @override
   Widget build(BuildContext context) {
+    final mainTabIndex = _mainTabIndexForPage(_currentPageIndex);
+    final relationTabIndex = _relationTabIndexForPage(_currentPageIndex);
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundColor,
       appBar: AppBar(
@@ -101,17 +168,28 @@ class _ChatPageState extends ConsumerState<ChatPage>
           _ChatCategorySegment(
             labels: const ['消息', '通话', '关系'],
             controller: _tabController,
+            selectedIndex: mainTabIndex,
+            onSelected: _selectMainTab,
           ),
           const SizedBox(height: 8),
+          if (_isRelationPage(_currentPageIndex)) ...[
+            _ChatCategorySegment(
+              labels: const ['关注', '粉丝', '黑名单'],
+              controller: _tabController,
+              selectedIndex: relationTabIndex,
+              onSelected: _selectRelationTab,
+            ),
+            const SizedBox(height: 8),
+          ],
           Expanded(
             child: TabBarView(
               controller: _tabController,
-              children: [
-                const MessagesPage.embedded(),
-                const CallPage.embedded(),
-                _RelationTabs(
-                  initialIndexOverride: widget.initialRelationTabIndexOverride,
-                ),
+              children: const [
+                MessagesPage.embedded(),
+                CallPage.embedded(),
+                MyFollowingPage.embedded(),
+                MyFansPage.embedded(),
+                MyBlacklistPage.embedded(),
               ],
             ),
           ),
@@ -121,78 +199,18 @@ class _ChatPageState extends ConsumerState<ChatPage>
   }
 }
 
-class _RelationTabs extends ConsumerStatefulWidget {
-  final int? initialIndexOverride;
-
-  const _RelationTabs({required this.initialIndexOverride});
-
-  @override
-  ConsumerState<_RelationTabs> createState() => _RelationTabsState();
-}
-
-class _RelationTabsState extends ConsumerState<_RelationTabs>
-    with SingleTickerProviderStateMixin {
-  late final TabController _relationTabController;
-
-  @override
-  void initState() {
-    super.initState();
-    final rememberedIndex = ref.read(mainTabMemoryProvider).relationTabIndex;
-    final initialIndex = widget.initialIndexOverride ?? rememberedIndex;
-    _relationTabController = TabController(
-      length: 3,
-      initialIndex: initialIndex.clamp(0, 2),
-      vsync: this,
-    );
-    _relationTabController.addListener(_onRelationTabChanged);
-    ref
-        .read(mainTabMemoryProvider.notifier)
-        .setRelationTabIndex(_relationTabController.index);
-  }
-
-  void _onRelationTabChanged() {
-    ref
-        .read(mainTabMemoryProvider.notifier)
-        .setRelationTabIndex(_relationTabController.index);
-  }
-
-  @override
-  void dispose() {
-    _relationTabController.removeListener(_onRelationTabChanged);
-    _relationTabController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        const SizedBox(height: 4),
-        _ChatCategorySegment(
-          labels: const ['关注', '粉丝', '黑名单'],
-          controller: _relationTabController,
-        ),
-        const SizedBox(height: 8),
-        Expanded(
-          child: TabBarView(
-            controller: _relationTabController,
-            children: const [
-              MyFollowingPage.embedded(),
-              MyFansPage.embedded(),
-              MyBlacklistPage.embedded(),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _ChatCategorySegment extends StatelessWidget {
   final List<String> labels;
   final TabController controller;
+  final int? selectedIndex;
+  final ValueChanged<int>? onSelected;
 
-  const _ChatCategorySegment({required this.labels, required this.controller});
+  const _ChatCategorySegment({
+    required this.labels,
+    required this.controller,
+    this.selectedIndex,
+    this.onSelected,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -200,7 +218,7 @@ class _ChatCategorySegment extends StatelessWidget {
     return AnimatedBuilder(
       animation: animation ?? controller,
       builder: (context, _) {
-        final selectedIndex = controller.index;
+        final activeIndex = selectedIndex ?? controller.index;
         return Container(
           margin: const EdgeInsets.symmetric(horizontal: 16),
           padding: const EdgeInsets.all(4),
@@ -210,10 +228,17 @@ class _ChatCategorySegment extends StatelessWidget {
           ),
           child: Row(
             children: List.generate(labels.length, (index) {
-              final active = selectedIndex == index;
+              final active = activeIndex == index;
               return Expanded(
                 child: GestureDetector(
-                  onTap: () => controller.animateTo(index),
+                  onTap: () {
+                    final handler = onSelected;
+                    if (handler != null) {
+                      handler(index);
+                      return;
+                    }
+                    controller.animateTo(index);
+                  },
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 160),
                     height: 36,

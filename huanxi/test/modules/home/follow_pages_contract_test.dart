@@ -19,6 +19,13 @@ void main() {
     expect(chatPage, contains("const ['消息', '通话', '关系']"));
     expect(chatPage, contains("const ['关注', '粉丝', '黑名单']"));
     expect(chatPage, contains('TabBarView'));
+    expect(chatPage, contains('static const int _chatPageCount = 5'));
+    expect(chatPage, contains('static const int _relationFirstPageIndex = 2'));
+    expect(chatPage, contains('_pageForMainTabIndex'));
+    expect(chatPage, contains('_pageForRelationTabIndex'));
+    expect(chatPage, contains('_mainTabIndexForPage'));
+    expect(chatPage, contains('_relationTabIndexForPage'));
+    expect(chatPage, isNot(contains('class _RelationTabs')));
   });
 
   test('chat page restores and writes remembered tab selections', () {
