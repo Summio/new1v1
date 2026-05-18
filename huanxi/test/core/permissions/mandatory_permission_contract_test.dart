@@ -20,7 +20,7 @@ void main() {
     final splash = File('lib/modules/auth/splash_page.dart').readAsStringSync();
 
     expect(splash, contains('MandatoryPermissionService.instance'));
-    expect(splash, contains('.check();'));
+    expect(splash, contains('.ensureReadyForLoggedInUser();'));
     expect(splash, contains('permissionState.requiredGranted'));
     expect(splash, contains('context.go(AppRoutes.index)'));
   });
@@ -58,6 +58,11 @@ void main() {
     expect(service, contains('storageKeepAliveEnabled'));
     expect(settings, contains('startKeepAliveForLoggedInUser'));
     expect(settings, contains('keepAlivePreferenceEnabled'));
+    expect(settings, contains('_keepAliveReady = preferenceEnabled;'));
+    expect(
+      settings,
+      isNot(contains('preferenceEnabled && state.keepAliveGranted')),
+    );
     expect(settings, contains('onTap: _keepAliveBusy'));
   });
 

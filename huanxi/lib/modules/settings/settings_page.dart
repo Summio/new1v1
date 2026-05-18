@@ -28,10 +28,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   Future<void> _refreshKeepAliveState() async {
     final service = MandatoryPermissionService.instance;
     final preferenceEnabled = service.keepAlivePreferenceEnabled;
-    final state = await service.check();
+    await service.check();
     if (!mounted) return;
     setState(() {
-      _keepAliveReady = preferenceEnabled && state.keepAliveGranted;
+      _keepAliveReady = preferenceEnabled;
     });
   }
 

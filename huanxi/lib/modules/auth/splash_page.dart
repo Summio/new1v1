@@ -52,7 +52,7 @@ class _SplashPageState extends ConsumerState<SplashPage> {
     if (isLoggedIn) {
       try {
         final permissionState = await MandatoryPermissionService.instance
-            .check();
+            .ensureReadyForLoggedInUser();
         if (!mounted) return;
         if (permissionState.requiredGranted) {
           context.go(AppRoutes.index);
