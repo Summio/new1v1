@@ -490,7 +490,7 @@ class _CertifiedUserDetailPageState
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Expanded(
                           child: Column(
@@ -501,6 +501,8 @@ class _CertifiedUserDetailPageState
                                     (certifiedUser.isCertifiedUser
                                         ? '认证用户'
                                         : '用户'),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                   fontSize: 26,
                                   fontWeight: FontWeight.bold,
@@ -538,77 +540,41 @@ class _CertifiedUserDetailPageState
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 8),
+                              const SizedBox(height: 6),
                               Wrap(
+                                key: const ValueKey(
+                                  'certified_detail_identity_status_row',
+                                ),
                                 spacing: 8,
                                 runSpacing: 8,
+                                crossAxisAlignment: WrapCrossAlignment.center,
                                 children: [
-                                  _buildTag(
-                                    icon: certifiedUser.gender == 'male'
-                                        ? Icons.male
-                                        : Icons.female,
-                                    label: age == null
-                                        ? _genderText(certifiedUser.gender)
-                                        : '$age岁',
-                                    color: _genderColor(certifiedUser.gender),
-                                  ),
-                                  _buildTag(
-                                    icon: Icons.auto_awesome,
-                                    label: zodiac ?? '星座未填',
-                                    color: AppTheme.primaryColor,
-                                  ),
-                                  ..._buildProfileFactTags(certifiedUser),
-                                  if ((certifiedUser.status ?? 'normal') ==
-                                      'banned')
-                                    _buildTag(
-                                      icon: Icons.block_rounded,
-                                      label: '封禁',
-                                      color: AppTheme.errorColor,
-                                    ),
+                                  _buildAvailabilityStatusChip(certifiedUser),
+                                  if (certifiedUser.isCertifiedUser)
+                                    _buildCertificationStatusChip(),
                                 ],
                               ),
                             ],
                           ),
                         ),
-                        Container(
-                          // 状态必须同时显示颜色和文字，不能只依赖色点。
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: _availabilityColor(
-                              certifiedUser.availabilityStatus,
-                            ).withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  color: _availabilityColor(
-                                    certifiedUser.availabilityStatus,
-                                  ),
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                certifiedUser.availabilityLabel,
-                                style: TextStyle(
-                                  color: _availabilityColor(
-                                    certifiedUser.availabilityStatus,
-                                  ),
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                        const SizedBox(width: 16),
+                        _buildProfileAvatar(certifiedUser),
                       ],
+                    ),
+                    const SizedBox(height: 16),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _buildPrimaryProfileTags(certifiedUser, age),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: _buildSecondaryProfileTags(
+                        certifiedUser,
+                        zodiac,
+                      ),
                     ),
                     const SizedBox(height: 24),
                     if (_interactionBlocked) ...[
@@ -827,6 +793,83 @@ class _CertifiedUserDetailPageState
     );
   }
 
+  Widget _buildProfileAvatar(CertifiedUserInfo certifiedUser) {
+    final avatarUrl = certifiedUser.avatar?.trim() ?? '';
+    final placeholder = Container(
+      color: AppTheme.primaryColor.withValues(alpha: 0.1),
+      child: const Icon(Icons.person, size: 34, color: AppTheme.primaryColor),
+    );
+
+    return CircleAvatar(
+      radius: 36,
+      backgroundColor: AppTheme.primaryColor.withValues(alpha: 0.1),
+      child: ClipOval(
+        child: SizedBox(
+          width: 72,
+          height: 72,
+          child: avatarUrl.isEmpty
+              ? placeholder
+              : Image.network(
+                  avatarUrl,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => placeholder,
+                ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAvailabilityStatusChip(CertifiedUserInfo certifiedUser) {
+    final color = _availabilityColor(certifiedUser.availabilityStatus);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('●', style: TextStyle(color: color, fontSize: 9, height: 1)),
+          const SizedBox(width: 4),
+          Text(
+            certifiedUser.availabilityLabel,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCertificationStatusChip() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppTheme.primaryColor.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.verified_rounded, size: 13, color: AppTheme.primaryColor),
+          SizedBox(width: 4),
+          Text(
+            '真人认证',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: AppTheme.primaryColor,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTag({
     required IconData icon,
     required String label,
@@ -855,8 +898,34 @@ class _CertifiedUserDetailPageState
     );
   }
 
-  List<Widget> _buildProfileFactTags(CertifiedUserInfo certifiedUser) {
+  List<Widget> _buildPrimaryProfileTags(
+    CertifiedUserInfo certifiedUser,
+    int? age,
+  ) {
     return [
+      _buildTag(
+        icon: certifiedUser.gender == 'male' ? Icons.male : Icons.female,
+        label: age == null ? _genderText(certifiedUser.gender) : '$age岁',
+        color: _genderColor(certifiedUser.gender),
+      ),
+      _buildTag(
+        icon: Icons.location_on_outlined,
+        label: _locationLabel(certifiedUser.locationCity),
+        color: AppTheme.primaryColor,
+      ),
+    ];
+  }
+
+  List<Widget> _buildSecondaryProfileTags(
+    CertifiedUserInfo certifiedUser,
+    String? zodiac,
+  ) {
+    return [
+      _buildTag(
+        icon: Icons.auto_awesome,
+        label: zodiac ?? '星座未填',
+        color: AppTheme.primaryColor,
+      ),
       _buildTag(
         icon: Icons.height,
         label: certifiedUser.heightCm == null
@@ -871,11 +940,12 @@ class _CertifiedUserDetailPageState
             : '${certifiedUser.weightKg}kg',
         color: AppTheme.primaryColor,
       ),
-      _buildTag(
-        icon: Icons.location_on_outlined,
-        label: _locationLabel(certifiedUser.locationCity),
-        color: AppTheme.primaryColor,
-      ),
+      if ((certifiedUser.status ?? 'normal') == 'banned')
+        _buildTag(
+          icon: Icons.block_rounded,
+          label: '封禁',
+          color: AppTheme.errorColor,
+        ),
     ];
   }
 

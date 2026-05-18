@@ -38,10 +38,23 @@ void main() {
       'lib/modules/home/certified_user_detail_page.dart',
     ).readAsStringSync();
 
-    expect(page, contains('_buildProfileFactTags(certifiedUser)'));
+    expect(page, contains('_buildPrimaryProfileTags('));
+    expect(page, contains('_buildSecondaryProfileTags('));
     expect(page, contains("'身高未填'"));
     expect(page, contains("'体重未填'"));
     expect(page, contains('_locationLabel(certifiedUser.locationCity)'));
     expect(page, isNot(contains('_buildInfoChip(')));
+  });
+
+  test('certified user detail lays out avatar and certification in identity row', () {
+    final page = File(
+      'lib/modules/home/certified_user_detail_page.dart',
+    ).readAsStringSync();
+
+    expect(page, contains('_buildProfileAvatar(certifiedUser)'));
+    expect(page, contains('_buildCertificationStatusChip()'));
+    expect(page, contains('certified_detail_identity_status_row'));
+    expect(page, contains('certifiedUser.isCertifiedUser'));
+    expect(page, contains('CircleAvatar'));
   });
 }
