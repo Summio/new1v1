@@ -1041,15 +1041,19 @@ const columns = [
     render(row) {
       const children = [
         h(
-          NTag,
-          { type: row.is_vip ? 'warning' : 'default' },
-          { default: () => (row.is_vip ? 'VIP' : '非VIP') }
+          'div',
+          { class: 'vip-cell-line' },
+          h(
+            NTag,
+            { type: row.is_vip ? 'warning' : 'default' },
+            { default: () => (row.is_vip ? 'VIP' : '非VIP') }
+          )
         ),
       ]
       if (row.is_vip && row.vip_expires_at) {
-        children.push(h('span', { class: 'meta-value' }, formatDate(row.vip_expires_at)))
+        children.push(h('div', { class: 'vip-cell-expire' }, formatDate(row.vip_expires_at)))
       }
-      return h('div', { class: 'meta-wrap' }, children)
+      return h('div', { class: 'vip-cell' }, children)
     },
   },
   // prettier-ignore
@@ -1552,6 +1556,27 @@ const columns = [
 .meta-value {
   color: #242933;
   word-break: break-all;
+}
+
+.vip-cell {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  line-height: 1.3;
+}
+
+.vip-cell-line {
+  display: flex;
+  justify-content: center;
+}
+
+.vip-cell-expire {
+  color: #242933;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .album-head {
