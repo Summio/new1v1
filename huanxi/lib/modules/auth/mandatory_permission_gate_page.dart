@@ -124,7 +124,7 @@ class _MandatoryPermissionGatePageState extends State<MandatoryPermissionGatePag
               ),
               const SizedBox(height: 10),
               const Text(
-                '欢喜需要相机和麦克风权限才能正常使用通话能力。通知和后台接听会尽量开启，未开启时不影响进入 App。',
+                'StarChat需要相机和麦克风权限才能正常使用通话能力。通知和后台接听会尽量开启，未开启时不影响进入 App。',
                 style: TextStyle(
                   height: 1.5,
                   fontSize: 15,

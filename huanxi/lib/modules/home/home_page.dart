@@ -201,7 +201,7 @@ class _HomePageState extends ConsumerState<HomePage>
         elevation: 0,
         centerTitle: false,
         title: const Text(
-          '欢喜',
+          'StarChat',
           style: TextStyle(
             fontSize: 32,
             fontWeight: FontWeight.w900,

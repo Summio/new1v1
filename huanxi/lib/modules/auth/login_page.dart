@@ -120,7 +120,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       shaderCallback: (bounds) =>
                           AppTheme.primaryGradient.createShader(bounds),
                       child: const Text(
-                        '欢迎来到欢喜',
+                        '欢迎来到StarChat',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 26,

@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     model_config = {"env_file": ".env", "extra": "ignore"}
 
     VERSION: str = "0.1.0"
-    APP_TITLE: str = "欢喜 (Huanxi) 后台管理"
-    PROJECT_NAME: str = "Huanxi Admin"
+    APP_TITLE: str = "StarChat 后台管理"
+    PROJECT_NAME: str = "StarChat Admin"
     APP_DESCRIPTION: str = "1v1付费音视频交友平台后台"
 
     # CORS 配置：生产环境必须通过环境变量设置具体域名列表，禁止默认允许所有来源

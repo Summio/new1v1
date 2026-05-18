@@ -2,7 +2,7 @@
 class AppConstants {
   AppConstants._();
 
-  static const String appName = '欢喜';
+  static const String appName = 'StarChat';
   static const String appVersion = '1.0.0';
 
   /// API 基础地址

@@ -165,7 +165,7 @@ class _SplashPageState extends ConsumerState<SplashPage> {
                   shaderCallback: (bounds) =>
                       AppTheme.primaryGradient.createShader(bounds),
                   child: const Text(
-                    '欢喜',
+                    'StarChat',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 36,

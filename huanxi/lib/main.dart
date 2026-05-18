@@ -65,7 +65,7 @@ class _HuanxiAppState extends ConsumerState<HuanxiApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: '欢喜',
+      title: 'StarChat',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       routerConfig: appRouter,

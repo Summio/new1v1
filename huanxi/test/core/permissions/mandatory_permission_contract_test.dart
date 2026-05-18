@@ -139,8 +139,8 @@ void main() {
     expect(service, contains('"正在保持在线"'));
     expect(service, contains('"通话中"'));
     expect(service, contains('"点击返回通话"'));
-    expect(service, isNot(contains('欢喜正在保持在线')));
-    expect(service, isNot(contains('欢喜通话中')));
+    expect(service, isNot(contains('StarChat正在保持在线')));
+    expect(service, isNot(contains('StarChat通话中')));
     expect(service, isNot(contains('可接收 1v1 来电')));
     expect(service, isNot(contains('可接收1v1来电')));
   });

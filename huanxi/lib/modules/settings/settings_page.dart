@@ -127,9 +127,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             onTap: () {
               showAboutDialog(
                 context: context,
-                applicationName: '欢喜',
+                applicationName: 'StarChat',
                 applicationVersion: '1.0.0',
-                applicationLegalese: '© 2026 欢喜科技',
+                applicationLegalese: '© 2026 StarChat科技',
               );
             },
           ),
@@ -193,7 +193,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
           const SizedBox(height: 16),
           Center(
             child: Text(
-              '欢喜 v1.0.0 | ${authState.userId != null ? 'ID: ${authState.userId}' : ''}',
+              'StarChat v1.0.0 | ${authState.userId != null ? 'ID: ${authState.userId}' : ''}',
               style: const TextStyle(color: AppTheme.textHint, fontSize: 12),
             ),
           ),
