@@ -2,12 +2,27 @@ import 'dart:convert';
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:huanxi/app/providers/auth_provider.dart';
 import 'package:huanxi/core/constants/api_endpoints.dart';
 import 'package:huanxi/core/network/dio_client.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  const screenshotSecurityChannel = MethodChannel('huanxi/screenshot_security');
+
+  setUp(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(screenshotSecurityChannel, (_) async => null);
+  });
+
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(screenshotSecurityChannel, null);
+  });
+
   test('AppInitState parses customer service bootstrap config', () {
     final state = AppInitState.fromBootstrapMap({
       'token_names': {'coin_name': '金币', 'diamond_name': '钻石'},
@@ -34,6 +49,22 @@ void main() {
     expect(state.customerServiceUserId, '9001');
     expect(state.customerServiceNickname, '在线客服');
     expect(state.customerServiceAvatar, 'https://example.com/avatar.png');
+  });
+
+  test('AppInitState parses screen security bootstrap config', () {
+    final defaults = AppInitState.fromBootstrapMap(const {});
+    expect(defaults.androidPreventScreenshotEnabled, isTrue);
+    expect(defaults.iosPreventScreenshotEnabled, isFalse);
+
+    final state = AppInitState.fromBootstrapMap({
+      'screen_security': {
+        'android_prevent_screenshot_enabled': false,
+        'ios_prevent_screenshot_enabled': true,
+      },
+    });
+
+    expect(state.androidPreventScreenshotEnabled, isFalse);
+    expect(state.iosPreventScreenshotEnabled, isTrue);
   });
 
   test('AppInitNotifier retries bootstrap after a failed load', () async {

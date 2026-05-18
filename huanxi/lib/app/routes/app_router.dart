@@ -38,7 +38,6 @@ import '../../modules/home/feedback_page.dart';
 import '../../modules/home/system_notification_detail_page.dart';
 import '../../modules/home/system_notifications_page.dart';
 import '../../modules/home/complaint_page.dart';
-import '../../modules/home/call_page.dart';
 import '../../app/providers/certified_user_provider.dart';
 import '../../app/providers/wallet_provider.dart';
 import '../../core/constants/app_constants.dart';
@@ -64,7 +63,6 @@ class AppRoutes {
   static const String withdrawAccount = '/profile/withdraw/account';
   static const String coinTransactions = '/profile/recharge/transactions';
   static const String diamondTransactions = '/profile/diamond/transactions';
-  static const String callHistory = '/profile/call-history';
   static const String editProfile = '/profile/edit';
   static const String doNotDisturb = '/profile/do-not-disturb';
   static const String settings = '/settings';
@@ -83,7 +81,6 @@ class AppRoutes {
   static const String giftPanel = '/gift';
   static const String myMoments = '/profile/moments';
   static const String myFollowing = '/profile/following';
-  static const String myFans = '/profile/fans';
   static const String publishMoment = '/moment/publish';
   static const String callRoom = '/call/room';
   static const String callOutgoing = '/call/outgoing';
@@ -316,10 +313,6 @@ final appRouter = GoRouter(
       },
     ),
     GoRoute(
-      path: AppRoutes.callHistory,
-      builder: (context, state) => const CallPage(),
-    ),
-    GoRoute(
       path: AppRoutes.recharge,
       builder: (context, state) => const RechargePage(),
     ),
@@ -412,10 +405,6 @@ final appRouter = GoRouter(
     GoRoute(
       path: AppRoutes.myFollowing,
       builder: (context, state) => const MyFollowingPage(),
-    ),
-    GoRoute(
-      path: AppRoutes.myFans,
-      builder: (context, state) => const MyFansPage(),
     ),
     GoRoute(
       path: AppRoutes.publishMoment,

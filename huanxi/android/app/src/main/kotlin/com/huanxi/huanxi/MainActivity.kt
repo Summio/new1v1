@@ -13,10 +13,6 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.setFlags(
-            WindowManager.LayoutParams.FLAG_SECURE,
-            WindowManager.LayoutParams.FLAG_SECURE
-        )
         captureIncomingCall(intent)
     }
 
@@ -31,6 +27,24 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "huanxi/screenshot_security"
+        ).setMethodCallHandler { call, result ->
+            try {
+                when (call.method) {
+                    "apply" -> {
+                        val enabled = call.argument<Boolean>("androidPreventScreenshotEnabled") ?: true
+                        applyScreenshotSecurity(enabled)
+                        result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            } catch (error: Throwable) {
+                result.error("SCREENSHOT_SECURITY_ERROR", error.message, null)
+            }
+        }
 
         MethodChannel(
             flutterEngine.dartExecutor.binaryMessenger,
@@ -116,5 +130,16 @@ class MainActivity : FlutterActivity() {
 
     private fun captureIncomingCall(intent: Intent?) {
         pendingIncomingCall = IncomingCallNotification.payloadFromIntent(intent)
+    }
+
+    private fun applyScreenshotSecurity(enabled: Boolean) {
+        if (enabled) {
+            window.setFlags(
+                WindowManager.LayoutParams.FLAG_SECURE,
+                WindowManager.LayoutParams.FLAG_SECURE
+            )
+        } else {
+            window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+        }
     }
 }

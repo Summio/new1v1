@@ -34,10 +34,6 @@ void main() {
         "title: const Text('发布动态')",
       ),
       _CenteredTitleSpec(
-        'lib/modules/home/wallet_page.dart',
-        "title: const Text('我的钱包')",
-      ),
-      _CenteredTitleSpec(
         'lib/modules/home/certification_center_page.dart',
         "title: const Text('认证中心')",
       ),

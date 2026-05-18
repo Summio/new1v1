@@ -15,6 +15,15 @@ router = APIRouter()
 _DEFAULT_CERTIFIED_CALL_PRICE_TIERS = [0, 100, 200, 300, 500]
 
 
+def _parse_bool_config(value: str | None, *, default: bool) -> bool:
+    normalized = (value or "").strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
 @router.get("/init/bootstrap", summary="获取 App 初始化配置")
 async def get_app_bootstrap():
     from app.models.system_config import SystemConfig
@@ -75,6 +84,14 @@ async def get_app_bootstrap():
     certified_call_price_tiers = parse_certified_call_price_tiers(certified_call_price_tiers_raw)
     customer_service = await load_customer_service_config(config_map)
     capability_limits = parse_capability_limit_config(config_map).dump()
+    android_prevent_screenshot_enabled = _parse_bool_config(
+        config_map.get("security_android_prevent_screenshot_enabled"),
+        default=True,
+    )
+    ios_prevent_screenshot_enabled = _parse_bool_config(
+        config_map.get("security_ios_prevent_screenshot_enabled"),
+        default=False,
+    )
 
     return Success(
         data={
@@ -104,5 +121,9 @@ async def get_app_bootstrap():
                 "avatar": customer_service.avatar,
             },
             "im_text_billing": dump_im_text_billing_config(parse_im_text_billing_config(config_map)),
+            "screen_security": {
+                "android_prevent_screenshot_enabled": android_prevent_screenshot_enabled,
+                "ios_prevent_screenshot_enabled": ios_prevent_screenshot_enabled,
+            },
         }
     )

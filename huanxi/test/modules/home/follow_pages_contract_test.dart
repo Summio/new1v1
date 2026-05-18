@@ -52,8 +52,10 @@ void main() {
     expect(profilePage, isNot(contains('AppRoutes.myFans')));
     expect(chatPage, contains('MyFollowingPage.embedded'));
     expect(chatPage, contains('MyFansPage.embedded'));
-    expect(router, contains('static const String myFans'));
-    expect(router, contains('MyFansPage'));
+    expect(router, isNot(contains('static const String callHistory')));
+    expect(router, isNot(contains('static const String myFans')));
+    expect(router, isNot(contains('path: AppRoutes.callHistory')));
+    expect(router, isNot(contains('path: AppRoutes.myFans')));
   });
 
   test(

@@ -10,6 +10,7 @@ import '../../core/network/api_exception.dart';
 import '../../core/network/media_payload_normalizer.dart';
 import '../../core/utils/app_logger.dart';
 import '../../core/permissions/mandatory_permission_service.dart';
+import '../../core/device/screenshot_security_bridge.dart';
 import '../../services/websocket_service.dart';
 
 /// 认证状态
@@ -210,6 +211,8 @@ class AppInitState {
   final int imTextBillingAnchorShareBps;
   final List<int> certifiedCallPriceTiers;
   final CapabilityLimitsState capabilityLimits;
+  final bool androidPreventScreenshotEnabled;
+  final bool iosPreventScreenshotEnabled;
 
   const AppInitState({
     this.isLoading = false,
@@ -227,6 +230,8 @@ class AppInitState {
     this.imTextBillingAnchorShareBps = 5000,
     this.certifiedCallPriceTiers = const [],
     this.capabilityLimits = const CapabilityLimitsState(),
+    this.androidPreventScreenshotEnabled = true,
+    this.iosPreventScreenshotEnabled = false,
   });
 
   AppInitState copyWith({
@@ -245,6 +250,8 @@ class AppInitState {
     int? imTextBillingAnchorShareBps,
     List<int>? certifiedCallPriceTiers,
     CapabilityLimitsState? capabilityLimits,
+    bool? androidPreventScreenshotEnabled,
+    bool? iosPreventScreenshotEnabled,
   }) {
     return AppInitState(
       isLoading: isLoading ?? this.isLoading,
@@ -268,6 +275,11 @@ class AppInitState {
       certifiedCallPriceTiers:
           certifiedCallPriceTiers ?? this.certifiedCallPriceTiers,
       capabilityLimits: capabilityLimits ?? this.capabilityLimits,
+      androidPreventScreenshotEnabled:
+          androidPreventScreenshotEnabled ??
+          this.androidPreventScreenshotEnabled,
+      iosPreventScreenshotEnabled:
+          iosPreventScreenshotEnabled ?? this.iosPreventScreenshotEnabled,
     );
   }
 
@@ -277,6 +289,7 @@ class AppInitState {
     final imTextBilling = respData['im_text_billing'] as Map<String, dynamic>?;
     final customerService =
         respData['customer_service'] as Map<String, dynamic>?;
+    final screenSecurity = respData['screen_security'] as Map<String, dynamic>?;
     final sdkAppIdRaw = im?['sdk_app_id'];
     final sdkAppId = sdkAppIdRaw is num ? sdkAppIdRaw.toInt() : null;
     final imTextPriceRaw = imTextBilling?['price'];
@@ -322,6 +335,10 @@ class AppInitState {
           : int.tryParse('${imTextShareRaw ?? 5000}') ?? 5000,
       certifiedCallPriceTiers: tiers,
       capabilityLimits: capabilityLimits,
+      androidPreventScreenshotEnabled:
+          screenSecurity?['android_prevent_screenshot_enabled'] != false,
+      iosPreventScreenshotEnabled:
+          screenSecurity?['ios_prevent_screenshot_enabled'] == true,
     );
   }
 
@@ -799,6 +816,15 @@ class AppInitNotifier extends StateNotifier<AppInitState> {
         return;
       }
       state = AppInitState.fromBootstrapMap(respData);
+      try {
+        await ScreenshotSecurityBridge.apply(
+          androidPreventScreenshotEnabled:
+              state.androidPreventScreenshotEnabled,
+          iosPreventScreenshotEnabled: state.iosPreventScreenshotEnabled,
+        );
+      } catch (e) {
+        AppLogger.debug('appInit.screenshotSecurity error: $e');
+      }
     } catch (e) {
       AppLogger.debug('appInit.init error: $e');
       state = state.copyWith(isLoading: false);

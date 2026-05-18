@@ -858,7 +858,7 @@ class _CertifiedUserDetailPageState
           Icon(Icons.verified_rounded, size: 13, color: AppTheme.primaryColor),
           SizedBox(width: 4),
           Text(
-            '真人认证',
+            '真人',
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
@@ -876,21 +876,27 @@ class _CertifiedUserDetailPageState
     required Color color,
   }) {
     return Container(
+      constraints: const BoxConstraints(maxWidth: 180),
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 14, color: color),
           const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: color,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
         ],

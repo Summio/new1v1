@@ -46,15 +46,34 @@ void main() {
     expect(page, isNot(contains('_buildInfoChip(')));
   });
 
-  test('certified user detail lays out avatar and certification in identity row', () {
+  test(
+    'certified user detail lays out avatar and certification in identity row',
+    () {
+      final page = File(
+        'lib/modules/home/certified_user_detail_page.dart',
+      ).readAsStringSync();
+
+      expect(page, contains('_buildProfileAvatar(certifiedUser)'));
+      expect(page, contains('_buildCertificationStatusChip()'));
+      expect(page, contains('certified_detail_identity_status_row'));
+      expect(page, contains('certifiedUser.isCertifiedUser'));
+      expect(page, contains('CircleAvatar'));
+      expect(page, contains("'真人'"));
+      expect(page, isNot(contains("'真人认证'")));
+    },
+  );
+
+  test('certified user detail profile tags stay compact in wraps', () {
     final page = File(
       'lib/modules/home/certified_user_detail_page.dart',
     ).readAsStringSync();
 
-    expect(page, contains('_buildProfileAvatar(certifiedUser)'));
-    expect(page, contains('_buildCertificationStatusChip()'));
-    expect(page, contains('certified_detail_identity_status_row'));
-    expect(page, contains('certifiedUser.isCertifiedUser'));
-    expect(page, contains('CircleAvatar'));
+    final tagBuilderStart = page.indexOf('Widget _buildTag({');
+    final tagBuilderEnd = page.indexOf('List<Widget> _buildPrimaryProfileTags');
+    final tagBuilder = page.substring(tagBuilderStart, tagBuilderEnd);
+
+    expect(tagBuilder, contains('mainAxisSize: MainAxisSize.min'));
+    expect(tagBuilder, contains('maxLines: 1'));
+    expect(tagBuilder, contains('overflow: TextOverflow.ellipsis'));
   });
 }
